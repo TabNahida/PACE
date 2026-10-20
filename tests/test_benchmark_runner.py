@@ -1,16 +1,25 @@
 """Regression checks for accepting benchmark evidence, using synthetic records."""
 
 import importlib.util
+import copy
+import contextlib
+import io
 import json
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 
 RUNNER_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_benchmarks.py"
 SPEC = importlib.util.spec_from_file_location("pace_benchmark_runner", RUNNER_PATH)
 RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
+PROFILE_SPEC = importlib.util.spec_from_file_location("pace_profile_runner", RUNNER_PATH.with_name("run_profile.py"))
+PROFILE = importlib.util.module_from_spec(PROFILE_SPEC)
+with mock.patch.dict(sys.modules, {"run_benchmarks": RUNNER}):
+    PROFILE_SPEC.loader.exec_module(PROFILE)
 
 
 class BenchmarkRecordValidationTests(unittest.TestCase):
@@ -97,6 +106,150 @@ class BenchmarkRecordValidationTests(unittest.TestCase):
                        {"roundtrip_mib_per_second": 1.953125}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 self.validate({**self.record, **change})
+
+    def diagnostic_record(self):
+        return {**self.record, "instrumented": True, "pace_profile": {
+            "window": RUNNER.PROFILE_WINDOW,
+            "stages": [
+                {"name": "reactor_run", "calls": 1, "inclusive_ns": 1000, "exclusive_ns": 100},
+                {"name": "recv", "calls": 20, "inclusive_ns": 900, "exclusive_ns": 900},
+            ],
+        }}
+
+    def test_accepts_explicit_instrumented_diagnostic_record(self):
+        RUNNER.validate_record(self.diagnostic_record(), "pace", 1, self.config, instrumented=True)
+
+    def test_rejects_profile_data_in_normal_comparison(self):
+        with self.assertRaises(ValueError):
+            self.validate(self.diagnostic_record())
+        with self.assertRaises(ValueError):
+            self.validate({**self.record, "pace_profile": self.diagnostic_record()["pace_profile"]})
+
+    def test_requires_instrumented_flag_and_counters_together(self):
+        for record in (self.record, {**self.record, "instrumented": True}):
+            with self.subTest(record=record), self.assertRaises(ValueError):
+                RUNNER.validate_record(record, "pace", 1, self.config, instrumented=True)
+        for flag in (1, "true", None):
+            with self.subTest(flag=flag), self.assertRaises(ValueError):
+                RUNNER.validate_record({**self.diagnostic_record(), "instrumented": flag},
+                                       "pace", 1, self.config, instrumented=True)
+
+    def test_rejects_invalid_profile_window_and_stage_counters(self):
+        invalid_profiles = [None, {}, {"window": "measured workload only", "stages": []}]
+        profile = self.diagnostic_record()["pace_profile"]
+        invalid_profiles += [{**profile, "stages": []}, {**profile, "stages": profile["stages"] * 2}]
+        for change in ({"calls": -1}, {"calls": True}, {"inclusive_ns": 0.5},
+                       {"exclusive_ns": 1001}, {"calls": 0}, {"name": ""},
+                       {"calls": 0, "inclusive_ns": 0, "exclusive_ns": 0}, {"calls": 2}):
+            altered = copy.deepcopy(profile)
+            altered["stages"][0].update(change)
+            invalid_profiles.append(altered)
+        for invalid in invalid_profiles:
+            with self.subTest(profile=invalid), self.assertRaises(ValueError):
+                RUNNER.validate_record({**self.diagnostic_record(), "pace_profile": invalid},
+                                       "pace", 1, self.config, instrumented=True)
+
+
+class ProfilingComparisonGuardTests(unittest.TestCase):
+    def test_profiling_requires_explicit_pace_only_selection(self):
+        available = {"backends": ["pace", "asio", "libuv"], "pace_profiling": True}
+        self.assertTrue(RUNNER.validate_profiling_mode(available, "pace", False))
+        for selection, required in ((None, False), ("pace,asio", False), ("asio", False),
+                                    ("pace", True), ("pace,asio,libuv", True)):
+            with self.subTest(selection=selection, required=required), self.assertRaises(ValueError):
+                RUNNER.validate_profiling_mode(available, selection, required)
+
+    def test_normal_and_legacy_binaries_remain_eligible_for_comparison(self):
+        for available in ({"pace_profiling": False}, {}):
+            self.assertFalse(RUNNER.validate_profiling_mode(available, None, True))
+
+    def test_rejects_non_boolean_capability(self):
+        for value in (1, "true", None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                RUNNER.validate_profiling_mode({"pace_profiling": value}, "pace", False)
+
+    def test_cli_rejects_instrumented_comparison_before_running_trials(self):
+        capabilities = json.dumps({"backends": ["pace", "asio", "libuv"], "pace_profiling": True})
+        with mock.patch("sys.argv", ["run_benchmarks.py", "--executable", str(RUNNER_PATH), "--require-all"]), \
+             mock.patch.object(RUNNER.subprocess, "check_output", return_value=capabilities), \
+             mock.patch.object(RUNNER.subprocess, "run") as run, \
+             contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
+            RUNNER.main()
+        self.assertEqual(stopped.exception.code, 2)
+        run.assert_not_called()
+
+
+class ProfileSummaryTests(unittest.TestCase):
+    def setUp(self):
+        record_tests = BenchmarkRecordValidationTests()
+        record_tests.setUp()
+        self.report = {
+            "environment": {
+                "status": "completed", "measurement_kind": "instrumented_diagnostic",
+                "fair_backend_comparison": False, "profile_window": RUNNER.PROFILE_WINDOW,
+                "configuration": {**vars(record_tests.config), "repeats": 2, "backends": "pace"},
+            },
+            "runs": [record_tests.diagnostic_record(), record_tests.diagnostic_record()],
+        }
+        self.report["runs"][1]["trial"] = 2
+        stages = self.report["runs"][1]["pace_profile"]["stages"]
+        stages[0].update(inclusive_ns=2000, exclusive_ns=400)
+        stages[1].update(calls=40, inclusive_ns=1600, exclusive_ns=1600)
+        for record in self.report["runs"]:
+            record["pace_profile"]["stages"].append(
+                {"name": "send", "calls": 0, "inclusive_ns": 0, "exclusive_ns": 0})
+
+    def test_aggregates_per_trial_values_and_preserves_stage_spread(self):
+        summary = PROFILE.summarize(self.report)
+        rows = {row["stage"]: row for row in summary["stages"]}
+        self.assertEqual(summary["trials"], 2)
+        self.assertEqual(rows["recv"]["median_calls"], 30)
+        self.assertEqual(rows["recv"]["median_exclusive_ns"], 1250)
+        self.assertEqual(rows["recv"]["min_exclusive_ns"], 900)
+        self.assertEqual(rows["recv"]["max_exclusive_ns"], 1600)
+        self.assertEqual(rows["recv"]["median_exclusive_share_percent"], 85)
+        self.assertEqual(rows["recv"]["median_inclusive_ns_per_call"], 42.5)
+        self.assertIsNone(rows["send"]["median_inclusive_ns_per_call"])
+        self.assertIn("not CPU sampling", PROFILE.markdown(summary))
+
+    def test_rejects_failed_normal_or_mixed_reports(self):
+        for changes in ({"status": "failed"}, {"measurement_kind": "uninstrumented_benchmark"},
+                        {"fair_backend_comparison": True}, {"profile_window": "steady state"}):
+            report = copy.deepcopy(self.report)
+            report["environment"].update(changes)
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                PROFILE.summarize(report)
+        for value in (None, [], {}, {"environment": None}):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                PROFILE.summarize(value)
+        self.report["environment"]["configuration"]["backends"] = "pace,asio"
+        with self.assertRaises(ValueError):
+            PROFILE.summarize(self.report)
+
+    def test_requires_complete_consistent_trial_set(self):
+        bad_reports = []
+        for count in (0, 1, 3):
+            report = copy.deepcopy(self.report)
+            report["environment"]["configuration"]["repeats"] = count
+            bad_reports.append(report)
+        report = copy.deepcopy(self.report)
+        report["runs"][1]["trial"] = 1
+        bad_reports.append(report)
+        report = copy.deepcopy(self.report)
+        report["runs"][1]["pace_profile"]["stages"].pop()
+        bad_reports.append(report)
+        report = copy.deepcopy(self.report)
+        report["runs"][1]["pace_profile"]["stages"][1]["exclusive_ns"] -= 1
+        bad_reports.append(report)
+        for report in bad_reports:
+            with self.subTest(report=report), self.assertRaises(ValueError):
+                PROFILE.summarize(report)
+
+    def test_cli_refuses_to_overwrite_raw_evidence(self):
+        with mock.patch("sys.argv", ["run_profile.py", "--input", "profile.json", "--output", "profile.md"]), \
+             contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
+            PROFILE.main()
+        self.assertEqual(stopped.exception.code, 2)
 
 
 if __name__ == "__main__":

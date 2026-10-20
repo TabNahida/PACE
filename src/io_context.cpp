@@ -1,5 +1,6 @@
 #include <pace/io_context.hpp>
 #include <pace/detail/poller.hpp>
+#include <pace/detail/profiling.hpp>
 #include <array>
 #include <atomic>
 #include <climits>
@@ -11,6 +12,7 @@
 #include <vector>
 
 namespace pace {
+namespace profiling = detail::profiling;
 namespace {
 thread_local io_context* active_context = nullptr;
 std::error_code canceled() { return std::make_error_code(std::errc::operation_canceled); }
@@ -26,6 +28,7 @@ struct io_context::implementation {
     bool has_run = false;
     bool cancellation_started = false;
     std::mutex inbox_mutex;
+    std::atomic<bool> inbox_pending{false};
     std::deque<task<void>> incoming_tasks;
     std::deque<std::function<void()>> incoming_posts;
     std::deque<std::function<void()>> posts;
@@ -99,12 +102,15 @@ void io_context::spawn(task<void> work) {
         h.promise().completion_context = this;
         return;
     }
+    bool notify;
     {
         std::lock_guard lock(p.inbox_mutex);
         if (stopped()) throw std::system_error(canceled());
         p.incoming_tasks.push_back(std::move(work));
+        notify = !p.inbox_pending.load(std::memory_order_relaxed);
+        p.inbox_pending.store(true, std::memory_order_release);
     }
-    p.poller.wake();
+    if (notify) p.poller.wake();
 }
 void io_context::post(std::function<void()> work) {
     if (!work) throw std::invalid_argument("empty posted function");
@@ -114,12 +120,15 @@ void io_context::post(std::function<void()> work) {
         p.posts.push_back(std::move(work));
         return;
     }
+    bool notify;
     {
         std::lock_guard lock(p.inbox_mutex);
         if (stopped()) throw std::system_error(canceled());
         p.incoming_posts.push_back(std::move(work));
+        notify = !p.inbox_pending.load(std::memory_order_relaxed);
+        p.inbox_pending.store(true, std::memory_order_release);
     }
-    p.poller.wake();
+    if (notify) p.poller.wake();
 }
 void io_context::completed(void* context, std::coroutine_handle<> handle) noexcept {
     auto& p = *static_cast<io_context*>(context)->impl_;
@@ -141,6 +150,7 @@ void io_context::io_awaiter::await_resume() {
     if (context.stopped()) throw std::system_error(canceled());
 }
 bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle) {
+    profiling::scope timing(profiling::stage::io_arm);
     check_affinity(this);
     if (stopped()) { operation.error = canceled(); return false; }
     auto& p = *impl_;
@@ -203,6 +213,7 @@ void io_context::run() {
     if (p.has_run) throw std::logic_error("io_context is single-use");
     p.has_run = true;
     active_context = this;
+    profiling::scope run_timing(profiling::stage::reactor_run);
     auto record_error = [&](std::exception_ptr error) {
         try { if (error) std::rethrow_exception(error); }
         catch (const std::system_error& e) {
@@ -213,31 +224,45 @@ void io_context::run() {
     };
     std::array<detail::poll_event, 256> events{};
     for (;;) {
-        std::deque<task<void>> new_tasks;
-        std::deque<std::function<void()>> new_posts;
-        {
-            std::lock_guard lock(p.inbox_mutex);
-            new_tasks.swap(p.incoming_tasks);
-            new_posts.swap(p.incoming_posts);
+        profiling::scope inbox_timing(profiling::stage::inbox);
+        // Most turns contain no external submissions. Avoid constructing empty
+        // deques (which can allocate) and taking the inbox lock on those turns.
+        if (p.inbox_pending.load(std::memory_order_acquire)) {
+            std::deque<task<void>> new_tasks;
+            std::deque<std::function<void()>> new_posts;
+            {
+                std::lock_guard lock(p.inbox_mutex);
+                new_tasks.swap(p.incoming_tasks);
+                new_posts.swap(p.incoming_posts);
+                // Publish the empty transition under the same lock as enqueue.
+                // The first producer after this drain must wake the poller.
+                p.inbox_pending.store(false, std::memory_order_relaxed);
+            }
+            for (auto& work : new_tasks) {
+                auto h = work.release();
+                if (!h) continue;
+                p.roots.insert(h.address());
+                h.promise().on_completion = completed;
+                h.promise().completion_context = this;
+                p.ready.push_back(h);
+            }
+            for (auto& work : new_posts) p.posts.push_back(std::move(work));
         }
-        for (auto& work : new_tasks) {
-            auto h = work.release();
-            if (!h) continue;
-            p.roots.insert(h.address());
-            h.promise().on_completion = completed;
-            h.promise().completion_context = this;
-            p.ready.push_back(h);
-        }
-        for (auto& work : new_posts) p.posts.push_back(std::move(work));
+        inbox_timing.close();
         if (stopped() && !p.cancellation_started) p.cancel_all();
+        profiling::scope post_timing(profiling::stage::post_dispatch);
         for (std::size_t i = 0, count = std::min<std::size_t>(p.posts.size(), 256); i < count; ++i) {
             auto work = std::move(p.posts.front()); p.posts.pop_front();
             try { work(); } catch (...) { record_error(std::current_exception()); }
         }
+        post_timing.close();
+        profiling::scope ready_timing(profiling::stage::coroutine_execution);
         for (std::size_t i = 0, count = std::min<std::size_t>(p.ready.size(), 256); i < count; ++i) {
             auto handle = p.ready.front(); p.ready.pop_front();
             handle.resume();
         }
+        ready_timing.close();
+        profiling::scope reap_timing(profiling::stage::root_reaping);
         while (p.completed_head) {
             auto h = task<void>::handle_type::from_address(p.completed_head.address());
             p.completed_head = h.promise().completed_next;
@@ -245,6 +270,7 @@ void io_context::run() {
             p.roots.erase(h.address());
             h.destroy();
         }
+        reap_timing.close();
         if (stopped()) {
             if (!p.cancellation_started) p.cancel_all();
             bool inbox_empty;
@@ -252,6 +278,7 @@ void io_context::run() {
             if (p.ready.empty() && p.posts.empty() && inbox_empty) break;
             continue;
         }
+        profiling::scope timer_timing(profiling::stage::timers);
         const auto now = std::chrono::steady_clock::now();
         while (!p.timers.empty() && p.timers.top()->deadline <= now) {
             p.ready.push_back(p.timers.top()->continuation); p.timers.pop();
@@ -262,8 +289,14 @@ void io_context::run() {
             auto ms = std::chrono::ceil<std::chrono::milliseconds>(p.timers.top()->deadline - now).count();
             timeout = static_cast<int>(std::min<decltype(ms)>(ms, INT_MAX));
         }
+        timer_timing.close();
+        // Task-only loops have no descriptor readiness to collect. Inbox and
+        // timers are still checked on every bounded dispatch turn above.
+        if (timeout == 0 && p.descriptors.empty()) continue;
         try {
-            const auto count = p.poller.wait(events, timeout);
+            const auto count = profiling::measure(timeout == 0 ? profiling::stage::poll_nonblocking
+                : profiling::stage::poll_blocking, [&] { return p.poller.wait(events, timeout); });
+            profiling::scope event_timing(profiling::stage::event_dispatch);
             for (std::size_t i = 0; i < count; ++i) {
                 const auto& event = events[i];
                 auto it = p.descriptors.find(event.token);

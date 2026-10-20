@@ -32,6 +32,8 @@ Same workload: one server thread, four persistent connections, 64-byte messages,
 [Latency, run spread, toolchains and all raw results](benchmarks/results/ci-2026-10-20/README.md). Every benchmark completed with validated data; this does not certify the performance leadership goal.
 <!-- benchmark-results:end -->
 
+A [local component study](benchmarks/results/component-2026-10-20/README.md) also records eight alternating before/after pairs per operation. The optimized build measured 58.26 ns per empty native poll, 18.88 ns per yield, 22.09 ns per same-context callback, and 22.89 ns per cross-thread enqueue in batches of 256 (median batch-average costs, Linux/WSL2, GCC 13.3). See the study for baseline values, exact units and uncertainty; these are component costs, not TCP or HTTP throughput.
+
 Read the [methodology and reproduction commands](benchmarks/README.md). [GitHub Actions](https://github.com/TabNahida/PACE/actions/workflows/ci.yml) is configured to build, test, and upload comparison artifacts for Linux, macOS, Windows, and FreeBSD. Shared runners are noisy: compare backends within the same job, inspect repeated runs, and treat TCP echo results separately from HTTP speed or multicore scaling.
 
 ## Small API. Explicit ownership. Independent reactors.
@@ -56,13 +58,15 @@ pace::task<pace::http::response> hello(pace::http::request request) {
 
 int main() {
     pace::io_context io;
-    pace::tcp_listener listener(io, {"127.0.0.1", 8080});
+    pace::tcp::listener listener(io, {"127.0.0.1", 8080});
     io.spawn(pace::http::serve(listener, hello));
     io.run();
 }
 ```
 
 The [complete HTTP example](examples/http_server.cpp) adds worker selection and signal-driven shutdown. The [TCP echo example](examples/echo_server.cpp) shows `accept()`, `read_some()`, and `write_all()`.
+
+TCP types live in `pace::tcp`: `listener`, `stream`, `endpoint`, and `listen_options`. Include `<pace/tcp.hpp>` for TCP or `<pace/pace.hpp>` for the complete library. Endpoints currently use numeric IPv4 addresses. The old `pace::tcp_listener`, `pace::tcp_stream`, `pace::ipv4_endpoint`, and `pace::listen_options` names remain compatibility aliases through `<pace/net.hpp>` and the umbrella header.
 
 For multiple loops, construct `pace::runtime workers(4)`, assign work with `workers.context(index).spawn(...)`, and call `workers.run()`. The call starts and joins the worker threads; `workers.stop()` wakes every loop. Task placement is explicit; PACE currently does not migrate tasks or pin threads to CPU cores.
 
@@ -97,7 +101,7 @@ xmake -y
 xmake test -v
 
 # Build the optional comparison target, including Asio and libuv.
-xmake f -m release --sanitizers=n --benchmarks=y -y
+xmake f -m release --sanitizers=n --profiling=n --benchmarks=y -y
 xmake -y pace_bench
 python3 scripts/run_benchmarks.py --require-all --repeats 5 --clients 8 \
   --requests 5000 --warmup 500 --bytes 64 --output benchmarks/results/local
@@ -105,7 +109,7 @@ python3 scripts/run_benchmarks.py --require-all --repeats 5 --clients 8 \
 
 Use `python` instead of `python3` on Windows and enter the benchmark command on one line in PowerShell. The comparison runner finds the latest `pace_bench` binary under `build/`; pass `--executable` to select one explicitly. Its output includes Markdown and JSON summaries plus all raw measurements.
 
-Available targets: `pace`, `pace_runtime_tests`, `pace_network_tests`, `http_server`, `echo_server`, and optional `pace_bench`. Build switches include `--tests=n` and `--examples=n`.
+Available targets: `pace`, `pace_runtime_tests`, `pace_network_tests`, `http_server`, `echo_server`, and optional `pace_bench`. Enable the dependency-free `pace_components` target with `--components=y`; its [microbenchmark guide](benchmarks/components.md) explains operation boundaries and paired before/after runs. Build switches include `--tests=n` and `--examples=n`.
 
 ## Platform support
 

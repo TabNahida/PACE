@@ -1,5 +1,11 @@
 # Reproducible TCP echo comparison
 
+For isolated PACE operation timings before optimization, see the
+[component microbenchmarks](components.md). Their ns/op units are explicitly
+defined and separate from this end-to-end TCP workload.
+For instrumented reactor-stage diagnosis, see [stage profiling](profiling.md).
+Profiling builds are explicitly excluded from backend comparisons.
+
 `echo_bench.cpp` hosts PACE, standalone Asio, and libuv behind the same TCP echo
 protocol. Every backend uses one server thread and the same independent blocking
 client implementation. Each client has one persistent connection and one request
@@ -24,6 +30,7 @@ python3 scripts/run_benchmarks.py \
 
 Use the executable path for your platform; on Windows it ends in `.exe`. Omitting
 `--executable` selects the newest benchmark executable under `build/`.
+Pass `--build-dir build/fair` to restrict discovery to one build directory.
 `--message-size` is an alias for `--bytes`. If `--output` ends in `.json`, the runner
 writes a combined JSON report there and puts individual evidence files in a
 sibling `<name>-evidence/` directory. It also appends its Markdown table to

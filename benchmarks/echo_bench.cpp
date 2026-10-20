@@ -17,7 +17,8 @@
 #include <signal.h>
 #endif
 
-#include <pace/net.hpp>
+#include <pace/tcp.hpp>
+#include <pace/detail/profiling.hpp>
 #ifdef PACE_HAS_LIBUV
 #include <uv.h>
 #endif
@@ -50,6 +51,7 @@
 
 namespace {
 using clock_type = std::chrono::steady_clock;
+namespace profiling = pace::detail::profiling;
 constexpr std::size_t server_buffer_size = 64 * 1024;
 
 class server {
@@ -57,6 +59,7 @@ public:
     virtual ~server() = default;
     virtual std::uint16_t port() const = 0;
     virtual void stop() noexcept = 0;
+    virtual const profiling::counters* profile() const noexcept { return nullptr; }
     void check_error() {
         std::lock_guard lock(error_mutex_);
         if (error_) std::rethrow_exception(error_);
@@ -76,8 +79,10 @@ public:
     pace_server() : listener_(context_, {"127.0.0.1", 0}) {
         context_.spawn(accept_loop());
         worker_ = std::thread([this] {
+            if constexpr (profiling::enabled) profiling::reset();
             try { context_.run(); }
             catch (...) { remember_error(std::current_exception()); }
+            if constexpr (profiling::enabled) profile_ = profiling::snapshot();
         });
     }
     ~pace_server() override { stop(); }
@@ -86,8 +91,13 @@ public:
         context_.stop();
         if (worker_.joinable()) worker_.join();
     }
+    const profiling::counters* profile() const noexcept override {
+        // benchmark() reads this only after stop() has joined the server thread.
+        if constexpr (profiling::enabled) return &profile_;
+        return nullptr;
+    }
 private:
-    pace::task<void> echo(pace::tcp_stream socket) {
+    pace::task<void> echo(pace::tcp::stream socket) {
         socket.set_no_delay();
         std::array<char, server_buffer_size> buffer{};
         for (;;) {
@@ -100,8 +110,9 @@ private:
         for (;;) context_.spawn(echo(co_await listener_.accept()));
     }
     pace::io_context context_;
-    pace::tcp_listener listener_;
+    pace::tcp::listener listener_;
     std::thread worker_;
+    profiling::counters profile_{};
 };
 
 #ifdef PACE_HAS_ASIO
@@ -381,9 +392,11 @@ void benchmark(const options& config) {
     start_signal.set_value();
     for (auto& worker : workers) worker.join();
     const auto elapsed = std::chrono::duration<double>(clock_type::now() - begin).count();
-    // Check before shutdown: cancellation is not a benchmark failure.
+    // Cancellation during shutdown is suppressed by the backends; genuine
+    // errors observed while draining must also invalidate the result.
     service->check_error();
     service->stop();
+    service->check_error();
     for (const auto& error : errors) if (error) std::rethrow_exception(error);
     std::vector<double> merged;
     merged.reserve(config.clients * config.requests);
@@ -402,7 +415,20 @@ void benchmark(const options& config) {
         << ",\"requests_per_second\":" << throughput
         << ",\"roundtrip_mib_per_second\":" << throughput * config.bytes * 2 / (1024 * 1024)
         << ",\"p50_us\":" << percentile(0.50) << ",\"p99_us\":" << percentile(0.99)
-        << ",\"max_us\":" << merged.back() << ",\"payload_verified\":true}\n";
+        << ",\"max_us\":" << merged.back() << ",\"payload_verified\":true"
+        << ",\"instrumented\":" << (service->profile() ? "true" : "false");
+    if (const auto* counters = service->profile()) {
+        std::cout << ",\"pace_profile\":{\"window\":\"server event-loop lifetime including startup, warmup and shutdown\",\"stages\":[";
+        for (std::size_t index = 0; index < counters->size(); ++index) {
+            if (index != 0) std::cout << ',';
+            const auto& value = (*counters)[index];
+            std::cout << "{\"name\":\"" << profiling::names[index]
+                << "\",\"calls\":" << value.calls << ",\"inclusive_ns\":" << value.inclusive_ns
+                << ",\"exclusive_ns\":" << value.exclusive_ns << '}';
+        }
+        std::cout << "]}";
+    }
+    std::cout << "}\n";
 }
 
 void list_backends() {
@@ -413,7 +439,7 @@ void list_backends() {
 #ifdef PACE_HAS_LIBUV
     std::cout << ",\"libuv\"";
 #endif
-    std::cout << "],\"asio_version\":";
+    std::cout << "],\"pace_profiling\":" << (profiling::enabled ? "true" : "false") << ",\"asio_version\":";
 #ifdef PACE_HAS_ASIO
     std::cout << ASIO_VERSION;
 #else

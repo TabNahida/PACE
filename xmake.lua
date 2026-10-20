@@ -28,6 +28,15 @@ option("sanitizers")
     set_default(false)
     set_description("Enable AddressSanitizer and UndefinedBehaviorSanitizer")
 option_end()
+option("components")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Build PACE component microbenchmarks without external dependencies")
+option_end()
+option("profiling")
+    set_default(false)
+    set_description("Enable intrusive per-thread stage timings (diagnostics only)")
+option_end()
 
 if has_config("benchmarks") then
     add_requires("asio 1.34.2", "libuv 1.52.1")
@@ -42,6 +51,7 @@ target("pace")
     add_files("src/*.cpp")
     add_headerfiles("include/(pace/**.hpp)")
     add_includedirs("include", {public = true})
+    if has_config("profiling") then add_defines("PACE_ENABLE_PROFILING", {public = true}) end
     if is_plat("windows", "mingw") then
         add_syslinks("ws2_32", {public = true})
         add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX", "_WIN32_WINNT=0x0A00", {public = true})
@@ -78,5 +88,12 @@ if has_config("benchmarks") then
         add_deps("pace")
         add_packages("asio", "libuv")
         add_defines("PACE_HAS_ASIO", "PACE_HAS_LIBUV", "ASIO_STANDALONE")
+    target_end()
+end
+if has_config("components") then
+    target("pace_components")
+        set_kind("binary")
+        add_files("benchmarks/components_bench.cpp")
+        add_deps("pace")
     target_end()
 end

@@ -1,0 +1,718 @@
+{
+  "schema_version": 1,
+  "status": "completed",
+  "label": "paired-comparison",
+  "started_utc": "2026-10-20T08:57:15.069216+00:00",
+  "binaries": {
+    "before": {
+      "path": "/tmp/pace-components-baseline-full",
+      "sha256": "4a7d691363697121441def8d17527ab01dda723a38c73f10ee19e3c667a29dae",
+      "build": {
+        "components": [
+          "lazy_task",
+          "await_chain",
+          "empty_poll",
+          "yield",
+          "post",
+          "cross_thread_post",
+          "spawn_completion",
+          "zero_timer"
+        ],
+        "compiler": "GCC 13.3.0",
+        "cpp_standard": 202002,
+        "ndebug": true,
+        "profiling_enabled": false
+      }
+    },
+    "after": {
+      "path": "/tmp/pace-components-after",
+      "sha256": "ed26ad4c5096be65278344158a4836f81b90fea7d6ce4ba2bce82f322ba977c3",
+      "build": {
+        "components": [
+          "lazy_task",
+          "await_chain",
+          "empty_poll",
+          "yield",
+          "post",
+          "cross_thread_post",
+          "spawn_completion",
+          "zero_timer"
+        ],
+        "compiler": "GCC 13.3.0",
+        "cpp_standard": 202002,
+        "ndebug": true,
+        "profiling_enabled": false
+      }
+    }
+  },
+  "environment": {
+    "platform": "Linux-6.18.40.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_model": "Intel(R) Core(TM) Ultra 7 270K Plus",
+    "git_commit": "0c42dcc9c1e481909e3283d2f80e2891ec4c2b89",
+    "git_status": "M .github/workflows/ci.yml\n M README.md\n M README.zh-CN.md\n M benchmarks/README.md\n M benchmarks/echo_bench.cpp\n M docs/architecture.md\n M examples/echo_server.cpp\n M examples/http_server.cpp\n M include/pace/http.hpp\n M include/pace/net.hpp\n M scripts/run_benchmarks.py\n M src/http.cpp\n M src/io_context.cpp\n M src/net.cpp\n M src/poller.cpp\n M tests/network_tests.cpp\n M tests/runtime_tests.cpp\n M tests/test_benchmark_runner.py\n M xmake.lua\n?? benchmarks/components.md\n?? benchmarks/components_bench.cpp\n?? benchmarks/profiling.md\n?? benchmarks/results/component-2026-10-20/\n?? include/pace/detail/profiling.hpp\n?? include/pace/tcp.hpp\n?? scripts/compare_builds.py\n?? scripts/run_components.py\n?? scripts/run_profile.py"
+  },
+  "configuration": {
+    "component": "cross_thread_post",
+    "tcp": false,
+    "pairs": 8,
+    "iterations": 1000000,
+    "depth": 4,
+    "batch": 256,
+    "clients": 4,
+    "requests": 100000,
+    "bytes": 64,
+    "warmup": 10000,
+    "timeout": 120,
+    "bootstrap_samples": 10000,
+    "seed": 0,
+    "label": "paired-comparison"
+  },
+  "operation": "One producer post call with a concurrent reactor consumer; timed enqueue batches include mutex/wake work, exclude final drain",
+  "ratio_definition": "after / before; above 1 favors after for requests/s, below 1 favors after for ns/op",
+  "uncertainty_method": "Resample whole paired ratios with replacement; percentile interval of bootstrap medians",
+  "limitations": [
+    "Exploratory interval assumes representative independent pairs; scheduling/frequency drift and autocorrelation can violate this",
+    "Small samples and short runs do not establish a portable performance improvement",
+    "No performance threshold changes the process exit code; correctness/measurement failures do"
+  ],
+  "commands": [
+    {
+      "pair": 1,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 1,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "3"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "3"
+      ]
+    },
+    {
+      "pair": 4,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "4"
+      ]
+    },
+    {
+      "pair": 4,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "4"
+      ]
+    },
+    {
+      "pair": 5,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "5"
+      ]
+    },
+    {
+      "pair": 5,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "5"
+      ]
+    },
+    {
+      "pair": 6,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "6"
+      ]
+    },
+    {
+      "pair": 6,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "6"
+      ]
+    },
+    {
+      "pair": 7,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "7"
+      ]
+    },
+    {
+      "pair": 7,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "7"
+      ]
+    },
+    {
+      "pair": 8,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "8"
+      ]
+    },
+    {
+      "pair": 8,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "cross_thread_post",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "8"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 1,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 332975926,
+      "ns_per_operation": 332.975926,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 1,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 23287704,
+      "ns_per_operation": 23.287704,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 2,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 23954038,
+      "ns_per_operation": 23.954038,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 2,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 325799901,
+      "ns_per_operation": 325.799901,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 3,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 324806501,
+      "ns_per_operation": 324.806501,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 3,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 22672987,
+      "ns_per_operation": 22.672987,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 4,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 23547073,
+      "ns_per_operation": 23.547073,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 4,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 321628251,
+      "ns_per_operation": 321.628251,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 5,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 326450864,
+      "ns_per_operation": 326.450864,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 5,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 22613516,
+      "ns_per_operation": 22.613516,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 6,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 23049938,
+      "ns_per_operation": 23.049938,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 6,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 325742000,
+      "ns_per_operation": 325.742,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 7,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 318601119,
+      "ns_per_operation": 318.601119,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 7,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 22543092,
+      "ns_per_operation": 22.543092,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 8,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 22720158,
+      "ns_per_operation": 22.720158,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "cross_thread_post",
+      "trial": 8,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 2,
+      "completed_operations": 1000000,
+      "elapsed_ns": 312239616,
+      "ns_per_operation": 312.239616,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    }
+  ],
+  "pairs": [
+    {
+      "pair": 1,
+      "before": 332.975926,
+      "after": 23.287704,
+      "after_before_ratio": 0.06993810117071346
+    },
+    {
+      "pair": 2,
+      "after": 23.954038,
+      "before": 325.799901,
+      "after_before_ratio": 0.07352377310881995
+    },
+    {
+      "pair": 3,
+      "before": 324.806501,
+      "after": 22.672987,
+      "after_before_ratio": 0.06980459729160408
+    },
+    {
+      "pair": 4,
+      "after": 23.547073,
+      "before": 321.628251,
+      "after_before_ratio": 0.07321207924611076
+    },
+    {
+      "pair": 5,
+      "before": 326.450864,
+      "after": 22.613516,
+      "after_before_ratio": 0.0692708106908242
+    },
+    {
+      "pair": 6,
+      "after": 23.049938,
+      "before": 325.742,
+      "after_before_ratio": 0.07076133258836748
+    },
+    {
+      "pair": 7,
+      "before": 318.601119,
+      "after": 22.543092,
+      "after_before_ratio": 0.07075647465004667
+    },
+    {
+      "pair": 8,
+      "after": 22.720158,
+      "before": 312.239616,
+      "after_before_ratio": 0.07276513560662334
+    }
+  ],
+  "summary": {
+    "metric": "ns_per_operation",
+    "lower_is_better": true,
+    "before_median": 325.2742505,
+    "after_median": 22.885048,
+    "before_min": 312.239616,
+    "before_max": 332.975926,
+    "after_min": 22.543092,
+    "after_max": 23.954038,
+    "median_paired_after_before_ratio": 0.07075890361920707,
+    "min_paired_after_before_ratio": 0.0692708106908242,
+    "max_paired_after_before_ratio": 0.07352377310881995,
+    "median_ratio_bootstrap_95_percentile_interval": [
+      0.06980459729160408,
+      0.07314445435772166
+    ],
+    "after_wins": 8,
+    "ties": 0,
+    "pairs": 8,
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 0
+  },
+  "failure": null,
+  "finished_utc": "2026-10-20T08:57:18.625828+00:00",
+  "archive_note": "One unrelated untracked local path was omitted from git_status; all workload settings, commands, timing records and computed results are unchanged."
+}

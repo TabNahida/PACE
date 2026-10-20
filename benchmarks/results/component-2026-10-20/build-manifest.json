@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "study_date": "2026-10-20",
+  "notes": [
+    "The reported Git commit is a common working-tree base, not an exact identifier for either binary. Per-file source and binary hashes identify the measured variants.",
+    "Both variants use GCC 13.3.0, C++20, -O3, -DNDEBUG and -pthread; profiling is disabled.",
+    "Both executables compile and link the same full source-file set: benchmarks/components_bench.cpp plus src/http.cpp, src/io_context.cpp, src/net.cpp, src/poller.cpp and src/runtime.cpp. Compiler flags and source ordering match; no warning flags or LTO are used.",
+    "One unrelated untracked path is omitted from report Git-status metadata. Numeric results and raw timing records are unchanged.",
+    "core-before-to-after.patch transforms the preserved baseline include/src snapshot into the after snapshot. Reverse it against matching after sources to reconstruct the baseline core."
+  ],
+  "baseline": {
+    "binary": "/tmp/pace-components-baseline-full",
+    "binary_sha256": "4a7d691363697121441def8d17527ab01dda723a38c73f10ee19e3c667a29dae",
+    "compiler_arguments": [
+      "g++",
+      "-std=c++20",
+      "-O3",
+      "-DNDEBUG",
+      "-pthread",
+      "-I/tmp/pace-components-baseline-source/include",
+      "benchmarks/components_bench.cpp",
+      "/tmp/pace-components-baseline-source/src/http.cpp",
+      "/tmp/pace-components-baseline-source/src/io_context.cpp",
+      "/tmp/pace-components-baseline-source/src/net.cpp",
+      "/tmp/pace-components-baseline-source/src/poller.cpp",
+      "/tmp/pace-components-baseline-source/src/runtime.cpp",
+      "-o",
+      "/tmp/pace-components-baseline-full"
+    ],
+    "core_snapshot_sha256": {
+      "include/pace/detail/poller.hpp": "e1dc4b2dc717dcb43fd7e5587017dd2fb6a83f2bfb0a05a51124a30632bfcac4",
+      "include/pace/http.hpp": "1698109928e9ca5595652ae1ca4a7ab48b70b23b90a156d8e912d35bc03851d0",
+      "include/pace/io_context.hpp": "d817697d603b55b36bc3eeda9ab62b78d9954b904d9a2b06a27a7a79b898e058",
+      "include/pace/net.hpp": "bcf33f0b76222f8b98eaa83416c0686194558bd7909754b9ea9e113a8352ea67",
+      "include/pace/pace.hpp": "cd02cc3aaa859ca33c366f002daddae41e49d3e26bc439e9cbf4534da8c15b36",
+      "include/pace/platform.hpp": "7aa182d1635d51ea0706d2828ff8375ee41afe5480c1aa59ad0f317a6e1a906f",
+      "include/pace/runtime.hpp": "845e42a1cfde6386fd500f056df253944e91276f3858508a165412464cc4cc66",
+      "include/pace/task.hpp": "7de346df1fb4c59377586b89fe9ea16b271ac9bfcc3d0469f89d823331d2f7d5",
+      "include/pace/tcp.hpp": "ba7f8d2dd71e5eb65edadc0f6626c6cd81c770d4618d7aca37481a1946a86765",
+      "src/http.cpp": "919871b74fc33107f0719800521d444f22fc580015e22982dd2bb660b39ccb61",
+      "src/io_context.cpp": "ea6a7d52ee616fc1a84aa5106051fa720c9fd1373f297020fd7fa368ec170cd2",
+      "src/net.cpp": "424f88883ff9f60d78e124b0a8bd4c33197d0eb302ce5fdea27605c617837904",
+      "src/poller.cpp": "c4b0b6f5487fdceeff5ff8c8a7185481b29b4f3a4cbc9f3242a916e48299b794",
+      "src/runtime.cpp": "460383c516b03805ba17737242e309e6e8f4018c1ba17c5af51200b0bad915df"
+    },
+    "build_command": "g++ -std=c++20 -O3 -DNDEBUG -pthread -I/tmp/pace-components-baseline-source/include benchmarks/components_bench.cpp /tmp/pace-components-baseline-source/src/*.cpp -o /tmp/pace-components-baseline-full"
+  },
+  "after": {
+    "binary": "/tmp/pace-components-after",
+    "binary_sha256": "ed26ad4c5096be65278344158a4836f81b90fea7d6ce4ba2bce82f322ba977c3",
+    "core_snapshot_sha256": {
+      "include/pace/detail/poller.hpp": "e1dc4b2dc717dcb43fd7e5587017dd2fb6a83f2bfb0a05a51124a30632bfcac4",
+      "include/pace/detail/profiling.hpp": "8296366efdaf1c39f5fc61372836880dc6cb4271dafd53b4de5206c528b85fc0",
+      "include/pace/http.hpp": "bf8a0c551bc7a14541841de730f6edf88c0f154eff645c47dc899872d24e6318",
+      "include/pace/io_context.hpp": "d817697d603b55b36bc3eeda9ab62b78d9954b904d9a2b06a27a7a79b898e058",
+      "include/pace/net.hpp": "bcf33f0b76222f8b98eaa83416c0686194558bd7909754b9ea9e113a8352ea67",
+      "include/pace/pace.hpp": "cd02cc3aaa859ca33c366f002daddae41e49d3e26bc439e9cbf4534da8c15b36",
+      "include/pace/platform.hpp": "7aa182d1635d51ea0706d2828ff8375ee41afe5480c1aa59ad0f317a6e1a906f",
+      "include/pace/runtime.hpp": "845e42a1cfde6386fd500f056df253944e91276f3858508a165412464cc4cc66",
+      "include/pace/task.hpp": "7de346df1fb4c59377586b89fe9ea16b271ac9bfcc3d0469f89d823331d2f7d5",
+      "include/pace/tcp.hpp": "ba7f8d2dd71e5eb65edadc0f6626c6cd81c770d4618d7aca37481a1946a86765",
+      "src/http.cpp": "3dbb807242082359463507d2da02c0d30723f778e74d1d8bbb6aa00e3327913b",
+      "src/io_context.cpp": "a41226bb9f2b9f60f3c29da6aacad3ecedc7a471c5ed39305262fadb724be5c4",
+      "src/net.cpp": "ab52d9b02a17c9dc588de856ee72560cbf8edcf8ce1abf755db3ce4f577dffbc",
+      "src/poller.cpp": "46eb0e3a66410ecb51604d76875c2180231b1a2ee6638489ecd6256c6be536c9",
+      "src/runtime.cpp": "460383c516b03805ba17737242e309e6e8f4018c1ba17c5af51200b0bad915df"
+    },
+    "compiler_arguments": [
+      "g++",
+      "-std=c++20",
+      "-O3",
+      "-DNDEBUG",
+      "-pthread",
+      "-Iinclude",
+      "benchmarks/components_bench.cpp",
+      "src/http.cpp",
+      "src/io_context.cpp",
+      "src/net.cpp",
+      "src/poller.cpp",
+      "src/runtime.cpp",
+      "-o",
+      "/tmp/pace-components-after"
+    ],
+    "build_command": "g++ -std=c++20 -O3 -DNDEBUG -pthread -Iinclude benchmarks/components_bench.cpp src/*.cpp -o /tmp/pace-components-after"
+  },
+  "harness_sha256": {
+    "benchmarks/components_bench.cpp": "0945c28eebd6c89dfd1cde8e66d6d7a2b0e6c0c85efe7bf7a5b8a93d7f6ddb2d",
+    "scripts/run_components.py": "a99a48165272ffede0c61622c549369bfcbb051a8d11e8a59c229c05693d407c",
+    "scripts/compare_builds.py": "3074fbc61e7482e5a17d0bb86cd530af16895fba02f192d0983af328e23bb67f"
+  },
+  "artifacts": {
+    "components-before-matched.json": {
+      "sha256": "879af599e749f8fbf4eae66dd9663f1fcb94333b99bf5d54a4b36c6cdf693f1d",
+      "source_report_sha256": "9e934e299c68527f68508eb78a8c348ddd9d92db856a4dc72ce851bf2a8d1514",
+      "raw_records": 40
+    },
+    "components-after.json": {
+      "sha256": "8437f26d6489b3102e61c8096f7bed43c400587e89ab21985362e77484d47270",
+      "source_report_sha256": "bae502f638472363f67fae0066b0d2d6c092e6c273eb608a9d2343df1ae481d2",
+      "raw_records": 40
+    },
+    "matched-await_chain.json": {
+      "sha256": "17f05923d6166ba115a92db79ebe2d6db4958a6eb5419686b117273f593d10fc",
+      "source_report_sha256": "f821e3a1cd8cbda3b91c3a5f47403cd6299cf66a40a9b3ecbf85527006f322bd",
+      "raw_records": 16
+    },
+    "matched-cross_thread_post.json": {
+      "sha256": "4db8bf770ea9beed7c433a20ae588eca3dd92487c19614930dc2c86207695003",
+      "source_report_sha256": "79927596bd51e43126b5aebfbe135c369bf046d905b02919df810aac07ffce2c",
+      "raw_records": 16
+    },
+    "matched-empty_poll.json": {
+      "sha256": "39363fbf6b2ac9513b64394c12d8d9a4514e3e3ecc205af236ca4dcccf5f521c",
+      "source_report_sha256": "88a7c1a2fda51e5b104813ecc26e8dfb3c43eead77dd13733edf6f7339e5720f",
+      "raw_records": 16
+    },
+    "matched-lazy_task.json": {
+      "sha256": "d51e231aacc19cde93821cf52a6ec4ee3ac5c0510d9cee078461b6519a41b440",
+      "source_report_sha256": "3a86fd852fb5ab086605c2e319861387e4b66b1a9873719023cbd83fda59ed41",
+      "raw_records": 16
+    },
+    "matched-post.json": {
+      "sha256": "55637cc3f7ec770c4eea8c712561ea1c591f968ebaaa588b752f41ffada90cb9",
+      "source_report_sha256": "ca7f9cc83283d40165820881c62dc173d52bf0b9eda5244a8e7b2cf2caf9e4e9",
+      "raw_records": 16
+    },
+    "matched-spawn_completion.json": {
+      "sha256": "105b08a6742539e3822eaf01be3f9a3138d87f266f0383dceb2b357d006efefb",
+      "source_report_sha256": "699883ffccf498bda1bdded3eb47ee923fdf061fcdb008569a755248b5f8532d",
+      "raw_records": 16
+    },
+    "matched-yield.json": {
+      "sha256": "42b2f8360fca4f440a303d52a4f8419a05a765da4d8fc21d412c262244d57f30",
+      "source_report_sha256": "3f1b3195339adc68015e3347e5f6a3d8a5c9a3a9fe518527c0120eb75a9d47ae",
+      "raw_records": 16
+    },
+    "matched-zero_timer.json": {
+      "sha256": "c3c76988ec8fe138c53056dca99fef5ab755e0c34d082d43f768114cf2158d03",
+      "source_report_sha256": "13914c027348c7162504f6cf6b495379975569e7f15112b222bc612c0b2b997b",
+      "raw_records": 16
+    }
+  },
+  "core_patch_sha256": "4cad4cdb765eab109845bea1663f28235bc3bed55c623de14b2b71f944516e8c"
+}

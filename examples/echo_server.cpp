@@ -32,7 +32,7 @@ public:
     }
 };
 
-pace::task<void> echo(pace::tcp_stream stream) {
+pace::task<void> echo(pace::tcp::stream stream) {
     try {
         stream.set_no_delay();
         std::array<char, 16 * 1024> buffer;
@@ -43,7 +43,7 @@ pace::task<void> echo(pace::tcp_stream stream) {
     }
 }
 
-pace::task<void> accept_connections(pace::tcp_listener& listener) {
+pace::task<void> accept_connections(pace::tcp::listener& listener) {
     for (;;) {
         try {
             listener.context().spawn(echo(co_await listener.accept()));
@@ -64,12 +64,12 @@ int main(int argc, char** argv) {
         if (workers > 1) throw std::invalid_argument("this example uses SO_REUSEPORT; use one worker on Windows");
 #endif
         pace::runtime runtime(workers);
-        std::vector<std::unique_ptr<pace::tcp_listener>> listeners;
+        std::vector<std::unique_ptr<pace::tcp::listener>> listeners;
         for (std::size_t i = 0; i < runtime.size(); ++i) {
             auto& context = runtime.context(i);
-            listeners.push_back(std::make_unique<pace::tcp_listener>(context,
-                pace::ipv4_endpoint{"0.0.0.0", static_cast<std::uint16_t>(port)},
-                pace::listen_options{.reuse_port = workers > 1}));
+            listeners.push_back(std::make_unique<pace::tcp::listener>(context,
+                pace::tcp::endpoint{"0.0.0.0", static_cast<std::uint16_t>(port)},
+                pace::tcp::listen_options{.reuse_port = workers > 1}));
             context.spawn(accept_connections(*listeners.back()));
         }
         std::signal(SIGINT, on_signal);

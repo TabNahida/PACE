@@ -13,7 +13,7 @@ jobs:
   native:
     name: ${{ matrix.os }} / ${{ matrix.standard }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -32,15 +32,27 @@ jobs:
         with:
           python-version: '3.12'
       - name: Configure
-        run: xmake f -m release --cxxstandard=${{ matrix.standard }} --benchmarks=y -y
+        run: xmake f -m release -o build/fair --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=y --profiling=n -y
       - name: Build
         run: xmake -y
       - name: Tests
         run: xmake test -v
       - name: Validate benchmark reporting
         run: python -m unittest discover -s tests -p "test_benchmark_runner.py"
+      - name: Measure PACE components without instrumentation
+        run: python scripts/run_components.py --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/components-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 5
       - name: Compare PACE, libuv and Asio
-        run: python scripts/run_benchmarks.py --require-all --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/${{ matrix.os }}-${{ matrix.standard }}.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
+        run: python scripts/run_benchmarks.py --build-dir build/fair --require-all --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/${{ matrix.os }}-${{ matrix.standard }}.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
+      - name: Configure separate profiling build
+        run: xmake f -m release -o build/profile --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=n --examples=n --tests=y --profiling=y -y
+      - name: Build with profiling
+        run: xmake -y
+      - name: Test with profiling
+        run: xmake test -v
+      - name: Collect PACE stage diagnostics
+        run: python scripts/run_benchmarks.py --build-dir build/profile --backends pace --label profile-${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/profile-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 3 --requests 10000 --warmup 1000 --clients 4 --message-size 64
+      - name: Summarize PACE stage diagnostics
+        run: python scripts/run_profile.py --input benchmark-results/profile-${{ matrix.os }}-${{ matrix.standard }}.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -55,7 +67,7 @@ jobs:
       - uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: '3.0.9'
-      - run: xmake f -m debug --sanitizers=y --examples=n -y
+      - run: xmake f -m debug --sanitizers=y --examples=n --profiling=n -y
       - run: xmake -y
       - run: xmake test -v
         env:
@@ -64,7 +76,7 @@ jobs:
   freebsd:
     name: FreeBSD 14 / C++20
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Build, test and benchmark in FreeBSD
@@ -82,14 +94,62 @@ jobs:
             set -eu
             export XMAKE_ROOT=y
             xmake --version
-            xmake f -m release --benchmarks=y -y
+            xmake f -m release -o build/fair --cxxstandard=cxx20 --benchmarks=y --components=y --profiling=n -y
             xmake -y
             xmake test -v
             python3 -m unittest discover -s tests -p "test_benchmark_runner.py"
-            python3 scripts/run_benchmarks.py --require-all --label freebsd-cxx20 --output benchmark-results/freebsd.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
+            python3 scripts/run_components.py --label freebsd-cxx20 --output benchmark-results/components-freebsd.json --repeats 5
+            python3 scripts/run_benchmarks.py --build-dir build/fair --require-all --label freebsd-cxx20 --output benchmark-results/freebsd.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
+            xmake f -m release -o build/profile --cxxstandard=cxx20 --benchmarks=y --components=n --examples=n --tests=y --profiling=y -y
+            xmake -y
+            xmake test -v
+            python3 scripts/run_benchmarks.py --build-dir build/profile --backends pace --label profile-freebsd-cxx20 --output benchmark-results/profile-freebsd.json --repeats 3 --requests 10000 --warmup 1000 --clients 4 --message-size 64
+            python3 scripts/run_profile.py --input benchmark-results/profile-freebsd.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: benchmark-freebsd
           path: benchmark-results/
+          if-no-files-found: warn
+  runtime-comparison:
+    name: Runtime before/after / Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          # Last merged runtime before the inbox/polling optimizations. Keep the
+          # reference fixed so repeated runs remain interpretable.
+          ref: 0c42dcc9c1e481909e3283d2f80e2891ec4c2b89
+          path: _baseline
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build matching uninstrumented GCC variants
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p build/paired
+          g++ -std=c++20 -O3 -DNDEBUG -pthread -I_baseline/include _baseline/benchmarks/echo_bench.cpp _baseline/src/*.cpp -o build/paired/tcp-before
+          g++ -std=c++20 -O3 -DNDEBUG -pthread -Iinclude benchmarks/echo_bench.cpp src/*.cpp -o build/paired/tcp-after
+          g++ -std=c++20 -O3 -DNDEBUG -pthread -I_baseline/include benchmarks/components_bench.cpp _baseline/src/*.cpp -o build/paired/components-before
+          g++ -std=c++20 -O3 -DNDEBUG -pthread -Iinclude benchmarks/components_bench.cpp src/*.cpp -o build/paired/components-after
+          git -C _baseline rev-parse HEAD > build/paired/baseline-revision.txt
+          git rev-parse HEAD > build/paired/candidate-revision.txt
+      - name: Alternate TCP and component comparisons
+        shell: bash
+        run: |
+          set -eu
+          python scripts/compare_builds.py --before build/paired/tcp-before --after build/paired/tcp-after --tcp --pairs 8 --requests 100000 --output benchmark-results/paired-tcp.json --label ubuntu-runtime-paired
+          for component in lazy_task await_chain empty_poll yield post cross_thread_post spawn_completion zero_timer; do
+            python scripts/compare_builds.py --before build/paired/components-before --after build/paired/components-after --component "$component" --pairs 8 --iterations 1000000 --output "benchmark-results/paired-$component.json" --label ubuntu-runtime-paired
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-before-after-linux
+          path: |
+            benchmark-results/
+            build/paired/*-revision.txt
           if-no-files-found: warn

@@ -1,3 +1,4 @@
+#include <pace/tcp.hpp>
 #include <pace/pace.hpp>
 
 #include <array>
@@ -12,6 +13,12 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <type_traits>
+
+static_assert(std::is_same_v<pace::tcp_stream, pace::tcp::stream>);
+static_assert(std::is_same_v<pace::tcp_listener, pace::tcp::listener>);
+static_assert(std::is_same_v<pace::ipv4_endpoint, pace::tcp::endpoint>);
+static_assert(std::is_same_v<pace::listen_options, pace::tcp::listen_options>);
 
 namespace {
 using namespace std::chrono_literals;
@@ -19,7 +26,7 @@ void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
-pace::task<void> echo_connection(pace::tcp_stream stream) {
+pace::task<void> echo_connection(pace::tcp::stream stream) {
     try {
         std::array<char, 4096> buffer{};
         while (const auto size = co_await stream.read_some(buffer))
@@ -29,15 +36,15 @@ pace::task<void> echo_connection(pace::tcp_stream stream) {
     }
 }
 
-pace::task<void> echo_listener(std::shared_ptr<pace::tcp_listener> listener) {
+pace::task<void> echo_listener(std::shared_ptr<pace::tcp::listener> listener) {
     auto stream = co_await listener->accept();
     co_await echo_connection(std::move(stream));
 }
 
 pace::task<void> tcp_roundtrip(pace::io_context& context) {
-    auto listener = std::make_shared<pace::tcp_listener>(context, pace::ipv4_endpoint{"127.0.0.1", 0});
+    auto listener = std::make_shared<pace::tcp::listener>(context, pace::tcp::endpoint{"127.0.0.1", 0});
     context.spawn(echo_listener(listener));
-    pace::tcp_stream client(context);
+    pace::tcp::stream client(context);
     co_await client.connect(listener->local_endpoint());
     client.set_no_delay();
     std::string payload(96 * 1024, '\0');
@@ -51,8 +58,9 @@ pace::task<void> tcp_roundtrip(pace::io_context& context) {
         received.append(buffer.data(), size);
     }
     require(received == payload, "binary TCP roundtrip mismatch");
-    pace::tcp_stream moved(std::move(client));
-    require(!client.is_open() && moved.is_open(), "move must transfer socket ownership");
+    pace::tcp_stream legacy(std::move(client));
+    pace::tcp::stream moved(std::move(legacy));
+    require(!client.is_open() && !legacy.is_open() && moved.is_open(), "new and compatibility APIs share socket ownership");
     moved.close();
     moved.close();
     bool bad_fd = false;
@@ -62,10 +70,10 @@ pace::task<void> tcp_roundtrip(pace::io_context& context) {
 }
 
 pace::task<void> connect_errors(pace::io_context& context) {
-    pace::tcp_listener reserved(context, {"127.0.0.1", 0});
+    pace::tcp::listener reserved(context, {"127.0.0.1", 0});
     auto endpoint = reserved.local_endpoint();
     reserved.close();
-    pace::tcp_stream client(context);
+    pace::tcp::stream client(context);
     bool failed = false;
     try { co_await client.connect(endpoint); }
     catch (const std::system_error&) { failed = true; }
@@ -89,7 +97,7 @@ pace::task<pace::http::response> http_handler(pace::http::request request) {
     co_return pace::http::response{.body = request.target};
 }
 
-pace::task<void> http_listener(std::shared_ptr<pace::tcp_listener> listener, pace::http::limits bounds) {
+pace::task<void> http_listener(std::shared_ptr<pace::tcp::listener> listener, pace::http::limits bounds) {
     co_await pace::http::serve(*listener, http_handler, bounds);
 }
 
@@ -139,7 +147,7 @@ void verify_response_framing() {
     require(complete_responses("HTTP/1.1 204 No Content\r\n\r\n", 1), "204 framing has no payload");
 }
 
-pace::task<std::string> read_responses(pace::tcp_stream& stream, std::size_t expected = 1,
+pace::task<std::string> read_responses(pace::tcp::stream& stream, std::size_t expected = 1,
                                      bool head_response = false) {
     std::string output;
     std::array<char, 1024> buffer{};
@@ -153,16 +161,16 @@ pace::task<std::string> read_responses(pace::tcp_stream& stream, std::size_t exp
     co_return output;
 }
 
-pace::task<std::string> exchange(pace::io_context& context, pace::ipv4_endpoint endpoint,
+pace::task<std::string> exchange(pace::io_context& context, pace::tcp::endpoint endpoint,
                                std::string request, std::size_t expected = 1) {
-    pace::tcp_stream stream(context);
+    pace::tcp::stream stream(context);
     co_await stream.connect(std::move(endpoint));
     co_await stream.write_all(request);
     co_return co_await read_responses(stream, expected, request.starts_with("HEAD "));
 }
 
 pace::task<void> http_protocol(pace::io_context& context) {
-    auto listener = std::make_shared<pace::tcp_listener>(context, pace::ipv4_endpoint{"127.0.0.1", 0});
+    auto listener = std::make_shared<pace::tcp::listener>(context, pace::tcp::endpoint{"127.0.0.1", 0});
     context.spawn(http_listener(listener, {.max_header_bytes = 256, .max_body_bytes = 32, .max_requests_per_connection = 2}));
     const auto endpoint = listener->local_endpoint();
     auto result = co_await exchange(context, endpoint,
@@ -177,7 +185,7 @@ pace::task<void> http_protocol(pace::io_context& context) {
     require(result.find("Connection: keep-alive") < second && result.find("Connection: close", second) != std::string::npos,
             "HTTP request-count limit must close final response");
 
-    pace::tcp_stream fragmented(context);
+    pace::tcp::stream fragmented(context);
     co_await fragmented.connect(endpoint);
     co_await fragmented.write_all("POST /echo HTTP/1.1\r\nHo");
     co_await context.sleep_for(1ms);
@@ -232,7 +240,7 @@ pace::task<void> stop_soon(pace::io_context& context) {
 }
 
 pace::task<void> stop_pending_accept(pace::io_context& context) {
-    pace::tcp_listener listener(context, {"127.0.0.1", 0});
+    pace::tcp::listener listener(context, {"127.0.0.1", 0});
     context.spawn(stop_soon(context));
     bool canceled = false;
     try { auto unused = co_await listener.accept(); }
@@ -240,7 +248,7 @@ pace::task<void> stop_pending_accept(pace::io_context& context) {
     require(canceled, "stop must cancel a suspended accept");
 }
 
-pace::task<void> accept_idle(std::shared_ptr<pace::tcp_listener> listener) {
+pace::task<void> accept_idle(std::shared_ptr<pace::tcp::listener> listener) {
     auto stream = co_await listener->accept();
     std::array<char, 8> buffer;
     try { co_await stream.read_some(buffer); }
@@ -250,9 +258,9 @@ pace::task<void> accept_idle(std::shared_ptr<pace::tcp_listener> listener) {
 }
 
 pace::task<void> stop_pending_read(pace::io_context& context) {
-    auto listener = std::make_shared<pace::tcp_listener>(context, pace::ipv4_endpoint{"127.0.0.1", 0});
+    auto listener = std::make_shared<pace::tcp::listener>(context, pace::tcp::endpoint{"127.0.0.1", 0});
     context.spawn(accept_idle(listener));
-    pace::tcp_stream client(context);
+    pace::tcp::stream client(context);
     co_await client.connect(listener->local_endpoint());
     context.spawn(stop_soon(context));
     bool canceled = false;
@@ -262,15 +270,15 @@ pace::task<void> stop_pending_read(pace::io_context& context) {
     require(canceled, "stop must cancel a suspended read");
 }
 
-pace::task<void> close_soon(std::shared_ptr<pace::tcp_stream> stream) {
+pace::task<void> close_soon(std::shared_ptr<pace::tcp::stream> stream) {
     co_await stream->context().sleep_for(5ms);
     stream->close();
 }
 
 pace::task<void> close_pending_read(pace::io_context& context) {
-    auto listener = std::make_shared<pace::tcp_listener>(context, pace::ipv4_endpoint{"127.0.0.1", 0});
+    auto listener = std::make_shared<pace::tcp::listener>(context, pace::tcp::endpoint{"127.0.0.1", 0});
     context.spawn(accept_idle(listener));
-    auto client = std::make_shared<pace::tcp_stream>(context);
+    auto client = std::make_shared<pace::tcp::stream>(context);
     co_await client->connect(listener->local_endpoint());
     context.spawn(close_soon(client));
     bool canceled = false;
@@ -285,7 +293,7 @@ struct graceful_close_result {
     std::chrono::steady_clock::duration elapsed{};
 };
 
-pace::task<void> close_after_reply(std::shared_ptr<pace::tcp_listener> listener,
+pace::task<void> close_after_reply(std::shared_ptr<pace::tcp::listener> listener,
                                   std::shared_ptr<graceful_close_result> result) {
     auto stream = co_await listener->accept();
     co_await stream.write_all("done");
@@ -297,10 +305,10 @@ pace::task<void> close_after_reply(std::shared_ptr<pace::tcp_listener> listener,
 }
 
 pace::task<void> graceful_close_bounds(pace::io_context& context) {
-    auto listener = std::make_shared<pace::tcp_listener>(context, pace::ipv4_endpoint{"127.0.0.1", 0});
+    auto listener = std::make_shared<pace::tcp::listener>(context, pace::tcp::endpoint{"127.0.0.1", 0});
     auto result = std::make_shared<graceful_close_result>();
     context.spawn(close_after_reply(listener, result));
-    pace::tcp_stream client(context);
+    pace::tcp::stream client(context);
     co_await client.connect(listener->local_endpoint());
     co_await client.write_all("discard this pending input");
     std::array<char, 4> reply{};
@@ -318,7 +326,7 @@ pace::task<void> graceful_close_bounds(pace::io_context& context) {
     require(co_await client.read_some(reply) == 0, "drained connection must close without reset");
 }
 
-pace::task<void> hold_connection(std::shared_ptr<pace::tcp_listener> listener) {
+pace::task<void> hold_connection(std::shared_ptr<pace::tcp::listener> listener) {
     auto stream = co_await listener->accept();
     try { co_await stream.context().sleep_for(24h); }
     catch (const std::system_error& error) {
@@ -327,9 +335,9 @@ pace::task<void> hold_connection(std::shared_ptr<pace::tcp_listener> listener) {
 }
 
 pace::task<void> graceful_close_cancellation(pace::io_context& context) {
-    auto listener = std::make_shared<pace::tcp_listener>(context, pace::ipv4_endpoint{"127.0.0.1", 0});
+    auto listener = std::make_shared<pace::tcp::listener>(context, pace::tcp::endpoint{"127.0.0.1", 0});
     context.spawn(hold_connection(listener));
-    pace::tcp_stream client(context);
+    pace::tcp::stream client(context);
     co_await client.connect(listener->local_endpoint());
     context.spawn(stop_soon(context));
     bool canceled = false;
