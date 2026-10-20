@@ -1,4 +1,5 @@
-#include <pace/net.hpp>
+#include <pace/tcp.hpp>
+#include <pace/detail/profiling.hpp>
 
 #if defined(_WIN32)
 #include <winsock2.h>
@@ -20,7 +21,7 @@
 #include <system_error>
 #include <utility>
 
-namespace pace {
+namespace pace::tcp {
 namespace {
 #if defined(_WIN32)
 using socket_length = int;
@@ -67,7 +68,7 @@ int set_option(native_socket_type fd, int level, int name, int value) {
     return ::setsockopt(fd, level, name, reinterpret_cast<const char*>(&value), sizeof(value));
 }
 
-sockaddr_in socket_address(const ipv4_endpoint& endpoint) {
+sockaddr_in socket_address(const endpoint& endpoint) {
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_port = htons(endpoint.port);
@@ -95,12 +96,12 @@ void check_operation(io_context& context, native_socket_type fd) {
 }
 } // namespace
 
-tcp_stream::tcp_stream(io_context& context) : context_(&context), fd_(create_socket()) {}
-tcp_stream::tcp_stream(io_context& context, native_socket_type fd) noexcept : context_(&context), fd_(fd) {}
-tcp_stream::~tcp_stream() { close(); }
-tcp_stream::tcp_stream(tcp_stream&& other) noexcept
+stream::stream(io_context& context) : context_(&context), fd_(create_socket()) {}
+stream::stream(io_context& context, native_socket_type fd) noexcept : context_(&context), fd_(fd) {}
+stream::~stream() { close(); }
+stream::stream(stream&& other) noexcept
     : context_(other.context_), fd_(std::exchange(other.fd_, invalid_socket)) {}
-tcp_stream& tcp_stream::operator=(tcp_stream&& other) noexcept {
+stream& stream::operator=(stream&& other) noexcept {
     if (this != &other) {
         close();
         context_ = other.context_;
@@ -109,7 +110,7 @@ tcp_stream& tcp_stream::operator=(tcp_stream&& other) noexcept {
     return *this;
 }
 
-task<void> tcp_stream::connect(ipv4_endpoint endpoint) {
+task<void> stream::connect(endpoint endpoint) {
     check_operation(*context_, fd_);
     const auto address = socket_address(endpoint);
     int result;
@@ -132,11 +133,11 @@ task<void> tcp_stream::connect(ipv4_endpoint endpoint) {
     if (error != 0) throw std::system_error(socket_error_code(error), "connect");
 }
 
-task<std::size_t> tcp_stream::read_some(std::span<char> buffer) {
+task<std::size_t> stream::read_some(std::span<char> buffer) {
     for (;;) {
         check_operation(*context_, fd_);
         if (buffer.empty()) co_return 0;
-        const auto count = ::recv(fd_, buffer.data(), static_cast<int>(std::min<std::size_t>(buffer.size(), INT_MAX)), 0);
+        const auto count = detail::profiling::measure(detail::profiling::stage::recv, [&] { return ::recv(fd_, buffer.data(), static_cast<int>(std::min<std::size_t>(buffer.size(), INT_MAX)), 0); });
         if (count >= 0) co_return static_cast<std::size_t>(count);
         const auto error = last_socket_error();
         if (interrupted(error)) continue;
@@ -145,7 +146,7 @@ task<std::size_t> tcp_stream::read_some(std::span<char> buffer) {
     }
 }
 
-task<void> tcp_stream::write_all(std::string_view bytes) {
+task<void> stream::write_all(std::string_view bytes) {
     do {
         check_operation(*context_, fd_);
         if (bytes.empty()) co_return;
@@ -154,7 +155,7 @@ task<void> tcp_stream::write_all(std::string_view bytes) {
 #else
         constexpr int flags = 0;
 #endif
-        const auto count = ::send(fd_, bytes.data(), static_cast<int>(std::min<std::size_t>(bytes.size(), INT_MAX)), flags);
+        const auto count = detail::profiling::measure(detail::profiling::stage::send, [&] { return ::send(fd_, bytes.data(), static_cast<int>(std::min<std::size_t>(bytes.size(), INT_MAX)), flags); });
         if (count > 0) {
             bytes.remove_prefix(static_cast<std::size_t>(count));
             continue;
@@ -168,14 +169,14 @@ task<void> tcp_stream::write_all(std::string_view bytes) {
     } while (!bytes.empty());
 }
 
-void tcp_stream::set_no_delay(bool enabled) {
+void stream::set_no_delay(bool enabled) {
     check_operation(*context_, fd_);
     const int value = enabled ? 1 : 0;
     if (set_option(fd_, IPPROTO_TCP, TCP_NODELAY, value) < 0)
         socket_error("setsockopt(TCP_NODELAY)");
 }
 
-task<void> tcp_stream::close_gracefully(std::chrono::milliseconds timeout, std::size_t discard_limit) {
+task<void> stream::close_gracefully(std::chrono::milliseconds timeout, std::size_t discard_limit) {
     try {
         check_operation(*context_, fd_);
 #if defined(_WIN32)
@@ -196,7 +197,7 @@ task<void> tcp_stream::close_gracefully(std::chrono::milliseconds timeout, std::
                std::chrono::duration<long double>(std::chrono::steady_clock::now() - started) < allowed_time) {
             check_operation(*context_, fd_);
             const auto wanted = static_cast<int>(std::min(discarded.size(), discard_limit - total));
-            const auto count = ::recv(fd_, discarded.data(), wanted, 0);
+            const auto count = detail::profiling::measure(detail::profiling::stage::recv, [&] { return ::recv(fd_, discarded.data(), wanted, 0); });
             if (count == 0) break;
             if (count > 0) {
                 total += static_cast<std::size_t>(count);
@@ -216,14 +217,14 @@ task<void> tcp_stream::close_gracefully(std::chrono::milliseconds timeout, std::
     close();
 }
 
-void tcp_stream::close() noexcept {
+void stream::close() noexcept {
     if (fd_ != invalid_socket) {
         context_->cancel(fd_);
         close_socket(std::exchange(fd_, invalid_socket));
     }
 }
 
-tcp_listener::tcp_listener(io_context& context, ipv4_endpoint endpoint, listen_options options)
+listener::listener(io_context& context, endpoint endpoint, listen_options options)
     : context_(&context) {
     const auto address = socket_address(endpoint);
     if (options.backlog <= 0) throw std::invalid_argument("listen backlog must be positive");
@@ -257,10 +258,10 @@ tcp_listener::tcp_listener(io_context& context, ipv4_endpoint endpoint, listen_o
     }
 }
 
-tcp_listener::~tcp_listener() { close(); }
-tcp_listener::tcp_listener(tcp_listener&& other) noexcept
+listener::~listener() { close(); }
+listener::listener(listener&& other) noexcept
     : context_(other.context_), fd_(std::exchange(other.fd_, invalid_socket)) {}
-tcp_listener& tcp_listener::operator=(tcp_listener&& other) noexcept {
+listener& listener::operator=(listener&& other) noexcept {
     if (this != &other) {
         close();
         context_ = other.context_;
@@ -269,14 +270,14 @@ tcp_listener& tcp_listener::operator=(tcp_listener&& other) noexcept {
     return *this;
 }
 
-task<tcp_stream> tcp_listener::accept() {
+task<stream> listener::accept() {
     for (;;) {
         check_operation(*context_, fd_);
-        const native_socket_type accepted = ::accept(fd_, nullptr, nullptr);
+        const native_socket_type accepted = detail::profiling::measure(detail::profiling::stage::accept, [&] { return ::accept(fd_, nullptr, nullptr); });
         if (accepted != invalid_socket) {
             try { configure_socket(accepted); }
             catch (...) { close_socket(accepted); throw; }
-            co_return tcp_stream(*context_, accepted);
+            co_return stream(*context_, accepted);
         }
         const auto error = last_socket_error();
         if (interrupted(error)) continue;
@@ -290,7 +291,7 @@ task<tcp_stream> tcp_listener::accept() {
     }
 }
 
-ipv4_endpoint tcp_listener::local_endpoint() const {
+endpoint listener::local_endpoint() const {
     sockaddr_in address{};
     socket_length length = sizeof(address);
     if (::getsockname(fd_, reinterpret_cast<sockaddr*>(&address), &length) < 0)
@@ -301,11 +302,11 @@ ipv4_endpoint tcp_listener::local_endpoint() const {
     return {text, ntohs(address.sin_port)};
 }
 
-void tcp_listener::close() noexcept {
+void listener::close() noexcept {
     if (fd_ != invalid_socket) {
         context_->cancel(fd_);
         close_socket(std::exchange(fd_, invalid_socket));
     }
 }
 
-} // namespace pace
+} // namespace pace::tcp

@@ -22,7 +22,11 @@ flowchart LR
     R1 --> C1[Local coroutine continuations]
 ```
 
-Cross-thread submissions enter a mutex-protected inbox and wake the poller. The reactor drains submissions into its local queues. Work submitted from the same running context can enter those queues directly. Ready coroutine and posted-function batches are bounded so continuously ready application work still gives the event loop opportunities to inspect timers, I/O, and shutdown.
+Cross-thread submissions enter a mutex-protected inbox. The first submission after a drain wakes the poller; further submissions share that notification. An atomic pending flag lets the reactor skip inbox allocation and locking when nothing arrived. Enqueue and the empty transition both occur under the inbox mutex, so the first producer after a drain cannot lose its wakeup. Work submitted from the same running context enters its local queues directly.
+
+Ready coroutine and posted-function batches are bounded at 256 items so continuously ready application work still gives the loop opportunities to inspect timers, I/O, and shutdown. A task-only loop skips a zero-timeout native poll when it has no registered descriptors. It still checks inbox submissions and timers on every turn. Once a socket has a registration, normal readiness polling continues.
+
+Optional [stage profiling](../benchmarks/profiling.md) and [component microbenchmarks](../benchmarks/components.md) separate operation cost from kernel waiting. Profiling is disabled by default and must remain disabled for comparative performance measurements.
 
 ## Readiness backends
 
@@ -74,11 +78,13 @@ Contexts keep running when idle. Call `stop()` explicitly; it is safe from anoth
 
 A context is single-use: `run()` cannot be called concurrently, nested inside another running PACE context on the same thread, or restarted after it returns. Destruction does not join an externally owned run thread. Stop the context, join that thread, then destroy sockets/listeners and finally the context. `runtime.run()` performs the worker joins before returning.
 
-`tcp_stream::close()` cancels its registered read/write operations before releasing the native socket. Destroying the socket object itself while a suspended member operation still refers to it is invalid: close it on its loop, allow the operation to resume and complete, then destroy the object. A listener passed to `http::serve()` must outlive that serving task and its accepted connections. Stopping the owning context cancels both accept and accepted-connection waits.
+`tcp::stream::close()` cancels its registered read/write operations before releasing the native socket. Destroying the socket object itself while a suspended member operation still refers to it is invalid: close it on its loop, allow the operation to resume and complete, then destroy the object. A listener passed to `http::serve()` must outlive that serving task and its accepted connections. Stopping the owning context cancels both accept and accepted-connection waits.
 
 Stop is cooperative, not a forced thread interruption. An application coroutine that never suspends or returns, or application code blocked in a synchronous call, can prevent shutdown from completing. Per-operation stop tokens and deadlines are not implemented.
 
 ## TCP and HTTP
+
+The canonical TCP header is `<pace/tcp.hpp>`. It declares `pace::tcp::listener`, `pace::tcp::stream`, `pace::tcp::endpoint`, and `pace::tcp::listen_options`; `endpoint` currently represents a numeric IPv4 address and port. `<pace/net.hpp>` forwards to this header and retains the original top-level names as source compatibility aliases. The umbrella `<pace/pace.hpp>` also retains those aliases.
 
 TCP uses nonblocking numeric IPv4 sockets. Operations first attempt the native call; when it would block, they await the relevant readiness event and retry. `write_all()` retains its input view until the complete buffer has been sent. Socket errors use `std::system_error`. Linux sends suppress `SIGPIPE` per operation; platforms with `SO_NOSIGPIPE` configure it on the socket.
 

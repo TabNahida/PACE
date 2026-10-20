@@ -1,4 +1,5 @@
 #include <pace/detail/poller.hpp>
+#include <pace/detail/profiling.hpp>
 
 #include <algorithm>
 #include <array>
@@ -65,6 +66,7 @@ struct poller::implementation {
 };
 
 void poller::update(native_socket_type fd, bool readable, bool writable, std::uint64_t token) {
+    profiling::scope timing(profiling::stage::poller_update);
     if (token == wake_token) throw std::invalid_argument("poller token UINT64_MAX is reserved");
     if (!readable && !writable) { remove(fd); return; }
     epoll_event event{};
@@ -83,7 +85,8 @@ void poller::remove(native_socket_type fd) noexcept {
 
 std::size_t poller::wait(std::span<poll_event> output, int timeout_ms) {
     if (output.empty()) return 0;
-    std::array<epoll_event, max_batch> events{};
+    // epoll_wait initializes every returned entry; only [0, count) is read.
+    std::array<epoll_event, max_batch> events;
     const int count = ::epoll_wait(impl_->queue, events.data(),
         static_cast<int>(std::min(output.size(), events.size())), timeout_ms);
     if (count < 0) {
@@ -143,6 +146,7 @@ struct poller::implementation {
 };
 
 void poller::update(native_socket_type fd, bool readable, bool writable, std::uint64_t token) {
+    profiling::scope timing(profiling::stage::poller_update);
     static_assert(sizeof(std::uintptr_t) >= sizeof(token), "PACE kqueue requires a 64-bit target");
     if (token == wake_token) throw std::invalid_argument("poller token UINT64_MAX is reserved");
     if (!readable && !writable) { remove(fd); return; }
@@ -183,7 +187,8 @@ void poller::remove(native_socket_type fd) noexcept {
 
 std::size_t poller::wait(std::span<poll_event> output, int timeout_ms) {
     if (output.empty()) return 0;
-    std::array<struct kevent, max_batch> events{};
+    // kevent initializes every returned entry; unused capacity is never read.
+    std::array<struct kevent, max_batch> events;
     timespec timeout{};
     timeout.tv_sec = timeout_ms / 1000;
     timeout.tv_nsec = (timeout_ms % 1000) * 1000000L;
@@ -193,7 +198,7 @@ std::size_t poller::wait(std::span<poll_event> output, int timeout_ms) {
         if (errno == EINTR) return 0;
         fail("kevent wait");
     }
-    std::array<native_socket_type, max_batch> descriptors{};
+    std::array<native_socket_type, max_batch> descriptors;
     std::size_t size = 0;
     for (int i = 0; i < count; ++i) {
         const auto& event = events[static_cast<std::size_t>(i)];
@@ -280,6 +285,7 @@ struct poller::implementation {
 };
 
 void poller::update(native_socket_type fd, bool readable, bool writable, std::uint64_t token) {
+    profiling::scope timing(profiling::stage::poller_update);
     if (token == wake_token) throw std::invalid_argument("poller token UINT64_MAX is reserved");
     if (!readable && !writable) { remove(fd); return; }
     short events = 0;

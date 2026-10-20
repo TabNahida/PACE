@@ -1,0 +1,4 @@
+# Keep archived measurement bytes stable across Git checkout settings. Windows
+# artifacts retain CRLF; source patches contain intentional blank context lines.
+benchmarks/results/** -text whitespace=cr-at-eol
+benchmarks/results/**/*.patch -text whitespace=-blank-at-eol

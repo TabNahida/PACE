@@ -17,20 +17,24 @@
 **超越 libuv 和 Asio 是目标，目前并非已经证实的结论。** PACE 目前是可运行的早期原型。基准程序使用相同的 TCP echo 工作负载，对比 PACE 协程、独立版 Asio 协程以及 libuv 原生回调 API。
 
 <!-- benchmark-results:start -->
-2026-10-20 [CI 实测](https://github.com/TabNahida/PACE/actions/runs/39378454679)，吞吐量单位为请求/秒（五轮中位数）：
+[2026 年 10 月 20 日 CI 实测](https://github.com/TabNahida/PACE/actions/runs/39397883915)，单位为请求/秒（五轮中位数）：
 
 | 平台 | PACE | Asio | libuv |
 |---|---:|---:|---:|
-| [Linux / C++20](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx20.json) | 61,555 | 64,126 | 57,505 |
-| [Linux / C++23](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx23.json) | 59,916 | 64,411 | 57,497 |
-| [macOS arm64 / C++20](benchmarks/results/ci-2026-10-20/macos-latest-cxx20.json) | 49,940 | 42,655 | 55,623 |
-| [Windows x64 / C++20](benchmarks/results/ci-2026-10-20/windows-latest-cxx20.json) | 37,531 | 38,367 | 39,245 |
-| [FreeBSD 14.3 VM / C++20](benchmarks/results/ci-2026-10-20/freebsd.json) | 216,926 | 221,328 | 218,280 |
+| [Linux / C++20](benchmarks/results/ci-runtime-2026-10-20/ubuntu-latest-cxx20.json) | 101,093 | 103,577 | 99,196 |
+| [Linux / C++23](benchmarks/results/ci-runtime-2026-10-20/ubuntu-latest-cxx23.json) | 61,553 | 64,620 | 56,866 |
+| [macOS arm64 / C++20](benchmarks/results/ci-runtime-2026-10-20/macos-latest-cxx20.json) | 78,807 | 57,981 | 89,020 |
+| [Windows x64 / C++20](benchmarks/results/ci-runtime-2026-10-20/windows-latest-cxx20.json) | 52,733 | 55,843 | 57,554 |
+| [FreeBSD 14.3 VM / C++20](benchmarks/results/ci-runtime-2026-10-20/freebsd.json) | 355,542 | 344,665 | 408,762 |
 
-相同负载：单服务线程、4 条持久连接、64 字节消息、每连接 10,000 次实测及 1,000 次预热，Asio 1.34.2、libuv 1.52.1。各平台使用不同共享运行器，请只在同一行内比较。PACE 尚未在所有平台超越两套基线。
+相同负载：单服务线程、4 条持久连接、64 字节消息，每条连接 10,000 次测量和 1,000 次预热；Asio 1.34.2、libuv 1.52.1。请在同一行内比较；不同平台和运行批次使用不同的共享机器。PACE 尚未在所有平台上同时超过两个基准库。
 
-[延迟、波动范围、工具链与全部原始结果](benchmarks/results/ci-2026-10-20/README.md)。所有基准均完成并通过数据校验；这不代表已达到性能领先目标。
+独立的 Linux 新旧版本实验测得 **TCP 吞吐配对提升中位数 3.47%**（8/8 组提升，探索性比值区间 1.0288–1.0396）。本地 TCP 配对结果仍不确定，不能据此推断所有机器都有提升。
+
+[原始对比、单项退化与阶段诊断](benchmarks/results/ci-runtime-2026-10-20/README.md) · [本地 TCP 与插桩数据](benchmarks/results/tcp-profile-2026-10-20/README.md)。7 个 CI 作业全部通过，包括四平台的普通/插桩版测试及 sanitizer。
 <!-- benchmark-results:end -->
+
+[本地组件性能研究](benchmarks/results/component-2026-10-20/README.md)还记录了每项操作八组交替执行的优化前后配对测量。优化后，一次空 native poll 为 58.26 ns、一次 yield 为 18.88 ns、一次同 context 回调为 22.09 ns；跨线程入队按每批 256 次测量，单次均摊 22.89 ns（各轮平均 ns/op 的中位数，Linux/WSL2、GCC 13.3）。研究中保留了基线值、精确计量单位和不确定性；这些组件开销不能直接代表 TCP 或 HTTP 吞吐量。
 
 详细说明见[测试方法与复现命令](benchmarks/README.md)。[GitHub Actions](https://github.com/TabNahida/PACE/actions/workflows/ci.yml) 已配置 Linux、macOS、Windows 和 FreeBSD 的构建、测试及性能产物上传。共享运行器存在噪声，应在同一个任务中比较不同后端，并检查多轮结果的波动；TCP echo 结果不能直接代表 HTTP 性能或多核扩展能力。
 
@@ -56,13 +60,15 @@ pace::task<pace::http::response> hello(pace::http::request request) {
 
 int main() {
     pace::io_context io;
-    pace::tcp_listener listener(io, {"127.0.0.1", 8080});
+    pace::tcp::listener listener(io, {"127.0.0.1", 8080});
     io.spawn(pace::http::serve(listener, hello));
     io.run();
 }
 ```
 
 [完整 HTTP 示例](examples/http_server.cpp) 还包含工作线程数量设置和信号触发的关闭流程。[TCP echo 示例](examples/echo_server.cpp) 展示了 `accept()`、`read_some()` 和 `write_all()` 的用法。
+
+TCP 类型统一放在 `pace::tcp` 命名空间中：`listener`、`stream`、`endpoint` 和 `listen_options`。仅使用 TCP 时包含 `<pace/tcp.hpp>`，使用完整库时包含 `<pace/pace.hpp>`。端点目前采用数字 IPv4 地址。通过 `<pace/net.hpp>` 或总头文件，原来的 `pace::tcp_listener`、`pace::tcp_stream`、`pace::ipv4_endpoint` 和 `pace::listen_options` 仍可作为兼容别名使用。
 
 需要多个循环时，构造 `pace::runtime workers(4)`，通过 `workers.context(index).spawn(...)` 分配任务，再调用 `workers.run()`。该调用负责启动并等待工作线程，`workers.stop()` 会唤醒所有循环。任务分配是显式的；目前不迁移任务，也不自动绑定 CPU 核心。
 
@@ -97,7 +103,7 @@ xmake -y
 xmake test -v
 
 # 构建包含 Asio、libuv 的可选性能对比程序。
-xmake f -m release --sanitizers=n --benchmarks=y -y
+xmake f -m release --sanitizers=n --profiling=n --benchmarks=y -y
 xmake -y pace_bench
 python3 scripts/run_benchmarks.py --require-all --repeats 5 --clients 8 \
   --requests 5000 --warmup 500 --bytes 64 --output benchmarks/results/local
@@ -105,7 +111,7 @@ python3 scripts/run_benchmarks.py --require-all --repeats 5 --clients 8 \
 
 Windows 上将 `python3` 替换为 `python`，在 PowerShell 中把基准命令写成一行。脚本自动查找 `build/` 下最新的 `pace_bench`，也可以通过 `--executable` 显式指定。输出包含 Markdown 和 JSON 汇总以及全部原始测量结果。
 
-构建目标包括 `pace`、`pace_runtime_tests`、`pace_network_tests`、`http_server`、`echo_server`，以及可选的 `pace_bench`。还可通过 `--tests=n`、`--examples=n` 关闭测试或示例。
+构建目标包括 `pace`、`pace_runtime_tests`、`pace_network_tests`、`http_server`、`echo_server`，以及可选的 `pace_bench`。通过 `--components=y` 可启用不依赖第三方库的 `pace_components`，其[微基准指南](benchmarks/components.md)说明了各项操作的测量边界和优化前后配对测试方法。还可通过 `--tests=n`、`--examples=n` 关闭测试或示例。
 
 ## 平台支持
 

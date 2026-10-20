@@ -149,7 +149,7 @@ request parse_head(std::string_view head, std::size_t& content_length, limits bo
     return result;
 }
 
-task<std::optional<request>> read_request(tcp_stream& stream, std::string& pending,
+task<std::optional<request>> read_request(tcp::stream& stream, std::string& pending,
                                         limits bounds, bool& head_request) {
     std::array<char, 8192> buffer{};
     // HEAD responses never carry payloads, including errors discovered after
@@ -209,7 +209,7 @@ std::string encode_response(const response& result, bool keep_alive, bool head_r
     return output;
 }
 
-task<void> process_connection(tcp_stream& stream, const handler& handle, limits bounds) {
+task<void> process_connection(tcp::stream& stream, const handler& handle, limits bounds) {
     std::string pending;
     for (std::size_t count = 0; count < bounds.max_requests_per_connection; ++count) {
         std::optional<request> incoming;
@@ -264,7 +264,7 @@ std::string_view request::header(std::string_view name) const noexcept {
     return {};
 }
 
-task<void> serve_connection(tcp_stream stream, handler handle, limits bounds) {
+task<void> serve_connection(tcp::stream stream, handler handle, limits bounds) {
     try {
         stream.set_no_delay();
         co_await process_connection(stream, handle, bounds);
@@ -274,7 +274,7 @@ task<void> serve_connection(tcp_stream stream, handler handle, limits bounds) {
     }
 }
 
-task<void> serve(tcp_listener& listener, handler handle, limits bounds) {
+task<void> serve(tcp::listener& listener, handler handle, limits bounds) {
     for (;;) {
         try {
             auto stream = co_await listener.accept();

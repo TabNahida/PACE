@@ -1,0 +1,718 @@
+{
+  "schema_version": 1,
+  "status": "completed",
+  "label": "paired-comparison",
+  "started_utc": "2026-10-20T08:57:20.658279+00:00",
+  "binaries": {
+    "before": {
+      "path": "/tmp/pace-components-baseline-full",
+      "sha256": "4a7d691363697121441def8d17527ab01dda723a38c73f10ee19e3c667a29dae",
+      "build": {
+        "components": [
+          "lazy_task",
+          "await_chain",
+          "empty_poll",
+          "yield",
+          "post",
+          "cross_thread_post",
+          "spawn_completion",
+          "zero_timer"
+        ],
+        "compiler": "GCC 13.3.0",
+        "cpp_standard": 202002,
+        "ndebug": true,
+        "profiling_enabled": false
+      }
+    },
+    "after": {
+      "path": "/tmp/pace-components-after",
+      "sha256": "ed26ad4c5096be65278344158a4836f81b90fea7d6ce4ba2bce82f322ba977c3",
+      "build": {
+        "components": [
+          "lazy_task",
+          "await_chain",
+          "empty_poll",
+          "yield",
+          "post",
+          "cross_thread_post",
+          "spawn_completion",
+          "zero_timer"
+        ],
+        "compiler": "GCC 13.3.0",
+        "cpp_standard": 202002,
+        "ndebug": true,
+        "profiling_enabled": false
+      }
+    }
+  },
+  "environment": {
+    "platform": "Linux-6.18.40.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_model": "Intel(R) Core(TM) Ultra 7 270K Plus",
+    "git_commit": "0c42dcc9c1e481909e3283d2f80e2891ec4c2b89",
+    "git_status": "M .github/workflows/ci.yml\n M README.md\n M README.zh-CN.md\n M benchmarks/README.md\n M benchmarks/echo_bench.cpp\n M docs/architecture.md\n M examples/echo_server.cpp\n M examples/http_server.cpp\n M include/pace/http.hpp\n M include/pace/net.hpp\n M scripts/run_benchmarks.py\n M src/http.cpp\n M src/io_context.cpp\n M src/net.cpp\n M src/poller.cpp\n M tests/network_tests.cpp\n M tests/runtime_tests.cpp\n M tests/test_benchmark_runner.py\n M xmake.lua\n?? benchmarks/components.md\n?? benchmarks/components_bench.cpp\n?? benchmarks/profiling.md\n?? benchmarks/results/component-2026-10-20/\n?? include/pace/detail/profiling.hpp\n?? include/pace/tcp.hpp\n?? scripts/compare_builds.py\n?? scripts/run_components.py\n?? scripts/run_profile.py"
+  },
+  "configuration": {
+    "component": "lazy_task",
+    "tcp": false,
+    "pairs": 8,
+    "iterations": 1000000,
+    "depth": 4,
+    "batch": 256,
+    "clients": 4,
+    "requests": 100000,
+    "bytes": 64,
+    "warmup": 10000,
+    "timeout": 120,
+    "bootstrap_samples": 10000,
+    "seed": 0,
+    "label": "paired-comparison"
+  },
+  "operation": "Create and destroy one unstarted task via a non-inlined indirect factory call",
+  "ratio_definition": "after / before; above 1 favors after for requests/s, below 1 favors after for ns/op",
+  "uncertainty_method": "Resample whole paired ratios with replacement; percentile interval of bootstrap medians",
+  "limitations": [
+    "Exploratory interval assumes representative independent pairs; scheduling/frequency drift and autocorrelation can violate this",
+    "Small samples and short runs do not establish a portable performance improvement",
+    "No performance threshold changes the process exit code; correctness/measurement failures do"
+  ],
+  "commands": [
+    {
+      "pair": 1,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 1,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "3"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "3"
+      ]
+    },
+    {
+      "pair": 4,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "4"
+      ]
+    },
+    {
+      "pair": 4,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "4"
+      ]
+    },
+    {
+      "pair": 5,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "5"
+      ]
+    },
+    {
+      "pair": 5,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "5"
+      ]
+    },
+    {
+      "pair": 6,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "6"
+      ]
+    },
+    {
+      "pair": 6,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "6"
+      ]
+    },
+    {
+      "pair": 7,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "7"
+      ]
+    },
+    {
+      "pair": 7,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "7"
+      ]
+    },
+    {
+      "pair": 8,
+      "variant": "after",
+      "command": [
+        "/tmp/pace-components-after",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "8"
+      ]
+    },
+    {
+      "pair": 8,
+      "variant": "before",
+      "command": [
+        "/tmp/pace-components-baseline-full",
+        "--component",
+        "lazy_task",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "8"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 1,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5704510,
+      "ns_per_operation": 5.70451,
+      "checksum": 0,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 1,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 6037962,
+      "ns_per_operation": 6.037962,
+      "checksum": 0,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 2,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5661483,
+      "ns_per_operation": 5.661483,
+      "checksum": 0,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 2,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5696575,
+      "ns_per_operation": 5.696575,
+      "checksum": 0,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 3,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5697204,
+      "ns_per_operation": 5.697204,
+      "checksum": 0,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 3,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5654444,
+      "ns_per_operation": 5.654444,
+      "checksum": 0,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 4,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5742904,
+      "ns_per_operation": 5.742904,
+      "checksum": 0,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 4,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5661506,
+      "ns_per_operation": 5.661506,
+      "checksum": 0,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 5,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5640032,
+      "ns_per_operation": 5.640032,
+      "checksum": 0,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 5,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5701842,
+      "ns_per_operation": 5.701842,
+      "checksum": 0,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 6,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5820256,
+      "ns_per_operation": 5.820256,
+      "checksum": 0,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 6,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5819250,
+      "ns_per_operation": 5.81925,
+      "checksum": 0,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 7,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5764999,
+      "ns_per_operation": 5.764999,
+      "checksum": 0,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 7,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5672464,
+      "ns_per_operation": 5.672464,
+      "checksum": 0,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 8,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5686326,
+      "ns_per_operation": 5.686326,
+      "checksum": 0,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "lazy_task",
+      "trial": 8,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 5724483,
+      "ns_per_operation": 5.724483,
+      "checksum": 0,
+      "validated": true,
+      "variant": "before"
+    }
+  ],
+  "pairs": [
+    {
+      "pair": 1,
+      "before": 5.70451,
+      "after": 6.037962,
+      "after_before_ratio": 1.0584541003521775
+    },
+    {
+      "pair": 2,
+      "after": 5.661483,
+      "before": 5.696575,
+      "after_before_ratio": 0.9938398072526035
+    },
+    {
+      "pair": 3,
+      "before": 5.697204,
+      "after": 5.654444,
+      "after_before_ratio": 0.9924945640001657
+    },
+    {
+      "pair": 4,
+      "after": 5.742904,
+      "before": 5.661506,
+      "after_before_ratio": 1.0143774465663378
+    },
+    {
+      "pair": 5,
+      "before": 5.640032,
+      "after": 5.701842,
+      "after_before_ratio": 1.0109591576785382
+    },
+    {
+      "pair": 6,
+      "after": 5.820256,
+      "before": 5.81925,
+      "after_before_ratio": 1.00017287451132
+    },
+    {
+      "pair": 7,
+      "before": 5.764999,
+      "after": 5.672464,
+      "after_before_ratio": 0.983948826357125
+    },
+    {
+      "pair": 8,
+      "after": 5.686326,
+      "before": 5.724483,
+      "after_before_ratio": 0.993334419894338
+    }
+  ],
+  "summary": {
+    "metric": "ns_per_operation",
+    "lower_is_better": true,
+    "before_median": 5.700857,
+    "after_median": 5.694084,
+    "before_min": 5.640032,
+    "before_max": 5.81925,
+    "after_min": 5.654444,
+    "after_max": 6.037962,
+    "median_paired_after_before_ratio": 0.9970063408819618,
+    "min_paired_after_before_ratio": 0.983948826357125,
+    "max_paired_after_before_ratio": 1.0584541003521775,
+    "median_ratio_bootstrap_95_percentile_interval": [
+      0.9924945640001657,
+      1.0143774465663378
+    ],
+    "after_wins": 4,
+    "ties": 0,
+    "pairs": 8,
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 0
+  },
+  "failure": null,
+  "finished_utc": "2026-10-20T08:57:20.769219+00:00",
+  "archive_note": "One unrelated untracked local path was omitted from git_status; all workload settings, commands, timing records and computed results are unchanged."
+}

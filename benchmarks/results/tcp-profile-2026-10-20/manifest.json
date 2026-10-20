@@ -1,0 +1,110 @@
+{
+  "source_revision": "62c8724b177a9ca03ed0b607bc5a74a852c26753",
+  "compiler": "GCC 13.3.0",
+  "flags": [
+    "-std=c++20",
+    "-O3",
+    "-DNDEBUG",
+    "-pthread"
+  ],
+  "source_order": [
+    "benchmarks/echo_bench.cpp",
+    "src/http.cpp",
+    "src/io_context.cpp",
+    "src/net.cpp",
+    "src/poller.cpp",
+    "src/runtime.cpp"
+  ],
+  "notes": [
+    "The before core includes the same diagnostic probes but predates the runtime optimizations. Both variants use the same committed echo harness.",
+    "The -DPACE_ENABLE_PROFILING flag is added only to the two profile binaries. Uninstrumented paired TCP measurements use neither macro nor probes.",
+    "One unrelated untracked path was omitted from Git status metadata; numeric/raw records unchanged."
+  ],
+  "artifacts": {
+    "tcp-pairs.json": {
+      "source_sha256": "8e08d75ed09569c7d73c0b0b96501b5d79fde5af70addff3d9e2db624b27fa67",
+      "sha256": "f27ac4176dd015a568d46a5b24143191e55860420d3a817f7713ab367c90efe3"
+    },
+    "profile-before.json": {
+      "source_sha256": "5cf3d5bcc39dd121910ece1ce2dc6b0621e928e2bef3b69106129a0a89d53162",
+      "sha256": "12c2fddb08671f21e805bfb9ced0f7c16b016b9c4d8e8cb6c1432416fc4de1b2"
+    },
+    "profile-after.json": {
+      "source_sha256": "472453f0b785013b9d87fff8cf74ae4d6d205efdf18037332fb2ea46ba409f9d",
+      "sha256": "99355710bf069f86dcebbfa4097cd9b3a425110dcaad94e79faf0ffbb43652bf"
+    },
+    "profile-before-stages.json": {
+      "source_sha256": "f5c93c4e5f64bb2f170299ca7ea547ba0d8b0cce1e69a4a3a57e6fd89f8abd91",
+      "sha256": "f5c93c4e5f64bb2f170299ca7ea547ba0d8b0cce1e69a4a3a57e6fd89f8abd91"
+    },
+    "profile-after-stages.json": {
+      "source_sha256": "5d9a0ef8ece33753a92b1eb95dcc3a810429bb6c541b838d377ae7b60e50004e",
+      "sha256": "5d9a0ef8ece33753a92b1eb95dcc3a810429bb6c541b838d377ae7b60e50004e"
+    },
+    "profile-before-stages.md": {
+      "source_sha256": "9a52c35c4364bd2825b80ebb6d1a06933747a92befa34d336507c863c09d7023",
+      "sha256": "9a52c35c4364bd2825b80ebb6d1a06933747a92befa34d336507c863c09d7023"
+    },
+    "profile-after-stages.md": {
+      "source_sha256": "5d3417b42d8a28566caaae4f747ca878618df332cc66d7219c4f02562e3f7ac9",
+      "sha256": "5d3417b42d8a28566caaae4f747ca878618df332cc66d7219c4f02562e3f7ac9"
+    }
+  },
+  "binaries": {
+    "before": {
+      "sha256": "d27ab340595f064b02944880b903a8b7ee7ce095cec45290f8922a593b53c94e"
+    },
+    "after": {
+      "sha256": "71fd9b05f48427ac9f25a94113f3fdb189f9b105d8b5af83258e8dfcd5df0699"
+    },
+    "profile-before": {
+      "sha256": "2e3ae5395618934a8dd5cddcebbe43a68b0695ac451f5b69af638bd66303465c"
+    },
+    "profile-after": {
+      "sha256": "27e69430ab32686999c7341fc2907f3dffaf2aab136650862e1310eb881875b7"
+    }
+  },
+  "core_sources": {
+    "before": {
+      "src/http.cpp": "3dbb807242082359463507d2da02c0d30723f778e74d1d8bbb6aa00e3327913b",
+      "src/io_context.cpp": "a8a404696f13105124b5ce089983cd73cbb13cddf697a73e644ab0b961b61cd1",
+      "src/runtime.cpp": "460383c516b03805ba17737242e309e6e8f4018c1ba17c5af51200b0bad915df",
+      "src/poller.cpp": "53ee230a12e8c9ddef793c0602ca6040841e2138763f33f13ae294faac7c7afd",
+      "src/net.cpp": "ab52d9b02a17c9dc588de856ee72560cbf8edcf8ce1abf755db3ce4f577dffbc",
+      "include/pace/pace.hpp": "cd02cc3aaa859ca33c366f002daddae41e49d3e26bc439e9cbf4534da8c15b36",
+      "include/pace/http.hpp": "bf8a0c551bc7a14541841de730f6edf88c0f154eff645c47dc899872d24e6318",
+      "include/pace/tcp.hpp": "ba7f8d2dd71e5eb65edadc0f6626c6cd81c770d4618d7aca37481a1946a86765",
+      "include/pace/platform.hpp": "7aa182d1635d51ea0706d2828ff8375ee41afe5480c1aa59ad0f317a6e1a906f",
+      "include/pace/net.hpp": "bcf33f0b76222f8b98eaa83416c0686194558bd7909754b9ea9e113a8352ea67",
+      "include/pace/task.hpp": "7de346df1fb4c59377586b89fe9ea16b271ac9bfcc3d0469f89d823331d2f7d5",
+      "include/pace/runtime.hpp": "845e42a1cfde6386fd500f056df253944e91276f3858508a165412464cc4cc66",
+      "include/pace/io_context.hpp": "d817697d603b55b36bc3eeda9ab62b78d9954b904d9a2b06a27a7a79b898e058",
+      "include/pace/detail/profiling.hpp": "8296366efdaf1c39f5fc61372836880dc6cb4271dafd53b4de5206c528b85fc0",
+      "include/pace/detail/poller.hpp": "e1dc4b2dc717dcb43fd7e5587017dd2fb6a83f2bfb0a05a51124a30632bfcac4"
+    },
+    "after": {
+      "src/io_context.cpp": "a41226bb9f2b9f60f3c29da6aacad3ecedc7a471c5ed39305262fadb724be5c4",
+      "src/net.cpp": "ab52d9b02a17c9dc588de856ee72560cbf8edcf8ce1abf755db3ce4f577dffbc",
+      "src/runtime.cpp": "460383c516b03805ba17737242e309e6e8f4018c1ba17c5af51200b0bad915df",
+      "src/http.cpp": "3dbb807242082359463507d2da02c0d30723f778e74d1d8bbb6aa00e3327913b",
+      "src/poller.cpp": "46eb0e3a66410ecb51604d76875c2180231b1a2ee6638489ecd6256c6be536c9",
+      "include/pace/net.hpp": "bcf33f0b76222f8b98eaa83416c0686194558bd7909754b9ea9e113a8352ea67",
+      "include/pace/pace.hpp": "cd02cc3aaa859ca33c366f002daddae41e49d3e26bc439e9cbf4534da8c15b36",
+      "include/pace/platform.hpp": "7aa182d1635d51ea0706d2828ff8375ee41afe5480c1aa59ad0f317a6e1a906f",
+      "include/pace/io_context.hpp": "d817697d603b55b36bc3eeda9ab62b78d9954b904d9a2b06a27a7a79b898e058",
+      "include/pace/tcp.hpp": "ba7f8d2dd71e5eb65edadc0f6626c6cd81c770d4618d7aca37481a1946a86765",
+      "include/pace/task.hpp": "7de346df1fb4c59377586b89fe9ea16b271ac9bfcc3d0469f89d823331d2f7d5",
+      "include/pace/http.hpp": "bf8a0c551bc7a14541841de730f6edf88c0f154eff645c47dc899872d24e6318",
+      "include/pace/runtime.hpp": "845e42a1cfde6386fd500f056df253944e91276f3858508a165412464cc4cc66",
+      "include/pace/detail/profiling.hpp": "8296366efdaf1c39f5fc61372836880dc6cb4271dafd53b4de5206c528b85fc0",
+      "include/pace/detail/poller.hpp": "e1dc4b2dc717dcb43fd7e5587017dd2fb6a83f2bfb0a05a51124a30632bfcac4"
+    }
+  },
+  "harness_sha256": "3859402f425cbd441485d2ea82a9287e65686392042009debeab5af38435ff1a",
+  "build_commands": {
+    "before": "g++ -std=c++20 -O3 -DNDEBUG -pthread -I/tmp/pace-profile-baseline-source/include benchmarks/echo_bench.cpp /tmp/pace-profile-baseline-source/src/*.cpp -o /tmp/pace-tcp-final-before",
+    "after": "g++ -std=c++20 -O3 -DNDEBUG -pthread -Iinclude benchmarks/echo_bench.cpp src/*.cpp -o /tmp/pace-tcp-final-after",
+    "profile-before": "g++ -std=c++20 -O3 -DNDEBUG -pthread -DPACE_ENABLE_PROFILING -I/tmp/pace-profile-baseline-source/include benchmarks/echo_bench.cpp /tmp/pace-profile-baseline-source/src/*.cpp -o /tmp/pace-tcp-final-profile-before",
+    "profile-after": "g++ -std=c++20 -O3 -DNDEBUG -pthread -DPACE_ENABLE_PROFILING -Iinclude benchmarks/echo_bench.cpp src/*.cpp -o /tmp/pace-tcp-final-profile-after"
+  }
+}
