@@ -1,7 +1,6 @@
 """Deterministic scaling-runner validation; no performance measurements."""
 
 import contextlib
-import copy
 import importlib.util
 import io
 import json
@@ -132,11 +131,17 @@ class ScalingRunnerFailureTests(unittest.TestCase):
                      mock.patch.object(RUNNER.subprocess, "check_output", return_value=json.dumps(self.build)), \
                      mock.patch.object(RUNNER, "command_output", return_value="synthetic metadata"), \
                      mock.patch.object(RUNNER, "cpu_model", return_value="synthetic CPU"), \
+                     mock.patch.object(RUNNER.platform, "platform", return_value="synthetic OS"), \
+                     mock.patch.object(RUNNER.platform, "machine", return_value="synthetic architecture"), \
                      mock.patch.object(RUNNER.subprocess, "run", **({"side_effect": failure} if isinstance(failure, Exception) else {"return_value": failure})), \
                      contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                     self.assertEqual(RUNNER.main(), 1)
                 report = json.loads(output.read_text())
                 self.assertEqual(report["status"], "failed")
+                # Platform discovery may itself invoke subprocess on BSD/macOS;
+                # keep it outside the synthetic benchmark-process failure path.
+                self.assertEqual(report["environment"]["platform"], "synthetic OS")
+                self.assertEqual(report["environment"]["machine"], "synthetic architecture")
                 self.assertIsNotNone(report["failure"])
                 self.assertEqual(report["runs"], [])
                 self.assertIsNone(report["summary"])
