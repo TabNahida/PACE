@@ -149,8 +149,12 @@ request parse_head(std::string_view head, std::size_t& content_length, limits bo
     return result;
 }
 
-task<std::optional<request>> read_request(tcp_stream& stream, std::string& pending, limits bounds) {
+task<std::optional<request>> read_request(tcp_stream& stream, std::string& pending,
+                                        limits bounds, bool& head_request) {
     std::array<char, 8192> buffer{};
+    // HEAD responses never carry payloads, including errors discovered after
+    // recognizing the method but before the full request has been validated.
+    head_request = pending.starts_with("HEAD ");
     auto delimiter = pending.find("\r\n\r\n");
     while (delimiter == std::string::npos) {
         if (pending.size() >= bounds.max_header_bytes) throw protocol_error{431};
@@ -161,6 +165,7 @@ task<std::optional<request>> read_request(tcp_stream& stream, std::string& pendi
             throw protocol_error{400};
         }
         pending.append(buffer.data(), count);
+        head_request = pending.starts_with("HEAD ");
         delimiter = pending.find("\r\n\r\n");
     }
     const auto head_size = delimiter + 4;
@@ -212,7 +217,7 @@ task<void> process_connection(tcp_stream& stream, const handler& handle, limits 
         bool keep_alive = false, head_request = false;
         unsigned error_status = 0;
         try {
-            incoming = co_await read_request(stream, pending, bounds);
+            incoming = co_await read_request(stream, pending, bounds, head_request);
         } catch (const protocol_error& error) {
             error_status = error.status;
         }

@@ -338,8 +338,9 @@ void benchmark(const options& config) {
 #ifdef _WIN32
                 const DWORD timeout = config.timeout_ms;
 #else
-                const timeval timeout{static_cast<long>(config.timeout_ms / 1000),
-                                      static_cast<long>((config.timeout_ms % 1000) * 1000)};
+                timeval timeout{};
+                timeout.tv_sec = static_cast<decltype(timeout.tv_sec)>(config.timeout_ms / 1000);
+                timeout.tv_usec = static_cast<decltype(timeout.tv_usec)>((config.timeout_ms % 1000) * 1000);
 #endif
                 for (const int option : {SO_RCVTIMEO, SO_SNDTIMEO}) {
                     if (::setsockopt(socket.fd, SOL_SOCKET, option,

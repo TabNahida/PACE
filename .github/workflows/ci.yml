@@ -1,6 +1,7 @@
 name: Build, test and compare
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -69,9 +70,14 @@ jobs:
         with:
           release: '14.3'
           usesh: true
-          prepare: pkg install -y xmake python3 git pkgconf libuv asio
+          cache-after-prepare: true
+          prepare: |
+            pkg install -y python3 git pkgconf libuv asio gmake curl unzip gsed bash perl5
+            git clone --recursive --depth 1 --branch v3.0.9 https://github.com/xmake-io/xmake.git /tmp/pace-xmake-source
+            (cd /tmp/pace-xmake-source && ./configure && gmake -j4 && gmake install)
           run: |
             export XMAKE_ROOT=y
+            xmake --version
             xmake f -m release --benchmarks=y -y
             xmake -y
             xmake test -v
