@@ -17,11 +17,19 @@
 **Surpassing libuv and Asio is a goal, not an established result.** PACE is an early, usable prototype. Its benchmark compares PACE and standalone Asio coroutines with libuv's native callback API under the same TCP echo workload.
 
 <!-- benchmark-results:start -->
-Published comparison results are pending. No speedup is claimed. The benchmark runner preserves every trial, environment metadata, throughput spread, and p50/p99 latency; measured tables will link to their raw evidence here.
+Measured in [CI on 20 October 2026](https://github.com/TabNahida/PACE/actions/runs/39378454679). Throughput in requests/s (median of five trials):
 
-| Workload | PACE | libuv | Standalone Asio |
-|---|---|---|---|
-| One server thread, localhost TCP echo | Pending | Pending | Pending |
+| Platform | PACE | Asio | libuv |
+|---|---:|---:|---:|
+| [Linux / C++20](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx20.json) | 61,555 | 64,126 | 57,505 |
+| [Linux / C++23](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx23.json) | 59,916 | 64,411 | 57,497 |
+| [macOS arm64 / C++20](benchmarks/results/ci-2026-10-20/macos-latest-cxx20.json) | 49,940 | 42,655 | 55,623 |
+| [Windows x64 / C++20](benchmarks/results/ci-2026-10-20/windows-latest-cxx20.json) | 37,531 | 38,367 | 39,245 |
+| [FreeBSD 14.3 VM / C++20](benchmarks/results/ci-2026-10-20/freebsd.json) | 216,926 | 221,328 | 218,280 |
+
+Same workload: one server thread, four persistent connections, 64-byte messages, 10,000 measured plus 1,000 warmup requests per connection; Asio 1.34.2 and libuv 1.52.1. Platforms use different shared runners; compare within each row. PACE does not yet outperform both baselines across platforms.
+
+[Latency, run spread, toolchains and all raw results](benchmarks/results/ci-2026-10-20/README.md). Every benchmark completed with validated data; this does not certify the performance leadership goal.
 <!-- benchmark-results:end -->
 
 Read the [methodology and reproduction commands](benchmarks/README.md). [GitHub Actions](https://github.com/TabNahida/PACE/actions/workflows/ci.yml) is configured to build, test, and upload comparison artifacts for Linux, macOS, Windows, and FreeBSD. Shared runners are noisy: compare backends within the same job, inspect repeated runs, and treat TCP echo results separately from HTTP speed or multicore scaling.

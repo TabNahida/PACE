@@ -17,11 +17,19 @@
 **超越 libuv 和 Asio 是目标，目前并非已经证实的结论。** PACE 目前是可运行的早期原型。基准程序使用相同的 TCP echo 工作负载，对比 PACE 协程、独立版 Asio 协程以及 libuv 原生回调 API。
 
 <!-- benchmark-results:start -->
-公开的对比结果正在准备中，目前不宣称任何加速比例。基准脚本保留每次测试结果、运行环境、吞吐量波动范围和 p50/p99 延迟；后续会在这里展示实测数据并链接到原始证据。
+2026-10-20 [CI 实测](https://github.com/TabNahida/PACE/actions/runs/39378454679)，吞吐量单位为请求/秒（五轮中位数）：
 
-| 测试负载 | PACE | libuv | 独立版 Asio |
-|---|---|---|---|
-| 单服务线程、本机回环 TCP echo | 待测 | 待测 | 待测 |
+| 平台 | PACE | Asio | libuv |
+|---|---:|---:|---:|
+| [Linux / C++20](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx20.json) | 61,555 | 64,126 | 57,505 |
+| [Linux / C++23](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx23.json) | 59,916 | 64,411 | 57,497 |
+| [macOS arm64 / C++20](benchmarks/results/ci-2026-10-20/macos-latest-cxx20.json) | 49,940 | 42,655 | 55,623 |
+| [Windows x64 / C++20](benchmarks/results/ci-2026-10-20/windows-latest-cxx20.json) | 37,531 | 38,367 | 39,245 |
+| [FreeBSD 14.3 VM / C++20](benchmarks/results/ci-2026-10-20/freebsd.json) | 216,926 | 221,328 | 218,280 |
+
+相同负载：单服务线程、4 条持久连接、64 字节消息、每连接 10,000 次实测及 1,000 次预热，Asio 1.34.2、libuv 1.52.1。各平台使用不同共享运行器，请只在同一行内比较。PACE 尚未在所有平台超越两套基线。
+
+[延迟、波动范围、工具链与全部原始结果](benchmarks/results/ci-2026-10-20/README.md)。所有基准均完成并通过数据校验；这不代表已达到性能领先目标。
 <!-- benchmark-results:end -->
 
 详细说明见[测试方法与复现命令](benchmarks/README.md)。[GitHub Actions](https://github.com/TabNahida/PACE/actions/workflows/ci.yml) 已配置 Linux、macOS、Windows 和 FreeBSD 的构建、测试及性能产物上传。共享运行器存在噪声，应在同一个任务中比较不同后端，并检查多轮结果的波动；TCP echo 结果不能直接代表 HTTP 性能或多核扩展能力。

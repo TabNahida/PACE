@@ -109,8 +109,10 @@ def main():
         "cpu_model": cpu_model(),
         "logical_cpus": os.cpu_count(),
         "python": platform.python_version(),
-        "git_commit": command_output(["git", "rev-parse", "HEAD"], cwd=root),
-        "git_status": command_output(["git", "status", "--porcelain"], cwd=root),
+        # VM source synchronization can preserve the host owner's UID. Trust
+        # this explicit build root for these read-only metadata commands only.
+        "git_commit": command_output(["git", "-c", f"safe.directory={root}", "rev-parse", "HEAD"], cwd=root),
+        "git_status": command_output(["git", "-c", f"safe.directory={root}", "status", "--porcelain"], cwd=root),
         "executable": str(executable),
         "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
         "backend_versions": available,
