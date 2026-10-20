@@ -17,19 +17,21 @@
 **超越 libuv 和 Asio 是目标，目前并非已经证实的结论。** PACE 目前是可运行的早期原型。基准程序使用相同的 TCP echo 工作负载，对比 PACE 协程、独立版 Asio 协程以及 libuv 原生回调 API。
 
 <!-- benchmark-results:start -->
-2026-10-20 [CI 实测](https://github.com/TabNahida/PACE/actions/runs/39378454679)，吞吐量单位为请求/秒（五轮中位数）：
+[2026 年 10 月 20 日 CI 实测](https://github.com/TabNahida/PACE/actions/runs/39397883915)，单位为请求/秒（五轮中位数）：
 
 | 平台 | PACE | Asio | libuv |
 |---|---:|---:|---:|
-| [Linux / C++20](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx20.json) | 61,555 | 64,126 | 57,505 |
-| [Linux / C++23](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx23.json) | 59,916 | 64,411 | 57,497 |
-| [macOS arm64 / C++20](benchmarks/results/ci-2026-10-20/macos-latest-cxx20.json) | 49,940 | 42,655 | 55,623 |
-| [Windows x64 / C++20](benchmarks/results/ci-2026-10-20/windows-latest-cxx20.json) | 37,531 | 38,367 | 39,245 |
-| [FreeBSD 14.3 VM / C++20](benchmarks/results/ci-2026-10-20/freebsd.json) | 216,926 | 221,328 | 218,280 |
+| [Linux / C++20](benchmarks/results/ci-runtime-2026-10-20/ubuntu-latest-cxx20.json) | 101,093 | 103,577 | 99,196 |
+| [Linux / C++23](benchmarks/results/ci-runtime-2026-10-20/ubuntu-latest-cxx23.json) | 61,553 | 64,620 | 56,866 |
+| [macOS arm64 / C++20](benchmarks/results/ci-runtime-2026-10-20/macos-latest-cxx20.json) | 78,807 | 57,981 | 89,020 |
+| [Windows x64 / C++20](benchmarks/results/ci-runtime-2026-10-20/windows-latest-cxx20.json) | 52,733 | 55,843 | 57,554 |
+| [FreeBSD 14.3 VM / C++20](benchmarks/results/ci-runtime-2026-10-20/freebsd.json) | 355,542 | 344,665 | 408,762 |
 
-相同负载：单服务线程、4 条持久连接、64 字节消息、每连接 10,000 次实测及 1,000 次预热，Asio 1.34.2、libuv 1.52.1。各平台使用不同共享运行器，请只在同一行内比较。PACE 尚未在所有平台超越两套基线。
+相同负载：单服务线程、4 条持久连接、64 字节消息，每条连接 10,000 次测量和 1,000 次预热；Asio 1.34.2、libuv 1.52.1。请在同一行内比较；不同平台和运行批次使用不同的共享机器。PACE 尚未在所有平台上同时超过两个基准库。
 
-[延迟、波动范围、工具链与全部原始结果](benchmarks/results/ci-2026-10-20/README.md)。所有基准均完成并通过数据校验；这不代表已达到性能领先目标。
+独立的 Linux 新旧版本实验测得 **TCP 吞吐配对提升中位数 3.47%**（8/8 组提升，探索性比值区间 1.0288–1.0396）。本地 TCP 配对结果仍不确定，不能据此推断所有机器都有提升。
+
+[原始对比、单项退化与阶段诊断](benchmarks/results/ci-runtime-2026-10-20/README.md) · [本地 TCP 与插桩数据](benchmarks/results/tcp-profile-2026-10-20/README.md)。7 个 CI 作业全部通过，包括四平台的普通/插桩版测试及 sanitizer。
 <!-- benchmark-results:end -->
 
 [本地组件性能研究](benchmarks/results/component-2026-10-20/README.md)还记录了每项操作八组交替执行的优化前后配对测量。优化后，一次空 native poll 为 58.26 ns、一次 yield 为 18.88 ns、一次同 context 回调为 22.09 ns；跨线程入队按每批 256 次测量，单次均摊 22.89 ns（各轮平均 ns/op 的中位数，Linux/WSL2、GCC 13.3）。研究中保留了基线值、精确计量单位和不确定性；这些组件开销不能直接代表 TCP 或 HTTP 吞吐量。

@@ -17,19 +17,21 @@
 **Surpassing libuv and Asio is a goal, not an established result.** PACE is an early, usable prototype. Its benchmark compares PACE and standalone Asio coroutines with libuv's native callback API under the same TCP echo workload.
 
 <!-- benchmark-results:start -->
-Measured in [CI on 20 October 2026](https://github.com/TabNahida/PACE/actions/runs/39378454679). Throughput in requests/s (median of five trials):
+Measured in [CI on 20 October 2026](https://github.com/TabNahida/PACE/actions/runs/39397883915). Throughput in requests/s (median of five trials):
 
 | Platform | PACE | Asio | libuv |
 |---|---:|---:|---:|
-| [Linux / C++20](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx20.json) | 61,555 | 64,126 | 57,505 |
-| [Linux / C++23](benchmarks/results/ci-2026-10-20/ubuntu-latest-cxx23.json) | 59,916 | 64,411 | 57,497 |
-| [macOS arm64 / C++20](benchmarks/results/ci-2026-10-20/macos-latest-cxx20.json) | 49,940 | 42,655 | 55,623 |
-| [Windows x64 / C++20](benchmarks/results/ci-2026-10-20/windows-latest-cxx20.json) | 37,531 | 38,367 | 39,245 |
-| [FreeBSD 14.3 VM / C++20](benchmarks/results/ci-2026-10-20/freebsd.json) | 216,926 | 221,328 | 218,280 |
+| [Linux / C++20](benchmarks/results/ci-runtime-2026-10-20/ubuntu-latest-cxx20.json) | 101,093 | 103,577 | 99,196 |
+| [Linux / C++23](benchmarks/results/ci-runtime-2026-10-20/ubuntu-latest-cxx23.json) | 61,553 | 64,620 | 56,866 |
+| [macOS arm64 / C++20](benchmarks/results/ci-runtime-2026-10-20/macos-latest-cxx20.json) | 78,807 | 57,981 | 89,020 |
+| [Windows x64 / C++20](benchmarks/results/ci-runtime-2026-10-20/windows-latest-cxx20.json) | 52,733 | 55,843 | 57,554 |
+| [FreeBSD 14.3 VM / C++20](benchmarks/results/ci-runtime-2026-10-20/freebsd.json) | 355,542 | 344,665 | 408,762 |
 
-Same workload: one server thread, four persistent connections, 64-byte messages, 10,000 measured plus 1,000 warmup requests per connection; Asio 1.34.2 and libuv 1.52.1. Platforms use different shared runners; compare within each row. PACE does not yet outperform both baselines across platforms.
+Same workload: one server thread, four persistent connections, 64-byte messages, 10,000 measured plus 1,000 warmup requests per connection; Asio 1.34.2 and libuv 1.52.1. Compare within each row; platforms and runs use different shared machines. PACE does not yet outperform both baselines across platforms.
 
-[Latency, run spread, toolchains and all raw results](benchmarks/results/ci-2026-10-20/README.md). Every benchmark completed with validated data; this does not certify the performance leadership goal.
+A separate Linux before/after experiment measured a **3.47% median paired TCP throughput increase** (8/8 wins; exploratory ratio interval 1.0288–1.0396). Local TCP pairs remain inconclusive. These findings do not establish a portable speedup.
+
+[Raw comparisons, component regressions and stage diagnostics](benchmarks/results/ci-runtime-2026-10-20/README.md) · [Local TCP/profile evidence](benchmarks/results/tcp-profile-2026-10-20/README.md). All seven CI jobs passed, including plain/profile tests on the four platforms and sanitizers.
 <!-- benchmark-results:end -->
 
 A [local component study](benchmarks/results/component-2026-10-20/README.md) also records eight alternating before/after pairs per operation. The optimized build measured 58.26 ns per empty native poll, 18.88 ns per yield, 22.09 ns per same-context callback, and 22.89 ns per cross-thread enqueue in batches of 256 (median batch-average costs, Linux/WSL2, GCC 13.3). See the study for baseline values, exact units and uncertainty; these are component costs, not TCP or HTTP throughput.

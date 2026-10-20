@@ -1,0 +1,173 @@
+{
+  "actions_run": 39397883915,
+  "pr": 3,
+  "head": "62c8724b177a9ca03ed0b607bc5a74a852c26753",
+  "checkout_merge": "0bc9df91ba4582e629ada6c5a77e7d62103d0804",
+  "baseline": "0c42dcc9c1e481909e3283d2f80e2891ec4c2b89",
+  "files": {
+    "profile-freebsd-stages.json": {
+      "artifact_path": "benchmark-freebsd/profile-freebsd-stages.json",
+      "sha256": "f12dc478b780f7a5598e9ccf28632352e010a354e7cc9b26ca6ac91b0b2399ac"
+    },
+    "freebsd.json": {
+      "artifact_path": "benchmark-freebsd/freebsd.json",
+      "sha256": "b5d88861eafd591c1d82f57bdb293a8140b72fee89f980357876fe8b6fc9310c"
+    },
+    "components-freebsd.md": {
+      "artifact_path": "benchmark-freebsd/components-freebsd.md",
+      "sha256": "22bf0e7d73439ca914630a6dd0974a9174f8e6570aeab01f4ce1203103298b01"
+    },
+    "profile-freebsd-stages.md": {
+      "artifact_path": "benchmark-freebsd/profile-freebsd-stages.md",
+      "sha256": "3151e7af5630ed9a31d1e5dd13583bdd5c6f011a4b74cc6e542df2f7e2e3f5dc"
+    },
+    "components-freebsd.json": {
+      "artifact_path": "benchmark-freebsd/components-freebsd.json",
+      "sha256": "622bb54218845c8cd315f615e7f0674c02c95dbe0fc70aa7fc6b82f1ef99dc71"
+    },
+    "profile-freebsd.json": {
+      "artifact_path": "benchmark-freebsd/profile-freebsd.json",
+      "sha256": "158d74a314423e1f74f34fb26e99c6cd15b46b0ff3f1fe116f5bf2da443a0ecc"
+    },
+    "profile-windows-latest-cxx20.json": {
+      "artifact_path": "benchmark-windows-latest-cxx20/profile-windows-latest-cxx20.json",
+      "sha256": "ea94625ff87ea113a8bc7eaa131e527e955b93f97393b0e7d291a2bac282c94e"
+    },
+    "profile-windows-latest-cxx20-stages.md": {
+      "artifact_path": "benchmark-windows-latest-cxx20/profile-windows-latest-cxx20-stages.md",
+      "sha256": "87d93be25f82940831af3c2bf35b0bf3355c923b0bc21bf97d4827387e4f14ca"
+    },
+    "windows-latest-cxx20.json": {
+      "artifact_path": "benchmark-windows-latest-cxx20/windows-latest-cxx20.json",
+      "sha256": "7c621b70dc5d0eb75a984c2bcaa7e1eda650055e57e53602b3c3348a8030d853"
+    },
+    "profile-windows-latest-cxx20-stages.json": {
+      "artifact_path": "benchmark-windows-latest-cxx20/profile-windows-latest-cxx20-stages.json",
+      "sha256": "d0dd3b270325557b18e83559f84d309ab729f3e8730a2c6ca7d142f7c5ded342"
+    },
+    "components-windows-latest-cxx20.md": {
+      "artifact_path": "benchmark-windows-latest-cxx20/components-windows-latest-cxx20.md",
+      "sha256": "98f4eb6670c55cc0b082d0ca341965f270a4d3113ac7ca8fef728c23510647de"
+    },
+    "components-windows-latest-cxx20.json": {
+      "artifact_path": "benchmark-windows-latest-cxx20/components-windows-latest-cxx20.json",
+      "sha256": "c1ca6c949dee13860825a2b2055828a8743b35233e2adf9ed96fb63ca1cc1670"
+    },
+    "components-macos-latest-cxx20.md": {
+      "artifact_path": "benchmark-macos-latest-cxx20/components-macos-latest-cxx20.md",
+      "sha256": "d3e3bbfb433f92d29561674e7878491e731167b5f8638a40fb28af914c3fe86c"
+    },
+    "profile-macos-latest-cxx20-stages.json": {
+      "artifact_path": "benchmark-macos-latest-cxx20/profile-macos-latest-cxx20-stages.json",
+      "sha256": "e090a7c559aae61471e4bdc77d2b4dc81004795b80ec0eacad9f6b0e4df84055"
+    },
+    "profile-macos-latest-cxx20-stages.md": {
+      "artifact_path": "benchmark-macos-latest-cxx20/profile-macos-latest-cxx20-stages.md",
+      "sha256": "241a711379441bb7caf7ac91df5fdcb8bd0f5926f259dba987e7a46db0ce5453"
+    },
+    "profile-macos-latest-cxx20.json": {
+      "artifact_path": "benchmark-macos-latest-cxx20/profile-macos-latest-cxx20.json",
+      "sha256": "a2e82db05b6a0ab0bd8c3fa81ba253fce76caa87d70002f0939673b96e2122e2"
+    },
+    "macos-latest-cxx20.json": {
+      "artifact_path": "benchmark-macos-latest-cxx20/macos-latest-cxx20.json",
+      "sha256": "ce143b7744d95b1e813285c5755ae1c11e2008959341c10cd4f0bffdb33db7cd"
+    },
+    "components-macos-latest-cxx20.json": {
+      "artifact_path": "benchmark-macos-latest-cxx20/components-macos-latest-cxx20.json",
+      "sha256": "aee90575eb6eab2cb04c72874c873cf120e59cd5b9eb5288f3c1bf81acd4096e"
+    },
+    "components-ubuntu-latest-cxx20.md": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx20/components-ubuntu-latest-cxx20.md",
+      "sha256": "1cb021bae9c33db8c9234583b3ea329539930c0735ea52edb69bb8f55c0bd175"
+    },
+    "profile-ubuntu-latest-cxx20-stages.json": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx20/profile-ubuntu-latest-cxx20-stages.json",
+      "sha256": "bba764adcf882632270fc8eddc8d145978cf341c9b2380e7f444b5b7c367896a"
+    },
+    "profile-ubuntu-latest-cxx20.json": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx20/profile-ubuntu-latest-cxx20.json",
+      "sha256": "aa85a1ffa382d40bfab2f0a98b4cb91b0290f842ddce51f80e94f4ae42d3f62c"
+    },
+    "ubuntu-latest-cxx20.json": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx20/ubuntu-latest-cxx20.json",
+      "sha256": "0713cf37d802a547c8a41190cf78645b10408d14d3c481d946c7f2efa3e93a4a"
+    },
+    "components-ubuntu-latest-cxx20.json": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx20/components-ubuntu-latest-cxx20.json",
+      "sha256": "ac4e2eb776205ca441f2d5efe072cf63e773ced53f6d593d454271bc7b61bd2d"
+    },
+    "profile-ubuntu-latest-cxx20-stages.md": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx20/profile-ubuntu-latest-cxx20-stages.md",
+      "sha256": "857ee2c44d4213f069e7308837673c322e58d420a334a618ee58fb4fa295bbf0"
+    },
+    "components-ubuntu-latest-cxx23.md": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx23/components-ubuntu-latest-cxx23.md",
+      "sha256": "9758d8fa2cdcd476480806652c2015be9d74122c198c3f82e3920b677a8c8c7d"
+    },
+    "profile-ubuntu-latest-cxx23-stages.md": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx23/profile-ubuntu-latest-cxx23-stages.md",
+      "sha256": "0f1f61919be3297277e02ddfe1e37cf9f02d73eff6d98c2551a2d984d74ca60a"
+    },
+    "profile-ubuntu-latest-cxx23-stages.json": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx23/profile-ubuntu-latest-cxx23-stages.json",
+      "sha256": "dc83d24666444f4f1bc773ef79ecfbab50afa7be9498446a473653e0f4c3ec86"
+    },
+    "ubuntu-latest-cxx23.json": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx23/ubuntu-latest-cxx23.json",
+      "sha256": "9fe81a2e6181690b0cbd7df6d18102f7662e9bfea82fe612195029c7d58177f4"
+    },
+    "components-ubuntu-latest-cxx23.json": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx23/components-ubuntu-latest-cxx23.json",
+      "sha256": "6723e3786fe38e6cef9ff2c3961fb3ba441eca5eeec76760cb80fd320c2903e5"
+    },
+    "profile-ubuntu-latest-cxx23.json": {
+      "artifact_path": "benchmark-ubuntu-latest-cxx23/profile-ubuntu-latest-cxx23.json",
+      "sha256": "944e5db1c7959d1fb1a966f480ad72b8eaad2222760ecffbbd25a4cda0aad798"
+    },
+    "paired-await_chain.json": {
+      "artifact_path": "runtime-before-after-linux/benchmark-results/paired-await_chain.json",
+      "sha256": "ba28e8f3a7cf7e75dab8e0fd11c0dbe4c3763b123805e85988a5de0a52fc5b1d"
+    },
+    "paired-post.json": {
+      "artifact_path": "runtime-before-after-linux/benchmark-results/paired-post.json",
+      "sha256": "edeff4ac8be11fdc30b61e9df598d8c8f4747f7d8f985e45a0ca7f3dc484c137"
+    },
+    "paired-tcp.json": {
+      "artifact_path": "runtime-before-after-linux/benchmark-results/paired-tcp.json",
+      "sha256": "59d86be95bd21bc388e3ce49438d00a573662f3238e95fee8b9b366932ca2314"
+    },
+    "paired-yield.json": {
+      "artifact_path": "runtime-before-after-linux/benchmark-results/paired-yield.json",
+      "sha256": "9fea2f6d9ca6a171a1e9d7449498202e6ca0bff918d4ce29273c6173f5e6b799"
+    },
+    "paired-lazy_task.json": {
+      "artifact_path": "runtime-before-after-linux/benchmark-results/paired-lazy_task.json",
+      "sha256": "d0795de52de98fc6fb39a92016a1c97811f8fc7665f736e0ade9d7af9f8e3921"
+    },
+    "paired-cross_thread_post.json": {
+      "artifact_path": "runtime-before-after-linux/benchmark-results/paired-cross_thread_post.json",
+      "sha256": "75faa185fea807b7fd3c304eea84d10db36ad7b65fdc9325f3dca6847c308190"
+    },
+    "paired-spawn_completion.json": {
+      "artifact_path": "runtime-before-after-linux/benchmark-results/paired-spawn_completion.json",
+      "sha256": "d7e30b4a72348aa221a7cd6b5059db815c64a315a3d26970b29fcbe6b70f248f"
+    },
+    "paired-empty_poll.json": {
+      "artifact_path": "runtime-before-after-linux/benchmark-results/paired-empty_poll.json",
+      "sha256": "a25964d6ce1fe1af211f907de3cbdc4a9c76df743fc6ddf59ba2e809ac4d8edc"
+    },
+    "paired-zero_timer.json": {
+      "artifact_path": "runtime-before-after-linux/benchmark-results/paired-zero_timer.json",
+      "sha256": "3a2f95a6a70f161c5c9f450cc2fea444c1dc0b20ac1f92ef1277ab37b57d8fb7"
+    },
+    "candidate-revision.txt": {
+      "artifact_path": "runtime-before-after-linux/build/paired/candidate-revision.txt",
+      "sha256": "ea44d1564fc67219d65d077b207a48cec07e53b601fb7642e15a8a9abc196aae"
+    },
+    "baseline-revision.txt": {
+      "artifact_path": "runtime-before-after-linux/build/paired/baseline-revision.txt",
+      "sha256": "23525ea3d54e533bebd7ca4eece581dce2bbb4aedeca27f653177a138f3ef4fe"
+    }
+  }
+}
