@@ -62,6 +62,8 @@ For multiple loops, construct `pace::runtime workers(4)`, assign work with `work
 
 Install [xmake](https://xmake.io/guide/quick-start.html) 2.9.8 or newer and a C++20 compiler with standard coroutine support. CI uses xmake 3.0.9. Windows builds require the Visual Studio C++ toolchain. Normal builds need no third-party runtime dependencies.
 
+On FreeBSD, install **xmake-io** from its upstream source or installer. The FreeBSD package named `xmake` is a different project; the CI workflow demonstrates a pinned source build.
+
 ```sh
 git clone https://github.com/TabNahida/PACE.git
 cd PACE

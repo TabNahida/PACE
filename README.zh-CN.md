@@ -62,6 +62,8 @@ int main() {
 
 安装 [xmake](https://xmake.io/guide/quick-start.html) 2.9.8 或更新版本，以及支持标准协程的 C++20 编译器。CI 使用 xmake 3.0.9。Windows 需要 Visual Studio C++ 工具链。普通构建不需要第三方运行时依赖。
 
+FreeBSD 请通过上游源码或安装器安装 **xmake-io**。FreeBSD 软件包中名为 `xmake` 的工具属于另一个项目；CI 工作流提供了固定版本的源码构建示例。
+
 ```sh
 git clone https://github.com/TabNahida/PACE.git
 cd PACE

@@ -14,6 +14,24 @@ namespace {
 std::atomic_flag interrupted = ATOMIC_FLAG_INIT;
 void on_signal(int) { interrupted.test_and_set(std::memory_order_relaxed); }
 
+// Keep signal handlers minimal and join the watcher even when run() throws.
+// std::thread also supports platforms whose libc++ does not provide jthread.
+class signal_watcher {
+    std::atomic<bool> finished_{false};
+    std::thread worker_;
+public:
+    explicit signal_watcher(pace::runtime& runtime) : worker_([this, &runtime] {
+        while (!finished_.load(std::memory_order_relaxed) &&
+               !interrupted.test(std::memory_order_relaxed))
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        if (interrupted.test(std::memory_order_relaxed)) runtime.stop();
+    }) {}
+    ~signal_watcher() {
+        finished_.store(true, std::memory_order_relaxed);
+        worker_.join();
+    }
+};
+
 pace::task<void> echo(pace::tcp_stream stream) {
     try {
         stream.set_no_delay();
@@ -56,11 +74,7 @@ int main(int argc, char** argv) {
         }
         std::signal(SIGINT, on_signal);
         std::signal(SIGTERM, on_signal);
-        std::jthread shutdown([&](std::stop_token token) {
-            while (!token.stop_requested() && !interrupted.test(std::memory_order_relaxed))
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            if (interrupted.test(std::memory_order_relaxed)) runtime.stop();
-        });
+        signal_watcher shutdown(runtime);
         std::cout << "PACE TCP echo listening on port " << port << " with " << workers
                   << " worker(s); Ctrl+C to stop\n";
         runtime.run();

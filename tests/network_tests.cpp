@@ -352,7 +352,7 @@ void run_test(const char* name, test_body body) {
     std::condition_variable condition;
     bool finished = false;
     std::atomic<bool> timed_out = false;
-    std::jthread watchdog([&] {
+    std::thread watchdog([&] {
         std::unique_lock lock(mutex);
         if (!condition.wait_for(lock, 10s, [&] { return finished; })) {
             timed_out = true;
@@ -362,6 +362,7 @@ void run_test(const char* name, test_body body) {
     auto finish = [&] {
         { std::lock_guard lock(mutex); finished = true; }
         condition.notify_one();
+        watchdog.join();
     };
     try {
         context.spawn(run_body(context, body, completed));
