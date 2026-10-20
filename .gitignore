@@ -1,0 +1,7 @@
+/build/
+/.xmake/
+/benchmark-results/
+*.core
+*.dmp
+__pycache__/
+*.pyc

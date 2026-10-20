@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="620" viewBox="0 0 1280 620" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">PACE — Modern C++ networking, at your pace</title>
+  <desc id="description">Dark project card with purple and mint accents. A request stream fans into three independent worker reactors. C++20 coroutines, TCP and HTTP, Linux, macOS, Windows and FreeBSD.</desc>
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="1280" y2="620" gradientUnits="userSpaceOnUse"><stop stop-color="#101627"/><stop offset="1" stop-color="#080D18"/></linearGradient>
+    <linearGradient id="accent" x1="80" y1="205" x2="520" y2="320" gradientUnits="userSpaceOnUse"><stop stop-color="#DBE5FF"/><stop offset="0.65" stop-color="#A7A8FF"/><stop offset="1" stop-color="#7B8BFF"/></linearGradient>
+    <linearGradient id="flow" x1="710" y1="320" x2="1000" y2="320" gradientUnits="userSpaceOnUse"><stop stop-color="#677BDF" stop-opacity="0.2"/><stop offset="1" stop-color="#8E9BFF"/></linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(1070 135) rotate(130) scale(520 400)" gradientUnits="userSpaceOnUse"><stop stop-color="#6357C2" stop-opacity="0.22"/><stop offset="1" stop-color="#6357C2" stop-opacity="0"/></radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" stroke="#B1BBED" stroke-opacity="0.035"/></pattern>
+  </defs>
+  <rect x="1" y="1" width="1278" height="618" rx="28" fill="url(#surface)" stroke="#263149" stroke-width="2"/>
+  <rect x="2" y="2" width="1276" height="616" rx="27" fill="url(#grid)"/>
+  <rect x="2" y="2" width="1276" height="616" rx="27" fill="url(#glow)"/>
+
+  <g font-family="Inter, Segoe UI, Arial, sans-serif">
+    <rect x="72" y="64" width="10" height="10" rx="3" fill="#70DDC3"/>
+    <text x="96" y="75" fill="#A4B1CC" font-size="13" font-weight="600" letter-spacing="2.2">C++20 COROUTINE NETWORKING</text>
+    <text x="68" y="254" fill="url(#accent)" font-size="140" font-weight="800" letter-spacing="-8">PACE</text>
+    <text x="76" y="312" fill="#F0F3FF" font-size="30" font-weight="500" letter-spacing="-0.6">Modern networking.</text>
+    <text x="76" y="354" fill="#F0F3FF" font-size="30" font-weight="500" letter-spacing="-0.6">Your threads. Your pace.</text>
+    <text x="76" y="404" fill="#8997B4" font-size="17">Coroutines · TCP + HTTP · Independent reactors</text>
+
+    <rect x="76" y="437" width="100" height="31" rx="15.5" fill="#18283A" stroke="#2B4553"/>
+    <text x="126" y="457" fill="#79DDC7" text-anchor="middle" font-size="12" font-weight="600" letter-spacing="0.8">C++20 / 23</text>
+    <rect x="188" y="437" width="82" height="31" rx="15.5" fill="#1B2139" stroke="#343D60"/>
+    <text x="229" y="457" fill="#B2BBEF" text-anchor="middle" font-size="12" font-weight="600" letter-spacing="0.8">XMAKE</text>
+    <rect x="282" y="437" width="70" height="31" rx="15.5" fill="#1B2139" stroke="#343D60"/>
+    <text x="317" y="457" fill="#B2BBEF" text-anchor="middle" font-size="12" font-weight="600" letter-spacing="0.8">MIT</text>
+
+    <text x="766" y="123" fill="#7E8CAB" font-size="11" font-weight="600" letter-spacing="2">ONE LOOP PER WORKER</text>
+    <path d="M716 298H755C791 298 787 205 832 205H865M716 298H865M716 298H755C791 298 787 391 832 391H865" stroke="url(#flow)" stroke-width="2"/>
+    <circle cx="716" cy="298" r="6" fill="#A1ABFF"/>
+    <circle cx="793" cy="246" r="4" fill="#9CA9FA"/>
+    <circle cx="811" cy="298" r="4" fill="#9CA9FA"/>
+    <circle cx="807" cy="376" r="4" fill="#9CA9FA"/>
+
+    <g>
+      <rect x="865" y="165" width="300" height="80" rx="15" fill="#141E32" stroke="#3A456C"/>
+      <circle cx="895" cy="194" r="4" fill="#78DDC4"/>
+      <text x="909" y="198" fill="#B1BED8" font-size="12" font-weight="600" letter-spacing="1.1">WORKER 01</text>
+      <text x="886" y="225" fill="#EEF1FD" font-size="17" font-weight="500">io_context</text>
+      <rect x="1031" y="201" width="24" height="22" rx="5" fill="#424E89"/>
+      <rect x="1063" y="201" width="24" height="22" rx="5" fill="#5E6BBC"/>
+      <rect x="1095" y="201" width="24" height="22" rx="5" fill="#8994E7"/>
+      <rect x="1127" y="201" width="17" height="22" rx="5" fill="#223347"/>
+    </g>
+    <g>
+      <rect x="865" y="258" width="300" height="80" rx="15" fill="#141E32" stroke="#3A456C"/>
+      <circle cx="895" cy="287" r="4" fill="#78DDC4"/>
+      <text x="909" y="291" fill="#B1BED8" font-size="12" font-weight="600" letter-spacing="1.1">WORKER 02</text>
+      <text x="886" y="318" fill="#EEF1FD" font-size="17" font-weight="500">io_context</text>
+      <rect x="1031" y="294" width="24" height="22" rx="5" fill="#378477"/>
+      <rect x="1063" y="294" width="24" height="22" rx="5" fill="#4EA792"/>
+      <rect x="1095" y="294" width="24" height="22" rx="5" fill="#76D9BF"/>
+      <rect x="1127" y="294" width="17" height="22" rx="5" fill="#223347"/>
+    </g>
+    <g>
+      <rect x="865" y="351" width="300" height="80" rx="15" fill="#141E32" stroke="#3A456C"/>
+      <circle cx="895" cy="380" r="4" fill="#78DDC4"/>
+      <text x="909" y="384" fill="#B1BED8" font-size="12" font-weight="600" letter-spacing="1.1">WORKER 03</text>
+      <text x="886" y="411" fill="#EEF1FD" font-size="17" font-weight="500">io_context</text>
+      <rect x="1031" y="387" width="24" height="22" rx="5" fill="#424E89"/>
+      <rect x="1063" y="387" width="24" height="22" rx="5" fill="#5E6BBC"/>
+      <rect x="1095" y="387" width="24" height="22" rx="5" fill="#8994E7"/>
+      <rect x="1127" y="387" width="17" height="22" rx="5" fill="#223347"/>
+    </g>
+    <text x="882" y="463" fill="#7E8CAB" font-size="12">Local tasks. Explicit placement.</text>
+    <line x1="76" y1="518" x2="1204" y2="518" stroke="#243047"/>
+    <text x="76" y="559" fill="#BCC7DD" font-size="14" font-weight="500">Linux</text>
+    <circle cx="130" cy="554" r="2" fill="#53617D"/>
+    <text x="147" y="559" fill="#BCC7DD" font-size="14" font-weight="500">macOS</text>
+    <circle cx="212" cy="554" r="2" fill="#53617D"/>
+    <text x="229" y="559" fill="#BCC7DD" font-size="14" font-weight="500">Windows</text>
+    <circle cx="311" cy="554" r="2" fill="#53617D"/>
+    <text x="328" y="559" fill="#BCC7DD" font-size="14" font-weight="500">FreeBSD</text>
+    <text x="1204" y="559" fill="#7E8CAB" font-size="12" text-anchor="end" letter-spacing="1">github.com/TabNahida/PACE</text>
+  </g>
+</svg>
