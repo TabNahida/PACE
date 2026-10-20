@@ -10,6 +10,7 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -338,8 +339,9 @@ void benchmark(const options& config) {
 #ifdef _WIN32
                 const DWORD timeout = config.timeout_ms;
 #else
-                const timeval timeout{static_cast<long>(config.timeout_ms / 1000),
-                                      static_cast<long>((config.timeout_ms % 1000) * 1000)};
+                timeval timeout{};
+                timeout.tv_sec = static_cast<decltype(timeout.tv_sec)>(config.timeout_ms / 1000);
+                timeout.tv_usec = static_cast<decltype(timeout.tv_usec)>((config.timeout_ms % 1000) * 1000);
 #endif
                 for (const int option : {SO_RCVTIMEO, SO_SNDTIMEO}) {
                     if (::setsockopt(socket.fd, SOL_SOCKET, option,
@@ -391,7 +393,7 @@ void benchmark(const options& config) {
         return merged[static_cast<std::size_t>(std::ceil(fraction * merged.size())) - 1];
     };
     const double throughput = merged.size() / elapsed;
-    std::cout << std::fixed << std::setprecision(3)
+    std::cout << std::fixed << std::setprecision(9)
         << "{\"benchmark\":\"tcp_echo\",\"backend\":\"" << config.backend
         << "\",\"trial\":" << config.trial << ",\"server_threads\":1,\"client_threads\":" << config.clients
         << ",\"connections\":" << config.clients << ",\"pipeline\":1,\"payload_bytes\":" << config.bytes

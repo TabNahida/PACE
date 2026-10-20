@@ -30,7 +30,7 @@ option("sanitizers")
 option_end()
 
 if has_config("benchmarks") then
-    add_requires("asio 1.34.2", "libuv")
+    add_requires("asio 1.34.2", "libuv 1.52.1")
 end
 if has_config("sanitizers") and not is_plat("windows") then
     add_cxxflags("-fsanitize=address,undefined", "-fno-omit-frame-pointer")

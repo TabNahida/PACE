@@ -5,3 +5,4 @@
 *.dmp
 __pycache__/
 *.pyc
+/.xmake-cache/

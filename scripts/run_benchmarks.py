@@ -5,6 +5,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -32,6 +33,34 @@ def cpu_model():
     return platform.processor() or os.environ.get("PROCESSOR_IDENTIFIER")
 
 
+def validate_record(record, backend, trial, config):
+    """Reject mismatched workloads and unusable measurements before aggregation."""
+    if not isinstance(record, dict):
+        raise ValueError("benchmark output must be a JSON object")
+    expected = {
+        "benchmark": "tcp_echo", "backend": backend, "trial": trial,
+        "server_threads": 1, "client_threads": config.clients,
+        "connections": config.clients, "pipeline": 1, "payload_bytes": config.bytes,
+        "requests_per_client": config.requests, "warmup_per_client": config.warmup,
+        "completed_requests": config.clients * config.requests, "payload_verified": True,
+    }
+    for key, value in expected.items():
+        if type(record.get(key)) is not type(value) or record[key] != value:
+            raise ValueError(f"unexpected {key}: expected {value!r}, received {record.get(key)!r}")
+    for key in ("seconds", "requests_per_second", "roundtrip_mib_per_second", "p50_us", "p99_us", "max_us"):
+        value = record.get(key)
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError(f"{key} must be finite and positive")
+    if not record["p50_us"] <= record["p99_us"] <= record["max_us"]:
+        raise ValueError("invalid latency percentile ordering")
+    expected_throughput = record["completed_requests"] / record["seconds"]
+    if not math.isclose(record["requests_per_second"], expected_throughput, rel_tol=0.01):
+        raise ValueError("throughput does not match completed requests / elapsed time")
+    expected_bandwidth = record["requests_per_second"] * config.bytes * 2 / (1024 * 1024)
+    if not math.isclose(record["roundtrip_mib_per_second"], expected_bandwidth, rel_tol=0.01, abs_tol=0.000001):
+        raise ValueError("bandwidth does not match throughput / payload size")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--executable", type=Path, help="Default: newest build/**/pace_bench(.exe)")
@@ -46,7 +75,7 @@ def main():
     parser.add_argument("--timeout", type=float, default=60, help="Hard wall-clock limit per subprocess, seconds")
     parser.add_argument("--label", default="local", help="Hardware / runner label, without performance claims")
     args = parser.parse_args()
-    if args.repeats < 1 or args.repeats > 100 or args.timeout <= 0:
+    if args.repeats < 1 or args.repeats > 100 or not math.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("repeats must be 1..100 and timeout must be positive")
     root = Path(__file__).resolve().parent.parent
     if args.executable is None:
@@ -80,8 +109,10 @@ def main():
         "cpu_model": cpu_model(),
         "logical_cpus": os.cpu_count(),
         "python": platform.python_version(),
-        "git_commit": command_output(["git", "rev-parse", "HEAD"], cwd=root),
-        "git_status": command_output(["git", "status", "--porcelain"], cwd=root),
+        # VM source synchronization can preserve the host owner's UID. Trust
+        # this explicit build root for these read-only metadata commands only.
+        "git_commit": command_output(["git", "-c", f"safe.directory={root}", "rev-parse", "HEAD"], cwd=root),
+        "git_status": command_output(["git", "-c", f"safe.directory={root}", "status", "--porcelain"], cwd=root),
         "executable": str(executable),
         "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
         "backend_versions": available,
@@ -90,6 +121,7 @@ def main():
         "pipeline": 1,
         "timing": "TCP round trip including send, recv and complete payload validation; connection setup and warmup excluded",
         "aggregation": "Median throughput and median of per-run p50/p99; min/max throughput show run spread",
+        "acceptance_scope": "Complete, payload-correct, internally consistent measurements; does not certify faster performance",
         "limitations": [
             "Loopback closed-loop workload; client threads, kernel and CPU scheduler contribute to results",
             "One reactor thread per backend; does not establish multicore scaling, HTTP speed or peak capacity",
@@ -122,10 +154,7 @@ def main():
                     if result.returncode:
                         raise RuntimeError(f"exit {result.returncode}: {result.stderr.strip()}")
                     record = json.loads(result.stdout)
-                    if record.get("backend") != backend or record.get("payload_verified") is not True:
-                        raise RuntimeError("backend output failed validation")
-                    if record.get("completed_requests") != args.clients * args.requests:
-                        raise RuntimeError("incomplete workload")
+                    validate_record(record, backend, trial, args)
                     records.append(record)
                     raw.write(json.dumps(record, separators=(",", ":")) + "\n")
                     raw.flush()
