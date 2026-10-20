@@ -33,6 +33,11 @@ option("components")
     set_showmenu(true)
     set_description("Build PACE component microbenchmarks without external dependencies")
 option_end()
+option("scaling")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Build PACE worker/execution scaling benchmark without external dependencies")
+option_end()
 option("profiling")
     set_default(false)
     set_description("Enable intrusive per-thread stage timings (diagnostics only)")
@@ -80,6 +85,21 @@ if has_config("examples") then
             add_deps("pace")
         target_end()
     end
+    for _, name in ipairs({"tutorial_tasks", "tutorial_tcp", "tutorial_http", "tutorial_workers", "tutorial_shutdown"}) do
+        target(name)
+            set_kind("binary")
+            add_files("examples/" .. name .. ".cpp")
+            add_deps("pace")
+            if has_config("tests") then add_tests("default") end
+        target_end()
+    end
+end
+if has_config("scaling") then
+    target("pace_scaling")
+        set_kind("binary")
+        add_files("benchmarks/scaling_bench.cpp")
+        add_deps("pace")
+    target_end()
 end
 if has_config("benchmarks") then
     target("pace_bench")

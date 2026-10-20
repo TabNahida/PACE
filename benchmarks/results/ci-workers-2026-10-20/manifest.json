@@ -1,0 +1,263 @@
+{
+  "run_url": "https://github.com/TabNahida/PACE/actions/runs/39404014672",
+  "source_head": "72327e4a2f5b787deeb902d188e26c67f9799441",
+  "checkout_merge": "b1c994212888585ea06a71f7276463379314bd93",
+  "files": [
+    {
+      "artifact": "benchmark-freebsd",
+      "artifact_path": "components-freebsd.json",
+      "sha256": "845968c83d6749b976d853dbdce9a2817fb15528eba5efce1910c8dd03e86641"
+    },
+    {
+      "artifact": "benchmark-freebsd",
+      "artifact_path": "components-freebsd.md",
+      "sha256": "38f04cb39ee71a295dedb1d1874594edb2631dcc13b735e00e1b4b482479dbbb"
+    },
+    {
+      "artifact": "benchmark-freebsd",
+      "artifact_path": "freebsd.json",
+      "sha256": "5e52c2dc508a0d84f19ef9cce8bcf15c19633e1a983534ba6a7897aac7716423"
+    },
+    {
+      "artifact": "benchmark-freebsd",
+      "artifact_path": "profile-freebsd-stages.json",
+      "sha256": "f9c3cb4a760f12890fae415c72a8d37fe7e447282680959fcec92017666520a9"
+    },
+    {
+      "artifact": "benchmark-freebsd",
+      "artifact_path": "profile-freebsd-stages.md",
+      "sha256": "3cb419f04417e37f11d6b306344e446c88da134c6b50737bb42f035fa1a0dc44"
+    },
+    {
+      "artifact": "benchmark-freebsd",
+      "artifact_path": "profile-freebsd.json",
+      "sha256": "14383e3b48b66024d1f94f8fe6e643aa8a3e12126ef556e449ebe98839d491c0"
+    },
+    {
+      "artifact": "benchmark-freebsd",
+      "artifact_path": "scaling-freebsd.json",
+      "sha256": "68ff2990c38b92ebc5dc73b20541caaeb201cdabb9f8475a4a51c781f5593e56"
+    },
+    {
+      "artifact": "benchmark-freebsd",
+      "artifact_path": "scaling-freebsd.md",
+      "sha256": "90ac7c8f2ba2dd899317a1ab6fa0655fbfd069cdc2cd837322a71a59b7dff302"
+    },
+    {
+      "artifact": "benchmark-macos-latest-cxx20",
+      "artifact_path": "components-macos-latest-cxx20.json",
+      "sha256": "c7274bfd105da87971228be2d1f785ae433c6f3cb14f4c4ea61a52a7eb4b7268"
+    },
+    {
+      "artifact": "benchmark-macos-latest-cxx20",
+      "artifact_path": "components-macos-latest-cxx20.md",
+      "sha256": "6ce49cf3b50871cf297c7d45324e50b54f2a39b5c19a5552f050e8ed95cd6afe"
+    },
+    {
+      "artifact": "benchmark-macos-latest-cxx20",
+      "artifact_path": "macos-latest-cxx20.json",
+      "sha256": "cf376404078da16db35f5046912ffe6bef09d3d7be401740f158b3e1295ee139"
+    },
+    {
+      "artifact": "benchmark-macos-latest-cxx20",
+      "artifact_path": "profile-macos-latest-cxx20-stages.json",
+      "sha256": "4c1f1665863d8a9c8200bceb9753f5931746a8751a1a2056f2098358643e0ec8"
+    },
+    {
+      "artifact": "benchmark-macos-latest-cxx20",
+      "artifact_path": "profile-macos-latest-cxx20-stages.md",
+      "sha256": "8d7e6b0dc960b7a6b834e317ce29f613add9b2ea403c769430ff44b1c030b189"
+    },
+    {
+      "artifact": "benchmark-macos-latest-cxx20",
+      "artifact_path": "profile-macos-latest-cxx20.json",
+      "sha256": "3970631f6e522b2670be46f65ee23254ef9603baf9ff76ba0acd2639e527fdd7"
+    },
+    {
+      "artifact": "benchmark-macos-latest-cxx20",
+      "artifact_path": "scaling-macos-latest-cxx20.json",
+      "sha256": "ae57666a6546a77ea8b4c55c14e42729843064252a848cc59d1eee56c72e134d"
+    },
+    {
+      "artifact": "benchmark-macos-latest-cxx20",
+      "artifact_path": "scaling-macos-latest-cxx20.md",
+      "sha256": "f54a0dbb5211077f8d10823908b1d23d4b94ecb4060c6daeda97c813731c5569"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx20",
+      "artifact_path": "components-ubuntu-latest-cxx20.json",
+      "sha256": "4707eea3316d0cf3f8bdb294e27c3392e7f93105eba119a99ffa7b08a6cc1704"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx20",
+      "artifact_path": "components-ubuntu-latest-cxx20.md",
+      "sha256": "ee09f73cd31e8ec472738c3cbd0f9d2e476d0e4be0edc9e276fb3aefe0b86a45"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx20",
+      "artifact_path": "profile-ubuntu-latest-cxx20-stages.json",
+      "sha256": "2300667d05fc40b41949e412f52d82946a551384a8f4da5b03f47ebb9b306875"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx20",
+      "artifact_path": "profile-ubuntu-latest-cxx20-stages.md",
+      "sha256": "1756bae5a5897d6ec40248652bc3a77202173aa1e18bae3d650b71260837863e"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx20",
+      "artifact_path": "profile-ubuntu-latest-cxx20.json",
+      "sha256": "6c273bf77491d39486898ac8c4678fe2737a03da1478ba548490f67bbab10d1a"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx20",
+      "artifact_path": "scaling-ubuntu-latest-cxx20.json",
+      "sha256": "1b6e2491d64651bd4f145e752e7ab5be35a4635b935f465a65ce10a6b6892b17"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx20",
+      "artifact_path": "scaling-ubuntu-latest-cxx20.md",
+      "sha256": "9d23702c1f310370826c6dfe4dcae2fff6fa9c0977d5618a7e0375ceb1f21ab2"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx20",
+      "artifact_path": "ubuntu-latest-cxx20.json",
+      "sha256": "8a178961a10980f18ceb618bfa79b2516ad7f7f8679bc2deee5896e0581276e6"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx23",
+      "artifact_path": "components-ubuntu-latest-cxx23.json",
+      "sha256": "fd2f75050ecbfdda63d9627f8a143e377db9a18639c44592185ce0d32fc1abfe"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx23",
+      "artifact_path": "components-ubuntu-latest-cxx23.md",
+      "sha256": "d137ff1e8816b9e8a67ddfc6009eb4740caafb70b7e8c245bc4516c3f9681da0"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx23",
+      "artifact_path": "profile-ubuntu-latest-cxx23-stages.json",
+      "sha256": "4251bc699352469ea4a1cc31b5b5fb7971675f77872c2077fc5ed07bb1035006"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx23",
+      "artifact_path": "profile-ubuntu-latest-cxx23-stages.md",
+      "sha256": "d7acbb611ce40c0cee1a6423cfb9d872824dcecf2903b6c41e3269cf2f94ac47"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx23",
+      "artifact_path": "profile-ubuntu-latest-cxx23.json",
+      "sha256": "a9923631581e3c12508d36957198c809e11cb8e67d06011429fb5059600d4a6e"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx23",
+      "artifact_path": "scaling-ubuntu-latest-cxx23.json",
+      "sha256": "b386c3f5604829bd2e662b1dcad6526252d0b87a7a89dd55caef3200a68aaa0d"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx23",
+      "artifact_path": "scaling-ubuntu-latest-cxx23.md",
+      "sha256": "69879a7242819955799c12d19874235539393f68f59f231c35bc305a558449f2"
+    },
+    {
+      "artifact": "benchmark-ubuntu-latest-cxx23",
+      "artifact_path": "ubuntu-latest-cxx23.json",
+      "sha256": "0ab43527dc073fad50d6c8ffb2fedd1cd6d9def844085ef6a75c94f2570ebb5c"
+    },
+    {
+      "artifact": "benchmark-windows-latest-cxx20",
+      "artifact_path": "components-windows-latest-cxx20.json",
+      "sha256": "baaaadf5a0e94a50d307a1dc9e072e10e1b35784e98e6495d10476352ae26897"
+    },
+    {
+      "artifact": "benchmark-windows-latest-cxx20",
+      "artifact_path": "components-windows-latest-cxx20.md",
+      "sha256": "ce200c05f2627a7e84440d2026fc19c3bdc0ccc405b6d8c5ed9afbd1fe21bb71"
+    },
+    {
+      "artifact": "benchmark-windows-latest-cxx20",
+      "artifact_path": "profile-windows-latest-cxx20-stages.json",
+      "sha256": "138a540668cef32d22176626d5961f63f264e9c64d8162aa2606886e9b027d83"
+    },
+    {
+      "artifact": "benchmark-windows-latest-cxx20",
+      "artifact_path": "profile-windows-latest-cxx20-stages.md",
+      "sha256": "edc88482caab9171238456c21bb63b0cfd9b1f55eb7da139c8b0a7060f23b696"
+    },
+    {
+      "artifact": "benchmark-windows-latest-cxx20",
+      "artifact_path": "profile-windows-latest-cxx20.json",
+      "sha256": "377b4149a21c877e9e6179d5c79d25f1a166d773b5d9e8388d29e15dd5192f13"
+    },
+    {
+      "artifact": "benchmark-windows-latest-cxx20",
+      "artifact_path": "scaling-windows-latest-cxx20.json",
+      "sha256": "90ea3296b5c108da9f294ec22a4f448e90944e7b736b74c0e23d4ff4a9931769"
+    },
+    {
+      "artifact": "benchmark-windows-latest-cxx20",
+      "artifact_path": "scaling-windows-latest-cxx20.md",
+      "sha256": "c672129f91d8d090852d00f484fa8c910d38da425aebfc91a0d806b072fa0ac5"
+    },
+    {
+      "artifact": "benchmark-windows-latest-cxx20",
+      "artifact_path": "windows-latest-cxx20.json",
+      "sha256": "8fb655d43242ce1834d1d3246260226ef2c8d8ac35bd71fffa634e4390ad6c89"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "benchmark-results/paired-await_chain.json",
+      "sha256": "1abf1f77722ed3bfa5b62f799816d3b1f8ed97abce8fb8eec930bfd8b4906e62"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "benchmark-results/paired-cross_thread_post.json",
+      "sha256": "33ad5afe48adf4668dd8fdc35fafd4e9d5b680bf9dbf1546f1072853e9e9bc4b"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "benchmark-results/paired-empty_poll.json",
+      "sha256": "b6781752bb420321daeebe97123e816d788dee2b3363fa04294ca7c2c437e8a6"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "benchmark-results/paired-lazy_task.json",
+      "sha256": "23d6fe2db7497b3c5bca861ba8926b396c863820fd432e7595d1a31bb138f4fa"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "benchmark-results/paired-post.json",
+      "sha256": "b2274f2f6c3908c4f3be494f4fd26b7312b5082503bfea303dc34c6c08e96c63"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "benchmark-results/paired-spawn_completion.json",
+      "sha256": "2bbc861f8dfde62feba4af2bb052c1658cab648ad57f9d0dce56019f2000c6f9"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "benchmark-results/paired-tcp.json",
+      "sha256": "4ea729b072be29939d34cceb2e8cd0d839fcf7baf64bed7a56dc5a06949bf6c0"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "benchmark-results/paired-yield.json",
+      "sha256": "9185668abb1f8a5b36e19429acf76df57d43e4dce069b47254ff67285255a60e"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "benchmark-results/paired-zero_timer.json",
+      "sha256": "137774b2d0abe7a3316ca68f650a4651fc99f21b5d2f0fc50db5f3196ba7fe4f"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "build/paired/baseline-revision.txt",
+      "sha256": "23525ea3d54e533bebd7ca4eece581dce2bbb4aedeca27f653177a138f3ef4fe"
+    },
+    {
+      "artifact": "runtime-before-after-linux",
+      "artifact_path": "build/paired/candidate-revision.txt",
+      "sha256": "75dcec706c22811b2c5bcf82d785e36c0cfebd0fbe22ced8aba754f3919a26c8"
+    }
+  ],
+  "note": "Top-level combined reports include all raw trials; duplicate per-trial evidence directories remain in downloadable Actions artifacts."
+}

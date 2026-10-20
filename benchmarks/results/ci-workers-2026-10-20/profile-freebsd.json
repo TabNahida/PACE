@@ -1,0 +1,451 @@
+{
+  "environment": {
+    "schema_version": 1,
+    "measurement_kind": "instrumented_diagnostic",
+    "fair_backend_comparison": false,
+    "status": "completed",
+    "started_utc": "2026-10-20T09:55:42.792470+00:00",
+    "label": "profile-freebsd-cxx20",
+    "platform": "FreeBSD-14.3-RELEASE-amd64-64bit-ELF",
+    "machine": "amd64",
+    "cpu_model": "amd64",
+    "logical_cpus": 4,
+    "python": "3.12.14",
+    "git_commit": "b1c994212888585ea06a71f7276463379314bd93",
+    "git_status": "",
+    "executable": "/home/runner/work/PACE/PACE/build/profile/bsd/x86_64/release/pace_bench",
+    "executable_sha256": "9694cf7373ae1edece8f0369d0255c42fcff2b9988567555862c4927e60feffa",
+    "backend_versions": {
+      "backends": [
+        "pace",
+        "asio",
+        "libuv"
+      ],
+      "pace_profiling": true,
+      "asio_version": 103402,
+      "libuv_version": "1.52.1",
+      "cpp_standard": 202002,
+      "compiler": "Clang 19.1.7",
+      "ndebug": true
+    },
+    "configuration": {
+      "build_dir": "build/profile",
+      "backends": "pace",
+      "require_all": false,
+      "repeats": 3,
+      "clients": 4,
+      "requests": 10000,
+      "warmup": 1000,
+      "bytes": 64,
+      "timeout": 60,
+      "label": "profile-freebsd-cxx20"
+    },
+    "server_threads": 1,
+    "pipeline": 1,
+    "timing": "TCP round trip including send, recv and complete payload validation; connection setup and warmup excluded",
+    "aggregation": "Median throughput and median of per-run p50/p99; min/max throughput show run spread",
+    "acceptance_scope": "Complete, payload-correct, internally consistent measurements; does not certify faster performance",
+    "limitations": [
+      "Profiling adds timing overhead: throughput and latency are instrumented diagnostics, not fair backend comparisons",
+      "Loopback closed-loop workload; client threads, kernel and CPU scheduler contribute to results",
+      "One reactor thread per backend; does not establish multicore scaling, HTTP speed or peak capacity",
+      "Library defaults and public async APIs; PACE/Asio use coroutines, libuv uses callbacks",
+      "CPU affinity and frequency are not controlled by this script; shared CI runners are noisy",
+      "Per-run latency percentiles are closed-loop observed latency, without coordinated-omission correction"
+    ],
+    "commands": [
+      [
+        "/home/runner/work/PACE/PACE/build/profile/bsd/x86_64/release/pace_bench",
+        "--backend",
+        "pace",
+        "--clients",
+        "4",
+        "--requests",
+        "10000",
+        "--warmup",
+        "1000",
+        "--bytes",
+        "64",
+        "--trial",
+        "1"
+      ],
+      [
+        "/home/runner/work/PACE/PACE/build/profile/bsd/x86_64/release/pace_bench",
+        "--backend",
+        "pace",
+        "--clients",
+        "4",
+        "--requests",
+        "10000",
+        "--warmup",
+        "1000",
+        "--bytes",
+        "64",
+        "--trial",
+        "2"
+      ],
+      [
+        "/home/runner/work/PACE/PACE/build/profile/bsd/x86_64/release/pace_bench",
+        "--backend",
+        "pace",
+        "--clients",
+        "4",
+        "--requests",
+        "10000",
+        "--warmup",
+        "1000",
+        "--bytes",
+        "64",
+        "--trial",
+        "3"
+      ]
+    ],
+    "profile_window": "server event-loop lifetime including startup, warmup and shutdown",
+    "finished_utc": "2026-10-20T09:55:43.506838+00:00",
+    "failure": null
+  },
+  "runs": [
+    {
+      "benchmark": "tcp_echo",
+      "backend": "pace",
+      "trial": 1,
+      "server_threads": 1,
+      "client_threads": 4,
+      "connections": 4,
+      "pipeline": 1,
+      "payload_bytes": 64,
+      "requests_per_client": 10000,
+      "warmup_per_client": 1000,
+      "completed_requests": 40000,
+      "seconds": 0.20662193,
+      "requests_per_second": 193590.293150393,
+      "roundtrip_mib_per_second": 23.631627582,
+      "p50_us": 18.675,
+      "p99_us": 54.432,
+      "max_us": 496.136,
+      "payload_verified": true,
+      "instrumented": true,
+      "pace_profile": {
+        "window": "server event-loop lifetime including startup, warmup and shutdown",
+        "stages": [
+          {
+            "name": "reactor_run",
+            "calls": 1,
+            "inclusive_ns": 233053382,
+            "exclusive_ns": 10199435
+          },
+          {
+            "name": "inbox",
+            "calls": 22117,
+            "inclusive_ns": 1497439,
+            "exclusive_ns": 1497439
+          },
+          {
+            "name": "post_dispatch",
+            "calls": 22117,
+            "inclusive_ns": 1315125,
+            "exclusive_ns": 1315125
+          },
+          {
+            "name": "coroutine_execution",
+            "calls": 22117,
+            "inclusive_ns": 185541609,
+            "exclusive_ns": 28239450
+          },
+          {
+            "name": "root_reaping",
+            "calls": 22117,
+            "inclusive_ns": 1518498,
+            "exclusive_ns": 1518498
+          },
+          {
+            "name": "timers",
+            "calls": 22115,
+            "inclusive_ns": 2536203,
+            "exclusive_ns": 2536203
+          },
+          {
+            "name": "poll_nonblocking",
+            "calls": 1,
+            "inclusive_ns": 4017,
+            "exclusive_ns": 4017
+          },
+          {
+            "name": "poll_blocking",
+            "calls": 22114,
+            "inclusive_ns": 27767060,
+            "exclusive_ns": 27767060
+          },
+          {
+            "name": "event_dispatch",
+            "calls": 22115,
+            "inclusive_ns": 2673996,
+            "exclusive_ns": 2673996
+          },
+          {
+            "name": "io_arm",
+            "calls": 43979,
+            "inclusive_ns": 32691532,
+            "exclusive_ns": 8375286
+          },
+          {
+            "name": "poller_update",
+            "calls": 43979,
+            "inclusive_ns": 24316246,
+            "exclusive_ns": 24316246
+          },
+          {
+            "name": "recv",
+            "calls": 87982,
+            "inclusive_ns": 45491217,
+            "exclusive_ns": 45491217
+          },
+          {
+            "name": "send",
+            "calls": 44000,
+            "inclusive_ns": 79111595,
+            "exclusive_ns": 79111595
+          },
+          {
+            "name": "accept",
+            "calls": 5,
+            "inclusive_ns": 7815,
+            "exclusive_ns": 7815
+          }
+        ]
+      }
+    },
+    {
+      "benchmark": "tcp_echo",
+      "backend": "pace",
+      "trial": 2,
+      "server_threads": 1,
+      "client_threads": 4,
+      "connections": 4,
+      "pipeline": 1,
+      "payload_bytes": 64,
+      "requests_per_client": 10000,
+      "warmup_per_client": 1000,
+      "completed_requests": 40000,
+      "seconds": 0.207658911,
+      "requests_per_second": 192623.566248019,
+      "roundtrip_mib_per_second": 23.513618927,
+      "p50_us": 18.696,
+      "p99_us": 57.061,
+      "max_us": 213.895,
+      "payload_verified": true,
+      "instrumented": true,
+      "pace_profile": {
+        "window": "server event-loop lifetime including startup, warmup and shutdown",
+        "stages": [
+          {
+            "name": "reactor_run",
+            "calls": 1,
+            "inclusive_ns": 229778060,
+            "exclusive_ns": 10561502
+          },
+          {
+            "name": "inbox",
+            "calls": 22258,
+            "inclusive_ns": 1478441,
+            "exclusive_ns": 1478441
+          },
+          {
+            "name": "post_dispatch",
+            "calls": 22258,
+            "inclusive_ns": 1365082,
+            "exclusive_ns": 1365082
+          },
+          {
+            "name": "coroutine_execution",
+            "calls": 22258,
+            "inclusive_ns": 185993485,
+            "exclusive_ns": 28776330
+          },
+          {
+            "name": "root_reaping",
+            "calls": 22258,
+            "inclusive_ns": 1594684,
+            "exclusive_ns": 1594684
+          },
+          {
+            "name": "timers",
+            "calls": 22257,
+            "inclusive_ns": 2567171,
+            "exclusive_ns": 2567171
+          },
+          {
+            "name": "poll_nonblocking",
+            "calls": 1,
+            "inclusive_ns": 2584,
+            "exclusive_ns": 2584
+          },
+          {
+            "name": "poll_blocking",
+            "calls": 22256,
+            "inclusive_ns": 23501473,
+            "exclusive_ns": 23501473
+          },
+          {
+            "name": "event_dispatch",
+            "calls": 22257,
+            "inclusive_ns": 2713638,
+            "exclusive_ns": 2713638
+          },
+          {
+            "name": "io_arm",
+            "calls": 43970,
+            "inclusive_ns": 33609240,
+            "exclusive_ns": 8530505
+          },
+          {
+            "name": "poller_update",
+            "calls": 43970,
+            "inclusive_ns": 25078735,
+            "exclusive_ns": 25078735
+          },
+          {
+            "name": "recv",
+            "calls": 87973,
+            "inclusive_ns": 45408373,
+            "exclusive_ns": 45408373
+          },
+          {
+            "name": "send",
+            "calls": 44000,
+            "inclusive_ns": 78191808,
+            "exclusive_ns": 78191808
+          },
+          {
+            "name": "accept",
+            "calls": 5,
+            "inclusive_ns": 7734,
+            "exclusive_ns": 7734
+          }
+        ]
+      }
+    },
+    {
+      "benchmark": "tcp_echo",
+      "backend": "pace",
+      "trial": 3,
+      "server_threads": 1,
+      "client_threads": 4,
+      "connections": 4,
+      "pipeline": 1,
+      "payload_bytes": 64,
+      "requests_per_client": 10000,
+      "warmup_per_client": 1000,
+      "completed_requests": 40000,
+      "seconds": 0.204266829,
+      "requests_per_second": 195822.298685608,
+      "roundtrip_mib_per_second": 23.904089195,
+      "p50_us": 18.876,
+      "p99_us": 50.814,
+      "max_us": 159.417,
+      "payload_verified": true,
+      "instrumented": true,
+      "pace_profile": {
+        "window": "server event-loop lifetime including startup, warmup and shutdown",
+        "stages": [
+          {
+            "name": "reactor_run",
+            "calls": 1,
+            "inclusive_ns": 224864277,
+            "exclusive_ns": 10070365
+          },
+          {
+            "name": "inbox",
+            "calls": 21865,
+            "inclusive_ns": 1583232,
+            "exclusive_ns": 1583232
+          },
+          {
+            "name": "post_dispatch",
+            "calls": 21865,
+            "inclusive_ns": 1301128,
+            "exclusive_ns": 1301128
+          },
+          {
+            "name": "coroutine_execution",
+            "calls": 21865,
+            "inclusive_ns": 185505997,
+            "exclusive_ns": 29171950
+          },
+          {
+            "name": "root_reaping",
+            "calls": 21865,
+            "inclusive_ns": 1504459,
+            "exclusive_ns": 1504459
+          },
+          {
+            "name": "timers",
+            "calls": 21864,
+            "inclusive_ns": 2592650,
+            "exclusive_ns": 2592650
+          },
+          {
+            "name": "poll_nonblocking",
+            "calls": 1,
+            "inclusive_ns": 2785,
+            "exclusive_ns": 2785
+          },
+          {
+            "name": "poll_blocking",
+            "calls": 21863,
+            "inclusive_ns": 19672363,
+            "exclusive_ns": 19672363
+          },
+          {
+            "name": "event_dispatch",
+            "calls": 21864,
+            "inclusive_ns": 2631298,
+            "exclusive_ns": 2631298
+          },
+          {
+            "name": "io_arm",
+            "calls": 43985,
+            "inclusive_ns": 33434834,
+            "exclusive_ns": 8448261
+          },
+          {
+            "name": "poller_update",
+            "calls": 43985,
+            "inclusive_ns": 24986573,
+            "exclusive_ns": 24986573
+          },
+          {
+            "name": "recv",
+            "calls": 87988,
+            "inclusive_ns": 45550723,
+            "exclusive_ns": 45550723
+          },
+          {
+            "name": "send",
+            "calls": 44000,
+            "inclusive_ns": 77340934,
+            "exclusive_ns": 77340934
+          },
+          {
+            "name": "accept",
+            "calls": 5,
+            "inclusive_ns": 7556,
+            "exclusive_ns": 7556
+          }
+        ]
+      }
+    }
+  ],
+  "summary": [
+    {
+      "backend": "pace",
+      "instrumented": true,
+      "trials": 3,
+      "median_requests_per_second": 193590.293150393,
+      "min_requests_per_second": 192623.566248019,
+      "max_requests_per_second": 195822.298685608,
+      "median_p50_us": 18.696,
+      "median_p99_us": 54.432
+    }
+  ]
+}

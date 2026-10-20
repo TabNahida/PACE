@@ -1,0 +1,17 @@
+[ 15%]: <pace_scaling> cache compiling.release benchmarks/scaling_bench.cpp
+/usr/bin/g++ -c -m64 -fvisibility=hidden -fvisibility-inlines-hidden -Wall -Wextra -O3 -std=c++20 -Iinclude -DNDEBUG -o build/worker-study/.objs/pace_scaling/linux/x86_64/release/benchmarks/scaling_bench.cpp.o benchmarks/scaling_bench.cpp
+[ 15%]: <pace> cache compiling.release src/io_context.cpp
+/usr/bin/g++ -c -m64 -fvisibility=hidden -fvisibility-inlines-hidden -Wall -Wextra -O3 -std=c++20 -Iinclude -DNDEBUG -o build/worker-study/.objs/pace/linux/x86_64/release/src/io_context.cpp.o src/io_context.cpp
+[ 15%]: <pace> cache compiling.release src/net.cpp
+/usr/bin/g++ -c -m64 -fvisibility=hidden -fvisibility-inlines-hidden -Wall -Wextra -O3 -std=c++20 -Iinclude -DNDEBUG -o build/worker-study/.objs/pace/linux/x86_64/release/src/net.cpp.o src/net.cpp
+[ 15%]: <pace> cache compiling.release src/runtime.cpp
+/usr/bin/g++ -c -m64 -fvisibility=hidden -fvisibility-inlines-hidden -Wall -Wextra -O3 -std=c++20 -Iinclude -DNDEBUG -o build/worker-study/.objs/pace/linux/x86_64/release/src/runtime.cpp.o src/runtime.cpp
+[ 23%]: <pace> cache compiling.release src/http.cpp
+/usr/bin/g++ -c -m64 -fvisibility=hidden -fvisibility-inlines-hidden -Wall -Wextra -O3 -std=c++20 -Iinclude -DNDEBUG -o build/worker-study/.objs/pace/linux/x86_64/release/src/http.cpp.o src/http.cpp
+[ 31%]: <pace> cache compiling.release src/poller.cpp
+/usr/bin/g++ -c -m64 -fvisibility=hidden -fvisibility-inlines-hidden -Wall -Wextra -O3 -std=c++20 -Iinclude -DNDEBUG -o build/worker-study/.objs/pace/linux/x86_64/release/src/poller.cpp.o src/poller.cpp
+[ 63%]: <pace> archiving.release libpace.a
+/usr/bin/ar -cr build/worker-study/linux/x86_64/release/libpace.a build/worker-study/.objs/pace/linux/x86_64/release/src/io_context.cpp.o build/worker-study/.objs/pace/linux/x86_64/release/src/net.cpp.o build/worker-study/.objs/pace/linux/x86_64/release/src/runtime.cpp.o build/worker-study/.objs/pace/linux/x86_64/release/src/http.cpp.o build/worker-study/.objs/pace/linux/x86_64/release/src/poller.cpp.o
+[ 71%]: <pace_scaling> linking.release pace_scaling
+/usr/bin/g++ -o build/worker-study/linux/x86_64/release/pace_scaling build/worker-study/.objs/pace_scaling/linux/x86_64/release/benchmarks/scaling_bench.cpp.o -m64 -Lbuild/worker-study/linux/x86_64/release -s -lpace -lpthread
+[100%]: build ok, spent 3.608s
