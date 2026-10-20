@@ -32,19 +32,21 @@ jobs:
         with:
           python-version: '3.12'
       - name: Configure
-        run: xmake f -m release -o build/fair --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=y --profiling=n -y
+        run: xmake f -m release -o build/fair --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=y --scaling=y --profiling=n --examples=y --tests=y -y
       - name: Build
         run: xmake -y
       - name: Tests
         run: xmake test -v
       - name: Validate benchmark reporting
-        run: python -m unittest discover -s tests -p "test_benchmark_runner.py"
+        run: python -m unittest discover -s tests -p "test_*.py"
       - name: Measure PACE components without instrumentation
         run: python scripts/run_components.py --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/components-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 5
       - name: Compare PACE, libuv and Asio
         run: python scripts/run_benchmarks.py --build-dir build/fair --require-all --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/${{ matrix.os }}-${{ matrix.standard }}.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
+      - name: Measure worker counts and execution placement
+        run: python scripts/run_scaling.py --build-dir build/fair --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/scaling-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 3 --requests 5000 --warmup 500 --clients 8
       - name: Configure separate profiling build
-        run: xmake f -m release -o build/profile --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=n --examples=n --tests=y --profiling=y -y
+        run: xmake f -m release -o build/profile --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=n --scaling=n --examples=n --tests=y --profiling=y -y
       - name: Build with profiling
         run: xmake -y
       - name: Test with profiling
@@ -94,13 +96,14 @@ jobs:
             set -eu
             export XMAKE_ROOT=y
             xmake --version
-            xmake f -m release -o build/fair --cxxstandard=cxx20 --benchmarks=y --components=y --profiling=n -y
+            xmake f -m release -o build/fair --cxxstandard=cxx20 --benchmarks=y --components=y --scaling=y --profiling=n --examples=y --tests=y -y
             xmake -y
             xmake test -v
-            python3 -m unittest discover -s tests -p "test_benchmark_runner.py"
+            python3 -m unittest discover -s tests -p "test_*.py"
             python3 scripts/run_components.py --label freebsd-cxx20 --output benchmark-results/components-freebsd.json --repeats 5
             python3 scripts/run_benchmarks.py --build-dir build/fair --require-all --label freebsd-cxx20 --output benchmark-results/freebsd.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
-            xmake f -m release -o build/profile --cxxstandard=cxx20 --benchmarks=y --components=n --examples=n --tests=y --profiling=y -y
+            python3 scripts/run_scaling.py --build-dir build/fair --label freebsd-cxx20 --output benchmark-results/scaling-freebsd.json --repeats 3 --requests 5000 --warmup 500 --clients 8
+            xmake f -m release -o build/profile --cxxstandard=cxx20 --benchmarks=y --components=n --scaling=n --examples=n --tests=y --profiling=y -y
             xmake -y
             xmake test -v
             python3 scripts/run_benchmarks.py --build-dir build/profile --backends pace --label profile-freebsd-cxx20 --output benchmark-results/profile-freebsd.json --repeats 3 --requests 10000 --warmup 1000 --clients 4 --message-size 64

@@ -1,5 +1,7 @@
 # Reproducible TCP echo comparison
 
+[Complete performance results](../docs/performance.md) · [Worker/execution scaling](scaling.md)
+
 For isolated PACE operation timings before optimization, see the
 [component microbenchmarks](components.md). Their ns/op units are explicitly
 defined and separate from this end-to-end TCP workload.

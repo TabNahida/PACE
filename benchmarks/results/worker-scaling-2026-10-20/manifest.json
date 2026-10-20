@@ -1,0 +1,32 @@
+{
+  "local_base_commit": "561ca353af696e1b95e378382b857ae033cb24c4",
+  "validated_trials": 150,
+  "source_sha256": {
+    "benchmarks/scaling_bench.cpp": "2590ea58957758e8743c95cb434bc58d2eb88028cb8398916779e6a206ffd18d",
+    "scripts/run_scaling.py": "d9d0bb580b3971ef7aff7a4f529e86528d9e08b4766b01b5937c6642b5f82311",
+    "include/pace/detail/poller.hpp": "e1dc4b2dc717dcb43fd7e5587017dd2fb6a83f2bfb0a05a51124a30632bfcac4",
+    "include/pace/detail/profiling.hpp": "8296366efdaf1c39f5fc61372836880dc6cb4271dafd53b4de5206c528b85fc0",
+    "include/pace/http.hpp": "bf8a0c551bc7a14541841de730f6edf88c0f154eff645c47dc899872d24e6318",
+    "include/pace/io_context.hpp": "d817697d603b55b36bc3eeda9ab62b78d9954b904d9a2b06a27a7a79b898e058",
+    "include/pace/net.hpp": "bcf33f0b76222f8b98eaa83416c0686194558bd7909754b9ea9e113a8352ea67",
+    "include/pace/pace.hpp": "cd02cc3aaa859ca33c366f002daddae41e49d3e26bc439e9cbf4534da8c15b36",
+    "include/pace/platform.hpp": "7aa182d1635d51ea0706d2828ff8375ee41afe5480c1aa59ad0f317a6e1a906f",
+    "include/pace/runtime.hpp": "afff16a61a547df078815d05fa7c84c02ac186b27b60a3719b1ae1caae081279",
+    "include/pace/task.hpp": "7de346df1fb4c59377586b89fe9ea16b271ac9bfcc3d0469f89d823331d2f7d5",
+    "include/pace/tcp.hpp": "ba7f8d2dd71e5eb65edadc0f6626c6cd81c770d4618d7aca37481a1946a86765",
+    "src/http.cpp": "3dbb807242082359463507d2da02c0d30723f778e74d1d8bbb6aa00e3327913b",
+    "src/io_context.cpp": "a41226bb9f2b9f60f3c29da6aacad3ecedc7a471c5ed39305262fadb724be5c4",
+    "src/net.cpp": "ab52d9b02a17c9dc588de856ee72560cbf8edcf8ce1abf755db3ce4f577dffbc",
+    "src/poller.cpp": "46eb0e3a66410ecb51604d76875c2180231b1a2ee6638489ecd6256c6be536c9",
+    "src/runtime.cpp": "fa99174c679e6e02372c7b22d931f1ca0c06318e3fb4db0701d3419afb399006"
+  },
+  "rebuilt_binary_sha256": "50dc68149685686d3624450e51e67f01ac8e1a347bba65f5fc9bf40beeb9413e",
+  "files_sha256": {
+    "README.md": "5df8370a1871807f7b87765ce2d8d63f418ac65caad44ca0b2a11f131ff077e6",
+    "local-48-clients.json": "bbecfcfee8ff7e378d5e9434fbabbe3db7c6a0ee40a31ba7120b845a86295080",
+    "local-48-clients.md": "71df531460c32e01acfabde4d89572e6f6dd0d99c5b8a5a75e629177e1d603d0",
+    "local-8-clients.json": "615d31037b1562885806990631a3ccbaf1f34c39e37aa3f063c52d4128f19bb9",
+    "local-8-clients.md": "b5d1ca471937748ef98b7848e72cd184ac0b202ce80e890a15782e338ba9acdb",
+    "local-build.txt": "db5484e99ce8bc1a0d274fe0dbd31e2f2832fa95c507fd76484ad9634b756928"
+  }
+}

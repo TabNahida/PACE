@@ -6,7 +6,7 @@ PACE currently provides a coroutine networking runtime, TCP sockets, and an HTTP
 
 `pace::io_context` owns a readiness poller, a ready queue, a timer heap, active coroutine roots, and socket wait registrations. Only one thread may execute a context's `run()` method. Coroutines submitted to that context resume on its running thread and do not migrate between contexts.
 
-`pace::runtime` owns a fixed vector of contexts. `run()` creates one worker thread per context and joins all workers before returning. The default count is the reported hardware concurrency, with a minimum of one; an explicit positive count overrides it. Access `runtime.context(index)` to choose where work is submitted. The runtime does not currently provide work stealing, automatic task balancing, or CPU affinity.
+`pace::runtime` owns a fixed vector of contexts. `run()` creates one worker thread per context and joins all workers before returning. `run_on_current_thread()` instead runs context zero on the calling thread and creates N−1 workers; with one context it creates no worker. Both modes block, drain and join before returning, and share a single-use guard. The default count is the reported hardware concurrency, with a minimum of one; an explicit positive count overrides it. Access `runtime.context(index)` to choose where work is submitted. The runtime does not currently provide work stealing, automatic task balancing, or CPU affinity.
 
 For applications with their own threading model, create independent contexts and run them on application-owned threads. A runtime is optional.
 
@@ -76,7 +76,7 @@ Cooperative scheduling means a coroutine runs until it suspends or finishes. `co
 
 Contexts keep running when idle. Call `stop()` explicitly; it is safe from another thread and wakes a blocked poller. The reactor cancels registered socket waits and timers with `std::errc::operation_canceled`, then resumes queued work so coroutine frames and resources can unwind. Awaiting I/O or yielding after shutdown also observes cancellation. New submissions after stop are rejected.
 
-A context is single-use: `run()` cannot be called concurrently, nested inside another running PACE context on the same thread, or restarted after it returns. Destruction does not join an externally owned run thread. Stop the context, join that thread, then destroy sockets/listeners and finally the context. `runtime.run()` performs the worker joins before returning.
+A context is single-use: `run()` cannot be called concurrently, nested inside another running PACE context on the same thread, or restarted after it returns. Destruction does not join an externally owned run thread. Stop the context, join that thread, then destroy sockets/listeners and finally the context. `runtime.run()` and `runtime.run_on_current_thread()` perform worker joins before returning. Caller mode cannot be nested inside another running PACE context.
 
 `tcp::stream::close()` cancels its registered read/write operations before releasing the native socket. Destroying the socket object itself while a suspended member operation still refers to it is invalid: close it on its loop, allow the operation to resume and complete, then destroy the object. A listener passed to `http::serve()` must outlive that serving task and its accepted connections. Stopping the owning context cancels both accept and accepted-connection waits.
 
@@ -101,3 +101,5 @@ TLS, chunked encoding, HTTP/2, protocol upgrades, CONNECT tunneling, streaming b
 The first benchmark measures one server reactor under a closed-loop localhost TCP echo workload. PACE and Asio use coroutines; libuv uses callbacks. Payloads and completed-request counts are validated, runs are repeated in rotating backend order, and every raw result is preserved. See the [benchmark methodology](../benchmarks/README.md) for timing boundaries, limitations, and reproducible commands.
 
 This workload does not establish HTTP performance, multiworker scalability, open-loop tail latency, or general superiority over another library. CI is configured to run native builds on Linux, macOS, and Windows, plus a FreeBSD VM, and to preserve benchmark artifacts. Current [workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml), tests, and evidence files determine what has actually been validated.
+
+The separate [worker/execution scaling study](../benchmarks/scaling.md) keeps total clients fixed, balances them across one listening port per context, and compares runtime-managed threads, caller participation and application-owned threads. Startup, warmup, steady state and shutdown have separate timing windows. [Complete performance results](performance.md) include the README chart's unselected comparisons and negative findings.

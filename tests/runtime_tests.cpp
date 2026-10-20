@@ -438,6 +438,143 @@ pace::task<void> worker(pace::runtime& rt, std::size_t index, std::atomic<int>& 
     if (++count == static_cast<int>(rt.size())) rt.stop();
 }
 
+pace::task<void> record_runtime_thread(pace::runtime& rt, std::size_t index,
+                                      std::vector<std::thread::id>& owners,
+                                      std::atomic<std::size_t>& completed) {
+    owners[index] = std::this_thread::get_id();
+    auto& context = rt.context(index);
+    co_await context.yield();
+    require(pace::io_context::current() == &context && owners[index] == std::this_thread::get_id(),
+            "runtime context migrated between execution threads");
+    if (completed.fetch_add(1) + 1 == rt.size()) rt.stop();
+}
+
+void runtime_thread_modes() {
+    const auto caller = std::this_thread::get_id();
+    for (const bool use_caller : {false, true}) {
+        for (const std::size_t count : {1U, 3U}) {
+            pace::runtime rt(count);
+            std::vector<std::thread::id> owners(count);
+            std::atomic<std::size_t> completed{0};
+            for (std::size_t i = 0; i < count; ++i)
+                rt.context(i).spawn(record_runtime_thread(rt, i, owners, completed));
+            if (use_caller) rt.run_on_current_thread();
+            else rt.run();
+            require(completed == count, "runtime did not join every context");
+            require(pace::io_context::current() == nullptr, "caller retained a completed runtime context");
+            for (std::size_t i = 0; i < count; ++i) {
+                require((owners[i] == caller) == (use_caller && i == 0),
+                        "runtime assigned a context to the wrong thread mode");
+                for (std::size_t other = 0; other < i; ++other)
+                    require(owners[i] != owners[other], "runtime contexts must have distinct execution threads");
+            }
+            bool rejected = false;
+            try { rt.run(); } catch (const std::logic_error&) { rejected = true; }
+            require(rejected, "runtime run must reject reuse after either mode");
+            rejected = false;
+            try { rt.run_on_current_thread(); } catch (const std::logic_error&) { rejected = true; }
+            require(rejected, "runtime caller mode must reject reuse after either mode");
+        }
+    }
+}
+
+struct runtime_task_lifetime {
+    unsigned& destroyed;
+    ~runtime_task_lifetime() { ++destroyed; }
+};
+
+pace::task<void> runtime_waiting_peer(pace::io_context& context,
+                                     std::atomic<std::size_t>& started,
+                                     unsigned& canceled, unsigned& destroyed) {
+    runtime_task_lifetime lifetime{destroyed};
+    ++started;
+    try { co_await context.sleep_for(24h); }
+    catch (const std::system_error& error) {
+        require(error.code() == std::errc::operation_canceled, "runtime peer shutdown error");
+        ++canceled;
+    }
+}
+
+pace::task<void> runtime_failing_peer(pace::runtime& rt, std::size_t index,
+                                     const std::atomic<std::size_t>& started,
+                                     unsigned& destroyed) {
+    runtime_task_lifetime lifetime{destroyed};
+    while (started.load() + 1 < rt.size()) co_await rt.context(index).yield();
+    throw std::runtime_error("caller-mode peer failure");
+}
+
+void runtime_caller_failures() {
+    for (const std::size_t count : {1U, 3U}) {
+        for (std::size_t failing = 0; failing < count; ++failing) {
+            pace::runtime rt(count);
+            std::atomic<std::size_t> started{0};
+            std::vector<unsigned> canceled(count), destroyed(count);
+            for (std::size_t i = 0; i < count; ++i) {
+                if (i == failing)
+                    rt.context(i).spawn(runtime_failing_peer(rt, i, started, destroyed[i]));
+                else rt.context(i).spawn(runtime_waiting_peer(rt.context(i), started, canceled[i], destroyed[i]));
+            }
+            bool propagated = false;
+            try { rt.run_on_current_thread(); }
+            catch (const std::runtime_error& error) {
+                propagated = std::string_view(error.what()) == "caller-mode peer failure";
+            }
+            require(propagated, "caller or worker failure must propagate through caller mode");
+            require(pace::io_context::current() == nullptr, "failed caller mode retained its context");
+            for (std::size_t i = 0; i < count; ++i) {
+                require(rt.context(i).stopped() && destroyed[i] == 1,
+                        "caller mode must stop, drain and destroy every context task before rethrowing");
+                require(canceled[i] == (i == failing ? 0U : 1U), "runtime failure did not cancel a peer exactly once");
+            }
+        }
+    }
+}
+
+void runtime_nested_caller_rejection() {
+    pace::runtime rt(2);
+    pace::io_context outer;
+    outer.post([&] {
+        bool rejected = false;
+        try { rt.run_on_current_thread(); } catch (const std::logic_error&) { rejected = true; }
+        require(rejected && pace::io_context::current() == &outer,
+                "caller mode must reject nesting without replacing the active context");
+        outer.stop();
+    });
+    outer.run();
+    std::atomic<int> completed{0};
+    for (std::size_t i = 0; i < rt.size(); ++i)
+        rt.context(i).post([&] { if (++completed == 2) rt.stop(); });
+    rt.run_on_current_thread();
+    require(completed == 2, "a rejected nested caller attempt must leave the runtime usable");
+}
+
+void runtime_concurrent_run_rejection() {
+    pace::runtime rt(1);
+    completion_signal started;
+    std::exception_ptr failure;
+    rt.context(0).post([&] { started.arrive(); });
+    std::thread runner([&] {
+        try { rt.run_on_current_thread(); }
+        catch (...) { failure = std::current_exception(); }
+    });
+    struct join_guard {
+        pace::runtime& rt;
+        std::thread& runner;
+        ~join_guard() { rt.stop(); if (runner.joinable()) runner.join(); }
+    } cleanup{rt, runner};
+    started.wait_for(1);
+    for (const bool use_caller : {false, true}) {
+        bool rejected = false;
+        try { if (use_caller) rt.run_on_current_thread(); else rt.run(); }
+        catch (const std::logic_error&) { rejected = true; }
+        require(rejected && !rt.context(0).stopped(),
+                "concurrent run rejection must not stop the active runtime");
+    }
+    rt.stop();
+    runner.join();
+    if (failure) std::rethrow_exception(failure);
+}
+
 struct pending_cleanup {
     pace::io_context* context;
     int* destroyed;
@@ -514,6 +651,10 @@ void run_tests() {
     repeated_sleep_and_wake();
     timer_fairness_with_ready_work();
     shutdown_exactly_once();
+    runtime_thread_modes();
+    runtime_caller_failures();
+    runtime_nested_caller_rejection();
+    runtime_concurrent_run_rejection();
     { pace::io_context io; int steps = 0; io.spawn(basics(io, steps)); io.run(); require(steps == 10000, "yield count"); }
     {
         pace::io_context io; int canceled = 0;
