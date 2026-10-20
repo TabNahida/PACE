@@ -250,7 +250,10 @@ task<void> process_connection(tcp_stream& stream, const handler& handle, limits 
             encoded = encode_response(response{.status = 500, .body = "Internal Server Error\n"}, false, head_request);
         }
         co_await stream.write_all(encoded);
-        if (!keep_alive) co_return;
+        if (!keep_alive) {
+            co_await stream.close_gracefully();
+            co_return;
+        }
     }
 }
 } // namespace

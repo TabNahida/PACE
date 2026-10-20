@@ -36,6 +36,29 @@ produces a successful aggregate. The runner reports medians and min–max spread
 it does not cherry-pick the fastest trial. The optional `--list` executable flag
 reports exactly which backends were compiled in.
 
+## Acceptance criteria
+
+A successful CI comparison requires every requested backend to complete every
+trial within its timeout, with all response bytes verified. Each record must
+match the requested trial and workload exactly, contain finite positive timing
+and throughput values, satisfy `p50 <= p99 <= max`, and agree with the completed
+request count and payload size. The runner rejects a mismatch before aggregation
+and preserves the failure evidence. Use `--require-all --repeats 3` or more for
+CI comparisons. This acceptance criterion establishes a working, measurable
+benchmark; it does not certify that PACE is faster.
+
+For a performance claim, evaluate each baseline separately on the same dedicated
+hardware and compiler configuration. A proposed release target is a throughput
+improvement of at least 5%, with the lower 95% confidence bound of paired trial
+ratios above 1.05 and median p99 latency no more than 5% worse than that baseline.
+Use at least 10 rotated trials per backend, choose request counts that keep each
+measured trial running for at least five seconds, and repeat the experiment in
+another session. Predeclare client counts and payload sizes, and report every
+scenario, including regressions. These are proposed performance criteria, not
+currently enforced CI thresholds; the present shared-runner smoke comparison is
+too short and noisy to establish them. HTTP speed and multiworker scaling need
+separate workloads before making those claims.
+
 ## What the numbers establish
 
 These are closed-loop, localhost TCP echo measurements. They include client,

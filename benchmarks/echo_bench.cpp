@@ -10,6 +10,7 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -392,7 +393,7 @@ void benchmark(const options& config) {
         return merged[static_cast<std::size_t>(std::ceil(fraction * merged.size())) - 1];
     };
     const double throughput = merged.size() / elapsed;
-    std::cout << std::fixed << std::setprecision(3)
+    std::cout << std::fixed << std::setprecision(9)
         << "{\"benchmark\":\"tcp_echo\",\"backend\":\"" << config.backend
         << "\",\"trial\":" << config.trial << ",\"server_threads\":1,\"client_threads\":" << config.clients
         << ",\"connections\":" << config.clients << ",\"pipeline\":1,\"payload_bytes\":" << config.bytes

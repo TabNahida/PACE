@@ -93,10 +93,8 @@ pace::task<void> http_listener(std::shared_ptr<pace::tcp_listener> listener, pac
     co_await pace::http::serve(*listener, http_handler, bounds);
 }
 
-// Error responses can be followed by TCP reset when the server rejects a
-// request before consuming its remaining bytes. First validate the advertised
-// HTTP frames, then require closure. The oversized-request test alone permits
-// reset after the complete response. Truncation and trailing bytes always fail.
+// First validate the advertised HTTP frames, then require orderly closure.
+// Reset, truncation and trailing bytes fail even for rejected requests.
 bool complete_responses(std::string_view input, std::size_t expected, bool head_response = false) {
     for (std::size_t index = 0; index < expected; ++index) {
         const auto delimiter = input.find("\r\n\r\n");
@@ -141,17 +139,8 @@ void verify_response_framing() {
     require(complete_responses("HTTP/1.1 204 No Content\r\n\r\n", 1), "204 framing has no payload");
 }
 
-bool connection_reset(const std::error_code& error) {
-    if (error == std::errc::connection_reset) return true;
-#if defined(_WIN32)
-    return error.category() == std::system_category() && error.value() == WSAECONNRESET;
-#else
-    return false;
-#endif
-}
-
 pace::task<std::string> read_responses(pace::tcp_stream& stream, std::size_t expected = 1,
-                                     bool head_response = false, bool allow_reset_after_response = false) {
+                                     bool head_response = false) {
     std::string output;
     std::array<char, 1024> buffer{};
     while (!complete_responses(output, expected, head_response)) {
@@ -160,21 +149,16 @@ pace::task<std::string> read_responses(pace::tcp_stream& stream, std::size_t exp
         output.append(buffer.data(), size);
         require(output.size() <= 1024 * 1024, "HTTP test response exceeds safety bound");
     }
-    try {
-        require(co_await stream.read_some(buffer) == 0, "unexpected trailing HTTP response bytes");
-    } catch (const std::system_error& error) {
-        if (!allow_reset_after_response || !connection_reset(error.code())) throw;
-    }
+    require(co_await stream.read_some(buffer) == 0, "unexpected trailing HTTP response bytes");
     co_return output;
 }
 
 pace::task<std::string> exchange(pace::io_context& context, pace::ipv4_endpoint endpoint,
-                               std::string request, std::size_t expected = 1,
-                               bool allow_reset_after_response = false) {
+                               std::string request, std::size_t expected = 1) {
     pace::tcp_stream stream(context);
     co_await stream.connect(std::move(endpoint));
     co_await stream.write_all(request);
-    co_return co_await read_responses(stream, expected, request.starts_with("HEAD "), allow_reset_after_response);
+    co_return co_await read_responses(stream, expected, request.starts_with("HEAD "));
 }
 
 pace::task<void> http_protocol(pace::io_context& context) {
@@ -203,7 +187,7 @@ pace::task<void> http_protocol(pace::io_context& context) {
     result = co_await read_responses(fragmented);
     require(result.ends_with("\r\n\r\nhello"), "fragmented HTTP head/body");
 
-    struct invalid_case { std::string request; unsigned status; bool unread_bytes = false; };
+    struct invalid_case { std::string request; unsigned status; };
     const std::array cases{
         invalid_case{"GET / HTTP/1.1\r\n\r\n", 400},
         invalid_case{"GET / HTTP/1.1\r\nHost: example.test\r\nHost: other\r\n\r\n", 400},
@@ -218,12 +202,12 @@ pace::task<void> http_protocol(pace::io_context& context) {
         invalid_case{"POST / HTTP/1.1\r\nHost: example.test\r\nExpect: 100-continue\r\n\r\n", 417},
         invalid_case{"HEAD / HTTP/1.1\r\nHost: example.test\r\nContent-Length: 0\r\nContent-Length: 0\r\n\r\n", 400},
         invalid_case{"HEAD / HTTP/1.1\r\nHost: example.test\r\nExpect: 100-continue\r\n\r\n", 417},
-        invalid_case{"GET / HTTP/1.1\r\nHost: example.test\r\nX-Large: " + std::string(256, 'x') + "\r\n\r\n", 431, true},
-        invalid_case{"HEAD / HTTP/1.1\r\nHost: example.test\r\nX-Large: " + std::string(256, 'x') + "\r\n\r\n", 431, true}
+        invalid_case{"GET / HTTP/1.1\r\nHost: example.test\r\nX-Large: " + std::string(256, 'x') + "\r\n\r\n", 431},
+        invalid_case{"HEAD / HTTP/1.1\r\nHost: example.test\r\nX-Large: " + std::string(256, 'x') + "\r\n\r\n", 431}
     };
     for (const auto& test : cases) {
         try {
-            result = co_await exchange(context, endpoint, test.request, 1, test.unread_bytes);
+            result = co_await exchange(context, endpoint, test.request);
         } catch (const std::exception& error) {
             throw std::runtime_error("HTTP error-response case (expected " + std::to_string(test.status) + "): " + error.what());
         }
@@ -296,6 +280,64 @@ pace::task<void> close_pending_read(pace::io_context& context) {
     require(canceled && !context.stopped(), "socket close must cancel only its own suspended read");
 }
 
+struct graceful_close_result {
+    bool finished = false;
+    std::chrono::steady_clock::duration elapsed{};
+};
+
+pace::task<void> close_after_reply(std::shared_ptr<pace::tcp_listener> listener,
+                                  std::shared_ptr<graceful_close_result> result) {
+    auto stream = co_await listener->accept();
+    co_await stream.write_all("done");
+    const auto started = std::chrono::steady_clock::now();
+    co_await stream.close_gracefully(5ms);
+    result->elapsed = std::chrono::steady_clock::now() - started;
+    result->finished = true;
+    require(!stream.is_open(), "graceful close must release its socket");
+}
+
+pace::task<void> graceful_close_bounds(pace::io_context& context) {
+    auto listener = std::make_shared<pace::tcp_listener>(context, pace::ipv4_endpoint{"127.0.0.1", 0});
+    auto result = std::make_shared<graceful_close_result>();
+    context.spawn(close_after_reply(listener, result));
+    pace::tcp_stream client(context);
+    co_await client.connect(listener->local_endpoint());
+    co_await client.write_all("discard this pending input");
+    std::array<char, 4> reply{};
+    std::size_t received = 0;
+    while (received < reply.size()) {
+        const auto count = co_await client.read_some(std::span<char>(reply).subspan(received));
+        require(count != 0, "graceful close truncated its final reply");
+        received += count;
+    }
+    require(std::string_view(reply.data(), reply.size()) == "done", "graceful close reply mismatch");
+    // Keep our send side open: the server must finish when its drain timeout
+    // expires instead of waiting indefinitely for peer EOF.
+    co_await context.sleep_for(25ms);
+    require(result->finished && result->elapsed >= 5ms, "graceful close must honor its drain deadline");
+    require(co_await client.read_some(reply) == 0, "drained connection must close without reset");
+}
+
+pace::task<void> hold_connection(std::shared_ptr<pace::tcp_listener> listener) {
+    auto stream = co_await listener->accept();
+    try { co_await stream.context().sleep_for(24h); }
+    catch (const std::system_error& error) {
+        if (error.code() != std::errc::operation_canceled) throw;
+    }
+}
+
+pace::task<void> graceful_close_cancellation(pace::io_context& context) {
+    auto listener = std::make_shared<pace::tcp_listener>(context, pace::ipv4_endpoint{"127.0.0.1", 0});
+    context.spawn(hold_connection(listener));
+    pace::tcp_stream client(context);
+    co_await client.connect(listener->local_endpoint());
+    context.spawn(stop_soon(context));
+    bool canceled = false;
+    try { co_await client.close_gracefully(1s); }
+    catch (const std::system_error& error) { canceled = error.code() == std::errc::operation_canceled; }
+    require(canceled && !client.is_open(), "canceled graceful close must release its socket");
+}
+
 using test_body = pace::task<void> (*)(pace::io_context&);
 pace::task<void> run_body(pace::io_context& context, test_body body, bool& completed) {
     co_await body(context);
@@ -340,6 +382,8 @@ int main() {
         run_test("stop cancels pending accept", stop_pending_accept);
         run_test("stop cancels pending read", stop_pending_read);
         run_test("socket close cancels pending read", close_pending_read);
+        run_test("graceful close drains input and bounds peer wait", graceful_close_bounds);
+        run_test("stop cancels graceful close", graceful_close_cancellation);
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';
         return 1;

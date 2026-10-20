@@ -6,12 +6,14 @@
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <climits>
 #include <stdexcept>
@@ -171,6 +173,47 @@ void tcp_stream::set_no_delay(bool enabled) {
     const int value = enabled ? 1 : 0;
     if (set_option(fd_, IPPROTO_TCP, TCP_NODELAY, value) < 0)
         socket_error("setsockopt(TCP_NODELAY)");
+}
+
+task<void> tcp_stream::close_gracefully(std::chrono::milliseconds timeout, std::size_t discard_limit) {
+    try {
+        check_operation(*context_, fd_);
+#if defined(_WIN32)
+        constexpr int send_side = SD_SEND;
+#else
+        constexpr int send_side = SHUT_WR;
+#endif
+        int result;
+        do { result = ::shutdown(fd_, send_side); }
+        while (result < 0 && interrupted(last_socket_error()));
+        if (result < 0) socket_error("shutdown(send)");
+
+        const auto started = std::chrono::steady_clock::now();
+        const auto allowed_time = std::chrono::duration<long double>(timeout);
+        std::array<char, 4096> discarded{};
+        std::size_t total = 0;
+        while (total < discard_limit &&
+               std::chrono::duration<long double>(std::chrono::steady_clock::now() - started) < allowed_time) {
+            check_operation(*context_, fd_);
+            const auto wanted = static_cast<int>(std::min(discarded.size(), discard_limit - total));
+            const auto count = ::recv(fd_, discarded.data(), wanted, 0);
+            if (count == 0) break;
+            if (count > 0) {
+                total += static_cast<std::size_t>(count);
+                continue;
+            }
+            const auto error = last_socket_error();
+            if (interrupted(error)) continue;
+            if (!would_block(error)) socket_error("recv during graceful close");
+            // A short cancellable timer bounds shutdown even when a peer keeps
+            // its send side open. No detached timer can outlive this socket.
+            co_await context_->sleep_for(std::chrono::milliseconds(1));
+        }
+    } catch (...) {
+        close();
+        throw;
+    }
+    close();
 }
 
 void tcp_stream::close() noexcept {

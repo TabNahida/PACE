@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <span>
 #include <string>
 #include <string_view>
@@ -47,6 +48,11 @@ public:
         return write_all(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
     }
     void set_no_delay(bool enabled = true);
+    // Half-close the send side, then discard peer input until EOF or a bound.
+    // This lets queued output reach peers before unread input can cause a reset.
+    // Must have no other operations outstanding; cancellation also closes it.
+    task<void> close_gracefully(std::chrono::milliseconds timeout = std::chrono::milliseconds(100),
+                               std::size_t discard_limit = 64 * 1024);
     void close() noexcept;
     [[nodiscard]] native_socket_type native_handle() const noexcept { return fd_; }
     [[nodiscard]] io_context& context() const noexcept { return *context_; }
