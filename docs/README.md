@@ -43,3 +43,5 @@ The documented protocol scope is deliberate: no TLS, DNS resolver, IPv6,
 asynchronous file API, HTTP client, chunked transfer, HTTP/2, WebSocket or request
 deadline API is currently provided. A TCP byte stream can carry a manually
 constructed HTTP request, as in the tutorial, but that is not a general HTTP client.
+
+[Complete performance results and tuning](performance.md) · [Worker/execution scaling](../benchmarks/scaling.md)

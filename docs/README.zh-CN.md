@@ -9,6 +9,8 @@ PACE 使用 C++20 协程、独立的事件循环 context 和可选的多线程 r
 - [API 中文索引和关键约定](reference/README.zh-CN.md)
 - [完整英文 API 参考](reference/README.md)
 - [架构说明](architecture.md)
+- [完整性能结果与调优](performance.md)
+- [worker 数量与执行模式实验](../benchmarks/scaling.md)
 - [性能测试方法](../benchmarks/README.md)
 - [组件测试](../benchmarks/components.md)与[阶段耗时诊断](../benchmarks/profiling.md)
 

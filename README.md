@@ -15,7 +15,7 @@
 ## Selected performance advantages
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/selected-performance.svg" alt="Selected TCP echo median leads: macOS PACE 78,807 vs Asio 57,981 requests/s; Linux C++23 PACE 61,553 vs libuv 56,866 requests/s. Five shared-CI trials per backend." width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/selected-performance.svg" alt="Selected TCP echo median leads: macOS PACE 50,116 vs Asio 44,079 requests/s; Linux C++23 PACE 66,318 vs libuv 63,401 requests/s. Five shared-CI trials per backend." width="100%"></a>
 </p>
 
 Selected pairwise medians from the 20 October 2026 CI snapshot, **not an overall ranking**. Each panel names its comparator; PACE does not yet lead both libraries across platforms. [Complete results, regressions, raw trials and methodology →](docs/performance.md)

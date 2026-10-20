@@ -15,7 +15,7 @@
 ## 优势项目选摘
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/selected-performance.svg" alt="TCP echo 吞吐中位数优势选摘：macOS PACE 78,807 对 Asio 57,981 请求/秒；Linux C++23 PACE 61,553 对 libuv 56,866 请求/秒。每个后端在共享 CI 上测量五轮。" width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/selected-performance.svg" alt="TCP echo 吞吐中位数优势选摘：macOS PACE 50,116 对 Asio 44,079 请求/秒；Linux C++23 PACE 66,318 对 libuv 63,401 请求/秒。每个后端在共享 CI 上测量五轮。" width="100%"></a>
 </p>
 
 选自 2026 年 10 月 20 日 CI 的两组对比中位数，**不代表综合排名**。每幅图标明单独的比较对象；PACE 尚未在所有平台同时超过两个库。[完整结果、退化项、原始数据与测试方法 →](docs/performance.md)

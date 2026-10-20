@@ -1,0 +1,717 @@
+{
+  "schema_version": 1,
+  "status": "completed",
+  "label": "ubuntu-runtime-paired",
+  "started_utc": "2026-10-20T09:56:41.006416+00:00",
+  "binaries": {
+    "before": {
+      "path": "/home/runner/work/PACE/PACE/build/paired/components-before",
+      "sha256": "12d818d679247b641d4ad24abb0f6c6baa1257c9c1c17e29dc1bed357d06f068",
+      "build": {
+        "components": [
+          "lazy_task",
+          "await_chain",
+          "empty_poll",
+          "yield",
+          "post",
+          "cross_thread_post",
+          "spawn_completion",
+          "zero_timer"
+        ],
+        "compiler": "GCC 13.3.0",
+        "cpp_standard": 202002,
+        "ndebug": true,
+        "profiling_enabled": false
+      }
+    },
+    "after": {
+      "path": "/home/runner/work/PACE/PACE/build/paired/components-after",
+      "sha256": "c56e09d948726206aff23ed0ea720f9aa66cb48c8b459bffccf1e492a0c369dc",
+      "build": {
+        "components": [
+          "lazy_task",
+          "await_chain",
+          "empty_poll",
+          "yield",
+          "post",
+          "cross_thread_post",
+          "spawn_completion",
+          "zero_timer"
+        ],
+        "compiler": "GCC 13.3.0",
+        "cpp_standard": 202002,
+        "ndebug": true,
+        "profiling_enabled": false
+      }
+    }
+  },
+  "environment": {
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "git_commit": "b1c994212888585ea06a71f7276463379314bd93",
+    "git_status": "?? _baseline/"
+  },
+  "configuration": {
+    "component": "yield",
+    "tcp": false,
+    "pairs": 8,
+    "iterations": 1000000,
+    "depth": 4,
+    "batch": 256,
+    "clients": 4,
+    "requests": 100000,
+    "bytes": 64,
+    "warmup": 10000,
+    "timeout": 120,
+    "bootstrap_samples": 10000,
+    "seed": 0,
+    "label": "ubuntu-runtime-paired"
+  },
+  "operation": "One yield suspension/resumption, including ready queue and reactor pass",
+  "ratio_definition": "after / before; above 1 favors after for requests/s, below 1 favors after for ns/op",
+  "uncertainty_method": "Resample whole paired ratios with replacement; percentile interval of bootstrap medians",
+  "limitations": [
+    "Exploratory interval assumes representative independent pairs; scheduling/frequency drift and autocorrelation can violate this",
+    "Small samples and short runs do not establish a portable performance improvement",
+    "No performance threshold changes the process exit code; correctness/measurement failures do"
+  ],
+  "commands": [
+    {
+      "pair": 1,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 1,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "3"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "3"
+      ]
+    },
+    {
+      "pair": 4,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "4"
+      ]
+    },
+    {
+      "pair": 4,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "4"
+      ]
+    },
+    {
+      "pair": 5,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "5"
+      ]
+    },
+    {
+      "pair": 5,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "5"
+      ]
+    },
+    {
+      "pair": 6,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "6"
+      ]
+    },
+    {
+      "pair": 6,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "6"
+      ]
+    },
+    {
+      "pair": 7,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "7"
+      ]
+    },
+    {
+      "pair": 7,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "7"
+      ]
+    },
+    {
+      "pair": 8,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "8"
+      ]
+    },
+    {
+      "pair": 8,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "yield",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "8"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 1,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 412394152,
+      "ns_per_operation": 412.394152,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 1,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 35639459,
+      "ns_per_operation": 35.639459,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 2,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 35621976,
+      "ns_per_operation": 35.621976,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 2,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 410051570,
+      "ns_per_operation": 410.05157,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 3,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 405756624,
+      "ns_per_operation": 405.756624,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 3,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 35564470,
+      "ns_per_operation": 35.56447,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 4,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 35549210,
+      "ns_per_operation": 35.54921,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 4,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 405023951,
+      "ns_per_operation": 405.023951,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 5,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 411431551,
+      "ns_per_operation": 411.431551,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 5,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 35525327,
+      "ns_per_operation": 35.525327,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 6,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 35556454,
+      "ns_per_operation": 35.556454,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 6,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 410736466,
+      "ns_per_operation": 410.736466,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 7,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 412199765,
+      "ns_per_operation": 412.199765,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 7,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 35609538,
+      "ns_per_operation": 35.609538,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 8,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 35650695,
+      "ns_per_operation": 35.650695,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "yield",
+      "trial": 8,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 404828997,
+      "ns_per_operation": 404.828997,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    }
+  ],
+  "pairs": [
+    {
+      "pair": 1,
+      "before": 412.394152,
+      "after": 35.639459,
+      "after_before_ratio": 0.0864208641833505
+    },
+    {
+      "pair": 2,
+      "after": 35.621976,
+      "before": 410.05157,
+      "after_before_ratio": 0.0868719414975048
+    },
+    {
+      "pair": 3,
+      "before": 405.756624,
+      "after": 35.56447,
+      "after_before_ratio": 0.0876497582452283
+    },
+    {
+      "pair": 4,
+      "after": 35.54921,
+      "before": 405.023951,
+      "after_before_ratio": 0.0877706365567502
+    },
+    {
+      "pair": 5,
+      "before": 411.431551,
+      "after": 35.525327,
+      "after_before_ratio": 0.08634565558634076
+    },
+    {
+      "pair": 6,
+      "after": 35.556454,
+      "before": 410.736466,
+      "after_before_ratio": 0.0865675608164774
+    },
+    {
+      "pair": 7,
+      "before": 412.199765,
+      "after": 35.609538,
+      "after_before_ratio": 0.086389030328535
+    },
+    {
+      "pair": 8,
+      "after": 35.650695,
+      "before": 404.828997,
+      "after_before_ratio": 0.08806359046459313
+    }
+  ],
+  "summary": {
+    "metric": "ns_per_operation",
+    "lower_is_better": true,
+    "before_median": 410.394018,
+    "after_median": 35.587004,
+    "before_min": 404.828997,
+    "before_max": 412.394152,
+    "after_min": 35.525327,
+    "after_max": 35.650695,
+    "median_paired_after_before_ratio": 0.0867197511569911,
+    "min_paired_after_before_ratio": 0.08634565558634076,
+    "max_paired_after_before_ratio": 0.08806359046459313,
+    "median_ratio_bootstrap_95_percentile_interval": [
+      0.086389030328535,
+      0.0877706365567502
+    ],
+    "after_wins": 8,
+    "ties": 0,
+    "pairs": 8,
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 0
+  },
+  "failure": null,
+  "finished_utc": "2026-10-20T09:56:44.644473+00:00"
+}

@@ -9,9 +9,9 @@ component improvements and regressions, and links to every archived trial.
 
 ## Complete TCP comparison behind the README chart
 
-[Successful CI run, 20 October 2026](https://github.com/TabNahida/PACE/actions/runs/39397883915).
-Source head `62c8724b177a9ca03ed0b607bc5a74a852c26753`; checkout merge
-`0bc9df91ba4582e629ada6c5a77e7d62103d0804`. Five rotating trials per backend;
+[Successful CI run, 20 October 2026](https://github.com/TabNahida/PACE/actions/runs/39404014672).
+Source head `72327e4a2f5b787deeb902d188e26c67f9799441`; checkout merge
+`b1c994212888585ea06a71f7276463379314bd93`. Five rotating trials per backend;
 **one server thread, four persistent connections, 64-byte messages, one outstanding
 request per connection, 10,000 measured + 1,000 warmup requests per connection**.
 Asio 1.34.2 and libuv 1.52.1. Both endpoints enable TCP_NODELAY and verify every
@@ -19,32 +19,33 @@ response byte. Startup, connection establishment and warmup are excluded.
 
 | Platform | PACE req/s | Asio req/s | libuv req/s | Highest median |
 |---|---:|---:|---:|---|
-| [Linux / C++20](../benchmarks/results/ci-runtime-2026-10-20/ubuntu-latest-cxx20.json) | 101,093 | 103,577 | 99,196 | Asio |
-| [Linux / C++23](../benchmarks/results/ci-runtime-2026-10-20/ubuntu-latest-cxx23.json) | 61,553 | 64,620 | 56,866 | Asio |
-| [macOS arm64 / C++20](../benchmarks/results/ci-runtime-2026-10-20/macos-latest-cxx20.json) | 78,807 | 57,981 | 89,020 | libuv |
-| [Windows x64 / C++20](../benchmarks/results/ci-runtime-2026-10-20/windows-latest-cxx20.json) | 52,733 | 55,843 | 57,554 | libuv |
-| [FreeBSD 14.3 VM / C++20](../benchmarks/results/ci-runtime-2026-10-20/freebsd.json) | 355,542 | 344,665 | 408,762 | libuv |
+| [Linux / C++20](../benchmarks/results/ci-workers-2026-10-20/ubuntu-latest-cxx20.json) | 100,211 | 104,742 | 98,069 | Asio |
+| [Linux / C++23](../benchmarks/results/ci-workers-2026-10-20/ubuntu-latest-cxx23.json) | 66,318 | 69,558 | 63,401 | Asio |
+| [macOS arm64 / C++20](../benchmarks/results/ci-workers-2026-10-20/macos-latest-cxx20.json) | 50,116 | 44,079 | 51,678 | libuv |
+| [Windows x64 / C++20](../benchmarks/results/ci-workers-2026-10-20/windows-latest-cxx20.json) | 34,120 | 35,607 | 36,560 | libuv |
+| [FreeBSD 14.3 VM / C++20](../benchmarks/results/ci-workers-2026-10-20/freebsd.json) | 238,219 | 232,652 | 269,490 | libuv |
 
 Values are medians, not best trials. Compare within rows only: different jobs use
 different shared machines, including the two Linux language standards. A C++23
 vs C++20 performance conclusion cannot be drawn from these rows.
 
-The README selects **macOS PACE vs Asio (1.36× median throughput)** and **Linux
-C++23 PACE vs libuv (1.08×)**. It does not plot the other comparator in each row.
+The README selects **macOS PACE vs Asio (1.14× median throughput)** and **Linux
+C++23 PACE vs libuv (1.05×)**. It does not plot the other comparator in each row.
 Neither selection establishes that PACE is fastest on that platform, or that the
-observed median lead is statistically reliable. For example, the macOS min–max
-throughputs overlap: PACE 51,014–84,539 req/s; Asio 47,378–69,731 req/s. All raw
-trials, p50/p99 latency, spreads, environment metadata and hashes are preserved
-in the [complete CI report](../benchmarks/results/ci-runtime-2026-10-20/README.md).
+observed median lead is statistically reliable. The macOS min–max throughputs
+were PACE 48,359–59,584 req/s and Asio 32,924–46,587 req/s in these five short
+shared-runner trials. All raw trials, p50/p99 latency, spreads, environment metadata and hashes are preserved
+in the [complete CI report](../benchmarks/results/ci-workers-2026-10-20/README.md).
 
 Regenerate the README chart from those JSON files with
 `python scripts/render_performance_chart.py` (optional dependency: matplotlib).
 Its axis is throughput relative to the named comparator's median; each panel
 uses a zero origin. It is an editorial selection of measured median leads.
 
-## Reactor optimization study
+## Earlier reactor optimization study
 
-The previous runtime change coalesces producer wakeups, skips an empty inbox
+The [previous runtime study](../benchmarks/results/ci-runtime-2026-10-20/README.md)
+measured a change that coalesces producer wakeups, skips an empty inbox
 allocation/lock, and avoids unnecessary native polling when only runnable tasks
 remain. Timers and newly submitted work are still checked each bounded turn.
 
@@ -52,7 +53,7 @@ Eight alternating paired runs used matching GCC C++20 `-O3 -DNDEBUG -pthread`
 builds, the same five linked library sources, and no instrumentation. Component
 costs are batch-average ns/op, not per-operation latency percentiles.
 
-| Component | Local before ns/op | Local after ns/op | CI paired after/before |
+| Component | Local before ns/op | Local after ns/op | Earlier CI paired after/before |
 |---|---:|---:|---:|
 | Empty native poll | 74.60 | 58.26 | 0.8405 |
 | Yield | 125.72 | 18.88 | 0.0838 |
@@ -143,6 +144,30 @@ See [all modes, ranges, p99 and lifecycle measurements](../benchmarks/results/wo
 and the [reproduction guide](../benchmarks/scaling.md). This is a separate
 PACE-only workload; its numbers must not be compared directly against the
 one-thread Asio/libuv table above.
+
+### Remote worker measurements
+
+The [successful four-platform CI study](../benchmarks/results/ci-workers-2026-10-20/README.md)
+adds 180 scaling trials: three per cell for all three modes and 1/2/4/8 workers,
+eight fixed clients, 5,000 measured + 500 warmup requests per client. All seven
+jobs passed, including C++20/23 Linux builds, tutorials, plain/profile tests,
+benchmark validation and sanitizers. The `run()` throughput medians below show
+that the local eight-client result does not generalize to every host:
+
+| Platform (reported logical CPUs) | 1 worker | 2 workers | 4 workers | 8 workers |
+|---|---:|---:|---:|---:|
+| Linux C++20 (4) | 96,939 | 172,882 | 190,415 | 191,350 |
+| Linux C++23 (4) | 67,342 | 120,040 | 119,421 | 129,018 |
+| macOS arm64 (3) | 66,948 | 60,976 | 70,215 | 52,936 |
+| Windows x64 (4) | 36,427 | 53,096 | 74,367 | 86,430 |
+| FreeBSD VM (4) | 259,126 | 273,775 | 268,238 | 257,059 |
+
+Units are requests/s; compare within rows only. Eight workers beat four in the
+Windows median, while macOS and FreeBSD favored smaller counts. Three trials
+per cell are exploratory; all modes, spreads, lifecycle timings and p99 are in
+the [unabridged reports](../benchmarks/results/ci-workers-2026-10-20/README.md).
+This supports keeping count and execution placement configurable, without
+equating workers to reported CPU count or promising a fixed optimum.
 
 ## Reproduce and interpret
 

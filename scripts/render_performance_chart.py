@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "benchmarks/results/ci-runtime-2026-10-20"
+EVIDENCE = ROOT / "benchmarks/results/ci-workers-2026-10-20"
 # Explicit editorial selection, not a claim about every backend or platform.
 SELECTION = [
     ("macOS arm64 · C++20", "macos-latest-cxx20.json", "asio", "Asio"),
@@ -23,7 +23,8 @@ SELECTION = [
 
 
 def main():
-    plt.rcParams.update({"font.family": "DejaVu Sans", "svg.fonttype": "none"})
+    plt.rcParams.update({"font.family": "DejaVu Sans", "svg.fonttype": "none",
+                         "svg.hashsalt": "pace-selected-performance-v1"})
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
     fig.patch.set_facecolor("#101827")
     fig.suptitle("Selected TCP echo median leads", x=.065, y=.95, ha="left",
@@ -63,6 +64,9 @@ def main():
     fig.subplots_adjust(left=.12, right=.965, bottom=.29, top=.72, wspace=.36)
     destination = ROOT / "docs/assets/selected-performance.svg"
     fig.savefig(destination, facecolor=fig.get_facecolor(), metadata={"Date": None})
+    destination.write_text("\n".join(line.rstrip() for line in
+                                    destination.read_text(encoding="utf-8").splitlines()) + "\n",
+                           encoding="utf-8")
     # PNG is a local preview; only the crisp, accessible SVG is checked in.
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
