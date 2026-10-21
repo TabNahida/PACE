@@ -182,7 +182,7 @@ class ExtendedMetricTests(unittest.TestCase):
             del record[field]
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.validate(record)
-        for version in (True, 0, 2, "1", None):
+        for version in (True, 0, 3, "1", None):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 self.validate({**self.record, "extended_metrics_version": version})
 
