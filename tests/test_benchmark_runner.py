@@ -365,6 +365,7 @@ class CurrentImageMemoryTests(unittest.TestCase):
                  mock.patch.object(RUNNER.subprocess, "check_output", return_value=json.dumps(capabilities)), \
                  mock.patch.object(RUNNER, "command_output", return_value=None), \
                  mock.patch.object(RUNNER, "cpu_model", return_value="synthetic test"), \
+                 mock.patch.object(RUNNER.platform, "platform", return_value="synthetic test platform"), \
                  mock.patch.dict(RUNNER.os.environ, {"GITHUB_STEP_SUMMARY": ""}), \
                  mock.patch.object(RUNNER.subprocess, "run", return_value=SimpleNamespace(
                      returncode=0, stdout=json.dumps(record), stderr="")), \
