@@ -8,11 +8,14 @@
 #endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
+#include <psapi.h>
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <sys/resource.h>
 #include <unistd.h>
 #include <signal.h>
 #endif
@@ -41,6 +44,7 @@
 #include <iomanip>
 #include <iostream>
 #include <latch>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -53,6 +57,42 @@ namespace {
 using clock_type = std::chrono::steady_clock;
 namespace profiling = pace::detail::profiling;
 constexpr std::size_t server_buffer_size = 64 * 1024;
+
+// The OS high-water mark covers this process, including identical blocking
+// clients and latency samples. It is not the server/library's isolated footprint.
+constexpr std::string_view memory_scope = "whole process including server, blocking clients and latency samples";
+constexpr std::string_view memory_window = "process lifetime through server/client shutdown, before result aggregation";
+#if defined(_WIN32)
+constexpr std::string_view memory_source = "GetProcessMemoryInfo.PeakWorkingSetSize";
+#elif defined(__APPLE__)
+constexpr std::string_view memory_source = "getrusage(RUSAGE_SELF).ru_maxrss_bytes";
+#else
+constexpr std::string_view memory_source = "getrusage(RUSAGE_SELF).ru_maxrss_KiB";
+#endif
+
+std::uint64_t peak_process_memory_bytes() {
+#if defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS counters{};
+    counters.cb = sizeof(counters);
+    if (!::GetProcessMemoryInfo(::GetCurrentProcess(), &counters, sizeof(counters)) ||
+        counters.PeakWorkingSetSize == 0)
+        throw std::runtime_error("GetProcessMemoryInfo failed or returned zero peak working set");
+    return static_cast<std::uint64_t>(counters.PeakWorkingSetSize);
+#else
+    rusage usage{};
+    if (::getrusage(RUSAGE_SELF, &usage) != 0 || usage.ru_maxrss <= 0)
+        throw std::runtime_error("getrusage failed or returned zero peak RSS");
+    const auto peak = static_cast<std::uint64_t>(usage.ru_maxrss);
+#if defined(__APPLE__)
+    return peak;
+#else
+    // Linux and FreeBSD report KiB; macOS reports bytes.
+    if (peak > std::numeric_limits<std::uint64_t>::max() / 1024)
+        throw std::overflow_error("peak RSS exceeds byte counter range");
+    return peak * 1024;
+#endif
+#endif
+}
 
 class server {
 public:
@@ -398,6 +438,8 @@ void benchmark(const options& config) {
     service->stop();
     service->check_error();
     for (const auto& error : errors) if (error) std::rethrow_exception(error);
+    // Sample before allocating the duplicate merged latency vector below.
+    const auto peak_memory = peak_process_memory_bytes();
     std::vector<double> merged;
     merged.reserve(config.clients * config.requests);
     for (auto& samples : latencies) merged.insert(merged.end(), samples.begin(), samples.end());
@@ -414,8 +456,13 @@ void benchmark(const options& config) {
         << ",\"completed_requests\":" << merged.size() << ",\"seconds\":" << elapsed
         << ",\"requests_per_second\":" << throughput
         << ",\"roundtrip_mib_per_second\":" << throughput * config.bytes * 2 / (1024 * 1024)
-        << ",\"p50_us\":" << percentile(0.50) << ",\"p99_us\":" << percentile(0.99)
+        << ",\"p50_us\":" << percentile(0.50) << ",\"p95_us\":" << percentile(0.95)
+        << ",\"p99_us\":" << percentile(0.99)
         << ",\"max_us\":" << merged.back() << ",\"payload_verified\":true"
+        << ",\"extended_metrics_version\":1,\"latency_samples\":" << merged.size()
+        << ",\"peak_process_memory\":{\"bytes\":" << peak_memory
+        << ",\"source\":\"" << memory_source << "\",\"scope\":\"" << memory_scope
+        << "\",\"window\":\"" << memory_window << "\"}"
         << ",\"instrumented\":" << (service->profile() ? "true" : "false");
     if (const auto* counters = service->profile()) {
         std::cout << ",\"pace_profile\":{\"window\":\"server event-loop lifetime including startup, warmup and shutdown\",\"stages\":[";
@@ -439,7 +486,8 @@ void list_backends() {
 #ifdef PACE_HAS_LIBUV
     std::cout << ",\"libuv\"";
 #endif
-    std::cout << "],\"pace_profiling\":" << (profiling::enabled ? "true" : "false") << ",\"asio_version\":";
+    std::cout << "],\"extended_metrics_version\":1,\"peak_process_memory_source\":\"" << memory_source
+        << "\",\"pace_profiling\":" << (profiling::enabled ? "true" : "false") << ",\"asio_version\":";
 #ifdef PACE_HAS_ASIO
     std::cout << ASIO_VERSION;
 #else

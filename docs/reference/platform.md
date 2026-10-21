@@ -3,8 +3,8 @@
 ## Header selection
 
 Use the narrow header for a component or include `<pace/pace.hpp>` for the full
-public surface. The umbrella includes task, io_context, runtime, the compatibility
-TCP facade and HTTP; it introduces no separate API and retains the old TCP aliases.
+public surface. The umbrella includes tasks, reactors, runtime and the protocol
+APIs enabled in the build. It retains the old TCP aliases.
 `<pace/tcp.hpp>` is the canonical header for new TCP code.
 
 | Include | Purpose |
@@ -13,7 +13,11 @@ TCP facade and HTTP; it introduces no separate API and retains the old TCP alias
 | `<pace/io_context.hpp>` | Reactor and awaiters |
 | `<pace/runtime.hpp>` | Fixed-context worker runtime |
 | `<pace/tcp.hpp>` | Numeric IPv4 TCP |
-| `<pace/http.hpp>` | HTTP/1 server layer |
+| `<pace/udp.hpp>` | Numeric IPv4 datagrams |
+| `<pace/http.hpp>` | HTTP/1.0–1.1 client and server; HTTPS with TLS enabled |
+| `<pace/tls.hpp>` | Verified TLS streams, with `--tls=y` |
+| `<pace/http2.hpp>` | HTTP/2 batch client and server, with `--http2=y` |
+| `<pace/websocket.hpp>` | WebSocket client and server; wss with TLS enabled |
 | `<pace/platform.hpp>` | Portable native socket handle types |
 | `<pace/net.hpp>` | Previous TCP naming aliases |
 | `<pace/pace.hpp>` | All of the above through public includes |

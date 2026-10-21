@@ -7,7 +7,44 @@ measurements below do **not** establish that goal across platforms. This page
 includes the complete backend comparison behind the README's selected bar chart,
 component improvements and regressions, and links to every archived trial.
 
-## Complete TCP comparison behind the README chart
+## Read the metrics
+
+The current TCP runner records the following for every backend under the same
+workload. Report all three backends together; a throughput lead alone does not
+establish a latency or memory advantage.
+
+| Metric | What it measures | How to read it |
+|---|---|---|
+| Throughput, requests/s | Verified complete request/response round trips divided by the measured wall-clock interval | Higher is better for this fixed workload; it does not measure connection setup or HTTP processing. |
+| p50 latency, µs | Median client-observed round-trip latency among measured requests | Typical request; lower is better. |
+| p95 / p99 latency, µs | Nearest-rank 95th / 99th percentile of the same measured requests | Tail latency; approximately 5% / 1% of samples are slower. Lower is better. |
+| Maximum latency, µs | Slowest measured request in one trial | Useful for finding stalls; sensitive to trial length and host scheduling. |
+| Peak process memory, MiB | OS process high-water mark, sampled after server/client shutdown and before result aggregation | Includes server, blocking clients, runtime, stacks and stored latency samples; it is **not the library's isolated footprint**. |
+
+Tables report the median across independent trials for each metric. A median of
+trial p99 values is not a pooled p99 across all requests. Likewise `median_max_us`
+is the median of trial maxima; `max_max_us` in JSON is the worst request across
+all trials. Min–max bars show the observed range, not a confidence interval.
+
+Memory covers the **whole process lifetime**, including startup and warmup; it
+does not share throughput's measured-only time window. Linux/FreeBSD use
+`getrusage().ru_maxrss` converted from KiB, macOS uses that field in bytes, and
+Windows uses `GetProcessMemoryInfo().PeakWorkingSetSize`. JSON preserves the
+source, scope and measurement window. Compare memory only within the same OS,
+toolchain and workload; OS accounting differs, and more requests also allocate
+more latency samples. No steady-state allocation or isolated-server claim is made.
+
+Historical reports below predate p95 and memory collection. Their missing values
+remain unreported; they cannot be reconstructed from p50/p99 or throughput. The
+new format adds `extended_metrics_version: 1` and requires every completed
+request to contribute one latency sample. [Exact timing boundaries and validation](../benchmarks/README.md).
+
+中文说明：吞吐越高、同一负载下的延迟越低通常越好，但必须结合尾延迟一起看。
+p95/p99 是单轮请求的延迟分位数，汇总表取各轮分位数的中位数；峰值内存包含
+服务端、客户端和样本存储，且覆盖整个进程生命周期，不是 PACE 本身的内存占用。
+历史报告未采集的 p95 与内存不会补算或推测。
+
+## Historical TCP comparison behind the README chart
 
 [Successful CI run, 20 October 2026](https://github.com/TabNahida/PACE/actions/runs/39404014672).
 Source head `72327e4a2f5b787deeb902d188e26c67f9799441`; checkout merge
@@ -37,10 +74,30 @@ were PACE 48,359–59,584 req/s and Asio 32,924–46,587 req/s in these five sho
 shared-runner trials. All raw trials, p50/p99 latency, spreads, environment metadata and hashes are preserved
 in the [complete CI report](../benchmarks/results/ci-workers-2026-10-20/README.md).
 
-Regenerate the README chart from those JSON files with
-`python scripts/render_performance_chart.py` (optional dependency: matplotlib).
-Its axis is throughput relative to the named comparator's median; each panel
-uses a zero origin. It is an editorial selection of measured median leads.
+The checked-in README chart preserves this historical selection. Its axis is
+throughput relative to the named comparator's median, starting at zero. It does
+not represent newer source changes or metrics that this snapshot did not collect.
+
+For a **new** complete comparison, collect fresh extended-metric evidence and
+render it explicitly (optional dependency: matplotlib):
+
+```sh
+xmake f -m release --sanitizers=n --profiling=n --benchmarks=y -y
+xmake -y pace_bench
+python3 scripts/run_benchmarks.py --require-all --repeats 5 --clients 4 \
+  --requests 10000 --warmup 1000 --bytes 64 --output benchmarks/results/local
+python3 scripts/render_performance_chart.py \
+  --evidence benchmarks/results/local/report.json \
+  --output /tmp/pace-performance.svg --preview /tmp/pace-performance.png
+```
+
+The runner writes the combined evidence to `report.json`. On Windows, use
+`python`, put each command on one line, and choose writable output paths.
+The renderer validates raw records and recomputes summaries before plotting all
+three backends' throughput, p99 and peak process memory with trial ranges. It
+rejects older records lacking those measurements. Keep this complete chart with
+the full report; any selected README chart must name its workload and comparator
+and link back to all results, including regressions.
 
 ## Earlier reactor optimization study
 

@@ -1,47 +1,56 @@
 # PACE documentation
 
-PACE is a C++20 coroutine networking library with independent reactor contexts,
-an optional worker runtime, numeric IPv4 TCP, and a bounded HTTP/1 server layer.
-Start with a runnable example, then use the reference to check ownership and
-shutdown requirements. [中文学习指南](tutorial/README.zh-CN.md).
+[简体中文](README.zh-CN.md) · [API reference](reference/README.md)
 
-## Learn by building
+## Run something first
 
-1. [Build and run](tutorial/01-build.md): xmake, dependencies, standards and examples.
-2. [Tasks and timers](tutorial/02-tasks-timers.md): lazy tasks, owned arguments and errors.
-3. [TCP echo](tutorial/03-tcp.md): a client, server and checked round trip.
-4. [HTTP services](tutorial/04-http.md): handlers, requests, responses and limits.
-5. [Execution and worker selection](tutorial/05-execution.md): explicit worker counts and application-owned contexts.
-6. [Orderly shutdown](tutorial/06-shutdown.md): stop accepting, drain, cancel and join.
+From the repository root, with xmake 2.9.8+ and a C++20 compiler:
 
-Each tutorial links to a complete `examples/tutorial_*.cpp` source. Default
-invocations finish by themselves and can be used as smoke checks; TCP and HTTP
-examples also expose long-running server modes for interactive use.
+```sh
+xmake f -m release -y
+xmake -y tutorial_tasks
+xmake run tutorial_tasks
+```
 
-## API reference
+The program prints `Hello, PACE` and exits. Its basic flow is
+`io.spawn(hello(io)); io.run();`: the caller executes the task until it calls
+`io.stop()`. [Build your own application](tutorial/01-build.md) or read the
+[complete example](../examples/tutorial_tasks.cpp).
 
-The [reference index](reference/README.md) maps all public types and functions to
-their signatures, defaults, thread requirements, lifetimes and errors.
+## Choose what to build
 
-| Area | Reference |
-|---|---|
-| Coroutine ownership and awaiting | [`task<T>` / `task<void>`](reference/task.md) |
-| Reactor, submission, readiness and timers | [`io_context`](reference/io-context.md) |
-| Worker runtime | [`runtime`](reference/runtime.md) |
-| TCP addresses, connections and listeners | [`pace::tcp`](reference/tcp.md) |
-| HTTP requests, responses and serving | [`pace::http`](reference/http.md) |
-| Headers, socket handles and old names | [Platform and compatibility](reference/platform.md) |
+Build the default examples with `xmake -y`, then choose a path:
 
-## Design and measurement
+| I want to… | Start here | Complete source |
+|---|---|---|
+| Await tasks and timers | [Tasks](tutorial/02-tasks-timers.md) | [tutorial_tasks.cpp](../examples/tutorial_tasks.cpp) |
+| Connect or listen with TCP | [TCP tutorial](tutorial/03-tcp.md) | [tutorial_tcp.cpp](../examples/tutorial_tcp.cpp) |
+| Send UDP datagrams | [UDP reference](reference/udp.md) | [tutorial_udp.cpp](../examples/tutorial_udp.cpp) |
+| Call or serve an HTTP API | [HTTP tutorial](tutorial/04-http.md) | [Client](../examples/tutorial_http_client.cpp) · [server](../examples/tutorial_http.cpp) |
+| Encrypt connections / use HTTPS | [TLS](reference/tls.md) · [HTTPS](reference/http.md) | [tutorial_tls.cpp](../examples/tutorial_tls.cpp) |
+| Exchange HTTP/2 requests | [HTTP/2 reference](reference/http2.md) | [tutorial_http2.cpp](../examples/tutorial_http2.cpp) |
+| Exchange WebSocket messages | [WebSocket reference](reference/websocket.md) | [tutorial_websocket.cpp](../examples/tutorial_websocket.cpp) |
+| Choose worker threads | [Execution](tutorial/05-execution.md) | [tutorial_workers.cpp](../examples/tutorial_workers.cpp) |
+| Stop and release resources | [Shutdown](tutorial/06-shutdown.md) | [tutorial_shutdown.cpp](../examples/tutorial_shutdown.cpp) |
 
-- [Architecture](architecture.md): scheduling, platform backends and cancellation.
-- [TCP comparison methodology](../benchmarks/README.md): timing boundaries and fair comparisons.
-- [Component measurements](../benchmarks/components.md): operation-specific costs.
-- [Stage profiling](../benchmarks/profiling.md): diagnostic wall-clock accounting.
+TLS and HTTP/2 require their optional build switches:
+`xmake f -m release --tls=y --http2=y -y`, then `xmake -y`.
+Default tutorial invocations finish automatically. TLS examples use public
+**test-only** certificates under `tests/certs`; replace them for real services.
 
-The documented protocol scope is deliberate: no TLS, DNS resolver, IPv6,
-asynchronous file API, HTTP client, chunked transfer, HTTP/2, WebSocket or request
-deadline API is currently provided. A TCP byte stream can carry a manually
-constructed HTTP request, as in the tutorial, but that is not a general HTTP client.
+## Look up the details
 
-[Complete performance results and tuning](performance.md) · [Worker/execution scaling](../benchmarks/scaling.md)
+The [API reference](reference/README.md) lists signatures, ownership, thread
+requirements and errors. Begin with the protocol you use, then check shared
+[task](reference/task.md), [context](reference/io-context.md) and
+[runtime](reference/runtime.md) rules.
+
+[Architecture](architecture.md) explains the reactor design.
+[Performance and tuning](performance.md) includes all measured backends,
+regressions, throughput, latency, process-memory interpretation and reproduction
+links. The [tutorial index](tutorial/README.md) lists runnable commands.
+
+PACE is under active development. Numeric IPv4 is supported; DNS, IPv6,
+asynchronous file I/O, streaming HTTP bodies and per-operation deadlines are
+not yet provided. Protocol support is bounded; consult each reference before
+choosing it for an application.

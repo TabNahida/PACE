@@ -19,8 +19,22 @@ The benchmark excludes server startup, connection establishment and per-connecti
 warmup. A start gate releases all clients after warmup. Throughput uses total
 completed round trips divided by wall time from gate release until clients have
 joined. Each round-trip latency includes sending, receiving and payload validation.
-All latencies are stored and nearest-rank p50 and p99 are computed after measurement.
+All latencies are stored and nearest-rank p50, p95 and p99 plus the maximum are
+computed after measurement. The returned sample count must equal completed requests.
 There is no sampling, histogram rounding or coordinated-omission correction.
+
+Each fresh benchmark process also records its OS peak resident memory: Linux and
+FreeBSD use `getrusage(RUSAGE_SELF).ru_maxrss` in KiB, macOS reports that field in
+bytes, and Windows uses `GetProcessMemoryInfo.PeakWorkingSetSize` in bytes. JSON
+normalizes the value to bytes and records the precise source, scope and window.
+The reading is taken after clients and server have joined, before allocating the
+merged latency vector for reporting. It covers the process lifetime up to that
+point, including startup, warmup, stacks, server, identical blocking clients and
+stored latency samples. It is **whole-process peak RSS/working set, not isolated
+library footprint**, steady-state memory, allocation count or a per-connection
+cost. Memory residency semantics differ across operating systems. Compare memory
+only within the same OS, executable and workload; report spread and avoid drawing
+library-memory conclusions from small whole-process differences.
 
 ```sh
 # Build a release-mode pace_bench target with all optional dependencies enabled.
@@ -42,7 +56,12 @@ missing required backends or invalid output, and writes all raw runs plus binary
 hash, dependency versions, OS, CPU, Git revision, invocation and aggregation rules.
 Individual sockets also have send/receive timeouts. A failed comparison never
 produces a successful aggregate. The runner reports medians and min–max spread;
-it does not cherry-pick the fastest trial. The optional `--list` executable flag
+it does not cherry-pick the fastest trial. Every measured latency and peak-memory
+metric retains median/min/max across trials in JSON. The Markdown maximum column
+is the median of each trial's maximum, while `max_max_us` retains the worst
+observed request across all trials. Neither is a pooled latency percentile.
+Historical reports without extended metrics remain valid; absent p95/memory is
+reported as unavailable, never filled with a guessed value. The optional `--list` executable flag
 reports exactly which backends were compiled in.
 
 ## Acceptance criteria
@@ -50,11 +69,19 @@ reports exactly which backends were compiled in.
 A successful CI comparison requires every requested backend to complete every
 trial within its timeout, with all response bytes verified. Each record must
 match the requested trial and workload exactly, contain finite positive timing
-and throughput values, satisfy `p50 <= p99 <= max`, and agree with the completed
+and throughput values, satisfy `p50 <= p95 <= p99 <= max` for new records, and agree with the completed
 request count and payload size. The runner rejects a mismatch before aggregation
 and preserves the failure evidence. Use `--require-all --repeats 3` or more for
 CI comparisons. This acceptance criterion establishes a working, measurable
 benchmark; it does not certify that PACE is faster.
+
+New executables advertise `extended_metrics_version=1`, requiring the p95,
+sample-count and peak-memory fields together. Peak memory must be a positive
+integer byte count with the declared OS source and measurement scope/window;
+KiB-based values must convert to a multiple of 1024 bytes. Legacy records retain
+their original p50/p99/max validation for historical before/after comparisons.
+New and legacy schemas or different memory sources cannot be silently mixed in
+one backend-comparison aggregate.
 
 For a performance claim, evaluate each baseline separately on the same dedicated
 hardware and compiler configuration. A proposed release target is a throughput

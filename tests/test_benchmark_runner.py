@@ -150,6 +150,94 @@ class BenchmarkRecordValidationTests(unittest.TestCase):
                                        "pace", 1, self.config, instrumented=True)
 
 
+class ExtendedMetricTests(unittest.TestCase):
+    def setUp(self):
+        fixture = BenchmarkRecordValidationTests()
+        fixture.setUp()
+        self.config, self.legacy = fixture.config, fixture.record
+        self.record = {**self.legacy, "extended_metrics_version": 1, "p95_us": 15.0,
+                       "latency_samples": 8000, "peak_process_memory": {
+                           "bytes": 8 * 1048576, "source": "getrusage(RUSAGE_SELF).ru_maxrss_KiB",
+                           "scope": RUNNER.MEMORY_SCOPE, "window": RUNNER.MEMORY_WINDOW}}
+
+    def validate(self, record, **kwargs):
+        RUNNER.validate_record(record, "pace", 1, self.config, **kwargs)
+
+    def test_accepts_legacy_and_each_portable_memory_source(self):
+        self.validate(self.legacy)
+        for source in RUNNER.MEMORY_SOURCES:
+            record = copy.deepcopy(self.record)
+            record["peak_process_memory"]["source"] = source
+            with self.subTest(source=source):
+                self.validate(record, require_extended=True, expected_memory_source=source)
+
+    def test_advertised_extension_cannot_silently_omit_all_new_fields(self):
+        with self.assertRaises(ValueError):
+            self.validate(self.legacy, require_extended=True)
+
+    def test_rejects_partial_extension_and_wrong_versions(self):
+        for field in RUNNER.EXTENDED_FIELDS:
+            record = copy.deepcopy(self.record)
+            del record[field]
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.validate(record)
+        for version in (True, 0, 2, "1", None):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                self.validate({**self.record, "extended_metrics_version": version})
+
+    def test_rejects_invalid_p95_and_sample_counts(self):
+        for value in (True, None, "15", float("nan"), float("inf"), 0, 9.9, 20.1):
+            with self.subTest(p95=value), self.assertRaises(ValueError):
+                self.validate({**self.record, "p95_us": value})
+        for value in (True, 8000.0, 7999, 8001, None):
+            with self.subTest(samples=value), self.assertRaises(ValueError):
+                self.validate({**self.record, "latency_samples": value})
+
+    def test_rejects_invalid_peak_bytes_and_unidentified_measurement(self):
+        for value in (True, None, "8", 1.5, 0, -1, 2**64, 1025):
+            record = copy.deepcopy(self.record)
+            record["peak_process_memory"]["bytes"] = value
+            with self.subTest(bytes=value), self.assertRaises(ValueError):
+                self.validate(record)
+        for field in ("bytes", "source", "scope", "window"):
+            record = copy.deepcopy(self.record)
+            del record["peak_process_memory"][field]
+            with self.subTest(missing=field), self.assertRaises(ValueError):
+                self.validate(record)
+        for field, value in (("source", "RSS"), ("source", []), ("scope", "server only"), ("window", "steady state")):
+            record = copy.deepcopy(self.record)
+            record["peak_process_memory"][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.validate(record)
+        with self.assertRaises(ValueError):
+            self.validate(self.record, expected_memory_source="GetProcessMemoryInfo.PeakWorkingSetSize")
+
+    def test_summary_preserves_spread_for_all_latency_and_memory_metrics(self):
+        second = copy.deepcopy(self.record)
+        second.update(trial=2, p50_us=12, p95_us=17, p99_us=22, max_us=100)
+        second["peak_process_memory"]["bytes"] = 12 * 1048576
+        summary = RUNNER.summarize([self.record, second], ["pace"], 2)[0]
+        for metric, median, low, high in (("p50_us", 11, 10, 12), ("p95_us", 16, 15, 17),
+                                         ("p99_us", 21, 20, 22), ("max_us", 65, 30, 100),
+                                         ("peak_process_memory_bytes", 10*1048576, 8*1048576, 12*1048576)):
+            self.assertEqual(summary[f"median_{metric}"], median)
+            self.assertEqual(summary[f"min_{metric}"], low)
+            self.assertEqual(summary[f"max_{metric}"], high)
+        legacy = RUNNER.summarize([self.legacy], ["pace"], 1)[0]
+        self.assertNotIn("median_p95_us", legacy)
+        self.assertNotIn("median_peak_process_memory_bytes", legacy)
+        self.assertEqual(legacy["median_p99_us"], 20)
+
+    def test_rejects_mixed_sources_schemas_and_incomplete_aggregate(self):
+        second = copy.deepcopy(self.record)
+        second["trial"] = 2
+        second["peak_process_memory"]["source"] = "GetProcessMemoryInfo.PeakWorkingSetSize"
+        for records in ([self.record, second], [self.legacy, {**self.record, "trial": 2}],
+                        [self.record], [self.record, self.record]):
+            with self.subTest(records=records), self.assertRaises(ValueError):
+                RUNNER.summarize(records, ["pace"], 2)
+
+
 class ProfilingComparisonGuardTests(unittest.TestCase):
     def test_profiling_requires_explicit_pace_only_selection(self):
         available = {"backends": ["pace", "asio", "libuv"], "pace_profiling": True}

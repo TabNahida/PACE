@@ -1,24 +1,63 @@
-# Tutorials
+# Learn PACE by running it
 
-Follow these chapters in order. Every source link points to a complete C++20
-program; default runs finish by themselves and check their expected result.
-[中文学习指南](README.zh-CN.md).
+[中文学习指南](README.zh-CN.md) · [API reference](../reference/README.md)
 
-| Chapter | Runnable source | Default command |
+## 1. Say hello
+
+From the repository root:
+
+```sh
+xmake f -m release -y
+xmake -y tutorial_tasks
+xmake run tutorial_tasks
+```
+
+This prints `Hello, PACE` and exits. Start with [build and integration](01-build.md)
+if you need a compiler or an application target. Read [tasks and timers](02-tasks-timers.md)
+for `co_await`, lazy tasks, owned arguments and errors.
+
+## 2. Pick a protocol
+
+Run `xmake -y` to build examples. Every default command below is a complete,
+bounded program, with source you can copy and adapt.
+
+| Goal | Command | Guide / source |
 |---|---|---|
-| [1. Build and run](01-build.md) | [Tasks example](../../examples/tutorial_tasks.cpp) | `xmake run tutorial_tasks` |
-| [2. Tasks and timers](02-tasks-timers.md) | [Tasks example](../../examples/tutorial_tasks.cpp) | `xmake run tutorial_tasks` |
-| [3. TCP echo](03-tcp.md) | [TCP example](../../examples/tutorial_tcp.cpp) | `xmake run tutorial_tcp` |
-| [4. HTTP services](04-http.md) | [HTTP example](../../examples/tutorial_http.cpp) | `xmake run tutorial_http` |
-| [5. Execution and workers](05-execution.md) | [Workers example](../../examples/tutorial_workers.cpp) | `xmake run tutorial_workers` |
-| [6. Orderly shutdown](06-shutdown.md) | [Shutdown example](../../examples/tutorial_shutdown.cpp) | `xmake run tutorial_shutdown` |
+| TCP echo | `xmake run tutorial_tcp` | [Guide](03-tcp.md) · [source](../../examples/tutorial_tcp.cpp) |
+| UDP datagrams | `xmake run tutorial_udp` | [Guide](../reference/udp.md) · [source](../../examples/tutorial_udp.cpp) |
+| HTTP server | `xmake run tutorial_http` | [Guide](04-http.md) · [source](../../examples/tutorial_http.cpp) |
+| HTTP client | `xmake run tutorial_http_client` | [Guide](04-http.md) · [source](../../examples/tutorial_http_client.cpp) |
+| TLS connection | `xmake run tutorial_tls` | [Guide](../reference/tls.md) · [source](../../examples/tutorial_tls.cpp) |
+| HTTP/2 exchange | `xmake run tutorial_http2` | [Guide](../reference/http2.md) · [source](../../examples/tutorial_http2.cpp) |
+| WebSocket messages | `xmake run tutorial_websocket` | [Guide](../reference/websocket.md) · [source](../../examples/tutorial_websocket.cpp) |
 
-TCP and HTTP examples accept `serve` for persistent interactive servers. Stop them
-with Ctrl-C. The worker example accepts `background` to compare execution layout,
-not performance. No example makes a speed claim; use the dedicated benchmark
-tools and methodology for measurements.
+TLS and HTTP/2 are optional. Before those examples, enable the features and rebuild:
 
-Code fragments in chapters explain parts of these programs or explicitly label
-application integration patterns. They are not alternate APIs. Use the complete
-source for include lists and error handling, and the [reference](../reference/README.md)
-for every signature and precondition.
+```sh
+xmake f -m release --tls=y --http2=y -y
+xmake -y
+```
+
+TLS examples load public test fixtures from `tests/certs` using the repository
+root as their working directory. These certificates and keys are for tests only.
+TCP and HTTP examples accept `serve` for a persistent server; stop it with Ctrl-C.
+[HTTP](04-http.md) also explains HTTPS configuration and client connection reuse.
+
+## 3. Choose execution and shutdown
+
+```sh
+xmake run tutorial_workers
+xmake run tutorial_workers background
+xmake run tutorial_shutdown
+```
+
+[Execution](05-execution.md) shows caller-owned loops, explicit worker counts and
+both runtime modes. [Shutdown](06-shutdown.md) explains stopping acceptance,
+draining connections, cancellation and joining. These examples check behavior;
+use the [benchmark tools](../../benchmarks/README.md) to measure performance.
+
+## 4. Look up your API
+
+Use the [reference](../reference/README.md) for signatures, defaults, ownership,
+thread rules and errors. Code fragments explain the complete linked programs;
+read their source for include lists and error handling.

@@ -10,8 +10,15 @@
 | 等待与取消 | `wait_readable/wait_writable/cancel/sleep_for/yield` 及 awaiter 类型 | [io_context](io-context.md) |
 | 工作线程 | `runtime(workers)`、`size/context/run/run_on_current_thread/stop` | [runtime](runtime.md) |
 | TCP | `tcp::endpoint/listen_options/stream/listener` | [TCP](tcp.md) |
-| HTTP | `http::header_field/request/response/limits/handler/serve/serve_connection` | [HTTP](http.md) |
+| UDP | `udp::endpoint/datagram/socket`、`send_to/receive_from` | [UDP](udp.md) |
+| HTTP/HTTPS | 消息与限额、`handler/serve/serve_connection`、`client/secure_client`、`get/fetch`、协议异常 | [HTTP](http.md) |
+| TLS | `tls::context/stream`、证书验证、握手、ALPN、加密读写与关闭 | [TLS](tls.md) |
+| HTTP/2 | `http2::limits/exchange/serve/serve_connection`，有界批量请求 | [HTTP/2](http2.md) |
+| WebSocket | 握手、消息、控制帧与可选加密传输 | [WebSocket](websocket.md) |
 | 平台与兼容 | `native_socket_type/invalid_socket`、旧 TCP 名称、公共头文件 | [平台与兼容](platform.md) |
+
+先运行程序可直接前往[按协议选择示例](../tutorial/README.zh-CN.md)。TLS 需要
+`--tls=y`，HTTP/2 需要 `--http2=y`；使用 TLS 承载 HTTP/2 时两个开关都要启用。
 
 ## 协程与数据所有权
 
@@ -46,15 +53,21 @@ TCP endpoint 仅支持数字 IPv4。每个 socket 最多并行一个读和一个
 `read_some` 不保证填满缓冲区；非空缓冲区返回零表示 EOF。
 `write_all` 完成表示数据已交给本机网络栈，不代表对端已经处理。
 
+UDP 保留数据报边界，零长度数据报有效；截断通过 `datagram::truncated` 报告。
+TLS 当前只允许**一个异步操作**同时进行，读写也不能重叠；TCP 的双向并发
+规则不适用于 TLS。所有协议都要求借用缓冲区活到异步操作完成。
+
 `close()` 取消等待并关闭句柄，但操作恢复前仍须保留 socket 对象。
 `close_gracefully()` 要求没有其他未完成操作，默认在发送半关闭后最多排空
 100 ms 或 64 KiB 的对端输入，然后关闭；这不是请求超时 API。
 
-HTTP 支持 HTTP/1.0、HTTP/1.1、Content-Length 和持久连接。
+HTTP 提供 HTTP/1.0、HTTP/1.1 客户端与服务端，支持 Content-Length、chunked、trailer 和持久连接。
 默认请求头上限 16 KiB、请求体上限 1 MiB、每连接最多 1000 个请求。
 响应的 Content-Length、Connection、Content-Type 等由库管理。
-暂不支持 TLS、chunked、HTTP/2、WebSocket、CONNECT、流式 body、请求截止时间，
-也没有通用 HTTP 客户端。各错误状态和解析细节见 [HTTP 参考](http.md)。
+启用 `--tls=y` 后，同样的 `get/fetch/serve` 接口有 HTTPS 重载，默认校验证书链和主机名。
+`http::get(io, endpoint, "/health")` 可以完成一次请求；`http::client` 支持顺序复用连接。
+HTTP/2 与 WebSocket 使用独立接口；本 HTTP/1.1 接口不提供 CONNECT、Expect 握手、流式 body、
+请求截止时间、自动 DNS/重定向/重试/解压。各错误状态和解析细节见 [HTTP 参考](http.md)。
 
 ## 停止与资源释放
 

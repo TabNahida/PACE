@@ -3,4 +3,8 @@
 #include <pace/io_context.hpp>
 #include <pace/runtime.hpp>
 #include <pace/net.hpp>
+#include <pace/udp.hpp>
 #include <pace/http.hpp>
+#include <pace/tls.hpp>
+#include <pace/http2.hpp>
+#include <pace/websocket.hpp>
