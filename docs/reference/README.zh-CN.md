@@ -58,15 +58,20 @@ TLS 当前只允许**一个异步操作**同时进行，读写也不能重叠；
 规则不适用于 TLS。所有协议都要求借用缓冲区活到异步操作完成。
 
 `close()` 取消等待并关闭句柄，但操作恢复前仍须保留 socket 对象。
-`close_gracefully()` 要求没有其他未完成操作，默认在发送半关闭后最多排空
-100 ms 或 64 KiB 的对端输入，然后关闭；这不是请求超时 API。
+`tcp::stream::close_gracefully()` 要求没有其他未完成操作，默认在发送半关闭后
+最多排空 100 ms 或 64 KiB 的对端输入，然后关闭；这不是请求超时 API。
+TLS 的关闭会交换 `close_notify`，WebSocket 的关闭会交换关闭帧；它们的具体
+时限、返回值和错误语义分别见 [TLS](tls.zh-CN.md) 和 [WebSocket](websocket.zh-CN.md)。
 
 HTTP 提供 HTTP/1.0、HTTP/1.1 客户端与服务端，支持 Content-Length、chunked、trailer 和持久连接。
 默认请求头上限 16 KiB、请求体上限 1 MiB、每连接最多 1000 个请求。
 响应的 Content-Length、Connection、Content-Type 等由库管理。
 启用 `--tls=y` 后，同样的 `get/fetch/serve` 接口有 HTTPS 重载，默认校验证书链和主机名。
 `http::get(io, endpoint, "/health")` 可以完成一次请求；`http::client` 支持顺序复用连接。
-HTTP/2 与 WebSocket 使用独立接口；本 HTTP/1.1 接口不提供 CONNECT、Expect 握手、流式 body、
+HTTP/1.1 服务端收到任何 `Expect`（包括 `100-continue`）都会返回 417。客户端
+拒绝自行设置 `Expect`，直接发送完整请求，然后可跳过数量受限的 100/103 等中间
+响应，继续读取最终响应；这不包含“先发请求头，等 100 许可后再发送 body”的握手。
+HTTP/2 与 WebSocket 使用独立接口；本 HTTP/1.1 接口不提供 CONNECT、流式 body、
 请求截止时间、自动 DNS/重定向/重试/解压。各错误状态和解析细节见 [HTTP 参考](http.md)。
 
 ## 停止与资源释放

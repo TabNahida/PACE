@@ -39,7 +39,7 @@ WebSocket 对象中，再调用 `accept({"echo"}, authorize)`。授权回调可�
 的应用应主动检查。服务端按照自己的协议列表顺序选择。
 
 必须在读取 HTTP 字节之前把传输流交给 WebSocket；它自行解析 Upgrade，并保存
-与请求头一起收到的首帧。当前它是独立端点，不能直接从 `http::server` 的已解析
+与请求头一起收到的首帧。当前它是独立端点，不能直接从 `http::serve` 的已解析
 请求转换，也没有 HTTP 路由层的 Upgrade 回调。`handshake` 的 Host 与 TCP 数字
 地址分开传入，target 必须是以 `/` 开头且不含 URL fragment 的路径和查询串。
 

@@ -81,7 +81,7 @@ def main():
         for y, value, upper in zip([1,0],values,high):
             ax.text(upper+max(high)*.025,y,f"{value:,.2f}",va="center",color="#eef4ff",fontsize=10)
         config=environment["configuration"]
-        ax.text(0,-.44,f"{environment['label']}\n{config['clients']} clients · {config['bytes']} B · {config['repeats']} trials/backend",
+        ax.text(0,-.44,f"{environment['label']} · {environment.get('started_utc', '')[:10]}\n{config['clients']} clients · {config['bytes']} B · {config['repeats']} trials/backend",
                 transform=ax.transAxes,color="#b9c8df",fontsize=9,va="top")
     figure.text(.05,.10,"Bars: medians · whiskers: min–max · selected comparisons are not an overall ranking or statistical confidence intervals.",
                 color="#99adc9",fontsize=9)

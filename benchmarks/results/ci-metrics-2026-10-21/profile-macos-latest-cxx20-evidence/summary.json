@@ -1,0 +1,30 @@
+[
+  {
+    "backend": "pace",
+    "instrumented": true,
+    "trials": 3,
+    "extended_metrics_version": 2,
+    "peak_process_memory_source": "task_info(MACH_TASK_BASIC_INFO).resident_size_max_bytes",
+    "peak_process_memory_scope": "whole process including server, blocking clients and latency samples",
+    "peak_process_memory_window": "current process image through server/client shutdown, before result aggregation",
+    "peak_process_memory_available": true,
+    "median_requests_per_second": 51172.729667541,
+    "min_requests_per_second": 40747.703406464,
+    "max_requests_per_second": 61226.422676597,
+    "median_p50_us": 75.375,
+    "min_p50_us": 50.0,
+    "max_p50_us": 81.583,
+    "median_p99_us": 210.125,
+    "min_p99_us": 193.583,
+    "max_p99_us": 406.709,
+    "median_max_us": 3818.417,
+    "min_max_us": 1694.292,
+    "max_max_us": 11950.959,
+    "median_p95_us": 141.041,
+    "min_p95_us": 122.5,
+    "max_p95_us": 178.667,
+    "median_peak_process_memory_bytes": 6668288,
+    "min_peak_process_memory_bytes": 6651904,
+    "max_peak_process_memory_bytes": 6684672
+  }
+]

@@ -118,6 +118,10 @@ Transfer-Encoding is rejected. A 205 must decode to an empty body. Informational
 upgrades require the separate protocol API. Ambiguous framing is rejected even
 on a bodyless response.
 
+Receiving `100 Continue` is distinct from an Expect handshake. The client sends
+the entire request before reading responses and rejects a caller-supplied Expect
+field. The server returns 417 for every Expect field, including `100-continue`.
+
 ## Receive limits
 
 ```cpp

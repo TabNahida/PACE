@@ -39,8 +39,11 @@ io.spawn(pace::http2::serve(listener, hello));
 The server accepts independent connections and receives multiplexed streams.
 Within one connection, completed requests invoke handlers sequentially; a slow
 handler delays that connection. Bodies are buffered, not streamed to handlers.
-An application exception produces HTTP 500. Cancellation propagates; malformed
-or closed peers are isolated by the `serve` accept loop.
+An application exception produces HTTP 500. Direct `serve_connection` and
+`exchange` calls propagate connection cancellation and errors; `serve` isolates
+accepted-connection failures and returns normally when its listener is closed or
+canceled. Closing the listener leaves accepted connections running; stopping the
+context cancels all its work.
 
 ## HTTPS with ALPN
 
@@ -89,6 +92,14 @@ Received versions are `HTTP/2`. Framing headers are generated automatically;
 connection-specific headers are rejected. HEAD, 204, 205 and 304 suppress response
 bodies. Header field names are sent in lowercase. `authority` supplies `:authority`;
 use the endpoint's numeric address for the transport and the HTTP hostname here.
+Request targets start with `/`; only `OPTIONS` may use `*`.
+
+The shared message types retain some HTTP/1-only fields. Outgoing `version`,
+`request.keep_alive`, `request.chunked`, `response.close` and `response.chunked`
+are ignored by this API; HTTP/2 uses its own framing and stream lifecycle.
+In particular, setting `response.close` does not close an HTTP/2 connection.
+Custom Content-Length and Host fields are replaced by generated framing and
+`authority`; set response Content-Type through `response.content_type`.
 
 | `http2::limits` field | Default |
 |---|---:|
@@ -100,6 +111,9 @@ use the endpoint's numeric address for the transport and the HTTP hostname here.
 
 Header bytes use the HTTP/2 header-list definition: name and value lengths plus
 32 bytes per field. Initial headers and trailers share each stream's allowance.
+Header byte/field limits and the connection request limit must be nonzero.
+`max_concurrent_streams` must be between 1 and 10,000. `max_body_bytes = 0`
+permits empty bodies only; zero never means unlimited.
 
 A batch must contain 1–`max_concurrent_streams` requests and fit the connection
 request limit. A bound violation fails the connection. Peak buffered memory grows
@@ -124,6 +138,10 @@ incremental client API are not provided. Use [HTTP/1.1](http.md) or
 请求、响应和 trailers 使用与 HTTP/1.1 相同的数据结构。消息体完整缓冲后再交给
 应用；同一连接内的 handler 按完成请求的顺序执行，慢 handler 会延迟该连接。
 通过上表的 limits 限制消息、字段和并发流，避免随并发增加无限占用内存。
+请求头字节数、字段数和每连接请求数上限必须大于零，并发流上限为 1–10,000；
+body 上限为零时只允许空 body。HTTP/1 专用的 keep_alive、chunked、response.close
+等字段在此接口中不控制连接或分块；设置 response.close 不会关闭 HTTP/2 连接。
+关闭 listener 会结束接受新连接，已有连接继续运行；停止 context 才会取消全部工作。
 当前明文方式需要 HTTP/2 prior knowledge，不支持 HTTP/1.1 升级、CONNECT、
 服务器推送或 HTTP/3。
 

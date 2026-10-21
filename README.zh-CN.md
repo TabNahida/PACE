@@ -17,10 +17,10 @@ PACE（Parallel Async Coroutine Engine）是一个 C++20 协程网络库。任�
 ## 实测优势选摘
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/selected-performance.svg" alt="历史 TCP echo 吞吐中位数：macOS PACE 50,116 对 Asio 44,079 请求/秒；Linux C++23 PACE 66,318 对 libuv 63,401 请求/秒。每个后端在共享 CI 上测量五轮。" width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/selected-performance.svg" alt="TCP echo 实测选摘：macOS 吞吐比 Asio 高 17.7%；本地 Linux p95 比 libuv 低 30.5%；Windows 进程峰值内存比 libuv 低 13.3%。平台和负载不同，误差线表示各轮范围。" width="100%"></a>
 </p>
 
-选自 **2026 年 10 月 20 日 CI 快照**中的两组领先结果，不代表综合排名，也不是对最新协议功能的测量。PACE 尚未在所有平台同时超过两个库。[所有后端、延迟、退化项、原始数据与测试方法 →](docs/performance.md)
+选自 **2026 年 10 月 21 日 TCP echo 实测中位数**，各图的平台与负载不同，内存包含客户端和服务端。这些结果不代表综合排名，也不是 HTTP/TLS 性能测试。[三个库的完整吞吐、延迟、内存、原始数据与测试方法 →](docs/performance.md)
 
 ## 运行第一个任务
 

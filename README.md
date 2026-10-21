@@ -17,10 +17,10 @@ PACE (Parallel Async Coroutine Engine) is a C++20 coroutine networking library. 
 ## Selected performance advantages
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/selected-performance.svg" alt="Historical TCP echo medians: macOS PACE 50,116 vs Asio 44,079 requests/s; Linux C++23 PACE 66,318 vs libuv 63,401 requests/s. Five shared-CI trials per backend." width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/selected-performance.svg" alt="Selected TCP echo medians: macOS throughput 17.7% higher than Asio; local Linux p95 30.5% lower than libuv; Windows whole-process peak memory 13.3% lower than libuv. Different hosts and workloads; whiskers show trial ranges." width="100%"></a>
 </p>
 
-Selected pairwise leads from the **20 October 2026 CI snapshot**, not an overall ranking or a measurement of the latest protocol additions. PACE does not yet lead both libraries across platforms. [All backends, latency, regressions, raw trials and methodology →](docs/performance.md)
+Selected **21 October 2026 TCP echo medians** across different hosts and workloads. Memory includes clients and server. These pairwise results are not an overall ranking or an HTTP/TLS benchmark. [All three libraries, throughput, latency, memory, raw trials and methodology →](docs/performance.md)
 
 ## Run your first task
 

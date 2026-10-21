@@ -1,0 +1,31 @@
+{
+  "run_id": 39608371946,
+  "head_sha": "3eb014ce014d11b780ef019b9c1936b77f8d81d6",
+  "job_url": "https://github.com/TabNahida/PACE/actions/runs/39608371946/job/119250994050",
+  "source": "GitHub Actions FreeBSD job log: --check-memory",
+  "probe_output": {
+    "status": "unavailable",
+    "source": "unavailable",
+    "normal": {
+      "probe": "peak_process_memory",
+      "allocated_bytes": 33554432,
+      "before": {
+        "bytes": null,
+        "source": "unavailable",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": false,
+        "unavailable_reason": "no verified current-image peak resident memory provider on this platform"
+      },
+      "after_release": {
+        "bytes": null,
+        "source": "unavailable",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": false,
+        "unavailable_reason": "no verified current-image peak resident memory provider on this platform"
+      }
+    },
+    "reason": "no verified current-image peak resident memory provider on this platform"
+  }
+}

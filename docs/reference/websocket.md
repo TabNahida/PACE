@@ -70,7 +70,7 @@ random generator on Linux, macOS, Windows and FreeBSD.
 
 The WebSocket stream owns initial upgrade parsing, including any frame bytes
 coalesced with the HTTP headers. Give it the TCP/TLS transport **before reading
-HTTP bytes**. It is a separate endpoint from `http::server`; there is no conversion
+HTTP bytes**. It is a separate endpoint from `http::serve`; there is no conversion
 from an already-parsed HTTP request or HTTP-router upgrade callback in this API.
 
 ## Secure WebSocket (wss)
