@@ -7,6 +7,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -158,14 +159,14 @@ class ExtendedMetricTests(unittest.TestCase):
         self.record = {**self.legacy, "extended_metrics_version": 1, "p95_us": 15.0,
                        "latency_samples": 8000, "peak_process_memory": {
                            "bytes": 8 * 1048576, "source": "getrusage(RUSAGE_SELF).ru_maxrss_KiB",
-                           "scope": RUNNER.MEMORY_SCOPE, "window": RUNNER.MEMORY_WINDOW}}
+                           "scope": RUNNER.MEMORY_SCOPE, "window": RUNNER.LEGACY_MEMORY_WINDOW}}
 
     def validate(self, record, **kwargs):
         RUNNER.validate_record(record, "pace", 1, self.config, **kwargs)
 
     def test_accepts_legacy_and_each_portable_memory_source(self):
         self.validate(self.legacy)
-        for source in RUNNER.MEMORY_SOURCES:
+        for source in RUNNER.LEGACY_MEMORY_SOURCES:
             record = copy.deepcopy(self.record)
             record["peak_process_memory"]["source"] = source
             with self.subTest(source=source):
@@ -236,6 +237,144 @@ class ExtendedMetricTests(unittest.TestCase):
                         [self.record], [self.record, self.record]):
             with self.subTest(records=records), self.assertRaises(ValueError):
                 RUNNER.summarize(records, ["pace"], 2)
+
+
+class CurrentImageMemoryTests(unittest.TestCase):
+    def setUp(self):
+        fixture = ExtendedMetricTests()
+        fixture.setUp()
+        self.config, self.legacy = fixture.config, fixture.record
+        self.record = copy.deepcopy(self.legacy)
+        self.record["extended_metrics_version"] = 2
+        self.record["peak_process_memory"].update(
+            source="/proc/self/status.VmHWM_KiB", window=RUNNER.MEMORY_WINDOW, available=True)
+
+    def validate(self, record, **kwargs):
+        RUNNER.validate_record(record, "pace", 1, self.config, require_extended=True, **kwargs)
+
+    def unavailable(self):
+        record = copy.deepcopy(self.record)
+        record["peak_process_memory"].update(bytes=None, source="unavailable", available=False,
+                                             unavailable_reason=RUNNER.MEMORY_UNAVAILABLE_REASON)
+        return record
+
+    def test_accepts_current_image_providers_with_declared_version(self):
+        for source in RUNNER.IMAGE_MEMORY_SOURCES:
+            record = copy.deepcopy(self.record)
+            record["peak_process_memory"]["source"] = source
+            self.validate(record, expected_memory_source=source, expected_metrics_version=2)
+
+    def test_legacy_records_remain_readable_but_cannot_masquerade_as_new(self):
+        self.validate(self.legacy, expected_metrics_version=1)
+        with self.assertRaises(ValueError):
+            self.validate(self.legacy, expected_metrics_version=2)
+        for source in RUNNER.LEGACY_MEMORY_SOURCES - RUNNER.IMAGE_MEMORY_SOURCES:
+            record = copy.deepcopy(self.record)
+            record["peak_process_memory"]["source"] = source
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                self.validate(record)
+        changed = copy.deepcopy(self.record)
+        changed["peak_process_memory"]["window"] = RUNNER.LEGACY_MEMORY_WINDOW
+        with self.assertRaises(ValueError):
+            self.validate(changed)
+
+    def test_unavailable_memory_preserves_latencies_without_fake_aggregate(self):
+        record = self.unavailable()
+        self.validate(record, expected_memory_source="unavailable", expected_metrics_version=2)
+        summary = RUNNER.summarize([record], ["pace"], 1)[0]
+        self.assertFalse(summary["peak_process_memory_available"])
+        self.assertEqual(summary["peak_process_memory_unavailable_reason"], RUNNER.MEMORY_UNAVAILABLE_REASON)
+        self.assertEqual(summary["median_p95_us"], 15)
+        self.assertNotIn("median_peak_process_memory_bytes", summary)
+        self.assertNotIn("min_peak_process_memory_bytes", summary)
+        self.assertNotIn("max_peak_process_memory_bytes", summary)
+
+    def test_available_memory_retains_all_aggregates(self):
+        summary = RUNNER.summarize([self.record], ["pace"], 1)[0]
+        self.assertTrue(summary["peak_process_memory_available"])
+        self.assertEqual(summary["extended_metrics_version"], 2)
+        self.assertEqual(summary["peak_process_memory_window"], RUNNER.MEMORY_WINDOW)
+        self.assertEqual(summary["median_peak_process_memory_bytes"], 8 * 1048576)
+
+    def test_rejects_ambiguous_or_fabricated_availability(self):
+        for field, value in (("bytes", 0), ("bytes", 1234), ("available", True),
+                             ("available", 0), ("unavailable_reason", ""),
+                             ("unavailable_reason", "estimated")):
+            record = self.unavailable()
+            record["peak_process_memory"][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.validate(record)
+        for record in (self.record, self.unavailable()):
+            for field in ("bytes", "available"):
+                changed = copy.deepcopy(record)
+                del changed["peak_process_memory"][field]
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    self.validate(changed)
+        for change in ({"available": False}, {"bytes": None}, {"unavailable_reason": "not measured"}):
+            changed = copy.deepcopy(self.record)
+            changed["peak_process_memory"].update(change)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.validate(changed)
+
+    def test_rejects_mixing_versions_or_missing_and_measured_memory(self):
+        for other in (self.legacy, self.unavailable()):
+            with self.subTest(other=other), self.assertRaises(ValueError):
+                RUNNER.summarize([self.record, {**other, "trial": 2}], ["pace"], 2)
+
+    def probe(self, before=4, after=36, unavailable=False):
+        memory = self.unavailable()["peak_process_memory"] if unavailable else self.record["peak_process_memory"]
+        initial, final = copy.deepcopy(memory), copy.deepcopy(memory)
+        if not unavailable:
+            initial["bytes"], final["bytes"] = before * 1048576, after * 1048576
+        return {"probe": "peak_process_memory", "allocated_bytes": 32 * 1048576,
+                "before": initial, "after_release": final}
+
+    def check_probe(self, probes, source="/proc/self/status.VmHWM_KiB"):
+        with mock.patch.object(RUNNER.subprocess, "check_output", side_effect=[json.dumps(p) for p in probes]), \
+             mock.patch.object(RUNNER, "bytearray", return_value=bytearray(1), create=True):
+            return RUNNER.check_memory_provider("pace_bench", {
+                "extended_metrics_version": 2, "peak_process_memory_source": source})
+
+    def test_probe_checks_retained_peak_and_rejects_launcher_contamination(self):
+        result = self.check_probe([self.probe(), self.probe(before=5, after=37)])
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(result["launcher_padding_bytes"], 128 * 1048576)
+        for probes in ([self.probe(before=4, after=5)],
+                       [self.probe(), self.probe(before=140, after=172)],
+                       [self.probe(), self.probe(before=140, after=140)]):
+            with self.subTest(probes=probes), self.assertRaises(ValueError):
+                self.check_probe(probes)
+
+    def test_probe_preserves_explicit_unavailable_and_rejects_v1(self):
+        result = self.check_probe([self.probe(unavailable=True)], source="unavailable")
+        self.assertEqual(result["status"], "unavailable")
+        self.assertNotIn("large_launcher", result)
+        with self.assertRaises(ValueError):
+            RUNNER.check_memory_provider("pace_bench", {"extended_metrics_version": 1})
+
+    def test_cli_reports_unavailable_memory_without_losing_timing_results(self):
+        record = self.unavailable()
+        capabilities = {"backends": ["pace"], "pace_profiling": False,
+                        "extended_metrics_version": 2, "peak_process_memory_source": "unavailable"}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "report.json"
+            argv = ["run_benchmarks.py", "--executable", str(RUNNER_PATH), "--output", str(output),
+                    "--backends", "pace", "--repeats", "1", "--clients", "4", "--requests", "2000",
+                    "--warmup", "200", "--bytes", "64"]
+            with mock.patch("sys.argv", argv), \
+                 mock.patch.object(RUNNER.subprocess, "check_output", return_value=json.dumps(capabilities)), \
+                 mock.patch.object(RUNNER, "command_output", return_value=None), \
+                 mock.patch.object(RUNNER, "cpu_model", return_value="synthetic test"), \
+                 mock.patch.dict(RUNNER.os.environ, {"GITHUB_STEP_SUMMARY": ""}), \
+                 mock.patch.object(RUNNER.subprocess, "run", return_value=SimpleNamespace(
+                     returncode=0, stdout=json.dumps(record), stderr="")), \
+                 contextlib.redirect_stdout(io.StringIO()) as printed:
+                self.assertEqual(RUNNER.main(), 0)
+            self.assertIn("| pace | n/a | n/a |", printed.getvalue())
+            report = json.loads(output.read_text())
+            self.assertEqual(report["environment"]["status"], "completed")
+            self.assertEqual(report["summary"][0]["median_p95_us"], 15)
+            self.assertNotIn("median_peak_process_memory_bytes", report["summary"][0])
 
 
 class ProfilingComparisonGuardTests(unittest.TestCase):

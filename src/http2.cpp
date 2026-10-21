@@ -378,7 +378,7 @@ task<void> serve_connection(tcp::stream transport,http::handler handle,limits bo
 task<void> serve(tcp::listener& listener,http::handler handle,limits bounds) {
     try { for (;;) listener.context().spawn(isolated(co_await listener.accept(),handle,bounds)); }
     catch (const std::system_error& error) {
-        if (error.code() != std::errc::operation_canceled) throw;
+        if (error.code() != std::errc::operation_canceled && error.code() != std::errc::bad_file_descriptor) throw;
     }
 }
 #ifdef PACE_HAS_TLS
@@ -399,7 +399,7 @@ task<void> secure_connection(tls::stream transport,http::handler handle,limits b
 task<void> serve(tcp::listener& listener,const tls::context& configuration,http::handler handle,limits bounds) {
     try { for (;;) listener.context().spawn(secure_connection(tls::stream(co_await listener.accept(),configuration),handle,bounds)); }
     catch (const std::system_error& error) {
-        if (error.code() != std::errc::operation_canceled) throw;
+        if (error.code() != std::errc::operation_canceled && error.code() != std::errc::bad_file_descriptor) throw;
     }
 }
 #endif

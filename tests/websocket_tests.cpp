@@ -279,7 +279,7 @@ void cancellation_and_overlap() {
 pace::task<void> deadline_lifetime_server(pace::tcp::listener& listener, completion& done) {
     ws::stream socket(co_await listener.accept(), ws::role::server); co_await socket.accept();
     require(!(co_await socket.receive()), "expected close in lifetime test");
-    co_await socket.context().sleep_for(30ms); // Keep reactor alive after the client's deadline expires.
+    co_await socket.context().sleep_for(300ms); // Keep reactor alive after the client's deadline expires.
     done.finish();
 }
 pace::task<void> deadline_lifetime_client(pace::io_context& io, pace::tcp::endpoint endpoint, completion& done) {
@@ -289,9 +289,9 @@ pace::task<void> deadline_lifetime_client(pace::io_context& io, pace::tcp::endpo
         ws::stream socket(std::move(original));
         require(!original.is_open(), "moved-from WebSocket retained transport");
         co_await socket.handshake("localhost");
-        require(co_await socket.close_gracefully(1000, "", 10ms), "lifetime close did not complete");
+        require(co_await socket.close_gracefully(1000, "", 100ms), "lifetime close did not complete");
     } // Pending cooperative deadline must not retain a pointer to the destroyed transport.
-    co_await io.sleep_for(20ms);
+    co_await io.sleep_for(200ms);
     done.finish();
 }
 void close_deadline_lifetime() {

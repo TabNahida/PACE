@@ -39,6 +39,8 @@ jobs:
         run: xmake test -v
       - name: Validate benchmark reporting
         run: python -m unittest discover -s tests -p "test_*.py"
+      - name: Verify peak memory belongs to the benchmark image
+        run: python scripts/run_benchmarks.py --build-dir build/fair --check-memory
       - name: Measure PACE components without instrumentation
         run: python scripts/run_components.py --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/components-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 5
       - name: Compare PACE, libuv and Asio
@@ -108,6 +110,7 @@ jobs:
             xmake -y
             xmake test -v
             python3 -m unittest discover -s tests -p "test_*.py"
+            python3 scripts/run_benchmarks.py --build-dir build/fair --check-memory
             python3 scripts/run_components.py --label freebsd-cxx20 --output benchmark-results/components-freebsd.json --repeats 5
             python3 scripts/run_benchmarks.py --build-dir build/fair --require-all --label freebsd-cxx20 --output benchmark-results/freebsd.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
             python3 scripts/run_scaling.py --build-dir build/fair --label freebsd-cxx20 --output benchmark-results/scaling-freebsd.json --repeats 3 --requests 5000 --warmup 500 --clients 8

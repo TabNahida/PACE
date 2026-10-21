@@ -16,7 +16,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from run_benchmarks import MEMORY_SOURCES, summarize, validate_record
+from run_benchmarks import IMAGE_MEMORY_SOURCES, summarize, validate_record
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKENDS = ("pace", "asio", "libuv")
@@ -31,11 +31,11 @@ def load_evidence(path):
             environment.get("fair_backend_comparison") is not True):
         raise ValueError("chart requires a completed, uninstrumented backend comparison")
     build = environment.get("backend_versions", {})
-    if (type(build.get("extended_metrics_version")) is not int or build["extended_metrics_version"] != 1 or
+    if (type(build.get("extended_metrics_version")) is not int or build["extended_metrics_version"] != 2 or
             build.get("pace_profiling") is not False or
             not isinstance(build.get("peak_process_memory_source"), str) or
-            build["peak_process_memory_source"] not in MEMORY_SOURCES):
-        raise ValueError("chart requires measured extended metrics; legacy reports are insufficient")
+            build["peak_process_memory_source"] not in IMAGE_MEMORY_SOURCES | {"unavailable"}):
+        raise ValueError("chart requires version 2 metrics with current-image memory semantics")
     configuration = environment.get("configuration", {})
     if type(configuration.get("repeats")) is not int or configuration["repeats"] < 2:
         raise ValueError("chart requires at least two trials per backend")
@@ -50,7 +50,8 @@ def load_evidence(path):
         if not isinstance(record, dict) or record.get("backend") not in BACKENDS:
             raise ValueError("unexpected backend")
         validate_record(record, record["backend"], record.get("trial"), config,
-                        require_extended=True, expected_memory_source=build["peak_process_memory_source"])
+                        require_extended=True, expected_memory_source=build["peak_process_memory_source"],
+                        expected_metrics_version=2)
     rows = summarize(records, BACKENDS, config.repeats)
     stored = report.get("summary")
     if not isinstance(stored, list) or len(stored) != 3:
@@ -91,6 +92,14 @@ def main():
                ("p99_us", 1, "p99 round-trip latency", "µs · lower is better"),
                ("peak_process_memory_bytes", 1048576, "Whole-process peak memory", "MiB · includes clients + server")]
     for ax, (metric, scale, title, units) in zip(axes, metrics):
+        if metric == "peak_process_memory_bytes" and not rows[0]["peak_process_memory_available"]:
+            ax.set_facecolor("#101827")
+            ax.set_title(title, color="#eef4ff", fontsize=12, loc="left", pad=12)
+            ax.text(.5, .5, "Unavailable\nNo verified current-image\npeak memory provider", transform=ax.transAxes,
+                    ha="center", va="center", color="#b9c8df", fontsize=11)
+            ax.set_xticks([]); ax.set_yticks([])
+            for spine in ax.spines.values(): spine.set_visible(False)
+            continue
         values = [row[f"median_{metric}"] / scale for row in rows]
         low = [row[f"min_{metric}"] / scale for row in rows]
         high = [row[f"max_{metric}"] / scale for row in rows]
@@ -118,7 +127,7 @@ def main():
              f"{config['requests']:,} requests/client + {config['warmup']:,} warmup", color="#b9c8df", fontsize=9)
     fig.text(.05, .17, "Bars: medians across trials · whiskers: min–max · p99 is the median of per-trial percentiles",
              color="#99adc9", fontsize=9)
-    fig.text(.05, .12, "Memory: OS peak RSS/working set through shutdown, including clients, stacks and latency samples; not isolated library footprint.",
+    fig.text(.05, .12, "Memory: current-image OS peak through shutdown, including clients, stacks and latency samples; not isolated library footprint.",
              color="#99adc9", fontsize=9)
     fig.text(.05, .07, f"Snapshot: {environment.get('started_utc', '')[:10]} · inspect full evidence and regressions before generalizing.",
              color="#99adc9", fontsize=9)

@@ -26,23 +26,35 @@ trial p99 values is not a pooled p99 across all requests. Likewise `median_max_u
 is the median of trial maxima; `max_max_us` in JSON is the worst request across
 all trials. Min–max bars show the observed range, not a confidence interval.
 
-Memory covers the **whole process lifetime**, including startup and warmup; it
-does not share throughput's measured-only time window. Linux/FreeBSD use
-`getrusage().ru_maxrss` converted from KiB, macOS uses that field in bytes, and
-Windows uses `GetProcessMemoryInfo().PeakWorkingSetSize`. JSON preserves the
-source, scope and measurement window. Compare memory only within the same OS,
-toolchain and workload; OS accounting differs, and more requests also allocate
-more latency samples. No steady-state allocation or isolated-server claim is made.
+Memory covers the **current executable image**, including startup and warmup;
+it does not share throughput's measured-only time window. Linux reads
+`/proc/self/status`'s `VmHWM`, macOS uses
+`task_info(MACH_TASK_BASIC_INFO).resident_size_max`, and Windows uses
+`GetProcessMemoryInfo().PeakWorkingSetSize`. Linux RSS accounting is approximate.
+FreeBSD peak memory is explicitly unavailable: its process-history counter can
+include pre-exec launcher memory, and a current-image provider has not been
+verified. Its throughput and latency remain measured.
+
+JSON preserves availability, source, scope and window. Compare memory only within
+the same OS, toolchain and workload; OS accounting differs, and more requests
+also allocate more latency samples. No steady-state allocation or isolated-server
+claim is made. `--check-memory` verifies peak retention after allocation/free and
+independence from a launcher with an extra 128 MiB. This runs separately from timing.
 
 Historical reports below predate p95 and memory collection. Their missing values
 remain unreported; they cannot be reconstructed from p50/p99 or throughput. The
-new format adds `extended_metrics_version: 1` and requires every completed
-request to contribute one latency sample. [Exact timing boundaries and validation](../benchmarks/README.md).
+current format uses `extended_metrics_version: 2` and requires every completed
+request to contribute one latency sample. The initial version 1 POSIX memory
+measurements were affected by inherited launcher peaks; the
+[diagnostic trials](../benchmarks/results/local-metrics-diagnostic-2026-10-21/README.md)
+are preserved and excluded from current memory comparisons.
+[Exact timing boundaries and validation](../benchmarks/README.md).
 
 中文说明：吞吐越高、同一负载下的延迟越低通常越好，但必须结合尾延迟一起看。
 p95/p99 是单轮请求的延迟分位数，汇总表取各轮分位数的中位数；峰值内存包含
-服务端、客户端和样本存储，且覆盖整个进程生命周期，不是 PACE 本身的内存占用。
-历史报告未采集的 p95 与内存不会补算或推测。
+服务端、客户端和样本存储，且覆盖当前程序启动、预热和测量过程，不是 PACE 本身的
+内存占用。FreeBSD 暂无已验证的当前程序峰值来源，明确显示不可用。历史报告未采集
+的 p95 与内存不会补算；第一版受启动器影响的内存数据保留作诊断，不用于优势结论。
 
 ## Historical TCP comparison behind the README chart
 

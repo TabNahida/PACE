@@ -15,9 +15,11 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
-#include <sys/resource.h>
 #include <unistd.h>
 #include <signal.h>
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#endif
 #endif
 
 #include <pace/tcp.hpp>
@@ -35,9 +37,11 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <future>
@@ -47,6 +51,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -58,19 +63,23 @@ using clock_type = std::chrono::steady_clock;
 namespace profiling = pace::detail::profiling;
 constexpr std::size_t server_buffer_size = 64 * 1024;
 
-// The OS high-water mark covers this process, including identical blocking
-// clients and latency samples. It is not the server/library's isolated footprint.
+// Only read high-water marks belonging to the current executable image. POSIX
+// getrusage can retain a launcher's pre-exec RSS peak and is deliberately avoided.
+// The sample includes identical clients and latency storage, not only the library.
 constexpr std::string_view memory_scope = "whole process including server, blocking clients and latency samples";
-constexpr std::string_view memory_window = "process lifetime through server/client shutdown, before result aggregation";
+constexpr std::string_view memory_window = "current process image through server/client shutdown, before result aggregation";
+constexpr std::string_view memory_unavailable_reason = "no verified current-image peak resident memory provider on this platform";
 #if defined(_WIN32)
 constexpr std::string_view memory_source = "GetProcessMemoryInfo.PeakWorkingSetSize";
 #elif defined(__APPLE__)
-constexpr std::string_view memory_source = "getrusage(RUSAGE_SELF).ru_maxrss_bytes";
+constexpr std::string_view memory_source = "task_info(MACH_TASK_BASIC_INFO).resident_size_max_bytes";
+#elif defined(__linux__)
+constexpr std::string_view memory_source = "/proc/self/status.VmHWM_KiB";
 #else
-constexpr std::string_view memory_source = "getrusage(RUSAGE_SELF).ru_maxrss_KiB";
+constexpr std::string_view memory_source = "unavailable";
 #endif
 
-std::uint64_t peak_process_memory_bytes() {
+std::optional<std::uint64_t> peak_process_memory_bytes() {
 #if defined(_WIN32)
     PROCESS_MEMORY_COUNTERS counters{};
     counters.cb = sizeof(counters);
@@ -78,20 +87,72 @@ std::uint64_t peak_process_memory_bytes() {
         counters.PeakWorkingSetSize == 0)
         throw std::runtime_error("GetProcessMemoryInfo failed or returned zero peak working set");
     return static_cast<std::uint64_t>(counters.PeakWorkingSetSize);
+#elif defined(__APPLE__)
+    mach_task_basic_info_data_t info{};
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    if (::task_info(::mach_task_self(), MACH_TASK_BASIC_INFO,
+                    reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS ||
+        count != MACH_TASK_BASIC_INFO_COUNT || info.resident_size_max == 0)
+        throw std::runtime_error("task_info failed or returned zero current-image peak resident size");
+    return static_cast<std::uint64_t>(info.resident_size_max);
+#elif defined(__linux__)
+    // VmHWM belongs to mm_struct, which exec replaces, unlike ru_maxrss. Kernel
+    // RSS accounting is approximate; this is not an allocation census or PSS.
+    const auto close_file = [](std::FILE* file) { std::fclose(file); };
+    std::unique_ptr<std::FILE, decltype(close_file)> file(std::fopen("/proc/self/status", "r"), close_file);
+    if (!file) throw std::runtime_error("cannot read /proc/self/status for current-image peak RSS");
+    std::array<char, 256> line{};
+    while (std::fgets(line.data(), static_cast<int>(line.size()), file.get())) {
+        std::string_view text(line.data());
+        if (!text.starts_with("VmHWM:")) continue;
+        text.remove_prefix(6);
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.remove_prefix(1);
+        std::uint64_t kib = 0;
+        const auto parsed = std::from_chars(text.data(), text.data() + text.size(), kib);
+        if (parsed.ec != std::errc{} || parsed.ptr == text.data())
+            throw std::runtime_error("invalid VmHWM counter");
+        text.remove_prefix(static_cast<std::size_t>(parsed.ptr - text.data()));
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.remove_prefix(1);
+        if (text != "kB\n" && text != "kB") throw std::runtime_error("unexpected VmHWM units");
+        if (!kib || kib > std::numeric_limits<std::uint64_t>::max() / 1024)
+            throw std::runtime_error("VmHWM byte count is zero or out of range");
+        return kib * 1024;
+    }
+    throw std::runtime_error("VmHWM is missing from /proc/self/status");
 #else
-    rusage usage{};
-    if (::getrusage(RUSAGE_SELF, &usage) != 0 || usage.ru_maxrss <= 0)
-        throw std::runtime_error("getrusage failed or returned zero peak RSS");
-    const auto peak = static_cast<std::uint64_t>(usage.ru_maxrss);
-#if defined(__APPLE__)
-    return peak;
-#else
-    // Linux and FreeBSD report KiB; macOS reports bytes.
-    if (peak > std::numeric_limits<std::uint64_t>::max() / 1024)
-        throw std::overflow_error("peak RSS exceeds byte counter range");
-    return peak * 1024;
+    // FreeBSD ru_maxrss is process history and can include pre-exec memory.
+    // Report missing data explicitly rather than forking or sampling the timed run.
+    return std::nullopt;
 #endif
-#endif
+}
+
+void print_peak_memory(std::optional<std::uint64_t> bytes) {
+    std::cout << "{\"bytes\":";
+    if (bytes) std::cout << *bytes;
+    else std::cout << "null";
+    std::cout << ",\"source\":\"" << memory_source << "\",\"scope\":\"" << memory_scope
+        << "\",\"window\":\"" << memory_window << "\",\"available\":" << (bytes ? "true" : "false");
+    if (!bytes) std::cout << ",\"unavailable_reason\":\"" << memory_unavailable_reason << "\"";
+    std::cout << '}';
+}
+
+// Diagnostic only: no sockets, server threads or comparative timings. Touch and
+// free 32 MiB so tests can distinguish a retained peak from current RSS and can
+// launch this under a deliberately bloated parent to detect pre-exec pollution.
+void memory_probe() {
+    const auto before = peak_process_memory_bytes();
+    constexpr std::size_t allocation = 32 * 1024 * 1024;
+    {
+        auto pages = std::make_unique<char[]>(allocation);
+        volatile char* touched = pages.get();
+        for (std::size_t index = 0; index < allocation; index += 4096) touched[index] = 1;
+    }
+    const auto after = peak_process_memory_bytes();
+    std::cout << "{\"probe\":\"peak_process_memory\",\"allocated_bytes\":" << allocation << ",\"before\":";
+    print_peak_memory(before);
+    std::cout << ",\"after_release\":";
+    print_peak_memory(after);
+    std::cout << "}\n";
 }
 
 class server {
@@ -459,11 +520,10 @@ void benchmark(const options& config) {
         << ",\"p50_us\":" << percentile(0.50) << ",\"p95_us\":" << percentile(0.95)
         << ",\"p99_us\":" << percentile(0.99)
         << ",\"max_us\":" << merged.back() << ",\"payload_verified\":true"
-        << ",\"extended_metrics_version\":1,\"latency_samples\":" << merged.size()
-        << ",\"peak_process_memory\":{\"bytes\":" << peak_memory
-        << ",\"source\":\"" << memory_source << "\",\"scope\":\"" << memory_scope
-        << "\",\"window\":\"" << memory_window << "\"}"
-        << ",\"instrumented\":" << (service->profile() ? "true" : "false");
+        << ",\"extended_metrics_version\":2,\"latency_samples\":" << merged.size()
+        << ",\"peak_process_memory\":";
+    print_peak_memory(peak_memory);
+    std::cout << ",\"instrumented\":" << (service->profile() ? "true" : "false");
     if (const auto* counters = service->profile()) {
         std::cout << ",\"pace_profile\":{\"window\":\"server event-loop lifetime including startup, warmup and shutdown\",\"stages\":[";
         for (std::size_t index = 0; index < counters->size(); ++index) {
@@ -486,7 +546,7 @@ void list_backends() {
 #ifdef PACE_HAS_LIBUV
     std::cout << ",\"libuv\"";
 #endif
-    std::cout << "],\"extended_metrics_version\":1,\"peak_process_memory_source\":\"" << memory_source
+    std::cout << "],\"extended_metrics_version\":2,\"peak_process_memory_source\":\"" << memory_source
         << "\",\"pace_profiling\":" << (profiling::enabled ? "true" : "false") << ",\"asio_version\":";
 #ifdef PACE_HAS_ASIO
     std::cout << ASIO_VERSION;
@@ -544,9 +604,11 @@ int main(int argc, char** argv) {
         for (int i = 1; i < argc; ++i) {
             const std::string_view argument = argv[i];
             if (argument == "--list") { list_backends(); return 0; }
+            if (argument == "--memory-probe") { memory_probe(); return 0; }
             if (argument == "--help") {
                 std::cout << "pace_bench --backend pace|asio|libuv [--clients 8] [--requests 5000] "
-                    "[--warmup 500] [--bytes 64] [--timeout-ms 5000] [--trial 1]\n";
+                    "[--warmup 500] [--bytes 64] [--timeout-ms 5000] [--trial 1]\n"
+                    "pace_bench --memory-probe  # diagnostic allocation probe; no network workload\n";
                 return 0;
             }
             if (i + 1 == argc) throw std::invalid_argument("missing option value");

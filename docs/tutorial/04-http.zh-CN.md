@@ -73,13 +73,15 @@ curl --http1.1 -H "Expect:" --data-binary "hello" http://127.0.0.1:8080/echo
 
 ```cpp
 pace::tls::context trust;
-trust.load_verify_file("my-ca.pem"); // 私有 CA 才需要；默认已经加载系统信任路径。
+trust.load_verify_file("my-ca.pem"); // 按需添加 CA；默认使用 OpenSSL 信任路径。
 auto response = co_await pace::http::get(io, trust, {"127.0.0.1", 8443},
                                        "localhost", "/health");
 ```
 
 TCP 连接地址和证书身份是分开的：上例连接本机地址，但必须验证证书中的 `localhost`。
 TLS 配置必须保持有效，直到这个惰性任务使用结束。库没有跳过证书验证的开关。
+如果 OpenSSL 安装没有可用的默认根证书，需要显式提供 CA 文件，详见
+[TLS 配置说明](../reference/tls.zh-CN.md#配置与连接)。
 
 HTTPS 服务端先配置证书链及对应私钥：
 

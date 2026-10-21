@@ -82,8 +82,8 @@ Build optional OpenSSL support with `--tls=y`. The shape of the HTTP call is the
 same; add a TLS configuration and verified peer name:
 
 ```cpp
-pace::tls::context trust; // Default trust roots; certificate verification is required.
-trust.load_verify_file("my-ca.pem"); // Only when using a private CA.
+pace::tls::context trust; // OpenSSL default trust paths; verification is required.
+trust.load_verify_file("my-ca.pem"); // Optional private CA or explicit CA bundle.
 auto response = co_await pace::http::get(io, trust, {"127.0.0.1", 8443},
                                        "localhost", "/health");
 ```
@@ -91,6 +91,8 @@ auto response = co_await pace::http::get(io, trust, {"127.0.0.1", 8443},
 `localhost` is checked against the certificate independently of the numeric TCP
 address. The TLS configuration must remain alive while this lazy helper uses it.
 The task owns endpoint, peer name and target values. There is no insecure mode.
+See [TLS trust setup](../reference/tls.md#configuration) if your OpenSSL installation
+needs an explicit CA file.
 
 For an HTTPS server, configure a certificate/private key before accepting:
 

@@ -229,6 +229,9 @@ void errors() {
     { pace::io_context io; pace::tcp::listener listener(io,{"127.0.0.1",0}); bool resumed=false;
       io.spawn(pace::http2::serve(listener,echo)); io.spawn(close_listener(listener,resumed));
       io.run(); require(resumed,"listener cancellation stopped unrelated task"); }
+    { pace::io_context io; pace::tcp::listener listener(io,{"127.0.0.1",0}); bool completed=false;
+      listener.close(); io.spawn(pace::http2::serve(listener,echo)); io.spawn(validation(io,completed));
+      io.run(); require(completed,"already-closed listener stopped unrelated task"); }
 }
 #ifdef PACE_HAS_TLS
 pace::task<void> secure_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done) {
