@@ -1,22 +1,50 @@
 # 1. Build and run
 
-PACE requires a compiler with C++20 coroutines and xmake 2.9.8 or newer. CI uses
-xmake 3.0.9. Linux, macOS, Windows and 64-bit FreeBSD have native readiness
-backends. Use a recent GCC, Clang or MSVC toolchain on the selected platform.
-
-From the repository root:
+PACE requires xmake 2.9.8+ and a compiler with C++20 coroutines. From the
+repository root, build and run the smallest tutorial first:
 
 ```sh
-xmake f -m release --cxxstandard=cxx20 --examples=y --tests=y -y
-xmake -y
-xmake test -v
+xmake f -m release -y
+xmake -y tutorial_tasks
 xmake run tutorial_tasks
 ```
 
-The tasks example prints `Hello, PACE` and returns. The test command also runs the
-runtime/network tests and registered example smoke checks. `xmake run TARGET`
-locates the binary for the active platform; hardcoded `build/linux/...` paths are
-unnecessary. On Windows use a shell with the compiler environment available.
+This prints `Hello, PACE` and returns. Read its [complete source](../../examples/tutorial_tasks.cpp),
+then select a [protocol example](README.md#2-pick-a-protocol) or add an application
+target below. `xmake run TARGET` finds the active platform's binary.
+
+CI uses xmake 3.0.9 with GCC, Clang or MSVC on Linux, macOS, Windows and 64-bit
+FreeBSD. On Windows use a shell with the Visual Studio C++ environment available.
+On FreeBSD install **xmake-io** from upstream: the FreeBSD package named `xmake`
+is a different tool. The [CI workflow](../../.github/workflows/ci.yml) has a
+pinned source-install example.
+
+Build all enabled targets and run correctness tests:
+
+```sh
+xmake -y
+xmake test -v
+```
+
+Tests include the enabled protocol suites and bounded tutorial smoke checks.
+
+## Enable TLS and HTTP/2
+
+The default core does not need third-party runtime libraries. TLS/HTTPS adds
+OpenSSL; HTTP/2 adds nghttp2. Enable either option independently, or both:
+
+```sh
+xmake f -m release --tls=y --http2=y -y
+xmake -y
+xmake run tutorial_tls
+xmake run tutorial_http2
+```
+
+xmake resolves OpenSSL 3.5.7 and nghttp2 1.70.0; first-time installation may need
+network access. HTTP/2 without TLS uses prior-knowledge cleartext TCP. HTTPS and
+HTTP/2 over TLS require certificate configuration; see [TLS](../reference/tls.md),
+[HTTP](04-http.md) and [HTTP/2](../reference/http2.md). Tutorial certificates in
+`tests/certs` are public test fixtures and must never be deployment credentials.
 
 ## Select a language version or build purpose
 
@@ -38,6 +66,8 @@ xmake retains configuration between commands.
 |---|---|---|
 | `--tests=y/n` | y | Runtime and network tests |
 | `--examples=y/n` | y | Runnable examples and tutorials |
+| `--tls=y/n` | n | TLS and HTTPS with OpenSSL |
+| `--http2=y/n` | n | HTTP/2 with nghttp2; TLS is a separate option |
 | `--benchmarks=y/n` | n | TCP comparison against standalone Asio and libuv |
 | `--components=y/n` | n | PACE operation microbenchmarks |
 | `--scaling=y/n` | n | Worker-count and execution-mode scaling benchmark |
@@ -78,7 +108,7 @@ target("pace")
     add_files("third_party/PACE/src/*.cpp")
     add_includedirs("third_party/PACE/include", {public = true})
     if is_plat("windows", "mingw") then
-        add_syslinks("ws2_32", {public = true})
+        add_syslinks("ws2_32", "bcrypt", {public = true})
         add_defines("WIN32_LEAN_AND_MEAN", "NOMINMAX", "_WIN32_WINNT=0x0A00", {public = true})
     else
         add_syslinks("pthread", {public = true})
@@ -90,8 +120,10 @@ target("my_application")
     add_deps("pace")
 ```
 
-Keep library and application compilation consistent, particularly the profiling
-definition. The library is C++20 ABI code, not a stable C ABI. Rebuild it for the
-selected compiler/toolchain configuration.
+This vendored target builds the default core. For optional protocols, mirror the
+packages and public `PACE_HAS_TLS` / `PACE_HAS_HTTP2` definitions in the repository's
+[xmake.lua](../../xmake.lua). Do not define a feature in only the application.
+Keep library and application compilation consistent, including profiling. The
+library is C++20 ABI code, not a stable C ABI; rebuild it for your toolchain.
 
 Next: [tasks and timers](02-tasks-timers.md).

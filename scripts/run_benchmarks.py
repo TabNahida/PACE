@@ -14,6 +14,89 @@ import subprocess
 import sys
 
 PROFILE_WINDOW = "server event-loop lifetime including startup, warmup and shutdown"
+MEMORY_SCOPE = "whole process including server, blocking clients and latency samples"
+LEGACY_MEMORY_WINDOW = "process lifetime through server/client shutdown, before result aggregation"
+MEMORY_WINDOW = "current process image through server/client shutdown, before result aggregation"
+MEMORY_UNAVAILABLE_REASON = "no verified current-image peak resident memory provider on this platform"
+LEGACY_MEMORY_SOURCES = {
+    "GetProcessMemoryInfo.PeakWorkingSetSize",
+    "getrusage(RUSAGE_SELF).ru_maxrss_bytes",
+    "getrusage(RUSAGE_SELF).ru_maxrss_KiB",
+}
+IMAGE_MEMORY_SOURCES = {
+    "GetProcessMemoryInfo.PeakWorkingSetSize",
+    "/proc/self/status.VmHWM_KiB",
+    "task_info(MACH_TASK_BASIC_INFO).resident_size_max_bytes",
+}
+MEMORY_SOURCES = LEGACY_MEMORY_SOURCES | IMAGE_MEMORY_SOURCES | {"unavailable"}
+EXTENDED_FIELDS = {"extended_metrics_version", "p95_us", "latency_samples", "peak_process_memory"}
+
+
+def validate_memory(memory, version, expected_source=None):
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError("unsupported extended metric version")
+    if not isinstance(memory, dict):
+        raise ValueError("extended metrics require peak_process_memory")
+    source = memory.get("source")
+    sources = LEGACY_MEMORY_SOURCES if version == 1 else IMAGE_MEMORY_SOURCES | {"unavailable"}
+    window = LEGACY_MEMORY_WINDOW if version == 1 else MEMORY_WINDOW
+    if (memory.get("scope") != MEMORY_SCOPE or memory.get("window") != window or
+            not isinstance(source, str) or source not in sources):
+        raise ValueError("peak process memory must identify its OS source, process scope and window")
+    if expected_source is not None and source != expected_source:
+        raise ValueError("peak process memory source differs from executable capability")
+    if version == 2:
+        if type(memory.get("available")) is not bool:
+            raise ValueError("version 2 peak memory requires a boolean availability flag")
+        if source == "unavailable":
+            if (memory["available"] or "bytes" not in memory or memory["bytes"] is not None or
+                    memory.get("unavailable_reason") != MEMORY_UNAVAILABLE_REASON):
+                raise ValueError("unavailable peak memory must use null bytes and explain the missing provider")
+            return
+        if not memory["available"] or "unavailable_reason" in memory:
+            raise ValueError("a supported memory provider must supply an available measurement")
+    if type(memory.get("bytes")) is not int or not 0 < memory["bytes"] <= 2**64 - 1:
+        raise ValueError("peak process memory must be a positive uint64 byte count")
+    if source.endswith("_KiB") and memory["bytes"] % 1024:
+        raise ValueError("KiB-based peak RSS must convert to whole multiples of 1024 bytes")
+
+
+def check_memory_provider(executable, available):
+    """A separate correctness diagnostic; never runs the TCP timing workload."""
+    if available.get("extended_metrics_version") != 2:
+        raise ValueError("memory-provider checks require an extended-metrics version 2 executable")
+    source = available.get("peak_process_memory_source")
+
+    def probe():
+        result = json.loads(subprocess.check_output([str(executable), "--memory-probe"], text=True, timeout=30))
+        if (not isinstance(result, dict) or result.get("probe") != "peak_process_memory" or
+                type(result.get("allocated_bytes")) is not int or result["allocated_bytes"] != 32 * 1048576):
+            raise ValueError("invalid memory-provider probe")
+        for key in ("before", "after_release"):
+            validate_memory(result.get(key), 2, source)
+        if source != "unavailable":
+            # Leave room for OS accounting granularity without accepting current
+            # RSS after free, zero values, or a flat inherited launcher maximum.
+            if result["after_release"]["bytes"] < result["before"]["bytes"] + 24 * 1048576:
+                raise ValueError("memory provider did not retain the touched allocation's high-water mark")
+        return result
+
+    normal = probe()
+    if source == "unavailable":
+        return {"status": "unavailable", "source": source, "normal": normal,
+                "reason": MEMORY_UNAVAILABLE_REASON}
+    launcher_padding_bytes = 128 * 1048576
+    # Keep the pages resident across child launch. A fork/exec-based process may
+    # inherit their RSS peak even though the new image never mapped those pages.
+    padding = bytearray(launcher_padding_bytes)
+    try:
+        inflated = probe()
+    finally:
+        del padding
+    if inflated["before"]["bytes"] > normal["before"]["bytes"] + 16 * 1048576:
+        raise ValueError("memory provider retained the launcher's pre-exec RSS high-water mark")
+    return {"status": "passed", "source": source, "normal": normal,
+            "large_launcher": inflated, "launcher_padding_bytes": launcher_padding_bytes}
 
 
 def validate_profile(profile):
@@ -75,7 +158,8 @@ def cpu_model():
     return platform.processor() or os.environ.get("PROCESSOR_IDENTIFIER")
 
 
-def validate_record(record, backend, trial, config, instrumented=False):
+def validate_record(record, backend, trial, config, instrumented=False, require_extended=False,
+                    expected_memory_source=None, expected_metrics_version=None):
     """Reject mismatched workloads and unusable measurements before aggregation."""
     if not isinstance(record, dict):
         raise ValueError("benchmark output must be a JSON object")
@@ -95,6 +179,20 @@ def validate_record(record, backend, trial, config, instrumented=False):
             raise ValueError(f"{key} must be finite and positive")
     if not record["p50_us"] <= record["p99_us"] <= record["max_us"]:
         raise ValueError("invalid latency percentile ordering")
+    # Legacy binaries remain accepted for historical and paired comparisons.
+    # A new binary or any partial extension must provide the complete schema.
+    if require_extended or EXTENDED_FIELDS.intersection(record):
+        version = record.get("extended_metrics_version")
+        if type(version) is not int or version not in (1, 2):
+            raise ValueError("extended metrics require version 1 or 2")
+        if expected_metrics_version is not None and version != expected_metrics_version:
+            raise ValueError("extended metric version differs from executable capability")
+        p95 = record.get("p95_us")
+        if type(p95) not in (int, float) or not math.isfinite(p95) or not record["p50_us"] <= p95 <= record["p99_us"]:
+            raise ValueError("p95 must be finite and ordered between p50 and p99")
+        if type(record.get("latency_samples")) is not int or record["latency_samples"] != record["completed_requests"]:
+            raise ValueError("latency sample count must match completed requests")
+        validate_memory(record.get("peak_process_memory"), version, expected_memory_source)
     expected_throughput = record["completed_requests"] / record["seconds"]
     if not math.isclose(record["requests_per_second"], expected_throughput, rel_tol=0.01):
         raise ValueError("throughput does not match completed requests / elapsed time")
@@ -111,8 +209,56 @@ def validate_record(record, backend, trial, config, instrumented=False):
         raise ValueError("uninstrumented comparisons must not contain profiling counters")
 
 
+def summarize(records, backends, repeats, instrumented=False):
+    """Preserve old summary keys while exposing every measured metric's spread."""
+    extended = ["extended_metrics_version" in record for record in records]
+    if any(extended) and not all(extended):
+        raise ValueError("cannot aggregate mixed legacy and extended metric records")
+    has_extended = bool(extended) and all(extended)
+    versions = {record["extended_metrics_version"] for record in records} if has_extended else set()
+    if len(versions) > 1:
+        raise ValueError("cannot aggregate different extended metric versions")
+    version = next(iter(versions)) if versions else None
+    sources = {record["peak_process_memory"]["source"] for record in records} if has_extended else set()
+    if len(sources) > 1:
+        raise ValueError("cannot aggregate different peak memory sources")
+    source = next(iter(sources)) if sources else None
+    if has_extended:
+        for record in records:
+            validate_memory(record["peak_process_memory"], version, source)
+    has_memory = has_extended and source != "unavailable"
+    summary = []
+    for backend in backends:
+        samples = [record for record in records if record["backend"] == backend]
+        if len(samples) != repeats or {sample["trial"] for sample in samples} != set(range(1, repeats + 1)):
+            raise ValueError("incomplete or duplicate backend trials")
+        row = {"backend": backend, "instrumented": instrumented, "trials": len(samples)}
+        metrics = ["requests_per_second", "p50_us", "p99_us", "max_us"]
+        if has_extended:
+            metrics += ["p95_us"]
+            row.update(extended_metrics_version=version, peak_process_memory_source=source,
+                       peak_process_memory_scope=MEMORY_SCOPE,
+                       peak_process_memory_window=LEGACY_MEMORY_WINDOW if version == 1 else MEMORY_WINDOW)
+            if version == 2:
+                row["peak_process_memory_available"] = has_memory
+                if not has_memory:
+                    row["peak_process_memory_unavailable_reason"] = MEMORY_UNAVAILABLE_REASON
+        for metric in metrics:
+            values = [sample[metric] for sample in samples]
+            for name, aggregate in (("median", statistics.median), ("min", min), ("max", max)):
+                row[f"{name}_{metric}"] = aggregate(values)
+        if has_memory:
+            values = [sample["peak_process_memory"]["bytes"] for sample in samples]
+            for name, aggregate in (("median", statistics.median), ("min", min), ("max", max)):
+                row[f"{name}_peak_process_memory_bytes"] = aggregate(values)
+        summary.append(row)
+    return summary
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check-memory", action="store_true",
+                        help="Run the allocation/launcher-contamination diagnostic only; no TCP timings")
     parser.add_argument("--executable", type=Path, help="Default: newest build/**/pace_bench(.exe)")
     parser.add_argument("--build-dir", type=Path, help="Restrict automatic executable discovery to this directory")
     parser.add_argument("--output", type=Path, default=Path("benchmarks/results/local"))
@@ -142,6 +288,20 @@ def main():
         instrumented = validate_profiling_mode(available, args.backends, args.require_all)
     except ValueError as error:
         parser.error(str(error))
+    extended = "extended_metrics_version" in available
+    if extended and (type(available["extended_metrics_version"]) is not int or
+                     available["extended_metrics_version"] not in (1, 2) or
+                     not isinstance(available.get("peak_process_memory_source"), str) or
+                     available.get("peak_process_memory_source") not in (
+                         LEGACY_MEMORY_SOURCES if available["extended_metrics_version"] == 1 else
+                         IMAGE_MEMORY_SOURCES | {"unavailable"})):
+        parser.error("invalid extended metric capabilities")
+    if args.check_memory:
+        try:
+            print(json.dumps(check_memory_provider(executable, available), indent=2))
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            parser.error(str(error))
+        return 0
     backends = args.backends.split(",") if args.backends else available["backends"]
     if not backends or len(set(backends)) != len(backends):
         parser.error("backend list must be nonempty and contain no duplicates")
@@ -179,7 +339,7 @@ def main():
         "server_threads": 1,
         "pipeline": 1,
         "timing": "TCP round trip including send, recv and complete payload validation; connection setup and warmup excluded",
-        "aggregation": "Median throughput and median of per-run p50/p99; min/max throughput show run spread",
+        "aggregation": "Median/min/max across trials for throughput, per-run latency percentiles/maxima and available whole-process peak memory; not pooled percentiles",
         "acceptance_scope": "Complete, payload-correct, internally consistent measurements; does not certify faster performance",
         "limitations": [
             "Loopback closed-loop workload; client threads, kernel and CPU scheduler contribute to results",
@@ -187,6 +347,10 @@ def main():
             "Library defaults and public async APIs; PACE/Asio use coroutines, libuv uses callbacks",
             "CPU affinity and frequency are not controlled by this script; shared CI runners are noisy",
             "Per-run latency percentiles are closed-loop observed latency, without coordinated-omission correction",
+            "Peak process RSS/working set includes server, identical blocking clients, stacks, runtime and stored latency samples; it is not isolated library memory",
+            "Version 2 peak memory covers the current process image through shutdown before aggregation; it includes startup and warmup and has OS-specific residency semantics",
+            "Linux VmHWM uses approximate kernel RSS accounting; FreeBSD current-image peak memory is explicitly unavailable",
+            "Version 1 POSIX getrusage peak memory may retain launcher pre-exec RSS and must not establish benchmark-image or library memory advantages",
         ],
         "commands": [],
     }
@@ -216,7 +380,12 @@ def main():
                     if result.returncode:
                         raise RuntimeError(f"exit {result.returncode}: {result.stderr.strip()}")
                     record = json.loads(result.stdout)
-                    validate_record(record, backend, trial, args, instrumented=instrumented)
+                    if isinstance(record, dict) and ("extended_metrics_version" in record) != extended:
+                        raise ValueError("extended metric record does not match executable capabilities")
+                    validate_record(record, backend, trial, args, instrumented=instrumented,
+                                    require_extended=extended,
+                                    expected_memory_source=available.get("peak_process_memory_source"),
+                                    expected_metrics_version=available.get("extended_metrics_version"))
                     records.append(record)
                     raw.write(json.dumps(record, separators=(",", ":")) + "\n")
                     raw.flush()
@@ -233,32 +402,35 @@ def main():
         report_path.write_text(json.dumps({"environment": metadata, "runs": records, "summary": None}, indent=2) + "\n", encoding="utf-8")
         print("Benchmark failed: " + json.dumps(failure), file=sys.stderr)
         return 1
-    summary = []
-    for backend in backends:
-        samples = [record for record in records if record["backend"] == backend]
-        summary.append({
-            "backend": backend,
-            "instrumented": instrumented,
-            "trials": len(samples),
-            "median_requests_per_second": statistics.median(sample["requests_per_second"] for sample in samples),
-            "min_requests_per_second": min(sample["requests_per_second"] for sample in samples),
-            "max_requests_per_second": max(sample["requests_per_second"] for sample in samples),
-            "median_p50_us": statistics.median(sample["p50_us"] for sample in samples),
-            "median_p99_us": statistics.median(sample["p99_us"] for sample in samples),
-        })
+    summary = summarize(records, backends, args.repeats, instrumented)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     report_path.write_text(json.dumps({"environment": metadata, "runs": records, "summary": summary}, indent=2) + "\n", encoding="utf-8")
     rows = [
-        "| Backend | " + ("Instrumented requests/s (median)" if instrumented else "Requests/s (median)") + " | Min–max requests/s | p50 µs¹ | p99 µs¹ |",
-        "|---|---:|---:|---:|---:|",
+        "| Backend | " + ("Instrumented requests/s (median)" if instrumented else "Requests/s (median)") + " | Min–max requests/s | p50 µs¹ | p95 µs¹ | p99 µs¹ | Max µs¹ |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
     if instrumented:
         rows = ["**Instrumented diagnostic run. Timing overhead is included; these results are not a fair backend comparison.**", ""] + rows
     for item in summary:
+        p95 = f"{item['median_p95_us']:.2f}" if "median_p95_us" in item else "n/a"
         rows.append(f"| {item['backend']} | {item['median_requests_per_second']:,.0f} | "
                     f"{item['min_requests_per_second']:,.0f}–{item['max_requests_per_second']:,.0f} | "
-                    f"{item['median_p50_us']:.2f} | {item['median_p99_us']:.2f} |")
-    rows += ["", "¹ Median of each run's percentile; not pooled percentiles.", "",
+                    f"{item['median_p50_us']:.2f} | {p95} | {item['median_p99_us']:.2f} | {item['median_max_us']:.2f} |")
+    rows += ["", "¹ Median of each trial's percentile or maximum; not pooled percentiles or the overall worst request. JSON preserves every metric's min/max across trials.", ""]
+    if extended:
+        rows += ["| Backend | Whole-process peak memory MiB (median) | Min–max MiB | OS source |",
+                 "|---|---:|---:|---|"]
+        for item in summary:
+            if item.get("peak_process_memory_available", True):
+                rows.append(f"| {item['backend']} | {item['median_peak_process_memory_bytes']/1048576:.3f} | "
+                            f"{item['min_peak_process_memory_bytes']/1048576:.3f}–{item['max_peak_process_memory_bytes']/1048576:.3f} | "
+                            f"{item['peak_process_memory_source']} |")
+            else:
+                rows.append(f"| {item['backend']} | n/a | n/a | {item['peak_process_memory_unavailable_reason']} |")
+        rows += ["", "Peak RSS/working set includes the server, identical blocking clients and stored latency samples. It includes startup/warmup and is read after shutdown, before result aggregation. Version 2 measures the current process image; unsupported providers report n/a, never zero. Linux VmHWM accounting is approximate. This does not isolate library footprint; compare only the same workload and OS.", ""]
+        if available["extended_metrics_version"] == 1:
+            rows += ["**Historical version 1:** POSIX getrusage peak memory can include a launcher's pre-exec RSS high-water mark. These memory figures must not support a benchmark-image or library memory advantage.", ""]
+    rows += [
              f"{args.repeats} trials per backend; one server thread; {args.clients} persistent connections; "
              f"{args.bytes}-byte payload; one outstanding request per connection; "
              f"{args.requests} measured + {args.warmup} warmup requests per connection per trial.", "",

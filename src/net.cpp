@@ -72,7 +72,8 @@ sockaddr_in socket_address(const endpoint& endpoint) {
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_port = htons(endpoint.port);
-    if (::inet_pton(AF_INET, endpoint.address.c_str(), &address.sin_addr) != 1)
+    if (endpoint.address.find('\0') != std::string::npos ||
+        ::inet_pton(AF_INET, endpoint.address.c_str(), &address.sin_addr) != 1)
         throw std::invalid_argument("expected a numeric IPv4 address");
     return address;
 }

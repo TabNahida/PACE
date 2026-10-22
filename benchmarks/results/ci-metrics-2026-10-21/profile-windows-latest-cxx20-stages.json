@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "measurement_kind": "instrumented_stage_diagnostic",
+  "label": "profile-windows-latest-cxx20",
+  "trials": 3,
+  "profile_window": "server event-loop lifetime including startup, warmup and shutdown",
+  "aggregation": "Per-trial totals, exclusive lifetime shares and inclusive ns/call, then medians across trials",
+  "limitations": [
+    "Timing scopes add overhead; diagnostic throughput must not be compared with uninstrumented Asio or libuv",
+    "Wall-clock accounting includes descheduling and blocking waits; it is not CPU sampling or per-request latency",
+    "The profile includes event-loop startup, connection setup, warmup and shutdown; throughput excludes startup and warmup",
+    "Listener construction and initial spawn on the main thread precede the worker reset and are excluded",
+    "Inclusive stages overlap and must not be added; exclusive shares are of each trial's reactor lifetime",
+    "Per-stage medians and median shares need not sum to a median total or 100 percent",
+    "Average ns/call excludes trials with zero calls; it is a stage average, not a latency percentile"
+  ],
+  "stages": [
+    {
+      "stage": "send",
+      "median_calls": 44000,
+      "median_inclusive_ns": 912100800,
+      "median_exclusive_ns": 912100800,
+      "min_exclusive_ns": 896341600,
+      "max_exclusive_ns": 923023100,
+      "median_inclusive_ns_per_call": 20729.563636363637,
+      "median_exclusive_share_percent": 75.50191428350766
+    },
+    {
+      "stage": "recv",
+      "median_calls": 86493,
+      "median_inclusive_ns": 129314900,
+      "median_exclusive_ns": 129314900,
+      "min_exclusive_ns": 127679400,
+      "max_exclusive_ns": 129588900,
+      "median_inclusive_ns_per_call": 1498.2588186327216,
+      "median_exclusive_share_percent": 10.727114831928715
+    },
+    {
+      "stage": "poll_blocking",
+      "median_calls": 11655,
+      "median_inclusive_ns": 76113000,
+      "median_exclusive_ns": 76113000,
+      "min_exclusive_ns": 75383900,
+      "max_exclusive_ns": 79350800,
+      "median_inclusive_ns_per_call": 6610.474205315269,
+      "median_exclusive_share_percent": 6.347507999441906
+    },
+    {
+      "stage": "coroutine_execution",
+      "median_calls": 11658,
+      "median_inclusive_ns": 1118010600,
+      "median_exclusive_ns": 52583000,
+      "min_exclusive_ns": 51526400,
+      "max_exclusive_ns": 53601700,
+      "median_inclusive_ns_per_call": 95744.36715303699,
+      "median_exclusive_share_percent": 4.352717549167464
+    },
+    {
+      "stage": "io_arm",
+      "median_calls": 42491,
+      "median_inclusive_ns": 22856900,
+      "median_exclusive_ns": 11957900,
+      "min_exclusive_ns": 11577700,
+      "max_exclusive_ns": 12002200,
+      "median_inclusive_ns_per_call": 534.8895441355425,
+      "median_exclusive_share_percent": 0.9935185624368662
+    },
+    {
+      "stage": "poller_update",
+      "median_calls": 42491,
+      "median_inclusive_ns": 10971900,
+      "median_exclusive_ns": 10971900,
+      "min_exclusive_ns": 10899000,
+      "max_exclusive_ns": 11537800,
+      "median_inclusive_ns_per_call": 260.0777490696186,
+      "median_exclusive_share_percent": 0.9177223476885294
+    },
+    {
+      "stage": "reactor_run",
+      "median_calls": 1,
+      "median_inclusive_ns": 1208049900,
+      "median_exclusive_ns": 6931500,
+      "min_exclusive_ns": 6869100,
+      "max_exclusive_ns": 7327100,
+      "median_inclusive_ns_per_call": 1208049900.0,
+      "median_exclusive_share_percent": 0.5836491836868558
+    },
+    {
+      "stage": "event_dispatch",
+      "median_calls": 11657,
+      "median_inclusive_ns": 2700100,
+      "median_exclusive_ns": 2700100,
+      "min_exclusive_ns": 2609900,
+      "max_exclusive_ns": 2764800,
+      "median_inclusive_ns_per_call": 229.07440400441163,
+      "median_exclusive_share_percent": 0.22088705939367603
+    },
+    {
+      "stage": "timers",
+      "median_calls": 11657,
+      "median_inclusive_ns": 1277600,
+      "median_exclusive_ns": 1277600,
+      "min_exclusive_ns": 1226300,
+      "max_exclusive_ns": 1345800,
+      "median_inclusive_ns_per_call": 110.95093356491533,
+      "median_exclusive_share_percent": 0.10575722079030013
+    },
+    {
+      "stage": "root_reaping",
+      "median_calls": 11658,
+      "median_inclusive_ns": 1229900,
+      "median_exclusive_ns": 1229900,
+      "min_exclusive_ns": 1093300,
+      "max_exclusive_ns": 1261900,
+      "median_inclusive_ns_per_call": 106.79923584577979,
+      "median_exclusive_share_percent": 0.10180870839855208
+    },
+    {
+      "stage": "inbox",
+      "median_calls": 11658,
+      "median_inclusive_ns": 924500,
+      "median_exclusive_ns": 924500,
+      "min_exclusive_ns": 920500,
+      "max_exclusive_ns": 933900,
+      "median_inclusive_ns_per_call": 79.93226814866273,
+      "median_exclusive_share_percent": 0.07619718357660557
+    },
+    {
+      "stage": "post_dispatch",
+      "median_calls": 11658,
+      "median_inclusive_ns": 831400,
+      "median_exclusive_ns": 831400,
+      "min_exclusive_ns": 813900,
+      "max_exclusive_ns": 860800,
+      "median_inclusive_ns_per_call": 70.52935188327112,
+      "median_exclusive_share_percent": 0.06853236249047565
+    },
+    {
+      "stage": "accept",
+      "median_calls": 7,
+      "median_inclusive_ns": 197900,
+      "median_exclusive_ns": 197900,
+      "min_exclusive_ns": 145300,
+      "max_exclusive_ns": 205000,
+      "median_inclusive_ns_per_call": 29285.714285714286,
+      "median_exclusive_share_percent": 0.016381773633688475
+    },
+    {
+      "stage": "poll_nonblocking",
+      "median_calls": 2,
+      "median_inclusive_ns": 12100,
+      "median_exclusive_ns": 12100,
+      "min_exclusive_ns": 3600,
+      "max_exclusive_ns": 13200,
+      "median_inclusive_ns_per_call": 6050.0,
+      "median_exclusive_share_percent": 0.0010188494730737872
+    }
+  ],
+  "source_report": "D:\\a\\PACE\\PACE\\benchmark-results\\profile-windows-latest-cxx20.json"
+}

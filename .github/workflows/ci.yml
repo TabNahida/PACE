@@ -13,7 +13,7 @@ jobs:
   native:
     name: ${{ matrix.os }} / ${{ matrix.standard }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -32,13 +32,15 @@ jobs:
         with:
           python-version: '3.12'
       - name: Configure
-        run: xmake f -m release -o build/fair --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=y --scaling=y --profiling=n --examples=y --tests=y -y
+        run: xmake f -m release -o build/fair --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=y --scaling=y --profiling=n --tls=n --http2=n --examples=y --tests=y -y
       - name: Build
         run: xmake -y
       - name: Tests
         run: xmake test -v
       - name: Validate benchmark reporting
         run: python -m unittest discover -s tests -p "test_*.py"
+      - name: Verify peak memory belongs to the benchmark image
+        run: python scripts/run_benchmarks.py --build-dir build/fair --check-memory
       - name: Measure PACE components without instrumentation
         run: python scripts/run_components.py --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/components-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 5
       - name: Compare PACE, libuv and Asio
@@ -55,6 +57,14 @@ jobs:
         run: python scripts/run_benchmarks.py --build-dir build/profile --backends pace --label profile-${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/profile-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 3 --requests 10000 --warmup 1000 --clients 4 --message-size 64
       - name: Summarize PACE stage diagnostics
         run: python scripts/run_profile.py --input benchmark-results/profile-${{ matrix.os }}-${{ matrix.standard }}.json
+      - name: Configure TLS and HTTP2 protocol coverage
+        run: xmake f -m release -o build/protocols --cxxstandard=${{ matrix.standard }} --benchmarks=n --components=n --scaling=n --profiling=n --tls=y --http2=y --examples=y --tests=y -y
+      - name: Build all protocols and examples
+        run: xmake -y
+      - name: Test UDP, TLS, HTTPS, HTTP2 and WebSocket
+        run: xmake test -v
+      - name: Verify WebSocket with independent Python peers
+        run: python tests/websocket_interop.py --build-dir build/protocols
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -63,13 +73,13 @@ jobs:
           if-no-files-found: warn
   sanitizers:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: '3.0.9'
-      - run: xmake f -m debug --sanitizers=y --examples=n --profiling=n -y
+      - run: xmake f -m debug --sanitizers=y --examples=n --profiling=n --tls=y --http2=y -y
       - run: xmake -y
       - run: xmake test -v
         env:
@@ -78,7 +88,7 @@ jobs:
   freebsd:
     name: FreeBSD 14 / C++20
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Build, test and benchmark in FreeBSD
@@ -96,10 +106,11 @@ jobs:
             set -eu
             export XMAKE_ROOT=y
             xmake --version
-            xmake f -m release -o build/fair --cxxstandard=cxx20 --benchmarks=y --components=y --scaling=y --profiling=n --examples=y --tests=y -y
+            xmake f -m release -o build/fair --cxxstandard=cxx20 --benchmarks=y --components=y --scaling=y --profiling=n --tls=n --http2=n --examples=y --tests=y -y
             xmake -y
             xmake test -v
             python3 -m unittest discover -s tests -p "test_*.py"
+            python3 scripts/run_benchmarks.py --build-dir build/fair --check-memory
             python3 scripts/run_components.py --label freebsd-cxx20 --output benchmark-results/components-freebsd.json --repeats 5
             python3 scripts/run_benchmarks.py --build-dir build/fair --require-all --label freebsd-cxx20 --output benchmark-results/freebsd.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
             python3 scripts/run_scaling.py --build-dir build/fair --label freebsd-cxx20 --output benchmark-results/scaling-freebsd.json --repeats 3 --requests 5000 --warmup 500 --clients 8
@@ -108,6 +119,10 @@ jobs:
             xmake test -v
             python3 scripts/run_benchmarks.py --build-dir build/profile --backends pace --label profile-freebsd-cxx20 --output benchmark-results/profile-freebsd.json --repeats 3 --requests 10000 --warmup 1000 --clients 4 --message-size 64
             python3 scripts/run_profile.py --input benchmark-results/profile-freebsd.json
+            xmake f -m release -o build/protocols --cxxstandard=cxx20 --benchmarks=n --components=n --scaling=n --profiling=n --tls=y --http2=y --examples=y --tests=y -y
+            xmake -y
+            xmake test -v
+            python3 tests/websocket_interop.py --build-dir build/protocols
       - uses: actions/upload-artifact@v4
         if: always()
         with:

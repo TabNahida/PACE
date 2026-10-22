@@ -1,14 +1,63 @@
-# 4. HTTP services
+# 4. HTTP and HTTPS in a few calls
 
-Complete source: [`tutorial_http.cpp`](../../examples/tutorial_http.cpp).
-The default mode performs a bounded loopback GET and checks status, declared
-length, body and EOF:
+[中文教程](04-http.zh-CN.md)
+
+Run the self-contained example:
 
 ```sh
-xmake run tutorial_http
+xmake f -m release --examples=y --tests=y -y
+xmake -y
+xmake run tutorial_http_client
 ```
 
-It prints `HTTP /health verified`. For a server you can query with curl:
+[`tutorial_http_client.cpp`](../../examples/tutorial_http_client.cpp) starts a
+loopback HTTP server, sends a GET, verifies its chunked body and trailer, then
+stops. It prints `Hello from /PACE`. No external server is needed.
+
+## The client
+
+```cpp
+pace::task<void> use_http(pace::io_context& io, pace::tcp::endpoint endpoint) {
+    auto response = co_await pace::http::get(io, endpoint, "/health");
+    std::cout << response.status << " " << response.body << '\n';
+    io.stop();
+}
+```
+
+`get` connects, generates Host, handles response framing and closes. Its endpoint
+is numeric IPv4; a DNS lookup is not performed. A 404 or 500 is a normal response
+whose `status` you inspect. Protocol/transport failures throw.
+
+To POST, use `fetch` with an owned message:
+
+```cpp
+pace::http::request request;
+request.method = "POST";
+request.target = "/echo";
+request.headers.push_back({"Content-Type", "text/plain"});
+request.body = "hello";
+auto response = co_await pace::http::fetch(io, endpoint, std::move(request));
+```
+
+The helper fills Host when absent. Do not manually set Content-Length,
+Transfer-Encoding or Connection. Set `request.chunked = true` for chunked
+framing, and `request.trailers.push_back({"X-Checksum", "..."})` for safe trailer
+metadata. The message still owns its complete buffered body.
+
+## The server
+
+```cpp
+pace::task<pace::http::response> route(pace::http::request request) {
+    if (request.target == "/health")
+        co_return pace::http::response{.body = "ok\n"};
+    co_return pace::http::response{.status = 404, .body = "Not Found\n"};
+}
+```
+
+In `main`, construct a context/listener, spawn `pace::http::serve(listener, route)`
+and call `io.run()`. Keep the listener alive until run returns; declare it after
+the context so it is destroyed first. The complete
+[`tutorial_http.cpp`](../../examples/tutorial_http.cpp) already does this:
 
 ```sh
 xmake run tutorial_http serve
@@ -17,70 +66,94 @@ curl --http1.1 -H "Expect:" --data-binary "hello" http://127.0.0.1:8080/echo
 curl --http1.1 -I http://127.0.0.1:8080/health
 ```
 
-The server returns `ok`, echoes the POST body, and correctly omits the HEAD body.
-Ctrl-C requests cooperative shutdown. The default smoke client's hand-written
-request is intentionally narrow; PACE does not currently provide a general HTTP
-client, URL parser or TLS.
+Ctrl-C requests cooperative stop. The curl Expect override stays within this
+API's scope: it does not implement the `100-continue` request handshake.
 
-## Write a handler
+A handler owns its request, so its body and headers survive suspension. Returned
+responses own their strings as well. Set `response.chunked = true` and fill
+`response.trailers` to emit chunked output; leave the default for Content-Length.
+HEAD and bodyless statuses are handled by the serializer. Set `response.close`
+to end persistence. Shared state across handlers on different workers still
+requires application synchronization.
+
+## Add HTTPS
+
+Build optional OpenSSL support with `--tls=y`. The shape of the HTTP call is the
+same; add a TLS configuration and verified peer name:
 
 ```cpp
-pace::task<pace::http::response> route(pace::http::request request) {
-    if ((request.method == "GET" || request.method == "HEAD") && request.target == "/health")
-        co_return pace::http::response{.body = "ok\n"};
-    if (request.method == "POST" && request.target == "/echo")
-        co_return pace::http::response{.body = std::move(request.body),
-                                      .content_type = "application/octet-stream"};
-    co_return pace::http::response{.status = 404, .body = "Not Found\n"};
-}
+pace::tls::context trust; // OpenSSL default trust paths; verification is required.
+trust.load_verify_file("my-ca.pem"); // Optional private CA or explicit CA bundle.
+auto response = co_await pace::http::get(io, trust, {"127.0.0.1", 8443},
+                                       "localhost", "/health");
 ```
 
-The request is passed by value and owns its body/headers, so it remains usable
-across handler suspension. `request.header("content-type")` returns a borrowed
-view into that owned request; copy it if it must outlive the request. Targets are
-raw strings, so `/health?full=1` does not equal `/health` in this simple router.
+`localhost` is checked against the certificate independently of the numeric TCP
+address. The TLS configuration must remain alive while this lazy helper uses it.
+The task owns endpoint, peer name and target values. There is no insecure mode.
+See [TLS trust setup](../reference/tls.md#configuration) if your OpenSSL installation
+needs an explicit CA file.
 
-Responses also own their data. PACE generates Content-Length and Connection,
-and uses `content_type` for Content-Type. Set custom fields through `headers`
-only when they are not those managed fields or Transfer-Encoding. Set
-`response.close = true` to end persistence after a response. Invalid response
-metadata or a normal handler exception becomes a closing 500.
-
-## Start serving with explicit bounds
+For an HTTPS server, configure a certificate/private key before accepting:
 
 ```cpp
-const pace::http::limits bounds{
-    .max_header_bytes = 8192,
-    .max_body_bytes = 65536,
-    .max_requests_per_connection = 100
-};
+pace::tls::context security(pace::tls::role::server);
+security.use_certificate_chain("server-chain.pem", "server-key.pem");
+security.set_alpn_protocols({"http/1.1"});
+pace::tcp::listener listener(io, {"127.0.0.1", 8443});
+io.spawn(pace::http::serve(listener, security, route));
+io.run();
+```
+
+The certificate/key files must match and serve the names clients verify. These
+objects must outlive the accept loop; declare `io` before them. Each connection
+handshakes independently. Ordinary HTTP/1.1 TLS accepts ALPN `http/1.1` or no ALPN;
+use the separate HTTP/2 API for `h2`. The committed `tests/certs` keys are public
+fixtures for tests only, not deployment credentials.
+
+## Reuse a connection
+
+For several exchanges, construct a persistent client from a connected transport:
+
+```cpp
+pace::tcp::stream socket(io);
+co_await socket.connect(endpoint);
+pace::http::client client(std::move(socket));
+pace::http::request request;
+request.method = "GET";
+request.target = "/health";
+request.headers.push_back({"Host", "localhost"});
+auto first = co_await client.send(request);
+auto second = co_await client.send(std::move(request));
+client.close();
+```
+
+The client owns the socket and parsing buffer. Keep it at a stable address while
+an exchange is pending. One `send` may be active at a time; no concurrent request
+multiplexing occurs. A closing/EOF-framed response makes it unusable for another
+request. Use `secure_client` with an already-handshaken `tls::stream` for the same
+pattern over HTTPS. Do not interleave raw transport reads with HTTP operations.
+
+## Set practical bounds
+
+```cpp
+pace::http::limits bounds;
+bounds.max_header_bytes = 8192;
+bounds.max_body_bytes = 65536;
+bounds.max_requests_per_connection = 100;
+bounds.max_trailer_bytes = 2048;
 io.spawn(pace::http::serve(listener, route, bounds));
 ```
 
-`serve` borrows the listener and spawns an independent task per accepted connection.
-Keep the listener and context alive through those tasks. The handler is copied;
-shared application state still needs synchronization when copies run on different
-worker contexts. Connections process their own requests sequentially, and the
-100th response in this example ends persistence.
+The same `limits` can be passed to clients. Defaults also cap field count, chunk
+line bytes, chunk count and client informational responses. Malformed or ambiguous
+Content-Length/chunked framing is rejected and the connection is closed. Trailers
+cannot redefine framing, Host, connection control or authentication fields.
 
-The limits bound parsing bytes and request count. They do not impose connection
-deadlines, a maximum number of connected clients or a global memory budget. A
-client may remain connected while sending slowly. Add an application-level
-connection policy when building a service that needs those controls.
+These limits bound individual messages and parsing metadata. They do not provide
+request deadlines, global memory limits or a connection-count policy. Bodies are
+buffered; automatic DNS, redirects, retries and decompression are absent. HTTP/2
+and WebSocket have separate APIs; HTTP/3 is not implemented.
 
-## Supported wire behavior
-
-HTTP/1.0 and HTTP/1.1 with Content-Length framing are supported. PACE rejects
-ambiguous framing such as duplicate Content-Length or Transfer-Encoding combined
-with Content-Length. Chunked transfer, any Expect request, CONNECT and upgrades
-are currently unsupported. The `-H "Expect:"` curl option keeps the POST within
-this supported scope. Header/body overflows produce 431/413 when a response can
-be sent.
-
-Closing the listener on its owning context ends accepts but leaves accepted connections running.
-Stopping its context cancels both. PACE's final HTTP response uses bounded
-graceful socket close; that improves handling of unread rejected-request bytes
-but is not a guarantee against every peer reset.
-
-Reference: [HTTP messages, parsing, errors and limits](../reference/http.md).
+Reference: [HTTP/1.1 and HTTPS API](../reference/http.md).
 Next: [execution and worker selection](05-execution.md).

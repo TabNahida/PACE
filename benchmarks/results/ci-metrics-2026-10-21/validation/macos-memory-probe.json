@@ -1,0 +1,47 @@
+{
+  "run_id": 39608371946,
+  "head_sha": "3eb014ce014d11b780ef019b9c1936b77f8d81d6",
+  "job_url": "https://github.com/TabNahida/PACE/actions/runs/39608371946/job/119250993938",
+  "source": "GitHub Actions job log: Verify peak memory belongs to the benchmark image",
+  "probe_output": {
+    "status": "passed",
+    "source": "task_info(MACH_TASK_BASIC_INFO).resident_size_max_bytes",
+    "normal": {
+      "probe": "peak_process_memory",
+      "allocated_bytes": 33554432,
+      "before": {
+        "bytes": 5750784,
+        "source": "task_info(MACH_TASK_BASIC_INFO).resident_size_max_bytes",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "after_release": {
+        "bytes": 39321600,
+        "source": "task_info(MACH_TASK_BASIC_INFO).resident_size_max_bytes",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      }
+    },
+    "large_launcher": {
+      "probe": "peak_process_memory",
+      "allocated_bytes": 33554432,
+      "before": {
+        "bytes": 5750784,
+        "source": "task_info(MACH_TASK_BASIC_INFO).resident_size_max_bytes",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "after_release": {
+        "bytes": 39321600,
+        "source": "task_info(MACH_TASK_BASIC_INFO).resident_size_max_bytes",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      }
+    },
+    "launcher_padding_bytes": 134217728
+  }
+}

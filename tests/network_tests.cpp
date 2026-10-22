@@ -82,6 +82,11 @@ pace::task<void> connect_errors(pace::io_context& context) {
     try { co_await client.connect({"not-an-address", 42}); }
     catch (const std::invalid_argument&) { invalid = true; }
     require(invalid, "numeric address validation");
+    invalid = false;
+    pace::tcp::endpoint malformed{std::string("127.0.0.1\0unexpected", 20), 42};
+    try { co_await client.connect(std::move(malformed)); }
+    catch (const std::invalid_argument&) { invalid = true; }
+    require(invalid, "embedded NUL address validation");
 }
 
 pace::task<pace::http::response> http_handler(pace::http::request request) {
@@ -201,7 +206,7 @@ pace::task<void> http_protocol(pace::io_context& context) {
         invalid_case{"GET / HTTP/1.1\r\nHost: example.test\r\nHost: other\r\n\r\n", 400},
         invalid_case{"POST / HTTP/1.1\r\nHost: example.test\r\nContent-Length: 0\r\nContent-Length: 0\r\n\r\n", 400},
         invalid_case{"POST / HTTP/1.1\r\nHost: example.test\r\nContent-Length: +1\r\n\r\n", 400},
-        invalid_case{"POST / HTTP/1.1\r\nHost: example.test\r\nTransfer-Encoding: chunked\r\n\r\n", 501},
+        invalid_case{"POST / HTTP/1.1\r\nHost: example.test\r\nTransfer-Encoding: gzip\r\n\r\n", 501},
         invalid_case{"POST / HTTP/1.1\r\nHost: example.test\r\nTransfer-Encoding: chunked\r\nContent-Length: 0\r\n\r\n", 400},
         invalid_case{"GET / HTTP/1.1\r\nHost: example.test\r\n bad: fold\r\n\r\n", 400},
         invalid_case{"GET / HTTP/1.1\r\nHost : example.test\r\n\r\n", 400},

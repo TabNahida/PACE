@@ -1,0 +1,717 @@
+{
+  "schema_version": 1,
+  "status": "completed",
+  "label": "ubuntu-runtime-paired",
+  "started_utc": "2026-10-21T13:33:20.718916+00:00",
+  "binaries": {
+    "before": {
+      "path": "/home/runner/work/PACE/PACE/build/paired/components-before",
+      "sha256": "12d818d679247b641d4ad24abb0f6c6baa1257c9c1c17e29dc1bed357d06f068",
+      "build": {
+        "components": [
+          "lazy_task",
+          "await_chain",
+          "empty_poll",
+          "yield",
+          "post",
+          "cross_thread_post",
+          "spawn_completion",
+          "zero_timer"
+        ],
+        "compiler": "GCC 13.3.0",
+        "cpp_standard": 202002,
+        "ndebug": true,
+        "profiling_enabled": false
+      }
+    },
+    "after": {
+      "path": "/home/runner/work/PACE/PACE/build/paired/components-after",
+      "sha256": "aa8d4e9ba8d865cae68f2e6d015184baaa7d0b907faa2b4368c21dfd3520d4cf",
+      "build": {
+        "components": [
+          "lazy_task",
+          "await_chain",
+          "empty_poll",
+          "yield",
+          "post",
+          "cross_thread_post",
+          "spawn_completion",
+          "zero_timer"
+        ],
+        "compiler": "GCC 13.3.0",
+        "cpp_standard": 202002,
+        "ndebug": true,
+        "profiling_enabled": false
+      }
+    }
+  },
+  "environment": {
+    "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "git_commit": "f84f15ba5eb43835a1da298f18bc4d50bc28cb6f",
+    "git_status": "?? _baseline/"
+  },
+  "configuration": {
+    "component": "zero_timer",
+    "tcp": false,
+    "pairs": 8,
+    "iterations": 1000000,
+    "depth": 4,
+    "batch": 256,
+    "clients": 4,
+    "requests": 100000,
+    "bytes": 64,
+    "warmup": 10000,
+    "timeout": 120,
+    "bootstrap_samples": 10000,
+    "seed": 0,
+    "label": "ubuntu-runtime-paired"
+  },
+  "operation": "One sleep_for(0ns), including deadline clock read, heap enqueue/expiry and resumption; one timer outstanding",
+  "ratio_definition": "after / before; above 1 favors after for requests/s, below 1 favors after for ns/op",
+  "uncertainty_method": "Resample whole paired ratios with replacement; percentile interval of bootstrap medians",
+  "limitations": [
+    "Exploratory interval assumes representative independent pairs; scheduling/frequency drift and autocorrelation can violate this",
+    "Small samples and short runs do not establish a portable performance improvement",
+    "No performance threshold changes the process exit code; correctness/measurement failures do"
+  ],
+  "commands": [
+    {
+      "pair": 1,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 1,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "3"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "3"
+      ]
+    },
+    {
+      "pair": 4,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "4"
+      ]
+    },
+    {
+      "pair": 4,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "4"
+      ]
+    },
+    {
+      "pair": 5,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "5"
+      ]
+    },
+    {
+      "pair": 5,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "5"
+      ]
+    },
+    {
+      "pair": 6,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "6"
+      ]
+    },
+    {
+      "pair": 6,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "6"
+      ]
+    },
+    {
+      "pair": 7,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "7"
+      ]
+    },
+    {
+      "pair": 7,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "7"
+      ]
+    },
+    {
+      "pair": 8,
+      "variant": "after",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-after",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "8"
+      ]
+    },
+    {
+      "pair": 8,
+      "variant": "before",
+      "command": [
+        "/home/runner/work/PACE/PACE/build/paired/components-before",
+        "--component",
+        "zero_timer",
+        "--iterations",
+        "1000000",
+        "--depth",
+        "4",
+        "--batch",
+        "256",
+        "--warmup",
+        "10000",
+        "--trial",
+        "8"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 1,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 469798909,
+      "ns_per_operation": 469.798909,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 1,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 70355542,
+      "ns_per_operation": 70.355542,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 2,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 67853901,
+      "ns_per_operation": 67.853901,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 2,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 468276260,
+      "ns_per_operation": 468.27626,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 3,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 471724792,
+      "ns_per_operation": 471.724792,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 3,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 67927689,
+      "ns_per_operation": 67.927689,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 4,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 67931737,
+      "ns_per_operation": 67.931737,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 4,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 476927747,
+      "ns_per_operation": 476.927747,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 5,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 475694690,
+      "ns_per_operation": 475.69469,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 5,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 67904766,
+      "ns_per_operation": 67.904766,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 6,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 67891451,
+      "ns_per_operation": 67.891451,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 6,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 474738090,
+      "ns_per_operation": 474.73809,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 7,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 467487474,
+      "ns_per_operation": 467.487474,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 7,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 68032214,
+      "ns_per_operation": 68.032214,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 8,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 68110201,
+      "ns_per_operation": 68.110201,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "after"
+    },
+    {
+      "benchmark": "components",
+      "component": "zero_timer",
+      "trial": 8,
+      "iterations": 1000000,
+      "warmup": 10000,
+      "chain_depth": 4,
+      "batch_size": 256,
+      "threads": 1,
+      "completed_operations": 1000000,
+      "elapsed_ns": 472637530,
+      "ns_per_operation": 472.63753,
+      "checksum": 499999500000,
+      "validated": true,
+      "variant": "before"
+    }
+  ],
+  "pairs": [
+    {
+      "pair": 1,
+      "before": 469.798909,
+      "after": 70.355542,
+      "after_before_ratio": 0.1497567164422683
+    },
+    {
+      "pair": 2,
+      "after": 67.853901,
+      "before": 468.27626,
+      "after_before_ratio": 0.14490143275680897
+    },
+    {
+      "pair": 3,
+      "before": 471.724792,
+      "after": 67.927689,
+      "after_before_ratio": 0.14399855625989658
+    },
+    {
+      "pair": 4,
+      "after": 67.931737,
+      "before": 476.927747,
+      "after_before_ratio": 0.14243611831626143
+    },
+    {
+      "pair": 5,
+      "before": 475.69469,
+      "after": 67.904766,
+      "after_before_ratio": 0.14274863148041447
+    },
+    {
+      "pair": 6,
+      "after": 67.891451,
+      "before": 474.73809,
+      "after_before_ratio": 0.1430082237555449
+    },
+    {
+      "pair": 7,
+      "before": 467.487474,
+      "after": 68.032214,
+      "after_before_ratio": 0.14552735160557476
+    },
+    {
+      "pair": 8,
+      "after": 68.110201,
+      "before": 472.63753,
+      "after_before_ratio": 0.14410662860395365
+    }
+  ],
+  "summary": {
+    "metric": "ns_per_operation",
+    "lower_is_better": true,
+    "before_median": 472.181161,
+    "after_median": 67.92971299999999,
+    "before_min": 467.487474,
+    "before_max": 476.927747,
+    "after_min": 67.853901,
+    "after_max": 70.355542,
+    "median_paired_after_before_ratio": 0.1440525924319251,
+    "min_paired_after_before_ratio": 0.14243611831626143,
+    "max_paired_after_before_ratio": 0.1497567164422683,
+    "median_ratio_bootstrap_95_percentile_interval": [
+      0.14274863148041447,
+      0.14552735160557476
+    ],
+    "after_wins": 8,
+    "ties": 0,
+    "pairs": 8,
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 0
+  },
+  "failure": null,
+  "finished_utc": "2026-10-21T13:33:25.138441+00:00"
+}

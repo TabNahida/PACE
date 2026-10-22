@@ -19,8 +19,56 @@ The benchmark excludes server startup, connection establishment and per-connecti
 warmup. A start gate releases all clients after warmup. Throughput uses total
 completed round trips divided by wall time from gate release until clients have
 joined. Each round-trip latency includes sending, receiving and payload validation.
-All latencies are stored and nearest-rank p50 and p99 are computed after measurement.
+All latencies are stored and nearest-rank p50, p95 and p99 plus the maximum are
+computed after measurement. The returned sample count must equal completed requests.
 There is no sampling, histogram rounding or coordinated-omission correction.
+
+Each fresh benchmark process records a peak resident-memory metric for its
+**current executable image**, where a verified OS provider exists:
+
+| Platform | Source recorded in JSON | Meaning |
+|---|---|---|
+| Linux | `/proc/self/status.VmHWM_KiB` | Peak RSS of the current memory image, converted from KiB to bytes; kernel RSS accounting is approximate. |
+| macOS | `task_info(MACH_TASK_BASIC_INFO).resident_size_max_bytes` | Current Mach task's lifetime resident peak in bytes; exec creates a new task and accounting ledger. |
+| Windows | `GetProcessMemoryInfo.PeakWorkingSetSize` | Current process's peak working set in bytes. |
+| FreeBSD | `unavailable` | No verified current-image peak provider; `available: false`, `bytes: null`, and an explicit reason. |
+
+The reading is taken after clients and server have joined, before allocating the
+merged latency vector for reporting. Its window includes image startup, warmup,
+stacks, server, identical blocking clients and stored latency samples. It is
+**whole-process peak RSS/working set, not isolated library footprint**, steady-state
+memory, allocation count, PSS or per-connection cost. Sources have different OS
+accounting semantics; compare only within the same OS, executable and workload.
+Small differences do not establish a library-memory advantage.
+
+The earlier version 1 used POSIX `getrusage().ru_maxrss`. That counter can preserve
+a launcher's pre-exec RSS high-water mark, so a Python runner's memory could
+dominate small workloads. Such raw results are retained as diagnostic evidence,
+but their POSIX memory figures must not support benchmark-image or library memory
+claims. Version 2 never falls back to that counter, never substitutes zero for
+missing data, and adds no sampling thread or child-process wrapper to timed runs.
+Throughput and latency from completed old trials retain their original scope;
+only their memory interpretation is invalidated by this issue.
+
+Linux describes [VmHWM and its accounting limitations](https://man7.org/linux/man-pages/man5/proc_pid_status.5.html).
+The macOS [task implementation](https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/task.c)
+and [exec implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_exec.c)
+show the task ledger used for `resident_size_max` and task replacement on exec.
+These source semantics are complemented by a native-runner diagnostic:
+
+```sh
+python3 scripts/run_benchmarks.py --build-dir build/fair --check-memory
+```
+
+This runs **no network benchmark**. `pace_bench --memory-probe` touches and frees
+32 MiB, then verifies that the peak remains recorded. The Python diagnostic runs
+it once normally and again while its launcher holds an additional 128 MiB;
+the child's initial peak must remain within a 16 MiB tolerance, and its retained
+peak must increase by at least 24 MiB after the allocation. The generous tolerances
+allow OS accounting granularity while catching current-RSS substitution and
+launcher contamination. FreeBSD prints an explicit unavailable result. Use a
+normal uninstrumented binary for this check, and preserve its JSON output with
+the measurement evidence. Run it separately before comparative trials.
 
 ```sh
 # Build a release-mode pace_bench target with all optional dependencies enabled.
@@ -42,7 +90,12 @@ missing required backends or invalid output, and writes all raw runs plus binary
 hash, dependency versions, OS, CPU, Git revision, invocation and aggregation rules.
 Individual sockets also have send/receive timeouts. A failed comparison never
 produces a successful aggregate. The runner reports medians and min–max spread;
-it does not cherry-pick the fastest trial. The optional `--list` executable flag
+it does not cherry-pick the fastest trial. Every measured latency and peak-memory
+metric retains median/min/max across trials in JSON. The Markdown maximum column
+is the median of each trial's maximum, while `max_max_us` retains the worst
+observed request across all trials. Neither is a pooled latency percentile.
+Historical reports without extended metrics remain valid; absent p95/memory is
+reported as unavailable, never filled with a guessed value. The optional `--list` executable flag
 reports exactly which backends were compiled in.
 
 ## Acceptance criteria
@@ -50,11 +103,21 @@ reports exactly which backends were compiled in.
 A successful CI comparison requires every requested backend to complete every
 trial within its timeout, with all response bytes verified. Each record must
 match the requested trial and workload exactly, contain finite positive timing
-and throughput values, satisfy `p50 <= p99 <= max`, and agree with the completed
+and throughput values, satisfy `p50 <= p95 <= p99 <= max` for new records, and agree with the completed
 request count and payload size. The runner rejects a mismatch before aggregation
 and preserves the failure evidence. Use `--require-all --repeats 3` or more for
 CI comparisons. This acceptance criterion establishes a working, measurable
 benchmark; it does not certify that PACE is faster.
+
+New executables advertise `extended_metrics_version=2`, requiring p95,
+sample-count and a peak-memory object together. Available memory must be a positive
+integer byte count with a current-image source, scope, window and `available: true`;
+KiB values must convert to whole multiples of 1024. Unavailable memory must use
+`available: false`, `bytes: null`, `source: "unavailable"` and its documented reason.
+It appears as `n/a` in Markdown; summaries omit numeric memory aggregates entirely.
+Version 1 records remain readable with their original source/window contract,
+and pre-extension records retain p50/p99/max validation. No schema versions or
+different memory sources can be silently mixed in a backend-comparison aggregate.
 
 For a performance claim, evaluate each baseline separately on the same dedicated
 hardware and compiler configuration. A proposed release target is a throughput

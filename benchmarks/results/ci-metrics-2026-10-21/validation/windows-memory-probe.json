@@ -1,0 +1,47 @@
+{
+  "run_id": 39608371946,
+  "head_sha": "3eb014ce014d11b780ef019b9c1936b77f8d81d6",
+  "job_url": "https://github.com/TabNahida/PACE/actions/runs/39608371946/job/119250994237",
+  "source": "GitHub Actions job log: Verify peak memory belongs to the benchmark image",
+  "probe_output": {
+    "status": "passed",
+    "source": "GetProcessMemoryInfo.PeakWorkingSetSize",
+    "normal": {
+      "probe": "peak_process_memory",
+      "allocated_bytes": 33554432,
+      "before": {
+        "bytes": 6033408,
+        "source": "GetProcessMemoryInfo.PeakWorkingSetSize",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "after_release": {
+        "bytes": 39591936,
+        "source": "GetProcessMemoryInfo.PeakWorkingSetSize",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      }
+    },
+    "large_launcher": {
+      "probe": "peak_process_memory",
+      "allocated_bytes": 33554432,
+      "before": {
+        "bytes": 6029312,
+        "source": "GetProcessMemoryInfo.PeakWorkingSetSize",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "after_release": {
+        "bytes": 39587840,
+        "source": "GetProcessMemoryInfo.PeakWorkingSetSize",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      }
+    },
+    "launcher_padding_bytes": 134217728
+  }
+}

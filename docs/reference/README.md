@@ -12,12 +12,19 @@ a public header; it has no compatibility guarantee.
 | [`io_context.hpp`](io-context.md) | `io_context`, construction/destruction, `spawn`, `post`, `run`, `stop`, `stopped`, `current`, `cancel`, `wait_readable`, `wait_writable`, `sleep_for`, `yield`, `io_awaiter`, `timer_awaiter`, `yield_awaiter` |
 | [`runtime.hpp`](runtime.md) | `runtime`, construction/destruction, `size`, `context`, `run`, `run_on_current_thread`, `stop` |
 | [`tcp.hpp`](tcp.md) | `tcp::endpoint`, `tcp::listen_options`, `tcp::stream`, `tcp::listener` and all their members |
-| [`http.hpp`](http.md) | `http::header_field`, `http::request`, `http::response`, `http::limits`, `http::handler`, `http::serve_connection`, `http::serve` |
+| [`udp.hpp`](udp.md) | `udp::endpoint`, `udp::datagram`, `udp::socket`, `send_to`, `receive_from` |
+| [`http.hpp`](http.md) | HTTP/1.1 message types/limits/errors, `handler`, `serve_connection`, `serve`, `client`/`secure_client`, `basic_client`, `fetch`, `get`, and optional HTTPS overloads |
+| [`tls.hpp`](tls.md) | Optional verified TLS: `tls::context`, `tls::stream`, handshake, ALPN, record I/O and shutdown |
+| [`http2.hpp`](http2.md) | Optional HTTP/2: `http2::limits`, batch `exchange`, `serve_connection`, `serve` |
+| [`websocket.hpp`](websocket.md) | WebSocket handshake, messages, control frames and optional secure transport |
 | [`platform.hpp`](platform.md) | `native_socket_type`, `invalid_socket` |
 | [`net.hpp`](platform.md) | Compatibility aliases `tcp_stream`, `tcp_listener`, `ipv4_endpoint`, `listen_options` |
 | [`pace.hpp`](platform.md) | Umbrella header; no additional types or functions |
 
 ## Rules shared by the APIs
+
+For a runnable starting point, [choose a protocol example](../tutorial/README.md).
+TLS needs `--tls=y`; HTTP/2 needs `--http2=y`. Enable both for HTTP/2 over TLS.
 
 **Ownership.** A task is lazy and consumed once. Parameters passed by value become
 part of its coroutine frame, but references, pointers, spans and string views do
@@ -30,6 +37,10 @@ cross-thread entry points. Socket I/O and timer/yield waits execute on their own
 context. Construction before `run()` and cleanup after it returns are supported;
 concurrent object access from an unrelated thread is not. Read-only accessors do
 not make a concurrently modified socket safe to inspect.
+
+Concurrency limits differ by protocol. TCP allows one read and one write at once;
+the initial TLS stream allows **one asynchronous operation total**. Check the
+specific protocol's contract before sharing a connection between coroutines.
 
 **Errors.** Awaited tasks rethrow their exceptions. A root task or posted callback
 with an unhandled exception stops its context; `run()` rethrows the first recorded
@@ -49,5 +60,5 @@ unbounded CPU loops prevent that reactor from serving other work or finishing
 shutdown. `run()` stays alive while idle until explicitly stopped. Contexts are
 single-use and cannot be restarted.
 
-The [tutorials](../README.md) show these rules together. The signatures below
+The [tutorials](../tutorial/README.md) show these rules together. The linked signatures
 describe the current implementation; they do not promise APIs from Asio or libuv.

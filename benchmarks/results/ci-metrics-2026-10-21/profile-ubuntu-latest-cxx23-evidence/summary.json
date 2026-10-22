@@ -1,0 +1,30 @@
+[
+  {
+    "backend": "pace",
+    "instrumented": true,
+    "trials": 3,
+    "extended_metrics_version": 2,
+    "peak_process_memory_source": "/proc/self/status.VmHWM_KiB",
+    "peak_process_memory_scope": "whole process including server, blocking clients and latency samples",
+    "peak_process_memory_window": "current process image through server/client shutdown, before result aggregation",
+    "peak_process_memory_available": true,
+    "median_requests_per_second": 106817.7382818,
+    "min_requests_per_second": 100682.703739971,
+    "max_requests_per_second": 107184.314025816,
+    "median_p50_us": 36.695,
+    "min_p50_us": 36.634,
+    "max_p50_us": 39.046,
+    "median_p99_us": 50.759,
+    "min_p99_us": 48.732,
+    "max_p99_us": 54.283,
+    "median_max_us": 672.156,
+    "min_max_us": 115.011,
+    "max_max_us": 922.323,
+    "median_p95_us": 44.706,
+    "min_p95_us": 43.658,
+    "max_p95_us": 47.429,
+    "median_peak_process_memory_bytes": 5263360,
+    "min_peak_process_memory_bytes": 5238784,
+    "max_peak_process_memory_bytes": 5308416
+  }
+]

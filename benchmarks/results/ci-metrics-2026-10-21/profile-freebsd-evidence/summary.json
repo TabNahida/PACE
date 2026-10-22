@@ -1,0 +1,28 @@
+[
+  {
+    "backend": "pace",
+    "instrumented": true,
+    "trials": 3,
+    "extended_metrics_version": 2,
+    "peak_process_memory_source": "unavailable",
+    "peak_process_memory_scope": "whole process including server, blocking clients and latency samples",
+    "peak_process_memory_window": "current process image through server/client shutdown, before result aggregation",
+    "peak_process_memory_available": false,
+    "peak_process_memory_unavailable_reason": "no verified current-image peak resident memory provider on this platform",
+    "median_requests_per_second": 283218.545682822,
+    "min_requests_per_second": 278844.015327052,
+    "max_requests_per_second": 284863.745646757,
+    "median_p50_us": 13.199,
+    "min_p50_us": 13.14,
+    "max_p50_us": 13.209,
+    "median_p99_us": 37.275,
+    "min_p99_us": 34.932,
+    "max_p99_us": 38.818,
+    "median_max_us": 194.619,
+    "min_max_us": 179.546,
+    "max_max_us": 457.499,
+    "median_p95_us": 14.902,
+    "min_p95_us": 14.722,
+    "max_p95_us": 17.807
+  }
+]
