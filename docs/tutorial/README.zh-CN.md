@@ -24,6 +24,9 @@ xmake run tutorial_tasks
 | 目标 | 命令 | 指南 / 源码 |
 |---|---|---|
 | TCP 回显 | `xmake run tutorial_tcp` | [指南](03-tcp.md) · [源码](../../examples/tutorial_tcp.cpp) |
+| DNS 解析 | `xmake run tutorial_dns` | [API](../reference/dns.md) · [source](../../examples/tutorial_dns.cpp) |
+| QUIC 多路流 | `xmake run tutorial_quic` | [API](../reference/quic.md) · [source](../../examples/tutorial_quic.cpp) |
+| HTTP/3 | `xmake run tutorial_http3` | [API](../reference/http3.md) · [source](../../examples/tutorial_http3.cpp) |
 | UDP 数据报 | `xmake run tutorial_udp` | [指南](../reference/udp.md) · [源码](../../examples/tutorial_udp.cpp) |
 | HTTP 服务端 | `xmake run tutorial_http` | [指南](04-http.md) · [源码](../../examples/tutorial_http.cpp) |
 | HTTP 客户端 | `xmake run tutorial_http_client` | [指南](04-http.md) · [源码](../../examples/tutorial_http_client.cpp) |
@@ -31,10 +34,10 @@ xmake run tutorial_tasks
 | HTTP/2 请求 | `xmake run tutorial_http2` | [指南](../reference/http2.md) · [源码](../../examples/tutorial_http2.cpp) |
 | WebSocket 消息 | `xmake run tutorial_websocket` | [指南](../reference/websocket.md) · [源码](../../examples/tutorial_websocket.cpp) |
 
-TLS 和 HTTP/2 默认关闭，运行相应示例前需要启用并重新构建：
+TLS、DNS、QUIC、HTTP/2 和 HTTP/3 默认关闭，运行相应示例前需要启用并重新构建：
 
 ```sh
-xmake f -m release --tls=y --http2=y -y
+xmake f -m release --tls=y --dns=y --quic=y --http2=y --http3=y -y
 xmake -y
 ```
 

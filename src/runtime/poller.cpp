@@ -42,6 +42,7 @@ constexpr std::size_t max_batch = 256;
 struct poller::implementation {
     int queue = -1;
     int notification = -1;
+    bool persistent = false;
 
     implementation() {
         queue = ::epoll_create1(EPOLL_CLOEXEC);
@@ -70,7 +71,7 @@ void poller::update(native_socket_type fd, bool readable, bool writable, std::ui
     if (token == wake_token) throw std::invalid_argument("poller token UINT64_MAX is reserved");
     if (!readable && !writable) { remove(fd); return; }
     epoll_event event{};
-    event.events = EPOLLONESHOT | EPOLLRDHUP;
+    event.events = (impl_->persistent ? 0U : EPOLLONESHOT) | EPOLLRDHUP;
     if (readable) event.events |= EPOLLIN;
     if (writable) event.events |= EPOLLOUT;
     event.data.u64 = token;
@@ -343,7 +344,13 @@ void poller::wake() noexcept {
 
 #endif
 
-poller::poller() : impl_(std::make_unique<implementation>()) {}
+poller::poller(bool persistent) : impl_(std::make_unique<implementation>()) {
+#if defined(__linux__)
+    impl_->persistent = persistent;
+#else
+    if (persistent) throw std::invalid_argument("persistent polling is unavailable on this platform");
+#endif
+}
 poller::~poller() = default;
 
 } // namespace pace::detail

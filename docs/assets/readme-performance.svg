@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="690" viewBox="0 0 1280 690" role="img" aria-labelledby="title description">
+<title id="title">PACE, Asio and libuv — local Linux TCP echo comparison</title>
+<desc id="description">PACE: 340,328 requests/s, p50 77.71, p95 157.01, p99 177.94 microseconds; Asio: 327,696 requests/s, p50 94.69, p95 109.53, p99 141.22 microseconds; libuv: 313,891 requests/s, p50 93.20, p95 179.80, p99 197.63 microseconds. All axes start at zero. This is one local workload, not an overall ranking.</desc>
+<metadata>{&quot;aggregation&quot;: &quot;Median of trial metrics; whiskers are observed min–max, not confidence intervals&quot;, &quot;latency_scale&quot;: [0, 250], &quot;rows&quot;: [{&quot;backend&quot;: &quot;pace&quot;, &quot;p50_us&quot;: 77.713, &quot;p95_us&quot;: 157.0105, &quot;p99_us&quot;: 177.9425, &quot;requests_per_second&quot;: 340328.23651204945}, {&quot;backend&quot;: &quot;asio&quot;, &quot;p50_us&quot;: 94.686, &quot;p95_us&quot;: 109.5315, &quot;p99_us&quot;: 141.21699999999998, &quot;requests_per_second&quot;: 327695.9128624185}, {&quot;backend&quot;: &quot;libuv&quot;, &quot;p50_us&quot;: 93.203, &quot;p95_us&quot;: 179.7985, &quot;p99_us&quot;: 197.63, &quot;requests_per_second&quot;: 313890.59266210545}], &quot;source&quot;: &quot;benchmarks/results/linux-optimization-2026-10-22/final-c32-b64-session1.json&quot;, &quot;source_sha256&quot;: &quot;13d3e4ef0ba70a67bd70f9063c854e0d4a30e3b45acdcbe71a67074cc695c8c9&quot;}</metadata>
+<rect x="1" y="1" width="1278" height="688" rx="24" fill="#0C1421" stroke="#263347" stroke-width="2"/>
+<g font-family="Inter, Segoe UI, Arial, sans-serif">
+<text x="48" y="58" fill="#F0F4FC" font-size="30" font-weight="700" text-anchor="start">Measured on Linux</text>
+<text x="1232" y="56" fill="#A4B2C8" font-size="17" font-weight="400" text-anchor="end">2026-10-22</text>
+<text x="48" y="92" fill="#A4B2C8" font-size="19" font-weight="400" text-anchor="start">TCP echo · 32 connections · 64-byte payloads · 1 server thread · 10 trials/backend</text>
+<text x="48" y="157" fill="#F0F4FC" font-size="24" font-weight="650" text-anchor="start">Throughput</text>
+<text x="48" y="184" fill="#A4B2C8" font-size="17" font-weight="400" text-anchor="start">k requests/s · higher is better</text>
+<path d="M132.00 204V328" stroke="#61728C" stroke-width="1.5"/>
+<text x="132.00" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">0</text>
+<path d="M225.50 204V328" stroke="#243146" stroke-width="1"/>
+<text x="225.50" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">100</text>
+<path d="M319.00 204V328" stroke="#243146" stroke-width="1"/>
+<text x="319.00" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">200</text>
+<path d="M412.50 204V328" stroke="#243146" stroke-width="1"/>
+<text x="412.50" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">300</text>
+<path d="M506.00 204V328" stroke="#243146" stroke-width="1"/>
+<text x="506.00" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">400</text>
+<text x="48" y="228" fill="#70DFC3" font-size="20" font-weight="600" text-anchor="start">PACE</text>
+<rect x="132" y="209" width="318.207" height="26" rx="3" fill="#70DFC3"/>
+<path d="M448.427 222H452.125M448.427 217V227M452.125 217V227" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="600" y="229" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">340.3</text>
+<text x="48" y="274" fill="#A9AEF7" font-size="20" font-weight="600" text-anchor="start">Asio</text>
+<rect x="132" y="255" width="306.396" height="26" rx="3" fill="#A9AEF7"/>
+<path d="M434.643 268H440.606M434.643 263V273M440.606 263V273" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="600" y="275" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">327.7</text>
+<text x="48" y="320" fill="#8D9DB7" font-size="20" font-weight="600" text-anchor="start">libuv</text>
+<rect x="132" y="301" width="293.488" height="26" rx="3" fill="#8D9DB7"/>
+<path d="M423.737 314H427.620M423.737 309V319M427.620 309V319" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="600" y="321" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">313.9</text>
+<text x="680" y="157" fill="#F0F4FC" font-size="24" font-weight="650" text-anchor="start">p50 latency</text>
+<text x="680" y="184" fill="#A4B2C8" font-size="17" font-weight="400" text-anchor="start">µs · lower is better</text>
+<path d="M764.00 204V328" stroke="#61728C" stroke-width="1.5"/>
+<text x="764.00" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">0</text>
+<path d="M838.80 204V328" stroke="#243146" stroke-width="1"/>
+<text x="838.80" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">50</text>
+<path d="M913.60 204V328" stroke="#243146" stroke-width="1"/>
+<text x="913.60" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">100</text>
+<path d="M988.40 204V328" stroke="#243146" stroke-width="1"/>
+<text x="988.40" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">150</text>
+<path d="M1063.20 204V328" stroke="#243146" stroke-width="1"/>
+<text x="1063.20" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">200</text>
+<path d="M1138.00 204V328" stroke="#243146" stroke-width="1"/>
+<text x="1138.00" y="354" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">250</text>
+<text x="680" y="228" fill="#70DFC3" font-size="20" font-weight="600" text-anchor="start">PACE</text>
+<rect x="764" y="209" width="116.259" height="26" rx="3" fill="#70DFC3"/>
+<path d="M879.820 222H881.288M879.820 217V227M881.288 217V227" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="1232" y="229" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">77.71</text>
+<text x="680" y="274" fill="#A9AEF7" font-size="20" font-weight="600" text-anchor="start">Asio</text>
+<rect x="764" y="255" width="141.650" height="26" rx="3" fill="#A9AEF7"/>
+<path d="M904.947 268H906.006M904.947 263V273M906.006 263V273" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="1232" y="275" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">94.69</text>
+<text x="680" y="320" fill="#8D9DB7" font-size="20" font-weight="600" text-anchor="start">libuv</text>
+<rect x="764" y="301" width="139.432" height="26" rx="3" fill="#8D9DB7"/>
+<path d="M902.715 314H903.774M902.715 309V319M903.774 309V319" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="1232" y="321" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">93.20</text>
+<text x="48" y="409" fill="#F0F4FC" font-size="24" font-weight="650" text-anchor="start">p95 latency</text>
+<text x="48" y="436" fill="#A4B2C8" font-size="17" font-weight="400" text-anchor="start">µs · lower is better</text>
+<path d="M132.00 456V580" stroke="#61728C" stroke-width="1.5"/>
+<text x="132.00" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">0</text>
+<path d="M206.80 456V580" stroke="#243146" stroke-width="1"/>
+<text x="206.80" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">50</text>
+<path d="M281.60 456V580" stroke="#243146" stroke-width="1"/>
+<text x="281.60" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">100</text>
+<path d="M356.40 456V580" stroke="#243146" stroke-width="1"/>
+<text x="356.40" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">150</text>
+<path d="M431.20 456V580" stroke="#243146" stroke-width="1"/>
+<text x="431.20" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">200</text>
+<path d="M506.00 456V580" stroke="#243146" stroke-width="1"/>
+<text x="506.00" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">250</text>
+<text x="48" y="480" fill="#70DFC3" font-size="20" font-weight="600" text-anchor="start">PACE</text>
+<rect x="132" y="461" width="234.888" height="26" rx="3" fill="#70DFC3"/>
+<path d="M366.048 474H368.721M366.048 469V479M368.721 469V479" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="600" y="481" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">157.01</text>
+<text x="48" y="526" fill="#A9AEF7" font-size="20" font-weight="600" text-anchor="start">Asio</text>
+<rect x="132" y="507" width="163.859" height="26" rx="3" fill="#A9AEF7"/>
+<path d="M294.323 520H304.248M294.323 515V525M304.248 515V525" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="600" y="527" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">109.53</text>
+<text x="48" y="572" fill="#8D9DB7" font-size="20" font-weight="600" text-anchor="start">libuv</text>
+<rect x="132" y="553" width="268.979" height="26" rx="3" fill="#8D9DB7"/>
+<path d="M400.346 566H402.212M400.346 561V571M402.212 561V571" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="600" y="573" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">179.80</text>
+<text x="680" y="409" fill="#F0F4FC" font-size="24" font-weight="650" text-anchor="start">p99 latency</text>
+<text x="680" y="436" fill="#A4B2C8" font-size="17" font-weight="400" text-anchor="start">µs · lower is better</text>
+<path d="M764.00 456V580" stroke="#61728C" stroke-width="1.5"/>
+<text x="764.00" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">0</text>
+<path d="M838.80 456V580" stroke="#243146" stroke-width="1"/>
+<text x="838.80" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">50</text>
+<path d="M913.60 456V580" stroke="#243146" stroke-width="1"/>
+<text x="913.60" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">100</text>
+<path d="M988.40 456V580" stroke="#243146" stroke-width="1"/>
+<text x="988.40" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">150</text>
+<path d="M1063.20 456V580" stroke="#243146" stroke-width="1"/>
+<text x="1063.20" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">200</text>
+<path d="M1138.00 456V580" stroke="#243146" stroke-width="1"/>
+<text x="1138.00" y="606" fill="#91A1B9" font-size="16" font-weight="400" text-anchor="middle">250</text>
+<text x="680" y="480" fill="#70DFC3" font-size="20" font-weight="600" text-anchor="start">PACE</text>
+<rect x="764" y="461" width="266.202" height="26" rx="3" fill="#70DFC3"/>
+<path d="M1026.198 474H1036.924M1026.198 469V479M1036.924 469V479" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="1232" y="481" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">177.94</text>
+<text x="680" y="526" fill="#A9AEF7" font-size="20" font-weight="600" text-anchor="start">Asio</text>
+<rect x="764" y="507" width="211.261" height="26" rx="3" fill="#A9AEF7"/>
+<path d="M969.990 520H993.187M969.990 515V525M993.187 515V525" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="1232" y="527" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">141.22</text>
+<text x="680" y="572" fill="#8D9DB7" font-size="20" font-weight="600" text-anchor="start">libuv</text>
+<rect x="764" y="553" width="295.654" height="26" rx="3" fill="#8D9DB7"/>
+<path d="M1057.095 566H1064.639M1057.095 561V571M1064.639 561V571" fill="none" stroke="#F8FAFE" stroke-width="1.5"/>
+<text x="1232" y="573" fill="#F0F4FC" font-size="22" font-weight="600" text-anchor="end">197.63</text>
+<path d="M48 630H1232" stroke="#263347"/>
+<text x="48" y="655" fill="#A4B2C8" font-size="16" font-weight="400" text-anchor="start">Bars: medians · whiskers: trial min–max, not confidence intervals · latency panels share one scale</text>
+<text x="48" y="678" fill="#91A1B9" font-size="15" font-weight="400" text-anchor="start">Linux / WSL2 · GCC 13.3.0 · Asio 1.34.2 · libuv 1.52.1 · closed-loop localhost workload</text>
+</g>
+</svg>

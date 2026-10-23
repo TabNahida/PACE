@@ -1,5 +1,6 @@
 #pragma once
-#include <pace/http.hpp>
+#include <pace/http_types.hpp>
+#include <pace/tcp.hpp>
 #include <pace/tls.hpp>
 
 #ifdef PACE_HAS_HTTP2

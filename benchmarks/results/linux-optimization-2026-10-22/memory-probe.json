@@ -1,0 +1,41 @@
+{
+  "status": "passed",
+  "source": "/proc/self/status.VmHWM_KiB",
+  "normal": {
+    "probe": "peak_process_memory",
+    "allocated_bytes": 33554432,
+    "before": {
+      "bytes": 3690496,
+      "source": "/proc/self/status.VmHWM_KiB",
+      "scope": "whole process including server, blocking clients and latency samples",
+      "window": "current process image through server/client shutdown, before result aggregation",
+      "available": true
+    },
+    "after_release": {
+      "bytes": 36970496,
+      "source": "/proc/self/status.VmHWM_KiB",
+      "scope": "whole process including server, blocking clients and latency samples",
+      "window": "current process image through server/client shutdown, before result aggregation",
+      "available": true
+    }
+  },
+  "large_launcher": {
+    "probe": "peak_process_memory",
+    "allocated_bytes": 33554432,
+    "before": {
+      "bytes": 3624960,
+      "source": "/proc/self/status.VmHWM_KiB",
+      "scope": "whole process including server, blocking clients and latency samples",
+      "window": "current process image through server/client shutdown, before result aggregation",
+      "available": true
+    },
+    "after_release": {
+      "bytes": 36843520,
+      "source": "/proc/self/status.VmHWM_KiB",
+      "scope": "whole process including server, blocking clients and latency samples",
+      "window": "current process image through server/client shutdown, before result aggregation",
+      "available": true
+    }
+  },
+  "launcher_padding_bytes": 134217728
+}

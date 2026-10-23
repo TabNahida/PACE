@@ -300,6 +300,8 @@ application. There is no implicit URL decoding, JSON parser or router.
 HTTP/1.1 support here is bounded buffered request/response messaging. It does not
 claim every HTTP feature: no content-coding decompression, Expect handshake,
 CONNECT tunnel, server informational emission, streaming bodies, request deadline,
-automatic redirect/retry, proxy or HTTP/3. HTTP/2 and WebSocket use their own APIs.
+automatic redirect/retry, proxy or HTTP/3 within this HTTP/1 module.
+HTTP/2, [HTTP/3](http3.md) and WebSocket use their own APIs; explicit hostname
+resolution is available through the optional [DNS extension](dns.md).
 EOF-delimited TLS responses additionally require a clean TLS close_notify; TLS
 truncation is a transport failure, not successful EOF.

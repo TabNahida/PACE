@@ -109,4 +109,5 @@ io.run();
 trailer、字段数量、chunk 行长、chunk 数量等上限。默认 body 上限为 1 MiB；
 歧义 Content-Length/Transfer-Encoding、非法 chunk 或危险 trailer 都会被拒绝并关闭连接。
 这些限额不是超时、全局连接数或全局内存策略。Expect、CONNECT、流式 body、HTTP/3
-不在这个接口范围内；HTTP/2 和 WebSocket 使用各自独立接口。
+不在这个接口范围内；HTTP/2、[HTTP/3](../reference/http3.md) 和 WebSocket
+使用各自独立接口。主机名可先用可选的 [DNS 扩展](../reference/dns.md)显式解析。

@@ -1,0 +1,21 @@
+| Backend | Requests/s (median) | Min–max requests/s | p50 µs¹ | p95 µs¹ | p99 µs¹ | Max µs¹ |
+|---|---:|---:|---:|---:|---:|---:|
+| pace | 135,487 | 131,806–144,256 | 27.41 | 38.80 | 50.59 | 4598.22 |
+| asio | 138,960 | 137,476–142,005 | 27.30 | 39.58 | 52.86 | 383.48 |
+| libuv | 160,854 | 156,343–165,268 | 21.90 | 35.31 | 47.27 | 381.61 |
+
+¹ Median of each trial's percentile or maximum; not pooled percentiles or the overall worst request. JSON preserves every metric's min/max across trials.
+
+| Backend | Whole-process peak memory MiB (median) | Min–max MiB | OS source |
+|---|---:|---:|---|
+| pace | 4.969 | 4.961–5.016 | /proc/self/status.VmHWM_KiB |
+| asio | 4.605 | 4.594–4.605 | /proc/self/status.VmHWM_KiB |
+| libuv | 4.688 | 4.637–4.691 | /proc/self/status.VmHWM_KiB |
+
+Peak RSS/working set includes the server, identical blocking clients and stored latency samples. It includes startup/warmup and is read after shutdown, before result aggregation. Version 2 measures the current process image; unsupported providers report n/a, never zero. Linux VmHWM accounting is approximate. This does not isolate library footprint; compare only the same workload and OS.
+
+3 trials per backend; one server thread; 4 persistent connections; 4096-byte payload; one outstanding request per connection; 10000 measured + 1000 warmup requests per connection per trial.
+
+Loopback results describe this workload on this machine, not general superiority or multicore/HTTP performance.
+
+Environment and commands: `environment.json`. Every run: `raw.jsonl`.

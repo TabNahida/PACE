@@ -1,6 +1,46 @@
 # Architecture and execution contract
 
-PACE provides a coroutine networking runtime, TCP and UDP sockets, HTTP/1.0–1.1 clients and servers, WebSocket, and optional TLS/HTTPS and HTTP/2. It is under active development; API and scheduling decisions may change as tests and measurements improve.
+PACE separates its coroutine runtime, sockets, base protocol extensions and application protocols into four layers. It is under active development; API and scheduling decisions may change as tests and measurements improve.
+
+## Four independently linkable layers
+
+```mermaid
+flowchart BT
+    R["Layer 0 · PACE Runtime<br/>Event loop · I/O backend · execution · timers · threading"]
+    N["Layer 1 · PACE Networking<br/>TCP socket · UDP socket · socket API"]
+    E["Layer 2 · Optional extensions<br/>TLS / SSL · DNS resolver · QUIC"]
+    A["Layer 3 · Optional application protocols<br/>HTTP/1.1 · HTTP/2 · HTTP/3 · WebSocket"]
+    R --> N
+    N --> E
+    N --> A
+    E --> A
+```
+
+| Layer | xmake targets | Implementation |
+|---|---|---|
+| 0, core | `pace_runtime` | `src/runtime/`: reactor, poller, execution, timers and worker runtime |
+| 1, core | `pace_net` | `src/networking/`: TCP and UDP; depends only on runtime |
+| 2, optional | `pace_tls`, `pace_dns`, `pace_quic`; aggregate `pace_extensions` | `src/extensions/` |
+| 3, optional | `pace_http1`, `pace_http2`, `pace_http3`, `pace_websocket`; aggregate `pace_application` | `src/application/` |
+
+`pace` is a compatibility aggregate target exporting the enabled modules. It no
+longer produces one monolithic `libpace.a`: applications link the individual
+static libraries through xmake's dependency graph. Existing `add_deps("pace")`
+and public include paths remain supported. Narrow consumers can instead use
+`add_deps("pace_net")` with `<pace/networking.hpp>`, or select an individual
+protocol. `<pace/extensions.hpp>` and `<pace/application.hpp>` group the upper
+layers. Public protocol headers remain at their existing paths.
+
+HTTP/1 and WebSocket default on for source compatibility and can be disabled;
+all third-party protocols default off. QUIC requires OpenSSL 3.5+ but does not
+enable the TCP TLS module. HTTP/3 enables QUIC plus nghttp3, without depending on
+HTTP/1 or HTTP/2. TLS uses OpenSSL, DNS uses c-ares, and HTTP/2 uses nghttp2.
+QUIC/HTTP3 require POSIX; Windows builds reject these options until a native
+transport adapter is implemented. See the [platform matrix](reference/platform.md).
+`http_types.hpp` holds transport-independent HTTP messages and handlers, so
+HTTP/2 and HTTP/3 do not depend on the HTTP/1 parser. Core networking has no
+upward protocol dependencies. Buffer ownership remains explicit through spans,
+views and owning message bodies; there is no separate buffer allocator module.
 
 ## One reactor per worker
 
@@ -32,11 +72,18 @@ Optional [stage profiling](../benchmarks/profiling.md) and [component microbench
 
 | Target | I/O notification | Cross-thread wakeup |
 |---|---|---|
-| Linux | `epoll`, persistent registration with `EPOLLONESHOT` | Nonblocking `eventfd` |
+| Linux | `epoll`, persistent level-triggered interests | Nonblocking `eventfd` |
 | macOS / FreeBSD, 64-bit | `kqueue`, `EV_ONESHOT` read/write filters | `EVFILT_USER` |
 | Windows | `WSAPoll` readiness array | Nonblocking UDP loopback sockets |
 
-The internal poller emits a token with readable, writable, and error flags. Event delivery disarms the whole descriptor; the reactor rearms any remaining waiter. For kqueue, read and write filters may produce separate native events, so the adapter merges them and disarms any undelivered counterpart. Windows removes delivered registrations from its active polling array. Wakeup events are consumed internally.
+The internal poller emits a token with readable, writable, and error flags. On
+Linux the reactor retains matching interests across successive coroutine waits,
+then reconciles dirty subscriptions before its next poll. A resumed reader can
+rearm without an `epoll_ctl` call; an actually idle direction is removed before
+polling to avoid spinning on stale readiness. Standalone poller users retain the
+one-shot default. On kqueue and Windows event delivery disarms the descriptor
+and the reactor rearms remaining waiters. For kqueue, separate read/write events
+are merged and any undelivered counterpart is disarmed. Wakeups are internal.
 
 Socket registrations have tokens independent of the native socket handle, allowing the reactor to discard stale deliveries after cancellation and handle reuse. `UINT64_MAX` is reserved for the internal wakeup token. Windows handles retain their native pointer width.
 
@@ -87,6 +134,11 @@ Stop is cooperative, not a forced thread interruption. An application coroutine 
 The canonical TCP header is `<pace/tcp.hpp>`. It declares `pace::tcp::listener`, `pace::tcp::stream`, `pace::tcp::endpoint`, and `pace::tcp::listen_options`; `endpoint` currently represents a numeric IPv4 address and port. `<pace/net.hpp>` forwards to this header and retains the original top-level names as source compatibility aliases. The umbrella `<pace/pace.hpp>` also retains those aliases.
 
 TCP uses nonblocking numeric IPv4 sockets. Operations first attempt the native call; when it would block, they await the relevant readiness event and retry. `write_all()` retains its input view until the complete buffer has been sent. Socket errors use `std::system_error`. Linux sends suppress `SIGPIPE` per operation; platforms with `SO_NOSIGPIPE` configure it on the socket.
+After a short TCP read, the next nonempty read waits for level readiness before
+retrying `recv`, avoiding the common redundant EAGAIN call. This is a hint,
+not an EOF decision: queued data, new arrivals and peer shutdown are still
+reported by the poller and verified with `recv`. Full-buffer reads keep the
+immediate-read path; the hint follows move operations.
 
 `co_await stream.close_gracefully()` half-closes the send side, then drains peer input until EOF, a 100 ms deadline, or 64 KiB of discarded data. Both bounds are configurable. A cancellable timer avoids blocking the reactor while waiting for the peer. The operation always releases the socket, including on cancellation or error, and requires that no other socket operation is outstanding. HTTP uses this bounded close after its final response so unread rejected-request bytes do not immediately reset the connection. Reaching either bound can still terminate a noncooperating peer before an orderly close; this is a shutdown bound, not a request timeout.
 
@@ -98,12 +150,22 @@ The HTTP/1 layer supports clients and servers, Content-Length and chunked framin
 
 [HTTP/2](reference/http2.md) uses optional nghttp2 for framing, HPACK and flow control. The client owns one connection for a batch of multiplexed requests; the server buffers bounded stream bodies and invokes completed handlers sequentially per connection. [WebSocket](reference/websocket.md) handles HTTP upgrades on its own owned transport, then validates masking, fragmentation, UTF-8 and control frames. The HTTP/1 parser does not transfer its buffered transport into another protocol.
 
-CONNECT tunneling, streaming HTTP bodies, HTTP/3 and request deadlines are not exposed. Header/body limits bound individual message parsing; they do not bound connection lifetimes. DNS, IPv6, and asynchronous file operations are also future work. Each protocol reference states its current ownership and concurrency limits.
+[DNS](reference/dns.md) integrates c-ares with readiness and timers. It resolves
+A/AAAA and CNAME records without a blocking network lookup thread.
+[QUIC](reference/quic.md) uses OpenSSL's native QUIC/TLS 1.3 implementation over
+UDP and exposes bidirectional/unidirectional streams. [HTTP/3](reference/http3.md)
+uses nghttp3 for HTTP framing and QPACK over those streams. These protocols are
+optional and are tested against local peers.
+
+CONNECT tunneling, streaming HTTP bodies, IPv6 transport and asynchronous file
+operations are not exposed. Header/body limits bound individual message parsing;
+they do not generally bound connection lifetimes. Each protocol reference states
+its deadlines, ownership and concurrency limits.
 
 ## Measurement and validation
 
 The first benchmark measures one server reactor under a closed-loop localhost TCP echo workload. PACE and Asio use coroutines; libuv uses callbacks. Payloads and completed-request counts are validated, runs are repeated in rotating backend order, and every raw result is preserved. See the [benchmark methodology](../benchmarks/README.md) for timing boundaries, limitations, and reproducible commands.
 
-This workload does not establish HTTP performance, multiworker scalability, open-loop tail latency, or general superiority over another library. CI is configured to run native builds on Linux, macOS, and Windows, plus a FreeBSD VM, and to preserve benchmark artifacts. Current [workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml), tests, and evidence files determine what has actually been validated.
+This workload does not establish HTTP performance, multiworker scalability, open-loop tail latency, or general superiority over another library. CI runs functional builds on Linux, macOS, and Windows, plus a FreeBSD VM, and preserves correctness-check artifacts. Published performance measurements come from local Linux. Current [workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml), tests, and evidence files determine what has actually been validated.
 
 The separate [worker/execution scaling study](../benchmarks/scaling.md) keeps total clients fixed, balances them across one listening port per context, and compares runtime-managed threads, caller participation and application-owned threads. Startup, warmup, steady state and shutdown have separate timing windows. [Complete performance results](performance.md) include the README chart's unselected comparisons and negative findings.

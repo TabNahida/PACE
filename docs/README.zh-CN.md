@@ -1,53 +1,43 @@
-# PACE 中文文档
+# PACE 文档
 
-[English](README.md) · [API 中文索引](reference/README.zh-CN.md)
+使用 C++20 协程构建异步网络应用。
 
-## 先运行一个程序
+[项目首页](../README.zh-CN.md) · [English](README.md) · [API 索引](reference/README.zh-CN.md)
 
-准备 xmake 2.9.8+ 和支持 C++20 协程的编译器，在仓库根目录运行：
+## 从这里开始
 
 ```sh
 xmake f -m release -y
-xmake -y tutorial_tasks
-xmake run tutorial_tasks
+xmake -y tutorial_tcp
+xmake run tutorial_tcp
 ```
 
-程序打印 `Hello, PACE` 后退出。核心流程是
-`io.spawn(hello(io)); io.run();`：调用线程执行任务，任务显式调用
-`io.stop()` 后退出。继续阅读[构建与应用集成](tutorial/01-build.md)，
-或直接看[完整源码](../examples/tutorial_tasks.cpp)。
+示例启动本地 TCP 服务端和客户端，交换消息后自行退出。
+需要 xmake 2.9.8+ 和支持 C++20 的编译器。
 
-## 按要做的事选择路径
+[构建与集成](tutorial/01-build.md) → [任务与定时器](tutorial/02-tasks-timers.md) → [TCP](tutorial/03-tcp.md) → [工作线程](tutorial/05-execution.md) → [有序关闭](tutorial/06-shutdown.md)
 
-先用 `xmake -y` 构建默认示例，再选择：
+## 按层选择模块
 
-| 我想要…… | 从这里开始 | 完整源码 |
+只链接应用需要的模块，核心层没有第三方依赖。
+
+| 层级 | 使用指南 | 可运行示例 |
 |---|---|---|
-| 组合协程任务与定时器 | [任务教程](tutorial/02-tasks-timers.md) | [tutorial_tasks.cpp](../examples/tutorial_tasks.cpp) |
-| 建立 TCP 客户端或服务 | [TCP 教程](tutorial/03-tcp.md) | [tutorial_tcp.cpp](../examples/tutorial_tcp.cpp) |
-| 收发 UDP 数据报 | [UDP 参考](reference/udp.md) | [tutorial_udp.cpp](../examples/tutorial_udp.cpp) |
-| 调用或提供 HTTP 接口 | [HTTP 教程](tutorial/04-http.md) | [客户端](../examples/tutorial_http_client.cpp) · [服务端](../examples/tutorial_http.cpp) |
-| 加密连接或使用 HTTPS | [TLS](reference/tls.md) · [HTTPS](reference/http.md) | [tutorial_tls.cpp](../examples/tutorial_tls.cpp) |
-| 交换 HTTP/2 请求 | [HTTP/2 参考](reference/http2.md) | [tutorial_http2.cpp](../examples/tutorial_http2.cpp) |
-| 收发 WebSocket 消息 | [WebSocket 参考](reference/websocket.md) | [tutorial_websocket.cpp](../examples/tutorial_websocket.cpp) |
-| 设置工作线程 | [执行方式](tutorial/05-execution.md) | [tutorial_workers.cpp](../examples/tutorial_workers.cpp) |
-| 停止服务并释放资源 | [关闭流程](tutorial/06-shutdown.md) | [tutorial_shutdown.cpp](../examples/tutorial_shutdown.cpp) |
+| **运行时** | [任务](reference/task.md) · [事件循环](reference/io-context.md) · [工作线程](reference/runtime.md) | [任务](../examples/tutorial_tasks.cpp) · [工作线程](../examples/tutorial_workers.cpp) |
+| **网络核心** | [TCP](tutorial/03-tcp.md) · [UDP](reference/udp.md) | [TCP](../examples/tutorial_tcp.cpp) · [UDP](../examples/tutorial_udp.cpp) |
+| **基础协议扩展** | [TLS](reference/tls.md) · [DNS](reference/dns.md) · [QUIC](reference/quic.md) | [TLS](../examples/tutorial_tls.cpp) · [DNS](../examples/tutorial_dns.cpp) · [QUIC](../examples/tutorial_quic.cpp) |
+| **应用协议** | [HTTP/1.1](reference/http.md) · [HTTP/2](reference/http2.md) · [HTTP/3](reference/http3.md) · [WebSocket](reference/websocket.md) | [HTTP](../examples/tutorial_http.cpp) · [HTTP/2](../examples/tutorial_http2.cpp) · [HTTP/3](../examples/tutorial_http3.cpp) · [WebSocket](../examples/tutorial_websocket.cpp) |
 
-TLS 和 HTTP/2 需要先启用可选开关：
-`xmake f -m release --tls=y --http2=y -y`，再运行 `xmake -y`。
-默认教程都会自行结束。TLS 示例使用 `tests/certs` 下公开的**测试专用**证书；
-真实服务必须使用自己的证书和密钥。
+HTTP/1.1 和 WebSocket 默认启用；TLS、DNS、QUIC、HTTP/2、HTTP/3 按需开启，
+详见[构建选项](tutorial/01-build.md)。TLS/QUIC 示例使用 `tests/certs` 中公开的测试专用证书。
 
-## 再查 API 细节
+## 了解设计
 
-[API 中文索引](reference/README.zh-CN.md)说明关键约定，
-[英文 API 参考](reference/README.md)提供签名、所有权、线程限制和错误。
-优先阅读所选协议，再查 [task](reference/task.md)、
-[io_context](reference/io-context.md) 和 [runtime](reference/runtime.md)。
+- [架构](architecture.md)：分层、事件循环、所有权与调度。
+- [API 参考](reference/README.zh-CN.md)：签名、错误处理与并发约定。
+- [教程](tutorial/README.zh-CN.md)：完整运行命令和示例。
+- [性能](performance.md)：本地 Linux 完整数据、取舍与复现方法。
+- [平台支持](reference/platform.md)：各平台后端与支持的配置。
 
-[架构](architecture.md)解释事件循环设计；
-[完整性能与调优](performance.md)包含所有后端、退化项、吞吐、延迟、
-进程内存的解释和复现方法；[中文教程](tutorial/README.zh-CN.md)提供运行命令。
-
-PACE 仍在开发中。目前支持数字 IPv4，尚无 DNS、IPv6、异步文件 I/O、
-HTTP 流式 body 或单操作截止时间。各协议均有明确边界，使用前请阅读对应参考页。
+当前传输使用 IPv4，HTTP body 采用缓冲方式；DNS 可解析 A 和 AAAA 记录。
+各协议的具体边界见对应参考页。

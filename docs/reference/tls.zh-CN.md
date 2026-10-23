@@ -31,7 +31,7 @@ co_await socket.connect({"192.0.2.1", 443}, "api.example.com");
 不会发送 DNS SNI。客户端必须提供非空身份，始终验证证书链与身份；没有跳过
 验证的开关。客户端加载 OpenSSL 默认信任路径，`load_verify_file` 可追加 CA。
 这不会自动导入 Windows 证书库或 macOS Keychain；默认根证书不可用时应显式
-提供正确的 CA 文件。没有内置 DNS 解析器。
+提供正确的 CA 文件。TLS 接口不会自动解析域名，可先使用独立的 [DNS 扩展](dns.md)。
 
 ```cpp
 pace::tls::context config(pace::tls::role::server);

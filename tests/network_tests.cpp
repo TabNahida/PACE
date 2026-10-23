@@ -89,6 +89,41 @@ pace::task<void> connect_errors(pace::io_context& context) {
     require(invalid, "embedded NUL address validation");
 }
 
+pace::task<void> short_read_server(std::shared_ptr<pace::tcp::listener> listener,
+                                   std::shared_ptr<bool> tail_sent) {
+    auto stream = co_await listener->accept();
+    co_await stream.write_all("A");
+    std::array<char, 1> acknowledgement{};
+    require(co_await stream.read_some(acknowledgement) == 1 && acknowledgement[0] == '!',
+            "short-read acknowledgement");
+    co_await stream.write_all("BC");
+    *tail_sent = true;
+}
+
+pace::task<void> short_read_rearm(pace::io_context& context) {
+    auto listener = std::make_shared<pace::tcp::listener>(context, pace::tcp::endpoint{"127.0.0.1", 0});
+    auto tail_sent = std::make_shared<bool>(false);
+    context.spawn(short_read_server(listener, tail_sent));
+    pace::tcp::stream client(context);
+    co_await client.connect(listener->local_endpoint());
+    std::array<char, 64> buffer{};
+    require(co_await client.read_some(buffer) == 1 && buffer[0] == 'A', "initial short read");
+    // A zero-size operation must finish even when the peer is awaiting our ack.
+    require(co_await client.read_some(std::span<char>{}) == 0, "empty read after short read");
+    pace::tcp::stream moved(std::move(client));
+    pace::tcp::stream assigned(context);
+    assigned = std::move(moved);
+    co_await assigned.write_all("!");
+    while (!*tail_sent) co_await context.yield();
+    // Data is already queued before rearming. A level subscription must find it;
+    // a full one-byte read must also preserve the unread remainder.
+    require(co_await assigned.read_some(std::span<char>(buffer).first(1)) == 1 && buffer[0] == 'B',
+            "queued readiness after short read and moves");
+    require(co_await assigned.read_some(buffer) == 1 && buffer[0] == 'C', "read remainder after full buffer");
+    require(co_await assigned.read_some(buffer) == 0, "EOF after short read");
+}
+
+#ifndef PACE_CORE_ONLY_TESTS
 pace::task<pace::http::response> http_handler(pace::http::request request) {
     require(request.header("HOST") == "example.test" || request.version == "HTTP/1.0", "case-insensitive header lookup");
     if (request.target == "/bad") {
@@ -238,6 +273,8 @@ pace::task<void> http_protocol(pace::io_context& context) {
     result = co_await exchange(context, endpoint, "GET /bad HTTP/1.1\r\nHost: example.test\r\n\r\n");
     require(result.starts_with("HTTP/1.1 500") && result.find("X-Injected") == std::string::npos, "response header injection must be rejected");
 }
+
+#endif
 
 pace::task<void> stop_soon(pace::io_context& context) {
     co_await context.sleep_for(5ms);
@@ -389,10 +426,15 @@ void run_test(const char* name, test_body body) {
 
 int main() {
     try {
+#ifndef PACE_CORE_ONLY_TESTS
         verify_response_framing();
+#endif
         run_test("TCP binary roundtrip and ownership", tcp_roundtrip);
         run_test("connect and endpoint errors", connect_errors);
+        run_test("short-read rearm, queued bytes, move, empty buffer and EOF", short_read_rearm);
+#ifndef PACE_CORE_ONLY_TESTS
         run_test("HTTP framing, fragmentation, limits and keep-alive", http_protocol);
+#endif
         run_test("stop cancels pending accept", stop_pending_accept);
         run_test("stop cancels pending read", stop_pending_read);
         run_test("socket close cancels pending read", close_pending_read);

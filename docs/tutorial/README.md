@@ -24,6 +24,9 @@ bounded program, with source you can copy and adapt.
 | Goal | Command | Guide / source |
 |---|---|---|
 | TCP echo | `xmake run tutorial_tcp` | [Guide](03-tcp.md) · [source](../../examples/tutorial_tcp.cpp) |
+| DNS resolution | `xmake run tutorial_dns` | [API](../reference/dns.md) · [source](../../examples/tutorial_dns.cpp) |
+| QUIC streams | `xmake run tutorial_quic` | [API](../reference/quic.md) · [source](../../examples/tutorial_quic.cpp) |
+| HTTP/3 | `xmake run tutorial_http3` | [API](../reference/http3.md) · [source](../../examples/tutorial_http3.cpp) |
 | UDP datagrams | `xmake run tutorial_udp` | [Guide](../reference/udp.md) · [source](../../examples/tutorial_udp.cpp) |
 | HTTP server | `xmake run tutorial_http` | [Guide](04-http.md) · [source](../../examples/tutorial_http.cpp) |
 | HTTP client | `xmake run tutorial_http_client` | [Guide](04-http.md) · [source](../../examples/tutorial_http_client.cpp) |
@@ -31,10 +34,10 @@ bounded program, with source you can copy and adapt.
 | HTTP/2 exchange | `xmake run tutorial_http2` | [Guide](../reference/http2.md) · [source](../../examples/tutorial_http2.cpp) |
 | WebSocket messages | `xmake run tutorial_websocket` | [Guide](../reference/websocket.md) · [source](../../examples/tutorial_websocket.cpp) |
 
-TLS and HTTP/2 are optional. Before those examples, enable the features and rebuild:
+TLS, DNS, QUIC, HTTP/2 and HTTP/3 are optional. Before those examples, enable the features and rebuild:
 
 ```sh
-xmake f -m release --tls=y --http2=y -y
+xmake f -m release --tls=y --dns=y --quic=y --http2=y --http3=y -y
 xmake -y
 ```
 
