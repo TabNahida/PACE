@@ -33,6 +33,8 @@ emulation.
 HTTP3 remain unsupported; Windows jobs check the explicit configuration error.
 MinGW is an additional compiler/backend check without optional third-party
 protocol dependencies, rather than a second full dependency matrix.
+Windows ARM64 uses a scoped [OpenSSL build correction](diagnostics/windows-arm64-openssl.md)
+validated by independent memory-BIO handshakes and the ordinary protocol tests.
 
 Linux retains all-protocol ASan/UBSan/leak checks, a dependency-free core build,
 and an HTTP3-only build that does not enable HTTP1, HTTP2 or TCP TLS.
@@ -40,6 +42,14 @@ The x86_64 GCC, Intel macOS, x64 Windows and FreeBSD entries additionally check
 benchmark checksums, result schemas and instrumented-runtime counters. These
 are small correctness workloads: timing data is discarded and CI publishes no
 performance rankings. Performance measurements are collected on local Linux.
+
+HTTP/2 backpressure scenarios each have a 30-second watchdog. The deliberately
+small socket buffers can interact with FreeBSD's TCP segmentation and delayed
+ACKs, so a single deadline shared by the entire growing suite could expire
+while later scenarios were still progressing. The per-scenario bound retains
+the same payloads, 4 KiB buffer settings and correctness assertions. FreeBSD
+enables opt-in stage/socket diagnostics for failures; these are correctness
+diagnostics, not performance measurements.
 
 ## Emulated Linux execution
 
