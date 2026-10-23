@@ -1,0 +1,3 @@
+transport,framing,close_policy,close_timeout_ms,no_delay,keep_alive,peer_close_delay_ms,trial,request_ms,after_response_written_ms,actual_peer_delay_ms,completed_before_peer_close,validated
+tcp,204,default,100,1,0,50,1,0.034700,0.009826,50.100467,1,1
+tcp,204,default,100,1,0,50,2,0.033104,0.009056,50.091492,1,1

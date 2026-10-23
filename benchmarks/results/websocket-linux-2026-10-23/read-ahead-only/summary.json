@@ -1,0 +1,158 @@
+[
+  {
+    "label": "before",
+    "bytes": 64,
+    "fragment_bytes": 0,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 255239.606076,
+      "min": 248775.963796,
+      "max": 259190.973925
+    },
+    "p50_us": {
+      "median": 3.7255000000000003,
+      "min": 3.707,
+      "max": 3.732
+    },
+    "p95_us": {
+      "median": 4.0169999999999995,
+      "min": 3.912,
+      "max": 4.363
+    },
+    "p99_us": {
+      "median": 6.5425,
+      "min": 4.787,
+      "max": 7.349
+    }
+  },
+  {
+    "label": "after",
+    "bytes": 64,
+    "fragment_bytes": 0,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 308381.5618865,
+      "min": 301770.983757,
+      "max": 314498.795457
+    },
+    "p50_us": {
+      "median": 3.0700000000000003,
+      "min": 3.059,
+      "max": 3.108
+    },
+    "p95_us": {
+      "median": 3.326,
+      "min": 3.22,
+      "max": 3.716
+    },
+    "p99_us": {
+      "median": 5.269500000000001,
+      "min": 3.746,
+      "max": 6.156
+    }
+  },
+  {
+    "label": "before",
+    "bytes": 16384,
+    "fragment_bytes": 0,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 44316.9314095,
+      "min": 43385.134615,
+      "max": 45077.961026
+    },
+    "p50_us": {
+      "median": 21.5075,
+      "min": 21.389,
+      "max": 21.633
+    },
+    "p95_us": {
+      "median": 24.052999999999997,
+      "min": 22.825,
+      "max": 28.378
+    },
+    "p99_us": {
+      "median": 33.604,
+      "min": 31.124,
+      "max": 46.576
+    }
+  },
+  {
+    "label": "after",
+    "bytes": 16384,
+    "fragment_bytes": 0,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 43004.922264,
+      "min": 41847.082166,
+      "max": 43335.716822
+    },
+    "p50_us": {
+      "median": 22.310000000000002,
+      "min": 22.155,
+      "max": 22.703
+    },
+    "p95_us": {
+      "median": 24.997500000000002,
+      "min": 23.956,
+      "max": 28.409
+    },
+    "p99_us": {
+      "median": 34.733000000000004,
+      "min": 32.931,
+      "max": 38.679
+    }
+  },
+  {
+    "label": "before",
+    "bytes": 65536,
+    "fragment_bytes": 1024,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 3293.7733905,
+      "min": 3212.230337,
+      "max": 3388.618229
+    },
+    "p50_us": {
+      "median": 292.786,
+      "min": 287.625,
+      "max": 297.911
+    },
+    "p95_us": {
+      "median": 338.938,
+      "min": 314.546,
+      "max": 387.734
+    },
+    "p99_us": {
+      "median": 475.2155,
+      "min": 384.035,
+      "max": 515.22
+    }
+  },
+  {
+    "label": "after",
+    "bytes": 65536,
+    "fragment_bytes": 1024,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 4208.4283495,
+      "min": 4157.673498,
+      "max": 4290.644463
+    },
+    "p50_us": {
+      "median": 229.66699999999997,
+      "min": 226.797,
+      "max": 231.848
+    },
+    "p95_us": {
+      "median": 259.5605,
+      "min": 246.284,
+      "max": 268.391
+    },
+    "p99_us": {
+      "median": 368.3525,
+      "min": 297.427,
+      "max": 447.535
+    }
+  }
+]

@@ -52,6 +52,11 @@ jobs:
         run: xmake -y
       - name: Verify executable architecture (including 32-bit and ARM Windows)
         run: python scripts/ci_portability.py --build-dir build/ci --target ${{ matrix.arch }} --mode native --metadata-only --output ci-results/architecture.json
+      - name: Isolate OpenSSL crypto, context, BIO and handshake on Windows ARM64
+        id: openssl-diagnostic
+        if: matrix.id == 'windows-arm64'
+        continue-on-error: true
+        run: python scripts/ci_openssl_diagnostic.py --build-dir build/ci --output-dir ci-results/openssl-diagnostic
       - name: Run all supported protocol tests and tutorials
         run: xmake test -v
       - name: Verify WebSocket with independent Python peers
@@ -77,6 +82,9 @@ jobs:
       - name: Verify Windows explicitly rejects unsupported QUIC and HTTP3
         if: runner.os == 'Windows'
         run: python scripts/ci_smoke.py --check-windows-quic-rejection --output ci-results/unsupported-protocols.json
+      - name: Require every OpenSSL diagnostic stage to pass
+        if: always() && matrix.id == 'windows-arm64' && steps.openssl-diagnostic.outcome == 'failure'
+        run: exit 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:

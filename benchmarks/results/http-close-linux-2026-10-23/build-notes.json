@@ -1,0 +1,49 @@
+{
+  "compiler": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "flags": [
+    "-std=c++20",
+    "-O3",
+    "-DNDEBUG",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-DPACE_HAS_TLS"
+  ],
+  "before_additional_flag": "-DPACE_HTTP_CLOSE_BASELINE",
+  "source_files": [
+    "benchmarks/http_close.cpp",
+    "src/application/http.cpp",
+    "src/extensions/tls.cpp",
+    "src/networking/net.cpp",
+    "src/networking/udp.cpp",
+    "src/runtime/io_context.cpp",
+    "src/runtime/poller.cpp",
+    "src/runtime/runtime.cpp"
+  ],
+  "include_paths": [
+    "include",
+    "/tmp/pace-xmake/.xmake/packages/o/openssl3/3.5.7/4b3c65bd848f4d048cecfb94305cd471/include"
+  ],
+  "link_flags": [
+    "-pthread",
+    "-ldl"
+  ],
+  "dependency_static_libraries": {
+    "/tmp/pace-xmake/.xmake/packages/o/openssl3/3.5.7/4b3c65bd848f4d048cecfb94305cd471/lib/libssl.a": "03e66ae918409b961f11ef6cba59abb2a641987855ea9d3330235bb24000df99",
+    "/tmp/pace-xmake/.xmake/packages/o/openssl3/3.5.7/4b3c65bd848f4d048cecfb94305cd471/lib/libcrypto.a": "6758b1ffe9a4cb2f9ccb13a3c7f53e4e8d77f9da8ddec2c51e1d7cc1c293fef4"
+  },
+  "probe_sha256": "c6cd155d2d78d180358c7cfb4b5031c16ec515f4344bb548a3e73dbb5ffb5f53",
+  "recorder_sha256": "372c8584033a4a233e2d4b73fe2557d38f6bb91724c49432bc504dadc83f1dd4",
+  "after_patch_sha256": "9314b26e7099028084ba3193c0dbf8ecbc13288ba566e98cf1d723444e46a7b7",
+  "measurement_order": [
+    "before",
+    "after",
+    "graceful",
+    "framing"
+  ],
+  "coordination": "All other task agents paused local builds/tests during this sequence; no external host load guarantee.",
+  "http_baseline_revision": "61fe0e21d62205fca77d1fb1e07e91aa200b6050",
+  "measurement_checkout_revision": "0efd2a8fe1fc7fd17942acb571b26d3c28c78f62",
+  "common_build_patch_sha256": "17d41233844354ee7a83aa451e1fcfb79c3351ec4fb3eb613cc7d0082f5d73ca",
+  "provenance_note": "Both binaries use the same TLS sources plus an unused protocol_driver addition from concurrent HTTP2 work, not a pristine release checkout. The relevant compiled source differences are only include/pace/http.hpp and src/application/http.cpp; the separately changed quic.hpp inventory entry is entirely preprocessed out by PACE_HAS_QUIC being disabled by this probe."
+}

@@ -45,6 +45,31 @@ Transfer-Encoding or Connection. Set `request.chunked = true` for chunked
 framing, and `request.trailers.push_back({"X-Checksum", "..."})` for safe trailer
 metadata. The message still owns its complete buffered body.
 
+## Response completion and close
+
+By default, a complete Content-Length, chunked or bodyless response returns without
+waiting for peer FIN. PACE attempts its TCP FIN / TLS `close_notify`, then releases
+the connection without background cleanup. Cleanup transport errors do not replace
+a completed response; context cancellation still propagates. EOF-framed responses
+still wait for EOF, including authenticated TLS closure for HTTPS.
+
+To request bounded graceful cleanup, pass options after the existing limits:
+
+```cpp
+pace::http::client_options closing{
+    .close_policy = pace::http::client_close_policy::graceful,
+    .close_timeout = std::chrono::milliseconds(25),
+};
+auto response = co_await pace::http::get(io, endpoint, "/health", {}, closing);
+// For a persistent client: http::client client(std::move(socket), {}, closing);
+```
+
+`graceful` waits for the peer or this budget and propagates cleanup errors. Zero
+only attempts local notification; negative values are rejected. This is not a
+request/read timeout. The default `no_wait` ignores the budget. Server final
+response draining remains unchanged, including early request rejection.
+See [close-policy semantics](../reference/http.md#final-response-close-policy).
+
 ## The server
 
 ```cpp

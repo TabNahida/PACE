@@ -38,8 +38,22 @@ batch rather than returning an incomplete response.
 connection. `serve(listener, handler, limits)` accepts connections and isolates
 individual peer failures. Configure the QUIC listener's server context with a
 certificate chain, private key, and `{"h3"}` before starting it. Handler exceptions
-produce a 500 response; I/O cancellation propagates. Handlers run serially within
-each connection, while requests travel on independent QUIC streams.
+produce a 500 response; I/O cancellation propagates. Complete requests run up to
+`min(max_concurrent_handlers, max_concurrent_streams)` application handlers
+concurrently (both default to 32). One connection driver owns nghttp3 and QUIC;
+handler results enter a bounded queue and explicitly wake that driver. A handler
+waiting for asynchronous I/O does not block protocol progress or other streams.
+This is cooperative concurrency on one context, not CPU execution on extra
+threads; synchronous work in a handler still blocks that context.
+
+Queued requests and buffered responses remain bounded by the concurrent stream
+limit. Set `max_concurrent_handlers = 1` to serialize application handlers while
+continuing to drive the connection. Shared handler state must allow coroutine
+interleaving. Responses may finish out of order; batch results preserve request
+order. Closing the connection discards queued requests and late results. The
+existing handler signature has no per-request cancellation token, so an already
+suspended application handler finishes independently and its captures must remain
+valid until it finishes. Stopping the context cancels its PACE I/O/timer waits.
 
 Each connection binds its own control stream and QPACK encoder/decoder streams.
 SETTINGS, request and response HEADERS/DATA, trailers, and stream FIN travel over
@@ -50,7 +64,8 @@ alive until acknowledged, and uses QUIC event readiness instead of fixed sleeps.
 
 Limits default to 16 KiB of decoded header/trailer bytes (including the RFC's
 32-byte overhead per field), 100 fields, 1 MiB of body data per stream, 32
-concurrent requests, and 1000 requests per connection. Bounds apply to incoming
+concurrent requests, 32 concurrent handlers, and 1000 requests per connection.
+Both concurrency limits must be 1–10,000. Bounds apply to incoming
 and outgoing messages. Bodies are buffered, so memory scales with the concurrent
 stream count and body limit. Excessive peer streams are rejected. The API does
 not provide streaming bodies, CONNECT tunnels, server push, HTTP Datagram,
@@ -60,7 +75,9 @@ numeric IPv4/IPv6 endpoints; DNS resolution belongs to the separate DNS extensio
 `examples/tutorial_http3.cpp` runs an authenticated localhost server and client.
 `tests/http3_tests.cpp` covers multiplexed binary bodies beyond a QUIC send
 buffer, a 130-request batch and stream cleanup, trailers, HEAD/205 semantics,
-application failures, ALPN enforcement, recovery after a failed peer handshake,
+application failures, bounded handler concurrency, out-of-order completion,
+requests arriving while another handler waits, late completion after disconnect,
+ALPN enforcement, recovery after a failed peer handshake,
 cancellation, incoming/outgoing limits, and independently encoded RFC 9114/QPACK
 peers in both directions, including a mismatched content length. The full suite
 also passes Linux AddressSanitizer, UndefinedBehaviorSanitizer, and leak checks.

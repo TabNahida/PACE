@@ -114,6 +114,15 @@ across frames. It automatically replies to ping and consumes pong, including
 controls interleaved with a fragmented message. Control payloads are at most
 125 bytes. There is no exposed pong callback or heartbeat scheduler.
 
+Each stream uses an 8 KiB receive buffer to amortize small frame-field reads;
+larger payloads also read directly into their final message storage. Data fragments
+are appended in place, and the send buffer retains its allocation for reuse
+(capacity depends on the largest emitted frame plus its header and
+`std::string`'s growth strategy, and is retained until stream destruction).
+This trades bounded per-connection storage
+for fewer receive calls and temporary allocations. Frame and message limits are
+checked before allocating the payload; read-ahead does not relax those limits.
+
 **Only one asynchronous operation may be active per WebSocket stream**, including
 send versus receive, handshake and close. This explicit initial contract also
 applies to plain TCP WebSockets; independent reader and writer coroutines must

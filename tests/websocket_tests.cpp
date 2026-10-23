@@ -190,6 +190,50 @@ void control_interleaving() {
     require(done.count == 2, "control interleaving incomplete");
 }
 
+constexpr std::array<std::size_t, 9> boundary_sizes{0, 1, 125, 126, 8190, 8192, 8193, 65535, 65536};
+std::string boundary_payload(std::size_t size) {
+    std::string result(size, '\0');
+    for (std::size_t i = 0; i < size; ++i) result[i] = static_cast<char>((i * 31 + size) % 251);
+    return result;
+}
+pace::task<void> buffered_server(pace::tcp::listener& listener, completion& done) {
+    ws::stream socket(co_await listener.accept(), ws::role::server, {.max_frame_bytes = 128 * 1024});
+    co_await socket.accept();
+    for (const auto size : boundary_sizes) {
+        const auto value = co_await socket.receive();
+        require(value && value->type == ws::message_type::binary && value->data == boundary_payload(size),
+                "read-ahead lost bytes across frame/buffer boundaries");
+    }
+    co_await socket.send_text("validated");
+    require(!(co_await socket.receive()), "buffered peer close missing");
+    done.finish();
+}
+pace::task<void> buffered_raw_client(pace::io_context& io, pace::tcp::endpoint endpoint, completion& done) {
+    pace::tcp::stream socket(io); co_await socket.connect(std::move(endpoint));
+    co_await socket.write_all(request);
+    std::string pending; (void)co_await read_head(socket, pending);
+    std::string wire;
+    for (const auto size : boundary_sizes) wire += frame(2, boundary_payload(size));
+    // Split the first masked frame's prefix/key across separate readiness events.
+    for (std::size_t i = 0; i < 7; ++i) {
+        co_await socket.write_all(std::string_view(wire).substr(i, 1));
+        co_await io.sleep_for(1ms);
+    }
+    // Coalesce the remainder, crossing both read-ahead and direct-read thresholds.
+    co_await socket.write_all(std::string_view(wire).substr(7));
+    const auto reply = co_await read_frame(socket, pending, false);
+    require(reply.first == 0x81 && reply.second == "validated", "buffered validation missing");
+    const auto closing = frame(8, std::string("\x03\xE8", 2));
+    co_await socket.write_all(closing);
+    require((co_await read_frame(socket, pending, false)).first == 0x88, "buffered close reply missing");
+    socket.close(); done.finish();
+}
+void buffered_boundaries() {
+    pace::io_context io; pace::tcp::listener listener(io, {"127.0.0.1", 0}); completion done{io};
+    io.spawn(buffered_server(listener, done)); io.spawn(buffered_raw_client(io, listener.local_endpoint(), done)); io.run();
+    require(done.count == 2, "buffered boundary exchange incomplete");
+}
+
 pace::task<void> invalid_frame_server(pace::tcp::listener& listener, completion& done, unsigned expected, ws::limits bounds) {
     ws::stream socket(co_await listener.accept(), ws::role::server, bounds);
     co_await socket.accept();
@@ -305,7 +349,7 @@ void close_deadline_lifetime() {
 int main(int argc, char** argv) {
     watchdog guard;
     try {
-        roundtrip(); control_interleaving(); bounded_close(); cancellation_and_overlap(); close_deadline_lifetime();
+        roundtrip(); control_interleaving(); buffered_boundaries(); bounded_close(); cancellation_and_overlap(); close_deadline_lifetime();
         bad_frame(frame(1, "unmasked", true, false));
         auto reserved = frame(1, "reserved"); reserved[0] |= 0x40; bad_frame(reserved);
         bad_frame(frame(3, "reserved opcode"));

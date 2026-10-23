@@ -1,0 +1,13 @@
+{
+  "release_http_groups_passed": 22,
+  "asan_ubsan_http_groups_passed": 22,
+  "asan_options": "detect_leaks=1:halt_on_error=1",
+  "ubsan_options": "halt_on_error=1",
+  "no_tls_syntax_check": [
+    "tests/http_extended_tests.cpp",
+    "src/application/http.cpp",
+    "benchmarks/http_close.cpp"
+  ],
+  "reconstruction": "common-build.patch + implementation.patch reconstruct measured active source hashes",
+  "test_source_sha256": "e6099511111ccd2bdcc45e7cf12b3e8b13fe8dd9a1e58ac04e98de946e677064"
+}

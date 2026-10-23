@@ -38,6 +38,8 @@ public test-only certificates under `tests/certs`.
 - [API reference](reference/README.md) — signatures, errors and concurrency contracts.
 - [Tutorials](tutorial/README.md) — complete commands and executable examples.
 - [Performance](performance.md) — full local Linux measurements, tradeoffs and reproduction.
+- [Protocol performance](protocol-performance.md) — HTTP completion, WebSocket framing and concurrent HTTP/2/3 handlers.
+- [CI coverage](ci.md) — native, emulated and compile-only architecture checks.
 - [Platform support](reference/platform.md) — backends and supported configurations.
 
 TCP, UDP and QUIC support numeric IPv4 and IPv6 endpoints; DNS resolves A and

@@ -162,7 +162,8 @@ still permits an empty body, and zero server requests closes without serving.
 ```cpp
 template<class Transport> class basic_client {
 public:
-    explicit basic_client(Transport stream, limits bounds = {});
+    explicit basic_client(Transport stream, limits bounds = {},
+                          client_options options = {});
     basic_client(const basic_client&) = delete;
     basic_client& operator=(const basic_client&) = delete;
     task<response> send(request outgoing);
@@ -189,8 +190,9 @@ can process multiple requests already buffered from a pipelined TCP input.
 
 For Content-Length or chunked responses, complete framing permits reuse unless
 either peer requests close. A response with no framing is read to EOF and cannot
-be reused. On a successful final exchange the client performs bounded transport
-graceful close; on protocol, cancellation or transport error it closes immediately.
+be reused. The default final exchange completes after the validated HTTP message,
+without waiting for the peer to close. Protocol, cancellation or transport errors
+before message completion close the connection immediately.
 `is_open` observes ownership/reuse eligibility, not a health probe. `close` is an
 idempotent immediate close on the owning context; pending member operations must
 still unwind before the object is destroyed. `transport()` is a borrowed reference
@@ -203,24 +205,63 @@ context cancellation propagate as `std::system_error`. Local request validation
 throws `invalid_argument` before writing, preserving a previously usable client;
 closed clients and overlapping exchanges throw `logic_error`.
 
+### Final-response close policy
+
+```cpp
+enum class client_close_policy { no_wait, graceful };
+struct client_options {
+    client_close_policy close_policy = client_close_policy::no_wait;
+    std::chrono::milliseconds close_timeout{100};
+};
+
+// The same third argument is supported by secure_client.
+pace::http::client client(std::move(connected_socket), {}, {
+    .close_policy = pace::http::client_close_policy::graceful,
+    .close_timeout = std::chrono::milliseconds(25),
+});
+```
+
+`no_wait` attempts the local TCP FIN or TLS `close_notify` with a zero wait
+budget, then releases the transport. It schedules no detached cleanup. It does
+not wait for peer FIN, peer TLS alert, or `close_timeout`. Once a length-delimited,
+chunked or bodyless response is complete, a transport error during this cleanup
+does not replace that response. Context cancellation still propagates.
+
+`graceful` explicitly waits for the peer or the configured bounded transport-close
+budget; cleanup errors and cancellation propagate. A zero budget attempts only
+the local close notification. Negative budgets and invalid policy values throw
+`invalid_argument` at construction (or before a one-shot helper connects).
+The timeout applies only to final cleanup, not to requests or response reads.
+
+Neither policy shortens EOF-framed responses: these still require TCP EOF, or
+an authenticated TLS `close_notify`. Truncated Content-Length, incomplete chunks,
+invalid trailers and missing TLS EOF authentication still fail. HEAD and bodyless
+status codes complete according to their validated HTTP framing. Persistent
+exchanges never run final cleanup. See [RFC 9112 message framing](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3)
+and [TLS connection closure](https://www.rfc-editor.org/rfc/rfc9112.html#section-9.8).
+The server keeps its separate bounded drain after final responses, including
+early rejection of an unread request body.
+
 ## One-shot clients
 
 ```cpp
 task<response> fetch(io_context& context, tcp::endpoint endpoint,
-                     request outgoing, limits bounds = {});
+                     request outgoing, limits bounds = {}, client_options options = {});
 task<response> get(io_context& context, tcp::endpoint endpoint,
-                   std::string target = "/", limits bounds = {});
+                   std::string target = "/", limits bounds = {}, client_options options = {});
 #ifdef PACE_HAS_TLS
 task<response> fetch(io_context& context, const tls::context& configuration,
                      tcp::endpoint endpoint, std::string peer_name,
-                     request outgoing, limits bounds = {});
+                     request outgoing, limits bounds = {}, client_options options = {});
 task<response> get(io_context& context, const tls::context& configuration,
                    tcp::endpoint endpoint, std::string peer_name,
-                   std::string target = "/", limits bounds = {});
+                   std::string target = "/", limits bounds = {}, client_options options = {});
 #endif
 ```
 
 These helpers connect, request one closing exchange, and release the connection.
+Their trailing `client_options` selects the same completion policy as `client`;
+the default returns a fully framed response without awaiting peer closure.
 `get` creates a GET; `fetch` uses the owned request you supply. Both override
 `keep_alive=false`. If no Host exists, plain HTTP uses the endpoint address and
 HTTPS uses `peer_name`; a nondefault port is appended (80 for HTTP, 443 for HTTPS).

@@ -127,7 +127,8 @@ must be acknowledged before releasing all handles if delivery matters.
 
 `stream.reset(application_error)` abandons the stream and cancels its local
 pending operations. `finish_write()` half-closes only its sending direction.
-`connection.close(application_error)` attempts a CONNECTION_CLOSE immediately,
+`connection.close(application_error)` discards unacknowledged application output
+and attempts a CONNECTION_CLOSE immediately,
 invalidates every stream on that connection, and wakes blocked operations. It is
 best-effort; there is no graceful drain/retransmission guarantee.
 `listener.close()` cancels accepts and invalidates every accepted connection using

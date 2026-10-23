@@ -66,17 +66,20 @@ struct io_context::implementation {
     std::priority_queue<timer_awaiter*, std::vector<timer_awaiter*>, later> timers;
     std::shared_ptr<callback_timers> callbacks;
 
-    void finish(io_awaiter*& operation, std::error_code error = {}) {
+    void finish(fd_state& state, io_awaiter* operation, std::error_code error = {}) {
         if (!operation) return;
         operation->error = error;
         ready.push_back(operation->continuation);
-        operation = nullptr;
+        // wait_ready owns both slots. Clear both before another direction from
+        // the same event (or cancel_all) can enqueue the continuation again.
+        if (state.reader == operation) state.reader = nullptr;
+        if (state.writer == operation) state.writer = nullptr;
     }
     void cancel_all() {
         for (auto& [token, state] : descriptors) {
             poller.remove(state.fd);
-            finish(state.reader, canceled());
-            finish(state.writer, canceled());
+            finish(state, state.reader, canceled());
+            finish(state, state.writer, canceled());
         }
         descriptors.clear(); tokens.clear();
         dirty_descriptors.clear();
@@ -235,13 +238,17 @@ bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle) {
     const auto token = token_it->second;
     auto& state = p.descriptors[token];
     state.fd = operation.fd;
-    auto& slot = operation.writable ? state.writer : state.reader;
-    if (slot) throw std::logic_error("only one pending operation per socket direction is allowed");
+    const bool read = !operation.writable || operation.either;
+    const bool write = operation.writable || operation.either;
+    if ((read && state.reader) || (write && state.writer))
+        throw std::logic_error("only one pending operation per socket direction is allowed");
     operation.continuation = handle;
-    slot = &operation;
+    if (read) state.reader = &operation;
+    if (write) state.writer = &operation;
     try { p.update(state, token); }
     catch (...) {
-        slot = nullptr;
+        if (read) state.reader = nullptr;
+        if (write) state.writer = nullptr;
         if (inserted) { p.tokens.erase(operation.fd); p.descriptors.erase(token); }
         throw;
     }
@@ -253,8 +260,8 @@ void io_context::cancel(native_socket_type fd) noexcept {
     if (it == p.tokens.end()) return;
     auto state_it = p.descriptors.find(it->second);
     p.poller.remove(fd);
-    p.finish(state_it->second.reader, canceled());
-    p.finish(state_it->second.writer, canceled());
+    p.finish(state_it->second, state_it->second.reader, canceled());
+    p.finish(state_it->second, state_it->second.writer, canceled());
     p.descriptors.erase(state_it);
     p.tokens.erase(it);
 }
@@ -393,8 +400,8 @@ void io_context::run() {
                 auto it = p.descriptors.find(event.token);
                 if (it == p.descriptors.end()) continue;
                 auto& state = it->second;
-                if (event.readable || event.error) p.finish(state.reader);
-                if (event.writable || event.error) p.finish(state.writer);
+                if (event.readable || event.error) p.finish(state, state.reader);
+                if (event.writable || event.error) p.finish(state, state.writer);
                 if constexpr (detail::poller::supports_persistent) {
                     if (!state.dirty) {
                         p.dirty_descriptors.push_back(event.token);

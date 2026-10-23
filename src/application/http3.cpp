@@ -1,4 +1,6 @@
 #include <pace/http3.hpp>
+#include <pace/detail/http_dispatch.hpp>
+#include <pace/detail/protocol_driver.hpp>
 #ifdef PACE_HAS_HTTP3
 #include <nghttp3/nghttp3.h>
 #include <openssl/rand.h>
@@ -106,7 +108,8 @@ struct session {
 
     explicit session(bool is_server, limits value) : bounds(value), server(is_server) {
         if (!bounds.max_header_bytes || !bounds.max_header_fields || !bounds.max_concurrent_streams ||
-            bounds.max_concurrent_streams > 10000 || !bounds.max_requests_per_connection)
+            bounds.max_concurrent_streams > 10000 || !bounds.max_requests_per_connection ||
+            !bounds.max_concurrent_handlers || bounds.max_concurrent_handlers > 10000)
             throw std::invalid_argument("invalid HTTP/3 limits");
         nghttp3_callbacks callbacks{};
         callbacks.begin_headers = begin_headers;
@@ -429,25 +432,26 @@ task<std::vector<http::response>> exchange(quic::connection transport, std::stri
 task<void> serve_connection(quic::connection transport, http::handler handle, limits bounds) {
     require_h3(transport);
     session state(true, bounds);
+    auto dispatch = std::make_shared<detail::http_dispatch>(transport.context(), std::move(handle));
+    dispatch->wake = [&] { detail::quic_driver::wake(transport); };
+    detail::close_http_dispatch close{dispatch};
     try {
         co_await state.initialize(transport);
         for (;;) {
             bool progress = state.receive(transport);
-            while (!state.ready.empty()) {
+            if (dispatch->failure) std::rethrow_exception(dispatch->failure);
+            while (!dispatch->completed.empty()) {
+                auto result = std::move(dispatch->completed.front()); dispatch->completed.pop_front();
+                if (result.error) std::rethrow_exception(result.error);
+                if (state.streams.contains(result.id)) state.respond(result.id, std::move(result.response));
+                progress = true;
+            }
+            while (!state.ready.empty() && dispatch->active < std::min(bounds.max_concurrent_handlers, bounds.max_concurrent_streams)) {
                 const auto id = state.ready.front(); state.ready.pop_front();
-                auto& stream = state.streams.at(id);
-                auto request = std::move(stream.request); stream.request.method = request.method;
-                http::response result;
-                if (request.method == "CONNECT") result = {.status = 405, .body = "CONNECT is not supported\n"};
-                else {
-                    try { result = co_await handle(std::move(request)); }
-                    catch (const std::system_error& error) {
-                        if (error.code() == std::errc::operation_canceled) throw;
-                        result = {.status = 500, .body = "Internal Server Error\n"};
-                    }
-                    catch (...) { result = {.status = 500, .body = "Internal Server Error\n"}; }
-                }
-                state.respond(id, std::move(result)); progress = true;
+                auto found = state.streams.find(id);
+                if (found == state.streams.end()) continue;
+                auto request = std::move(found->second.request); found->second.request.method = request.method;
+                dispatch->start(id, std::move(request)); progress = true;
             }
             progress = state.flush() || progress;
             state.acknowledge();

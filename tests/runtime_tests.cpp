@@ -400,6 +400,109 @@ void poller_output_contract() {
     for (const auto& pair : pairs) poller.remove(pair.sockets[0]);
 }
 
+pace::task<void> ready_rearm(pace::io_context& io, pace::native_socket_type fd, unsigned& resumed) {
+    // Both readiness flags are set. Repeatedly reclaim both directions, then
+    // each direction independently, leaving the datagram unread throughout.
+    co_await io.wait_ready(fd); ++resumed;
+    co_await io.sleep_for(1ms); // A duplicate queued resume would resume this too early.
+    co_await io.wait_ready(fd); ++resumed;
+    co_await io.wait_readable(fd); ++resumed;
+    co_await io.wait_writable(fd); ++resumed;
+    io.stop();
+}
+pace::task<void> separate_direction(pace::io_context& io, pace::native_socket_type fd,
+                                    bool writable, unsigned& resumed) {
+    if (writable) co_await io.wait_writable(fd);
+    else co_await io.wait_readable(fd);
+    if (++resumed == 2) io.stop();
+}
+pace::task<void> canceled_ready(pace::io_context& io, pace::native_socket_type fd, unsigned& canceled) {
+    try { co_await io.wait_ready(fd); require(false, "ready wait was not canceled"); }
+    catch (const std::system_error& error) {
+        require(error.code() == std::errc::operation_canceled, "ready cancellation error");
+        ++canceled;
+    }
+    io.stop();
+}
+pace::task<void> conflict_with_ready(pace::io_context& io, pace::native_socket_type fd, unsigned& rejected) {
+    try { co_await io.wait_readable(fd); }
+    catch (const std::logic_error&) { ++rejected; }
+    try { co_await io.wait_writable(fd); }
+    catch (const std::logic_error&) { ++rejected; }
+    try { co_await io.wait_ready(fd); }
+    catch (const std::logic_error&) { ++rejected; }
+    require(rejected == 3, "ready wait must exclusively occupy both socket directions");
+    io.cancel(fd);
+}
+pace::task<void> canceled_single_direction(pace::io_context& io, pace::native_socket_type fd,
+                                          bool writable, unsigned& canceled) {
+    try {
+        if (writable) co_await io.wait_writable(fd);
+        else co_await io.wait_readable(fd);
+        require(false, "directional wait lost by rejected ready wait");
+    } catch (const std::system_error& error) {
+        require(error.code() == std::errc::operation_canceled, "directional cancellation error");
+        ++canceled;
+    }
+    io.stop();
+}
+pace::task<void> reject_ready_then_cancel(pace::io_context& io, pace::native_socket_type fd, unsigned& rejected) {
+    try { co_await io.wait_ready(fd); }
+    catch (const std::logic_error&) { ++rejected; }
+    require(rejected == 1, "ready wait must reject either occupied direction");
+    io.cancel(fd);
+}
+pace::task<void> stop_pending_ready(pace::io_context& io) { io.stop(); co_return; }
+
+void readiness_union_contract() {
+    {
+        pace::io_context io;
+        datagram_pair pair;
+        pair.send();
+        unsigned resumed = 0;
+        io.spawn(ready_rearm(io, pair.sockets[0], resumed));
+        io.run();
+        require(resumed == 4, "ready union must resume once and release both directions for rearm");
+    }
+    {
+        pace::io_context io;
+        datagram_pair pair;
+        pair.send();
+        unsigned resumed = 0;
+        io.spawn(separate_direction(io, pair.sockets[0], false, resumed));
+        io.spawn(separate_direction(io, pair.sockets[0], true, resumed));
+        io.run();
+        require(resumed == 2, "independent read/write awaiters must each resume exactly once");
+    }
+    {
+        pace::io_context io;
+        datagram_pair pair;
+        unsigned canceled = 0, rejected = 0;
+        io.spawn(canceled_ready(io, pair.sockets[0], canceled));
+        io.spawn(conflict_with_ready(io, pair.sockets[0], rejected));
+        io.run();
+        require(canceled == 1 && rejected == 3, "ready cancel must resume once after rejected conflicts");
+    }
+    for (const bool writable : {false, true}) {
+        pace::io_context io;
+        datagram_pair pair;
+        unsigned canceled = 0, rejected = 0;
+        io.spawn(canceled_single_direction(io, pair.sockets[0], writable, canceled));
+        io.spawn(reject_ready_then_cancel(io, pair.sockets[0], rejected));
+        io.run();
+        require(canceled == 1 && rejected == 1, "ready conflict must preserve the original awaiter");
+    }
+    {
+        pace::io_context io;
+        datagram_pair pair;
+        unsigned canceled = 0;
+        io.spawn(canceled_ready(io, pair.sockets[0], canceled));
+        io.spawn(stop_pending_ready(io));
+        io.run();
+        require(canceled == 1, "context stop must cancel a readiness union only once");
+    }
+}
+
 void profiling_contract() {
 #ifdef PACE_ENABLE_PROFILING
     namespace profile = pace::detail::profiling;
@@ -669,6 +772,28 @@ struct owned_eventfd {
     ~owned_eventfd() { context.cancel(fd); ::close(fd); }
 };
 
+pace::task<void> ready_one_direction(pace::io_context& io, int fd, unsigned& resumed) {
+    co_await io.wait_ready(fd);
+    ++resumed;
+    io.cancel(fd);
+    io.stop();
+}
+
+void ready_single_flag_contract() {
+    // An empty eventfd is only writable; a saturated one is only readable.
+    // Whichever flag delivers the union, cancellation must not find its other
+    // slot still pointing into the already-resumed coroutine.
+    for (const auto value : {UINT64_C(0), UINT64_MAX - UINT64_C(1)}) {
+        pace::io_context io;
+        owned_eventfd descriptor(io);
+        if (value) require(::write(descriptor.fd, &value, sizeof(value)) == sizeof(value), "saturate eventfd");
+        unsigned resumed = 0;
+        io.spawn(ready_one_direction(io, descriptor.fd, resumed));
+        io.run();
+        require(resumed == 1, "single readiness flag must resume and clear a union once");
+    }
+}
+
 void persistent_poller_contract() {
     pace::io_context owner;
     owned_eventfd descriptor(owner);
@@ -766,6 +891,7 @@ pace::task<void> simultaneous_writer(pace::io_context& io, int fd, bool& rejecte
 void run_tests() {
     profiling_contract();
     poller_output_contract();
+    readiness_union_contract();
     mixed_concurrent_submissions();
     repeated_sleep_and_wake();
     timer_fairness_with_ready_work();
@@ -827,6 +953,7 @@ void run_tests() {
         require(negative.deadline <= std::chrono::steady_clock::now(), "negative duration must be ready immediately");
     }
 #if defined(__linux__)
+    ready_single_flag_contract();
     persistent_poller_contract();
     persistent_reactor_batches();
     {

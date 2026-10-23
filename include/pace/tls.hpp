@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+namespace pace::detail { class tls_driver; }
 namespace pace::tls {
 
 enum class role { client, server };
@@ -88,6 +89,7 @@ public:
 private:
     struct implementation;
     std::unique_ptr<implementation> impl_;
+    friend class pace::detail::tls_driver;
     task<void> perform_handshake(std::string peer_name);
 };
 

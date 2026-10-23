@@ -1,0 +1,3 @@
+transport,framing,close_policy,close_timeout_ms,no_delay,keep_alive,peer_close_delay_ms,trial,request_ms,after_response_written_ms,actual_peer_delay_ms,completed_before_peer_close,validated
+tls,chunked,default,100,1,0,50,1,0.154950,0.043487,50.134233,1,1
+tls,chunked,default,100,1,0,50,2,0.127801,0.040866,50.149177,1,1

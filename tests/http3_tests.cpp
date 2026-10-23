@@ -1,4 +1,5 @@
 #include <pace/http3.hpp>
+#include <algorithm>
 #include <array>
 #include <condition_variable>
 #include <filesystem>
@@ -201,8 +202,87 @@ void interop(const std::filesystem::path& certs) {
     test.io.spawn(pace::http3::serve(*test.listener, echo)); test.io.spawn(raw_client(test, complete));
     test.io.run(); require(complete, "independent client incomplete");
 }
+struct concurrent_handlers {
+    pace::io_context& io;
+    unsigned active = 0, peak = 0;
+    std::vector<unsigned> completed;
+    explicit concurrent_handlers(pace::io_context& context) : io(context) {}
+    pace::task<pace::http::response> operator()(pace::http::request request) {
+        const auto id = static_cast<unsigned>(std::stoul(request.target.substr(1)));
+        peak = std::max(peak, ++active);
+        co_await io.sleep_for(id == 0 ? 80ms : 2ms);
+        --active; completed.push_back(id);
+        if (id == 4) throw std::runtime_error("isolated concurrent handler");
+        co_return pace::http::response{.body = std::string(150 * 1024, static_cast<char>('a' + id))};
+    }
+};
+pace::task<void> concurrent_client(fixture& test, bool& complete) {
+    pace::quic::connection connection(test.io, test.client);
+    co_await connection.connect(test.listener->local_endpoint(), "localhost");
+    std::vector<pace::http::request> requests(6);
+    for (unsigned i = 0; i < requests.size(); ++i) { requests[i].method = "GET"; requests[i].target = "/" + std::to_string(i); }
+    const auto replies = co_await pace::http3::exchange(std::move(connection), "localhost", std::move(requests));
+    require(replies.size() == 6, "concurrent response count");
+    for (unsigned i = 0; i < replies.size(); ++i) {
+        if (i == 4) require(replies[i].status == 500, "concurrent exception isolation");
+        else require(replies[i].body == std::string(150 * 1024, static_cast<char>('a' + i)), "concurrent response order/body");
+    }
+    complete = true; test.io.stop();
+}
+void concurrency(const std::filesystem::path& certs) {
+    for (unsigned cap : {1u, 2u}) {
+        fixture test(certs); concurrent_handlers handler{test.io}; bool complete = false;
+        pace::http3::limits limits; limits.max_concurrent_handlers = cap;
+        test.io.spawn(pace::http3::serve(*test.listener, std::ref(handler), limits)); test.io.spawn(concurrent_client(test, complete));
+        test.io.run();
+        require(complete && handler.active == 0 && handler.peak == cap, "HTTP3 handler concurrency bound");
+        require(handler.completed.front() == (cap == 1 ? 0u : 1u), "slow HTTP3 handler blocked another stream");
+    }
+}
+struct delayed_handler {
+    pace::io_context& io;
+    bool started = false, finished = false, canceled = false;
+    pace::task<pace::http::response> operator()(pace::http::request) {
+        if (!started) {
+            started = true;
+            try { co_await io.sleep_for(200ms); finished = true; }
+            catch (const std::system_error& error) { canceled = error.code() == std::errc::operation_canceled; throw; }
+        }
+        co_return pace::http::response{.body = "ok"};
+    }
+};
+pace::task<void> delayed_server(fixture& test, delayed_handler& handler, bool& ended) {
+    try { co_await pace::http3::serve_connection(co_await test.listener->accept(), std::ref(handler)); }
+    catch (const std::system_error& error) { if (error.code() != std::errc::operation_canceled) throw; }
+    ended = true;
+}
+pace::task<void> delayed_peer(fixture& test, delayed_handler& handler, bool& ended, unsigned mode) {
+    pace::quic::connection connection(test.io, test.client);
+    co_await connection.connect(test.listener->local_endpoint(), "localhost");
+    auto controls = co_await raw_controls(connection);
+    const auto request = bytes({1, 16, 0, 0, 0xd1, 0xd7, 0xc1, 0x50, 9}) + "localhost";
+    auto slow = co_await connection.open_stream(); co_await slow.write_all(request); slow.finish_write();
+    while (!handler.started) co_await test.io.yield();
+    if (mode == 2) { test.io.stop(); co_return; }
+    if (mode == 0 || mode == 3) {
+        auto fast = co_await connection.open_stream(); co_await fast.write_all(request); fast.finish_write();
+        require(!(co_await read_all(fast)).empty() && !handler.finished, "HTTP3 driver stopped reading during a handler");
+    }
+    connection.close();
+    co_await test.io.sleep_for(250ms);
+    require(handler.finished, "HTTP3 late handler did not finish");
+    require(ended, mode == 1 ? "HTTP3 early peer close was not observed" : "HTTP3 after-fast peer close was not observed");
+    test.io.stop();
+}
+void delayed_streams(const std::filesystem::path& certs) {
+    for (unsigned mode : {0u, 1u, 2u}) {
+        fixture test(certs); delayed_handler handler{test.io}; bool ended = false;
+        test.io.spawn(delayed_server(test, handler, ended)); test.io.spawn(delayed_peer(test, handler, ended, mode));
+        test.io.run(); require(ended && (mode == 2 ? handler.canceled && !handler.finished : handler.finished), "delayed HTTP3 stream incomplete");
+    }
+}
 pace::task<void> validation(fixture& test, bool& complete) {
-    for (unsigned variant = 0; variant < 6; ++variant) {
+    for (unsigned variant = 0; variant < 7; ++variant) {
         auto batch = one_request(); pace::http3::limits limits;
         switch (variant) {
         case 0: batch[0].headers.push_back({"connection", "close"}); break;
@@ -211,6 +291,7 @@ pace::task<void> validation(fixture& test, bool& complete) {
         case 3: batch[0].trailers.push_back({"content-length", "1"}); break;
         case 4: limits.max_header_bytes = 1; break;
         case 5: limits.max_concurrent_streams = 0; break;
+        case 6: limits.max_concurrent_handlers = 0; break;
         }
         bool rejected = false;
         try { (void)co_await pace::http3::exchange(pace::quic::connection(test.io, test.client), "localhost", std::move(batch), limits); }
@@ -270,7 +351,7 @@ int main(int argc, char** argv) {
     watchdog deadline;
     try {
         const auto certs = argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path()/"certs";
-        roundtrip(certs); roundtrip(certs, "::1"); stream_credit(certs); interop(certs); errors(certs);
+        roundtrip(certs); roundtrip(certs, "::1"); stream_credit(certs); interop(certs); errors(certs); concurrency(certs); delayed_streams(certs);
         std::cout << "HTTP/3 encrypted multiplexing, flow control, trailers, independent wire peers, limits, ALPN and cancellation passed\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

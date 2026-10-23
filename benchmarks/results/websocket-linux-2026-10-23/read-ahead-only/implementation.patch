@@ -1,0 +1,82 @@
+--- a/src/application/websocket.cpp
++++ b/src/application/websocket.cpp
+@@ -204,7 +204,11 @@
+     Transport transport;
+     role mode;
+     limits bounds;
+-    std::string pending, protocol, close_reason;
++    std::string pending, protocol, close_reason, output;
++    // Read ahead once for small frame fields, instead of a recv per field.
++    // Large payloads bypass this bounded buffer after consuming any read-ahead.
++    std::array<char, 8192> input;
++    std::size_t input_begin = 0, input_end = 0, pending_begin = 0;
+     std::optional<std::uint16_t> close_code;
+     bool busy = false, upgraded = false, close_sent = false, close_received = false;
+     implementation(Transport socket, role value, limits maximum)
+@@ -239,15 +243,26 @@
+         ~operation() { state.busy = false; }
+     };
+     task<void> exact(std::span<char> bytes) {
+-        if (!pending.empty()) {
+-            const auto count = std::min(pending.size(), bytes.size());
+-            std::copy_n(pending.data(), count, bytes.data());
+-            pending.erase(0, count); bytes = bytes.subspan(count);
++        if (pending_begin < pending.size()) {
++            const auto count = std::min(pending.size() - pending_begin, bytes.size());
++            std::copy_n(pending.data() + pending_begin, count, bytes.data());
++            pending_begin += count; bytes = bytes.subspan(count);
++            if (pending_begin == pending.size()) { pending.clear(); pending_begin = 0; }
+         }
+         while (!bytes.empty()) {
+-            const auto count = co_await transport.read_some(bytes);
+-            if (!count) invalid("WebSocket EOF without a complete closing frame");
+-            bytes = bytes.subspan(count);
++            if (input_begin < input_end) {
++                const auto count = std::min(input_end - input_begin, bytes.size());
++                std::copy_n(input.data() + input_begin, count, bytes.data());
++                input_begin += count; bytes = bytes.subspan(count);
++            } else if (bytes.size() >= input.size()) {
++                const auto count = co_await transport.read_some(bytes);
++                if (!count) invalid("WebSocket EOF without a complete closing frame");
++                bytes = bytes.subspan(count);
++            } else {
++                input_begin = 0;
++                input_end = co_await transport.read_some(input);
++                if (!input_end) invalid("WebSocket EOF without a complete closing frame");
++            }
+         }
+     }
+     task<head> read_head() {
+@@ -268,7 +283,7 @@
+         }
+     }
+     task<void> frame(unsigned opcode, std::string_view data, bool final = true) {
+-        std::string output;
++        output.clear();
+         output.reserve(data.size() + 14);
+         output += static_cast<char>((final ? 0x80 : 0) | opcode);
+         const auto mask = mode == role::client ? 0x80 : 0;
+@@ -325,9 +340,12 @@
+             }
+             std::array<char, 4> key{};
+             if (masked) co_await exact(key);
+-            std::string data(static_cast<std::size_t>(length), '\0');
+-            co_await exact(std::span<char>(data.data(), data.size()));
+-            if (masked) for (std::size_t i = 0; i < data.size(); ++i) data[i] ^= key[i % 4];
++            std::string control_data;
++            auto& data = control ? control_data : result.data;
++            const auto start = data.size();
++            data.resize(start + static_cast<std::size_t>(length));
++            co_await exact(std::span<char>(data.data() + start, static_cast<std::size_t>(length)));
++            if (masked) for (std::size_t i = 0; i < length; ++i) data[start + i] ^= key[i % 4];
+             if (opcode == 8) {
+                 if (data.size() == 1) invalid("invalid WebSocket close payload");
+                 if (!data.empty()) {
+@@ -343,7 +361,6 @@
+             }
+             if (opcode == 9) { co_await frame(10, data); continue; }
+             if (opcode == 10) continue;
+-            result.data += data;
+             if (final) {
+                 if (result.type == message_type::text && !valid_utf8(result.data)) invalid("invalid WebSocket text UTF-8", 1007);
+                 co_return result;

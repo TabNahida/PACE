@@ -1,4 +1,5 @@
 #include <pace/tls.hpp>
+#include <pace/detail/protocol_driver.hpp>
 
 #ifdef PACE_HAS_TLS
 #include <openssl/ssl.h>
@@ -534,4 +535,55 @@ task<void> stream::shutdown(std::chrono::milliseconds timeout) {
 }
 
 } // namespace pace::tls
+
+namespace pace::detail {
+tls_driver::tls_driver(tls::stream& stream) : stream_(stream) {
+    if (!stream_.impl_) throw std::logic_error("moved-from TLS stream");
+    auto& p = *stream_.impl_;
+    if (p.active) throw std::logic_error("another TLS operation is pending");
+    p.check(true);
+    p.active = true;
+}
+tls_driver::~tls_driver() { stream_.impl_->active = false; }
+native_socket_type tls_driver::native_handle() const noexcept { return stream_.impl_->transport.native_handle(); }
+bool tls_driver::write_wait() const noexcept { return read_wants_write_ || (write_retry_ && write_wants_write_); }
+std::optional<std::size_t> tls_driver::read(std::span<char> bytes) {
+    auto& p = *stream_.impl_;
+    p.check(true);
+    if (!read_allowed()) return std::nullopt;
+    if (p.eof || bytes.empty()) return 0;
+    std::size_t count = 0;
+    ERR_clear_error();
+    const int result = SSL_read_ex(p.ssl.get(), bytes.data(), bytes.size(), &count);
+    if (result == 1) { read_wants_write_ = false; return count; }
+    const int error = SSL_get_error(p.ssl.get(), result);
+    if (error == SSL_ERROR_ZERO_RETURN) { p.eof = true; read_wants_write_ = false; return 0; }
+    if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
+        read_wants_write_ = error == SSL_ERROR_WANT_WRITE;
+        return std::nullopt;
+    }
+    tls::tls_error("TLS protocol driver read failed", p.ssl.get());
+}
+std::size_t tls_driver::write(std::string_view bytes) {
+    auto& p = *stream_.impl_;
+    p.check(true);
+    if (!write_allowed() || bytes.empty()) return 0;
+    // OpenSSL may have consumed part of the record even when it reports WANT.
+    // Neither its input pointer nor length/data may change until retry succeeds.
+    if (write_retry_ && (write_data_ != bytes.data() || write_size_ != bytes.size()))
+        throw std::logic_error("TLS write retry changed its buffer");
+    std::size_t count = 0;
+    ERR_clear_error();
+    const int result = SSL_write_ex(p.ssl.get(), bytes.data(), bytes.size(), &count);
+    if (result == 1) { write_retry_ = false; write_wants_write_ = false; return count; }
+    const int error = SSL_get_error(p.ssl.get(), result);
+    if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
+        write_retry_ = true;
+        write_wants_write_ = error == SSL_ERROR_WANT_WRITE;
+        write_data_ = bytes.data(); write_size_ = bytes.size();
+        return 0;
+    }
+    tls::tls_error("TLS protocol driver write failed", p.ssl.get());
+}
+} // namespace pace::detail
 #endif // PACE_HAS_TLS

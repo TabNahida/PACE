@@ -1,4 +1,6 @@
 #include <pace/http2.hpp>
+#include <pace/detail/protocol_driver.hpp>
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <condition_variable>
@@ -6,6 +8,9 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#if !defined(_WIN32)
+#include <sys/socket.h>
+#endif
 
 namespace {
 using namespace std::chrono_literals;
@@ -177,7 +182,7 @@ void interop() {
     }
 }
 pace::task<void> validation(pace::io_context& io, bool& completed) {
-    for(unsigned variant=0;variant<7;++variant) {
+    for(unsigned variant=0;variant<8;++variant) {
         std::vector<pace::http::request> batch(1); batch[0].method="GET"; batch[0].target="/";
         if(variant==0) batch[0].headers.push_back({"content-type","x\r\ny"});
         if(variant==1) batch[0].headers.push_back({"connection","close"});
@@ -185,6 +190,7 @@ pace::task<void> validation(pace::io_context& io, bool& completed) {
         if(variant==3) batch.clear();
         if(variant==6) batch[0].target="*";
         pace::http2::limits limits;
+        if(variant==7) limits.max_concurrent_handlers=0;
         if(variant==4 || variant==5) {
             batch[0].headers.push_back({"x-header","one"});
             batch[0].trailers.push_back({"x-trailer","two"});
@@ -233,6 +239,110 @@ void errors() {
       listener.close(); io.spawn(pace::http2::serve(listener,echo)); io.spawn(validation(io,completed));
       io.run(); require(completed,"already-closed listener stopped unrelated task"); }
 }
+// Handler completion order is independent from stream and batch order. A
+// small handler cap must also bound active work while the driver keeps reading.
+struct concurrent_handlers {
+    pace::io_context& io;
+    unsigned active = 0, peak = 0;
+    std::vector<unsigned> completed;
+    explicit concurrent_handlers(pace::io_context& context) : io(context) {}
+    pace::task<pace::http::response> operator()(pace::http::request request) {
+        const auto id = static_cast<unsigned>(std::stoul(request.target.substr(1)));
+        require(request.body == std::string(64 * 1024, 'q'), "duplex concurrent request body");
+        peak = std::max(peak, ++active);
+        co_await io.sleep_for(id == 0 ? 80ms : 2ms);
+        --active; completed.push_back(id);
+        if (id == 4) throw std::runtime_error("isolated concurrent handler");
+        co_return pace::http::response{.body = std::string(150 * 1024, static_cast<char>('a' + id))};
+    }
+};
+std::vector<pace::http::request> concurrent_requests() {
+    std::vector<pace::http::request> result(6);
+    for (unsigned i = 0; i < result.size(); ++i) { result[i].method = "GET"; result[i].target = "/" + std::to_string(i); result[i].body.assign(64 * 1024, 'q'); }
+    return result;
+}
+void concurrent_results(const std::vector<pace::http::response>& result) {
+    require(result.size() == 6, "concurrent result count");
+    for (unsigned i = 0; i < result.size(); ++i) {
+        if (i == 4) require(result[i].status == 500, "concurrent exception isolation");
+        else require(result[i].body == std::string(150 * 1024, static_cast<char>('a' + i)), "concurrent result order/body");
+    }
+}
+template<class Stream> pace::task<void> concurrent_server(Stream stream, concurrent_handlers& handler, unsigned cap, completion& done) {
+    pace::http2::limits limits; limits.max_concurrent_handlers = cap;
+    co_await pace::http2::serve_connection(std::move(stream), std::ref(handler), limits); done.arrive();
+}
+pace::task<void> concurrent_tcp_server(pace::tcp::listener& listener, concurrent_handlers& handler, unsigned cap, completion& done) {
+    auto stream = co_await listener.accept(); stream.set_no_delay(); const int small = 4096;
+    require(::setsockopt(stream.native_handle(), SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "small TCP send buffer");
+    co_await concurrent_server(std::move(stream), handler, cap, done);
+}
+pace::task<void> concurrent_tcp_client(pace::io_context& io, pace::tcp::endpoint endpoint, completion& done) {
+    pace::tcp::stream stream(io); stream.set_no_delay(); const int small = 4096;
+    require(::setsockopt(stream.native_handle(), SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "small TCP client send buffer");
+    co_await stream.connect(endpoint);
+    concurrent_results(co_await pace::http2::exchange(std::move(stream), "localhost", concurrent_requests())); done.arrive();
+}
+void concurrency() {
+    for (unsigned cap : {1u, 2u}) {
+        pace::io_context io; pace::tcp::listener listener(io, {"127.0.0.1", 0}); completion done{io};
+        concurrent_handlers handler{io};
+        io.spawn(concurrent_tcp_server(listener, handler, cap, done));
+        io.spawn(concurrent_tcp_client(io, listener.local_endpoint(), done)); io.run();
+        require(done.count == 2 && handler.active == 0 && handler.peak == cap, "HTTP2 handler concurrency bound");
+        require(handler.completed.front() == (cap == 1 ? 0u : 1u), "slow handler blocked another stream");
+    }
+}
+struct delayed_handler {
+    pace::io_context& io;
+    bool started = false, finished = false, canceled = false;
+    pace::task<pace::http::response> operator()(pace::http::request) {
+        if (!started) {
+            started = true;
+            try { co_await io.sleep_for(200ms); finished = true; }
+            catch (const std::system_error& error) { canceled = error.code() == std::errc::operation_canceled; throw; }
+        }
+        co_return pace::http::response{.body = "ok"};
+    }
+};
+pace::task<void> delayed_server(pace::tcp::listener& listener, delayed_handler& handler, bool& ended) {
+    try { co_await pace::http2::serve_connection(co_await listener.accept(), std::ref(handler)); }
+    catch (const std::system_error&) {}
+    ended = true;
+}
+pace::task<void> delayed_peer(pace::io_context& io, pace::tcp::endpoint endpoint, delayed_handler& handler, bool& ended, unsigned mode) {
+    pace::tcp::stream stream(io); co_await stream.connect(endpoint);
+    const std::string headers = std::string("\x82\x86\x84\x01\x09", 5) + "localhost";
+    co_await stream.write_all(std::string("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") + frame(4, 0, 0) + frame(1, 5, 1, headers));
+    while (!handler.started) co_await io.yield();
+    if (mode == 2) { io.stop(); co_return; }
+    if (mode == 0 || mode == 3) {
+        // This request arrives after the first handler suspended; processing
+        // only requests from the original read would deadlock this exchange.
+        if (mode == 3) co_await stream.write_all(frame(3, 0, 1, std::string("\0\0\0\x08", 4)));
+        co_await stream.write_all(frame(1, 5, 3, headers));
+        bool fast_done = false;
+        while (!fast_done) {
+            const auto head = co_await read_exact(stream, 9);
+            const auto size = (static_cast<unsigned char>(head[0]) << 16) | (static_cast<unsigned char>(head[1]) << 8) | static_cast<unsigned char>(head[2]);
+            (void)co_await read_exact(stream, size);
+            if (head[3] == 4 && head[4] == 0) co_await stream.write_all(frame(4, 1, 0));
+            fast_done = head[8] == 3 && (head[3] == 0 || head[3] == 1) && (head[4] & 1);
+        }
+        require(!handler.finished, "HTTP2 driver stopped reading during a handler");
+    }
+    stream.close();
+    co_await io.sleep_for(250ms);
+    require(ended && handler.finished, "HTTP2 detached late handler completion/lifetime");
+    io.stop();
+}
+void delayed_streams() {
+    for (unsigned mode : {0u, 1u, 2u, 3u}) {
+        pace::io_context io; pace::tcp::listener listener(io, {"127.0.0.1", 0}); delayed_handler handler{io}; bool ended = false;
+        io.spawn(delayed_server(listener, handler, ended)); io.spawn(delayed_peer(io, listener.local_endpoint(), handler, ended, mode));
+        io.run(); require(ended && (mode == 2 ? handler.canceled && !handler.finished : handler.finished), "delayed stream incomplete");
+    }
+}
 #ifdef PACE_HAS_TLS
 pace::task<void> secure_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done) {
     pace::tls::stream stream(co_await listener.accept(),config); co_await stream.handshake();
@@ -242,6 +352,65 @@ pace::task<void> secure_client(pace::io_context& io, pace::tcp::endpoint endpoin
     pace::tls::stream stream(io,config); co_await stream.connect(endpoint,"localhost");
     check_responses(co_await pace::http2::exchange(std::move(stream),"localhost",requests())); done.arrive();
 }
+pace::task<void> concurrent_tls_server(pace::tcp::listener& listener, const pace::tls::context& config,
+                                        concurrent_handlers& handler, completion& done) {
+    auto tcp = co_await listener.accept();
+    const int small = 4096;
+    require(::setsockopt(tcp.native_handle(), SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "small TLS send buffer");
+    pace::tls::stream stream(std::move(tcp), config); co_await stream.handshake();
+    co_await concurrent_server(std::move(stream), handler, 2, done);
+}
+pace::task<void> concurrent_tls_client(pace::io_context& io, pace::tcp::endpoint endpoint,
+                                      const pace::tls::context& config, completion& done) {
+    pace::tls::stream stream(io, config); co_await stream.connect(endpoint, "localhost");
+    concurrent_results(co_await pace::http2::exchange(std::move(stream), "localhost", concurrent_requests())); done.arrive();
+}
+pace::task<void> tls_driver_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done) {
+    pace::tls::stream stream(co_await listener.accept(), config); co_await stream.handshake();
+    co_await listener.context().sleep_for(20ms);
+    std::array<char, 16384> buffer{}; std::size_t received = 0;
+    while (received < 1024 * 1024) {
+        const auto count = co_await stream.read_some(buffer); require(count != 0, "TLS driver truncated retry");
+        require(std::all_of(buffer.begin(), buffer.begin() + count, [](char c) { return c == 'x'; }), "TLS retry corrupted data"); received += count;
+    }
+    co_await stream.write_all("ok"); co_await stream.close_gracefully(); done.arrive();
+}
+pace::task<void> tls_driver_client(pace::io_context& io, pace::tcp::endpoint endpoint, const pace::tls::context& config, completion& done) {
+    pace::tcp::stream tcp(io); tcp.set_no_delay(); const int small = 4096;
+    require(::setsockopt(tcp.native_handle(), SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "TLS driver small send buffer");
+    co_await tcp.connect(endpoint); pace::tls::stream stream(std::move(tcp), config); co_await stream.handshake("localhost");
+    {
+        pace::detail::tls_driver driver(stream); std::array<char, 16> input{};
+        require(!driver.read(input), "TLS nonblocking read should want input");
+        bool guarded = false;
+        try { (void)co_await stream.read_some(input); } catch (const std::logic_error&) { guarded = true; }
+        require(guarded, "TLS protocol driver did not retain single-operation guard");
+        const std::string payload(1024 * 1024, 'x'); std::size_t offset = 0; bool blocked = false;
+        while (offset < payload.size()) {
+            const auto count = driver.write(std::string_view(payload).substr(offset));
+            if (count) { offset += count; continue; }
+            require(!driver.read_allowed(), "TLS pending write must be retried before reads");
+            if (!blocked) {
+                bool rejected = false;
+                try { (void)driver.write(std::string_view(payload).substr(offset + 1)); }
+                catch (const std::logic_error&) { rejected = true; }
+                require(rejected, "TLS WANT write must retain buffer identity"); blocked = true;
+            }
+            if (driver.write_wait()) co_await io.wait_writable(driver.native_handle());
+            else co_await io.wait_readable(driver.native_handle());
+        }
+        require(blocked, "TLS backpressure did not exercise WANT retry");
+        std::string response;
+        while (response.size() < 2) {
+            const auto count = driver.read(input);
+            if (count) { require(*count != 0, "TLS response early EOF"); response.append(input.data(), *count); }
+            else if (driver.write_wait()) co_await io.wait_writable(driver.native_handle());
+            else co_await io.wait_readable(driver.native_handle());
+        }
+        require(response == "ok", "TLS retry response");
+    }
+    co_await stream.close_gracefully(); done.arrive();
+}
 void secure_roundtrip(const std::filesystem::path& certs) {
     pace::io_context io; pace::tcp::listener listener(io,{"127.0.0.1",0}); completion done{io};
     pace::tls::context server_config(pace::tls::role::server), client_config;
@@ -250,13 +419,23 @@ void secure_roundtrip(const std::filesystem::path& certs) {
     server_config.set_alpn_protocols({"h2"}); client_config.set_alpn_protocols({"h2"});
     io.spawn(secure_server(listener,server_config,done)); io.spawn(secure_client(io,listener.local_endpoint(),client_config,done));
     io.run(); require(done.count==2,"secure roundtrip incomplete");
+    pace::io_context concurrent_io; pace::tcp::listener concurrent_listener(concurrent_io, {"127.0.0.1", 0});
+    completion concurrent_done{concurrent_io}; concurrent_handlers handler{concurrent_io};
+    concurrent_io.spawn(concurrent_tls_server(concurrent_listener, server_config, handler, concurrent_done));
+    concurrent_io.spawn(concurrent_tls_client(concurrent_io, concurrent_listener.local_endpoint(), client_config, concurrent_done));
+    concurrent_io.run();
+    require(concurrent_done.count == 2 && handler.peak == 2 && handler.completed.front() == 1, "TLS HTTP2 concurrent handlers/backpressure");
+    pace::io_context driver_io; pace::tcp::listener driver_listener(driver_io, {"127.0.0.1", 0}); completion driver_done{driver_io};
+    driver_io.spawn(tls_driver_server(driver_listener, server_config, driver_done));
+    driver_io.spawn(tls_driver_client(driver_io, driver_listener.local_endpoint(), client_config, driver_done)); driver_io.run();
+    require(driver_done.count == 2, "TLS protocol driver retry test incomplete");
 }
 #endif
 }
 int main(int argc, char** argv) {
     watchdog deadline;
     try {
-        roundtrip(); interop(); errors();
+        roundtrip(); interop(); errors(); concurrency(); delayed_streams();
 #ifdef PACE_HAS_TLS
         secure_roundtrip(argc>1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path()/"certs");
 #else
