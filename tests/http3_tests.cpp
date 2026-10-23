@@ -239,46 +239,84 @@ void concurrency(const std::filesystem::path& certs) {
         require(handler.completed.front() == (cap == 1 ? 0u : 1u), "slow HTTP3 handler blocked another stream");
     }
 }
+// One-shot, context-affine test signal. The otherwise idle UDP socket gives
+// the waiter normal reactor cancellation on stop(), without polling or a
+// coroutine handle that could outlive its frame. No datagrams are sent.
+struct test_signal {
+    pace::udp::socket socket;
+    bool ready = false;
+    explicit test_signal(pace::io_context& io) : socket(io, pace::udp::endpoint{"127.0.0.1", 0}) {}
+    void set() { ready = true; socket.close(); }
+    pace::task<void> wait() {
+        if (ready) co_return;
+        try { co_await socket.context().wait_readable(socket.native_handle()); }
+        catch (const std::system_error& error) {
+            if (ready && error.code() == std::errc::operation_canceled) co_return;
+            throw;
+        }
+        throw std::runtime_error("unexpected HTTP3 test signal readability");
+    }
+};
 struct delayed_handler {
-    pace::io_context& io;
+    test_signal entered, release, completed;
     bool started = false, finished = false, canceled = false;
+    explicit delayed_handler(pace::io_context& io) : entered(io), release(io), completed(io) {}
     pace::task<pace::http::response> operator()(pace::http::request) {
         if (!started) {
-            started = true;
-            try { co_await io.sleep_for(200ms); finished = true; }
+            started = true; entered.set();
+            try { co_await release.wait(); finished = true; completed.set(); }
             catch (const std::system_error& error) { canceled = error.code() == std::errc::operation_canceled; throw; }
         }
         co_return pace::http::response{.body = "ok"};
     }
 };
-pace::task<void> delayed_server(fixture& test, delayed_handler& handler, bool& ended) {
+pace::task<void> delayed_server(fixture& test, delayed_handler& handler, test_signal& ended,
+                                bool& critical_closed, unsigned mode) {
     try { co_await pace::http3::serve_connection(co_await test.listener->accept(), std::ref(handler)); }
-    catch (const std::system_error& error) { if (error.code() != std::errc::operation_canceled) throw; }
-    ended = true;
+    catch (const pace::http::protocol_error& error) {
+        if (mode != 1 || std::string_view(error.what()) != "HTTP/3: ERR_CLOSED_CRITICAL_STREAM") throw;
+        critical_closed = true;
+    }
+    catch (const std::system_error& error) {
+        if (mode == 1 || error.code() != std::errc::operation_canceled) throw;
+    }
+    ended.set();
 }
-pace::task<void> delayed_peer(fixture& test, delayed_handler& handler, bool& ended, unsigned mode) {
+pace::task<void> delayed_peer(fixture& test, delayed_handler& handler, test_signal& ended,
+                              bool& critical_closed, unsigned mode) {
     pace::quic::connection connection(test.io, test.client);
     co_await connection.connect(test.listener->local_endpoint(), "localhost");
     auto controls = co_await raw_controls(connection);
     const auto request = bytes({1, 16, 0, 0, 0xd1, 0xd7, 0xc1, 0x50, 9}) + "localhost";
     auto slow = co_await connection.open_stream(); co_await slow.write_all(request); slow.finish_write();
-    while (!handler.started) co_await test.io.yield();
+    co_await handler.entered.wait();
     if (mode == 2) { test.io.stop(); co_return; }
-    if (mode == 0 || mode == 3) {
+    if (mode == 0) {
         auto fast = co_await connection.open_stream(); co_await fast.write_all(request); fast.finish_write();
         require(!(co_await read_all(fast)).empty() && !handler.finished, "HTTP3 driver stopped reading during a handler");
+        test.listener->close();
+    } else {
+        // RFC 9114 section 6.2.1: closing a control stream is a connection
+        // error. Keep the QUIC engine alive so its FIN is retransmittable;
+        // connection.close() only promises a best-effort CONNECTION_CLOSE.
+        controls.front().finish_write();
     }
+    co_await ended.wait();
+    require(!handler.finished && !handler.canceled, "HTTP3 handler ended before its connection driver");
+    require(critical_closed == (mode == 1), "HTTP3 critical-stream closure was not observed");
+    handler.release.set();
+    co_await handler.completed.wait();
+    require(handler.finished, "HTTP3 late handler did not finish after connection teardown");
     connection.close();
-    co_await test.io.sleep_for(250ms);
-    require(handler.finished, "HTTP3 late handler did not finish");
-    require(ended, mode == 1 ? "HTTP3 early peer close was not observed" : "HTTP3 after-fast peer close was not observed");
     test.io.stop();
 }
 void delayed_streams(const std::filesystem::path& certs) {
     for (unsigned mode : {0u, 1u, 2u}) {
-        fixture test(certs); delayed_handler handler{test.io}; bool ended = false;
-        test.io.spawn(delayed_server(test, handler, ended)); test.io.spawn(delayed_peer(test, handler, ended, mode));
-        test.io.run(); require(ended && (mode == 2 ? handler.canceled && !handler.finished : handler.finished), "delayed HTTP3 stream incomplete");
+        fixture test(certs); delayed_handler handler{test.io}; test_signal ended{test.io}; bool critical_closed = false;
+        test.io.spawn(delayed_server(test, handler, ended, critical_closed, mode));
+        test.io.spawn(delayed_peer(test, handler, ended, critical_closed, mode));
+        test.io.run();
+        require(ended.ready && (mode == 2 ? handler.canceled && !handler.finished : handler.finished), "delayed HTTP3 stream incomplete");
     }
 }
 pace::task<void> validation(fixture& test, bool& complete) {

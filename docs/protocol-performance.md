@@ -2,9 +2,11 @@
 
 [TCP comparison](performance.md) · [CI architecture coverage](ci.md)
 
-These measurements use local Linux. They compare PACE with its own v0.1.1
-behavior; the older TCP Asio/libuv comparison does not establish HTTP or
-WebSocket performance rankings. Remote CI checks functionality and portability.
+These measurements use local Linux. HTTP/1 and WebSocket compare PACE with its
+own v0.1.1 behavior; the HTTP/2 and HTTP/3 experiment compares handler limits in
+the same updated binary. The older TCP Asio/libuv comparison does not establish
+HTTP or WebSocket performance rankings. Remote CI checks functionality and
+portability.
 
 ## HTTP/1 response completion
 
@@ -101,8 +103,10 @@ preserves TLS retry buffers. It also batches generated frames at a 64 KiB
 threshold, potentially including one final frame. The TLS path reserves 128 KiB
 of bounded ciphertext buffers per connection so simultaneous writes can keep
 receiving under socket backpressure. HTTP/3 wakes its existing
-QUIC event driver. Neither path polls on a millisecond timer. Setting the handler
-limit to one retains sequential application dispatch.
+QUIC event driver. Neither HTTP adapter adds a periodic polling timer; the QUIC
+transport uses timerfd on Linux and retains its existing 1–10 ms timer fallback
+on macOS/FreeBSD. Setting the handler limit to one retains sequential
+application dispatch.
 
 See the [HTTP/2](reference/http2.md) and [HTTP/3](reference/http3.md) references
 for bounds, handler lifetime and cancellation contracts. Regression tests cover
