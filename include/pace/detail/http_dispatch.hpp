@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <utility>
 
 namespace pace::detail {
 // One reactor owns this queue. Handler tasks never access a protocol session or
@@ -18,9 +19,40 @@ struct http_dispatch : std::enable_shared_from_this<http_dispatch> {
     std::exception_ptr failure;
     std::function<void()> wake;
     bool open = true;
+    std::coroutine_handle<> waiter{};
 
     http_dispatch(io_context& context, http::handler handler) : io(context), handle(std::move(handler)) {}
     void close() noexcept { open = false; wake = {}; completed.clear(); }
+    // A transport EOF removes network readability as a useful wake source.
+    // Keep one context-affine, RAII-unlinked waiter for handler completion.
+    struct completion_awaiter {
+        std::shared_ptr<http_dispatch> state;
+        std::coroutine_handle<> continuation{};
+        ~completion_awaiter() {
+            if (state->waiter == continuation) state->waiter = {};
+        }
+        bool await_ready() const noexcept {
+            return !state->completed.empty() || state->failure || !state->open || state->io.stopped();
+        }
+        void await_suspend(std::coroutine_handle<> handle) {
+            if (state->waiter) throw std::logic_error("another handler-completion waiter is pending");
+            continuation = handle; state->waiter = handle;
+        }
+        void await_resume() {
+            if (state->io.stopped() || !state->open)
+                throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+        }
+    };
+    completion_awaiter wait_completion() { return {shared_from_this(), {}}; }
+    void notify() {
+        if (waiter) {
+            const auto continuation = std::exchange(waiter, {});
+            // Queue, never inline-resume, the protocol owner. yield's scheduling
+            // path also accepts cancellation continuations after context.stop().
+            io.yield().await_suspend(continuation);
+        }
+        if (wake) wake();
+    }
     void start(std::int64_t id, http::request request) {
         ++active;
         try { io.spawn(invoke(shared_from_this(), id, std::move(request))); }
@@ -44,7 +76,7 @@ struct http_dispatch : std::enable_shared_from_this<http_dispatch> {
         catch (...) { self->failure = std::current_exception(); }
         // Completion only schedules the owner; it must not reenter nghttp from
         // inside an application coroutine or one of its I/O callbacks.
-        if (self->wake) self->wake();
+        self->notify();
     }
 };
 struct close_http_dispatch {

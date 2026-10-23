@@ -343,6 +343,61 @@ void delayed_streams() {
         io.run(); require(ended && (mode == 2 ? handler.canceled && !handler.finished : handler.finished), "delayed stream incomplete");
     }
 }
+struct eof_case {
+    pace::io_context& io;
+    completion done{io};
+    unsigned variant, calls = 0;
+    bool error = false, canceled = false;
+    pace::task<pace::http::response> handle(pace::http::request) {
+        ++calls;
+        try { co_await io.sleep_for(variant == 3 ? 1s : 20ms); }
+        catch (const std::system_error& e) { canceled = e.code() == std::errc::operation_canceled; throw; }
+        co_return pace::http::response{.body = variant == 1 ? std::string(100000, 'x') : "half closed"};
+    }
+};
+pace::task<void> eof_server(pace::tcp::listener& listener, eof_case& test) {
+    try { co_await pace::http2::serve_connection(co_await listener.accept(), [&](pace::http::request request) { return test.handle(std::move(request)); }); }
+    catch (const std::exception&) { test.error = true; }
+    test.done.arrive();
+}
+pace::task<void> eof_peer(pace::tcp::endpoint endpoint, eof_case& test) {
+    pace::tcp::stream stream(test.io); co_await stream.connect(endpoint);
+    const std::string headers = std::string("\x82\x86\x84\x01\x09", 5) + "localhost";
+    co_await stream.write_all(std::string("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") + frame(4, 0, 0) + frame(1, test.variant == 2 ? 4 : 5, 1, headers));
+#ifdef _WIN32
+    require(::shutdown(stream.native_handle(), SD_SEND) == 0, "HTTP2 peer write shutdown");
+#else
+    require(::shutdown(stream.native_handle(), SHUT_WR) == 0, "HTTP2 peer write shutdown");
+#endif
+    if (test.variant == 3) {
+        while (!test.calls) co_await test.io.yield();
+        // Let the connection enter its handler-completion wait after EOF.
+        co_await test.io.sleep_for(5ms); test.io.stop(); test.done.arrive(); co_return;
+    }
+    std::string wire; std::array<char, 16384> buffer{};
+    while (const auto count = co_await stream.read_some(buffer)) wire.append(buffer.data(), count);
+    std::size_t cursor = 0; std::string body; bool ended = false;
+    while (cursor + 9 <= wire.size()) {
+        const auto size = (static_cast<unsigned char>(wire[cursor]) << 16) | (static_cast<unsigned char>(wire[cursor + 1]) << 8) | static_cast<unsigned char>(wire[cursor + 2]);
+        require(static_cast<std::size_t>(size) <= wire.size() - cursor - 9, "HTTP2 EOF output partial frame");
+        if (wire[cursor + 3] == 0) { body.append(wire, cursor + 9, size); ended = wire[cursor + 4] & 1; }
+        cursor += size + 9;
+    }
+    if (test.variant == 0) require(body == "half closed" && ended, "complete request lost after TCP half close");
+    else if (test.variant == 1) require(body.size() < 100000 && !ended, "EOF response exceeded unavailable flow credit");
+    else require(test.calls == 0 && body.empty(), "truncated EOF request reached handler");
+    test.done.arrive();
+}
+void half_close() {
+    for (unsigned variant : {0u, 1u, 2u, 3u}) {
+        pace::io_context io; pace::tcp::listener listener(io, {"127.0.0.1", 0}); eof_case test{io, {io}, variant};
+        auto deadline = io.call_after(2s, [&] { io.stop(); });
+        io.spawn(eof_server(listener, test)); io.spawn(eof_peer(listener.local_endpoint(), test)); io.run();
+        require(test.done.count == 2, "HTTP2 EOF stalled on handler/flow control");
+        require(test.error == (variant != 0), "HTTP2 EOF error classification");
+        if (variant == 3) require(test.canceled, "EOF waiter prevented active handler cancellation");
+    }
+}
 #ifdef PACE_HAS_TLS
 pace::task<void> secure_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done) {
     pace::tls::stream stream(co_await listener.accept(),config); co_await stream.handshake();
@@ -418,16 +473,19 @@ void secure_roundtrip(const std::filesystem::path& certs) {
     client_config.load_verify_file((certs/"ca.pem").string());
     server_config.set_alpn_protocols({"h2"}); client_config.set_alpn_protocols({"h2"});
     io.spawn(secure_server(listener,server_config,done)); io.spawn(secure_client(io,listener.local_endpoint(),client_config,done));
+    std::cerr << "HTTP2 stage: TLS roundtrip\n";
     io.run(); require(done.count==2,"secure roundtrip incomplete");
     pace::io_context concurrent_io; pace::tcp::listener concurrent_listener(concurrent_io, {"127.0.0.1", 0});
     completion concurrent_done{concurrent_io}; concurrent_handlers handler{concurrent_io};
     concurrent_io.spawn(concurrent_tls_server(concurrent_listener, server_config, handler, concurrent_done));
     concurrent_io.spawn(concurrent_tls_client(concurrent_io, concurrent_listener.local_endpoint(), client_config, concurrent_done));
+    std::cerr << "HTTP2 stage: TLS concurrent duplex/backpressure\n";
     concurrent_io.run();
     require(concurrent_done.count == 2 && handler.peak == 2 && handler.completed.front() == 1, "TLS HTTP2 concurrent handlers/backpressure");
     pace::io_context driver_io; pace::tcp::listener driver_listener(driver_io, {"127.0.0.1", 0}); completion driver_done{driver_io};
     driver_io.spawn(tls_driver_server(driver_listener, server_config, driver_done));
-    driver_io.spawn(tls_driver_client(driver_io, driver_listener.local_endpoint(), client_config, driver_done)); driver_io.run();
+    driver_io.spawn(tls_driver_client(driver_io, driver_listener.local_endpoint(), client_config, driver_done));
+    std::cerr << "HTTP2 stage: TLS driver WANT retry\n"; driver_io.run();
     require(driver_done.count == 2, "TLS protocol driver retry test incomplete");
 }
 #endif
@@ -435,7 +493,12 @@ void secure_roundtrip(const std::filesystem::path& certs) {
 int main(int argc, char** argv) {
     watchdog deadline;
     try {
-        roundtrip(); interop(); errors(); concurrency(); delayed_streams();
+        std::cerr << "HTTP2 stage: roundtrip\n"; roundtrip();
+        std::cerr << "HTTP2 stage: raw interoperability\n"; interop();
+        std::cerr << "HTTP2 stage: errors\n"; errors();
+        std::cerr << "HTTP2 stage: TCP concurrency/backpressure\n"; concurrency();
+        std::cerr << "HTTP2 stage: delayed/reset/cancel\n"; delayed_streams();
+        std::cerr << "HTTP2 stage: TCP half close\n"; half_close();
 #ifdef PACE_HAS_TLS
         secure_roundtrip(argc>1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path()/"certs");
 #else

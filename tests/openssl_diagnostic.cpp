@@ -25,21 +25,38 @@
 namespace {
 #ifdef _WIN32
 LONG WINAPI crash_trace(EXCEPTION_POINTERS* failure) {
+    const DWORD code = failure->ExceptionRecord->ExceptionCode;
+    if (code != EXCEPTION_ACCESS_VIOLATION && code != EXCEPTION_ILLEGAL_INSTRUCTION &&
+        code != EXCEPTION_STACK_OVERFLOW && code != EXCEPTION_IN_PAGE_ERROR)
+        return EXCEPTION_CONTINUE_SEARCH;
     static bool tracing = false;
     if (tracing) return EXCEPTION_CONTINUE_SEARCH;
     tracing = true;
     const auto process = GetCurrentProcess();
     const auto base = reinterpret_cast<DWORD64>(GetModuleHandleW(nullptr));
     const auto pc = reinterpret_cast<DWORD64>(failure->ExceptionRecord->ExceptionAddress);
-    std::fprintf(stderr, "OPENSSL_DIAGNOSTIC unhandled exception=0x%08lx pc=0x%llx image=0x%llx rva=0x%llx\n",
+    std::fprintf(stderr, "OPENSSL_DIAGNOSTIC exception=0x%08lx pc=0x%llx image=0x%llx rva=0x%llx\n",
         failure->ExceptionRecord->ExceptionCode, static_cast<unsigned long long>(pc),
         static_cast<unsigned long long>(base), static_cast<unsigned long long>(pc - base));
     std::fflush(stderr);
+    if (failure->ExceptionRecord->NumberParameters >= 2) {
+        std::fprintf(stderr, "OPENSSL_DIAGNOSTIC exception operation=%llu address=0x%llx\n",
+            static_cast<unsigned long long>(failure->ExceptionRecord->ExceptionInformation[0]),
+            static_cast<unsigned long long>(failure->ExceptionRecord->ExceptionInformation[1]));
+        std::fflush(stderr);
+    }
     CONTEXT context = *failure->ContextRecord;
     STACKFRAME64 frame{};
 #if defined(_M_ARM64)
     constexpr DWORD machine = IMAGE_FILE_MACHINE_ARM64;
     frame.AddrPC.Offset = context.Pc; frame.AddrFrame.Offset = context.Fp; frame.AddrStack.Offset = context.Sp;
+    std::fprintf(stderr, "OPENSSL_DIAGNOSTIC arm64 sp=0x%llx fp=0x%llx lr=0x%llx\n",
+        static_cast<unsigned long long>(context.Sp), static_cast<unsigned long long>(context.Fp),
+        static_cast<unsigned long long>(context.Lr));
+    for (unsigned index = 0; index < 8; ++index)
+        std::fprintf(stderr, "OPENSSL_DIAGNOSTIC arm64 x%u=0x%llx\n", index,
+            static_cast<unsigned long long>(context.X[index]));
+    std::fflush(stderr);
 #elif defined(_M_X64)
     constexpr DWORD machine = IMAGE_FILE_MACHINE_AMD64;
     frame.AddrPC.Offset = context.Rip; frame.AddrFrame.Offset = context.Rbp; frame.AddrStack.Offset = context.Rsp;
@@ -68,6 +85,10 @@ void install_crash_trace() {
     SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
     if (!SymInitialize(GetCurrentProcess(), nullptr, TRUE))
         std::fprintf(stderr, "OPENSSL_DIAGNOSTIC SymInitialize failed: %lu\n", GetLastError());
+    // Observe the original fault before stack unwinding: a damaged frame can
+    // prevent Windows from reaching the process-level unhandled filter.
+    if (AddVectoredExceptionHandler(1, crash_trace) == nullptr)
+        std::fprintf(stderr, "OPENSSL_DIAGNOSTIC AddVectoredExceptionHandler failed: %lu\n", GetLastError());
     SetUnhandledExceptionFilter(crash_trace);
 }
 #endif

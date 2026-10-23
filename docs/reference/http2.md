@@ -53,7 +53,13 @@ interleaving. Responses may finish out of order; the batch client still returns
 results in request order. Reset streams discard their pending responses, but an
 already-running handler occupies its slot until it finishes.
 
-Closing a connection discards queued requests and late handler results. The
+A clean TCP receive EOF preserves already-complete requests: handlers can finish
+and responses can use the peer's remaining flow-control credit. No further
+requests or WINDOW_UPDATE frames can arrive after EOF. Truncated requests fail
+the connection; a response that needs additional credit also fails instead of
+waiting indefinitely. Handler-completion waits do not poll the EOF socket.
+
+Aborting a connection discards queued requests and late handler results. The
 existing handler signature has no cancellation token: an application coroutine
 already suspended in its own operation is allowed to finish safely, and its
 handler captures must remain valid until then. Stopping the owning context

@@ -398,7 +398,7 @@ template<class Driver> struct pump {
     bool step(bool receive = true) {
         bool progress = false;
         // A TLS read that needs a write must be retried before new SSL writes.
-        if (receive && driver.read_allowed()) {
+        if (!eof && receive && driver.read_allowed()) {
             for (unsigned attempt = 0; attempt < 16; ++attempt) {
                 const auto count = driver.read(input);
                 if (!count) break;
@@ -417,9 +417,10 @@ template<class Driver> struct pump {
     }
     bool drained() const { return offset == output.size() && !nghttp2_session_want_write(state.native); }
 };
-template<class Driver> task<void> wait_driver(io_context& io, Driver& driver, bool* wake = nullptr) {
+template<class Driver> task<void> wait_driver(io_context& io, Driver& driver, bool* wake = nullptr, bool output_only = false) {
     try {
-        if (driver.either_wait()) co_await io.wait_ready(driver.native_handle());
+        if (output_only) co_await io.wait_writable(driver.native_handle());
+        else if (driver.either_wait()) co_await io.wait_ready(driver.native_handle());
         else if (driver.write_wait()) co_await io.wait_writable(driver.native_handle());
         else co_await io.wait_readable(driver.native_handle());
     } catch (const std::system_error& error) {
@@ -486,9 +487,24 @@ template<class Stream> task<void> serve_impl(Stream transport,http::handler hand
                     dispatch->start(id, std::move(request)); progress = true;
                 }
                 progress = pending.step() || progress;
-                if (pending.eof || (((state.goaway && state.streams.empty()) || !nghttp2_session_want_read(state.native)) && pending.drained())) break;
+                if (pending.eof) {
+                    // TCP FIN closes only the peer's send direction. Preserve
+                    // complete requests and replies that fit existing credit.
+                    for (const auto& [id, stream] : state.streams) {
+                        (void)id;
+                        if (!stream.incoming_complete) throw http::protocol_error("HTTP/2 truncated request");
+                    }
+                    if (state.streams.empty() && pending.drained()) break;
+                } else if (((state.goaway && state.streams.empty()) || !nghttp2_session_want_read(state.native)) && pending.drained()) break;
                 if (progress) co_await transport.context().yield();
-                else co_await wait_driver(transport.context(), driver, &wake);
+                else if (!pending.eof) co_await wait_driver(transport.context(), driver, &wake);
+                else if (pending.offset < pending.output.size()) {
+                    // There can be no new TLS input or HTTP/2 WINDOW_UPDATE
+                    // after EOF; watching readability would spin indefinitely.
+                    if (!driver.write_wait()) throw http::protocol_error("HTTP/2 EOF blocked response output");
+                    co_await wait_driver(transport.context(), driver, &wake, true);
+                } else if (dispatch->active) co_await dispatch->wait_completion();
+                else throw http::protocol_error("HTTP/2 EOF exhausted response flow control");
             }
         }
         co_await transport.close_gracefully();
