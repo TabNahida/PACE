@@ -10,6 +10,7 @@
 #error PACE_QUIC_requires_POSIX_sockets_Windows_transport_is_not_implemented
 #else
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #endif
 #if defined(__linux__)

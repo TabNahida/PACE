@@ -89,13 +89,14 @@ def windows_rejections():
         raise ValueError("Windows rejection checks must run on Windows")
     passed = []
     for feature in ("quic", "http3"):
-        command = ["xmake", "f", "-c", "-m", "release", "-o", "build/unsupported-" + feature,
+        command = ["xmake", "f", "-p", "windows", "-c", "-m", "release", "-o", "build/unsupported-" + feature,
                    "--quic=" + ("y" if feature == "quic" else "n"),
                    "--http3=" + ("y" if feature == "http3" else "n"), "-y"]
         result = subprocess.run(command, text=True, capture_output=True, timeout=60)
         diagnostic = result.stdout + result.stderr
         if result.returncode == 0 or "QUIC/HTTP3 currently require a POSIX platform" not in diagnostic:
-            raise RuntimeError(f"Windows {feature} did not fail with the documented unsupported-platform error")
+            raise RuntimeError(f"Windows {feature} did not fail with the documented unsupported-platform error "
+                               f"(exit {result.returncode}). xmake diagnostic:\n{diagnostic[-4000:].strip()}")
         passed.append(f"unsupported_on_windows:{feature}")
     return passed
 

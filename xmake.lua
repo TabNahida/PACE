@@ -18,7 +18,15 @@ set_languages(get_config("cxxstandard") or "cxx20")
 
 local enable_quic = has_config("quic") or has_config("http3")
 if enable_quic and is_plat("windows", "mingw") then
-    raise("QUIC/HTTP3 currently require a POSIX platform; Windows QUIC transport is not implemented")
+    -- Error helpers are available in sandbox callbacks, not the top-level DSL.
+    -- Stop before optional dependencies are resolved on an unsupported platform.
+    target("pace_unsupported_protocol")
+        set_kind("phony")
+        on_load(function ()
+            raise("QUIC/HTTP3 currently require a POSIX platform; Windows QUIC transport is not implemented")
+        end)
+    target_end()
+    return
 end
 if has_config("tls") or enable_quic then add_requires("openssl3 3.5.7") end
 if has_config("http2") then add_requires("nghttp2 1.70.0") end
