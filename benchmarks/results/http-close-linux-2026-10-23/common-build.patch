@@ -1,0 +1,126 @@
+diff --git a/include/pace/tls.hpp b/include/pace/tls.hpp
+index d6fe27d..96a2c36 100644
+--- a/include/pace/tls.hpp
++++ b/include/pace/tls.hpp
+@@ -8,6 +8,7 @@
+ #include <string>
+ #include <vector>
+ 
++namespace pace::detail { class tls_driver; }
+ namespace pace::tls {
+ 
+ enum class role { client, server };
+@@ -88,6 +89,7 @@ public:
+ private:
+     struct implementation;
+     std::unique_ptr<implementation> impl_;
++    friend class pace::detail::tls_driver;
+     task<void> perform_handshake(std::string peer_name);
+ };
+ 
+diff --git a/src/extensions/tls.cpp b/src/extensions/tls.cpp
+index 44d96fb..faa4ab1 100644
+--- a/src/extensions/tls.cpp
++++ b/src/extensions/tls.cpp
+@@ -1,4 +1,5 @@
+ #include <pace/tls.hpp>
++#include <pace/detail/protocol_driver.hpp>
+ 
+ #ifdef PACE_HAS_TLS
+ #include <openssl/ssl.h>
+@@ -534,4 +535,55 @@ task<void> stream::shutdown(std::chrono::milliseconds timeout) {
+ }
+ 
+ } // namespace pace::tls
++
++namespace pace::detail {
++tls_driver::tls_driver(tls::stream& stream) : stream_(stream) {
++    if (!stream_.impl_) throw std::logic_error("moved-from TLS stream");
++    auto& p = *stream_.impl_;
++    if (p.active) throw std::logic_error("another TLS operation is pending");
++    p.check(true);
++    p.active = true;
++}
++tls_driver::~tls_driver() { stream_.impl_->active = false; }
++native_socket_type tls_driver::native_handle() const noexcept { return stream_.impl_->transport.native_handle(); }
++bool tls_driver::write_wait() const noexcept { return read_wants_write_ || (write_retry_ && write_wants_write_); }
++std::optional<std::size_t> tls_driver::read(std::span<char> bytes) {
++    auto& p = *stream_.impl_;
++    p.check(true);
++    if (!read_allowed()) return std::nullopt;
++    if (p.eof || bytes.empty()) return 0;
++    std::size_t count = 0;
++    ERR_clear_error();
++    const int result = SSL_read_ex(p.ssl.get(), bytes.data(), bytes.size(), &count);
++    if (result == 1) { read_wants_write_ = false; return count; }
++    const int error = SSL_get_error(p.ssl.get(), result);
++    if (error == SSL_ERROR_ZERO_RETURN) { p.eof = true; read_wants_write_ = false; return 0; }
++    if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
++        read_wants_write_ = error == SSL_ERROR_WANT_WRITE;
++        return std::nullopt;
++    }
++    tls::tls_error("TLS protocol driver read failed", p.ssl.get());
++}
++std::size_t tls_driver::write(std::string_view bytes) {
++    auto& p = *stream_.impl_;
++    p.check(true);
++    if (!write_allowed() || bytes.empty()) return 0;
++    // OpenSSL may have consumed part of the record even when it reports WANT.
++    // Neither its input pointer nor length/data may change until retry succeeds.
++    if (write_retry_ && (write_data_ != bytes.data() || write_size_ != bytes.size()))
++        throw std::logic_error("TLS write retry changed its buffer");
++    std::size_t count = 0;
++    ERR_clear_error();
++    const int result = SSL_write_ex(p.ssl.get(), bytes.data(), bytes.size(), &count);
++    if (result == 1) { write_retry_ = false; write_wants_write_ = false; return count; }
++    const int error = SSL_get_error(p.ssl.get(), result);
++    if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
++        write_retry_ = true;
++        write_wants_write_ = error == SSL_ERROR_WANT_WRITE;
++        write_data_ = bytes.data(); write_size_ = bytes.size();
++        return 0;
++    }
++    tls::tls_error("TLS protocol driver write failed", p.ssl.get());
++}
++} // namespace pace::detail
+ #endif // PACE_HAS_TLS
+diff --git a/include/pace/detail/protocol_driver.hpp b/include/pace/detail/protocol_driver.hpp
+new file mode 100644
+index 0000000..3dbf9e7
+--- /dev/null
++++ b/include/pace/detail/protocol_driver.hpp
+@@ -0,0 +1,34 @@
++#pragma once
++#include <pace/tls.hpp>
++#include <pace/quic.hpp>
++#include <optional>
++
++namespace pace::detail {
++#ifdef PACE_HAS_TLS
++// Internal single-owner adapter. It holds TLS's normal operation guard while a
++// multiplexed protocol drives nonblocking progress and waits outside OpenSSL.
++// It does not permit simultaneous public TLS operations.
++class tls_driver {
++public:
++    explicit tls_driver(tls::stream& stream);
++    ~tls_driver();
++    tls_driver(const tls_driver&) = delete;
++    std::optional<std::size_t> read(std::span<char> bytes);
++    std::size_t write(std::string_view bytes);
++    native_socket_type native_handle() const noexcept;
++    bool write_wait() const noexcept;
++    bool read_allowed() const noexcept { return !write_retry_; }
++    bool write_allowed() const noexcept { return !read_wants_write_; }
++private:
++    tls::stream& stream_;
++    const char* write_data_ = nullptr;
++    std::size_t write_size_ = 0;
++    bool write_retry_ = false, write_wants_write_ = false, read_wants_write_ = false;
++};
++#endif
++#ifdef PACE_HAS_QUIC
++struct quic_driver {
++    static void wake(quic::connection& connection);
++};
++#endif
++} // namespace pace::detail

@@ -61,12 +61,15 @@ public:
         bool writable;
         std::error_code error;
         std::coroutine_handle<> continuation;
+        bool either = false;
         bool await_ready() noexcept;
         bool await_suspend(std::coroutine_handle<> handle);
         void await_resume();
     };
     io_awaiter wait_readable(native_socket_type fd) noexcept { return {*this, fd, false, {}, {}}; }
     io_awaiter wait_writable(native_socket_type fd) noexcept { return {*this, fd, true, {}, {}}; }
+    // Claims both directions; either readiness notification resumes it once.
+    io_awaiter wait_ready(native_socket_type fd) noexcept { return {*this, fd, false, {}, {}, true}; }
 
     struct timer_awaiter {
         io_context& context;

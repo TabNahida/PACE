@@ -18,6 +18,23 @@
 
 namespace pace::websocket {
 namespace {
+void apply_mask(std::span<char> bytes, const char* key) {
+    // memcpy keeps word-at-a-time masking valid for unaligned buffers and both
+    // byte orders. The repeated key is represented in the host's byte order.
+    std::array<char, 8> repeated;
+    std::copy_n(key, 4, repeated.data());
+    std::copy_n(key, 4, repeated.data() + 4);
+    std::uint64_t mask;
+    std::memcpy(&mask, repeated.data(), sizeof(mask));
+    std::size_t offset = 0;
+    for (; bytes.size() - offset >= sizeof(mask); offset += sizeof(mask)) {
+        std::uint64_t word;
+        std::memcpy(&word, bytes.data() + offset, sizeof(word));
+        word ^= mask;
+        std::memcpy(bytes.data() + offset, &word, sizeof(word));
+    }
+    for (; offset < bytes.size(); ++offset) bytes[offset] ^= key[offset % 4];
+}
 [[noreturn]] void invalid(const char* text, std::uint16_t code = 1002) { throw protocol_error(code, text); }
 void random_bytes(std::span<unsigned char> bytes) {
 #if defined(_WIN32)
@@ -204,7 +221,11 @@ struct basic_stream<Transport>::implementation {
     Transport transport;
     role mode;
     limits bounds;
-    std::string pending, protocol, close_reason;
+    std::string pending, protocol, close_reason, output;
+    // Read ahead once for small frame fields, instead of a recv per field.
+    // Large payloads bypass this bounded buffer after consuming any read-ahead.
+    std::array<char, 8192> input;
+    std::size_t input_begin = 0, input_end = 0, pending_begin = 0;
     std::optional<std::uint16_t> close_code;
     bool busy = false, upgraded = false, close_sent = false, close_received = false;
     implementation(Transport socket, role value, limits maximum)
@@ -239,15 +260,26 @@ struct basic_stream<Transport>::implementation {
         ~operation() { state.busy = false; }
     };
     task<void> exact(std::span<char> bytes) {
-        if (!pending.empty()) {
-            const auto count = std::min(pending.size(), bytes.size());
-            std::copy_n(pending.data(), count, bytes.data());
-            pending.erase(0, count); bytes = bytes.subspan(count);
+        if (pending_begin < pending.size()) {
+            const auto count = std::min(pending.size() - pending_begin, bytes.size());
+            std::copy_n(pending.data() + pending_begin, count, bytes.data());
+            pending_begin += count; bytes = bytes.subspan(count);
+            if (pending_begin == pending.size()) { pending.clear(); pending_begin = 0; }
         }
         while (!bytes.empty()) {
-            const auto count = co_await transport.read_some(bytes);
-            if (!count) invalid("WebSocket EOF without a complete closing frame");
-            bytes = bytes.subspan(count);
+            if (input_begin < input_end) {
+                const auto count = std::min(input_end - input_begin, bytes.size());
+                std::copy_n(input.data() + input_begin, count, bytes.data());
+                input_begin += count; bytes = bytes.subspan(count);
+            } else if (bytes.size() >= input.size()) {
+                const auto count = co_await transport.read_some(bytes);
+                if (!count) invalid("WebSocket EOF without a complete closing frame");
+                bytes = bytes.subspan(count);
+            } else {
+                input_begin = 0;
+                input_end = co_await transport.read_some(input);
+                if (!input_end) invalid("WebSocket EOF without a complete closing frame");
+            }
         }
     }
     task<head> read_head() {
@@ -268,7 +300,7 @@ struct basic_stream<Transport>::implementation {
         }
     }
     task<void> frame(unsigned opcode, std::string_view data, bool final = true) {
-        std::string output;
+        output.clear();
         output.reserve(data.size() + 14);
         output += static_cast<char>((final ? 0x80 : 0) | opcode);
         const auto mask = mode == role::client ? 0x80 : 0;
@@ -285,7 +317,7 @@ struct basic_stream<Transport>::implementation {
         if (mask) { random_bytes(key); output.append(reinterpret_cast<const char*>(key.data()), key.size()); }
         const auto start = output.size();
         output.append(data);
-        if (mask) for (std::size_t i = 0; i < data.size(); ++i) output[start + i] ^= static_cast<char>(key[i % 4]);
+        if (mask) apply_mask(std::span<char>(output.data() + start, data.size()), reinterpret_cast<const char*>(key.data()));
         co_await transport.write_all(output);
     }
     task<std::optional<message>> receive_message() {
@@ -325,9 +357,12 @@ struct basic_stream<Transport>::implementation {
             }
             std::array<char, 4> key{};
             if (masked) co_await exact(key);
-            std::string data(static_cast<std::size_t>(length), '\0');
-            co_await exact(std::span<char>(data.data(), data.size()));
-            if (masked) for (std::size_t i = 0; i < data.size(); ++i) data[i] ^= key[i % 4];
+            std::string control_data;
+            auto& data = control ? control_data : result.data;
+            const auto start = data.size();
+            data.resize(start + static_cast<std::size_t>(length));
+            co_await exact(std::span<char>(data.data() + start, static_cast<std::size_t>(length)));
+            if (masked) apply_mask(std::span<char>(data.data() + start, static_cast<std::size_t>(length)), key.data());
             if (opcode == 8) {
                 if (data.size() == 1) invalid("invalid WebSocket close payload");
                 if (!data.empty()) {
@@ -343,7 +378,6 @@ struct basic_stream<Transport>::implementation {
             }
             if (opcode == 9) { co_await frame(10, data); continue; }
             if (opcode == 10) continue;
-            result.data += data;
             if (final) {
                 if (result.type == message_type::text && !valid_utf8(result.data)) invalid("invalid WebSocket text UTF-8", 1007);
                 co_return result;

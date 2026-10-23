@@ -1,4 +1,5 @@
 #include <pace/quic.hpp>
+#include <pace/detail/protocol_driver.hpp>
 #ifdef PACE_HAS_QUIC
 #include <pace/detail/socket_address.hpp>
 #include <openssl/ssl.h>
@@ -376,8 +377,10 @@ void connection::close(std::uint64_t code) noexcept {
     // Retain the state until every cancellation callback has unwound.
     auto state = state_;
     if (!state || !state->open) return;
+    // Immediate close abandons pending application bytes. RAPID alone still
+    // waits for stream ACKs before sending CONNECTION_CLOSE.
     SSL_SHUTDOWN_EX_ARGS args{code, nullptr};
-    SSL_shutdown_ex(state->ssl, SSL_SHUTDOWN_FLAG_RAPID | SSL_SHUTDOWN_FLAG_NO_BLOCK, &args, sizeof(args));
+    SSL_shutdown_ex(state->ssl, SSL_SHUTDOWN_FLAG_RAPID | SSL_SHUTDOWN_FLAG_NO_BLOCK | SSL_SHUTDOWN_FLAG_NO_STREAM_FLUSH, &args, sizeof(args));
     SSL_handle_events(state->owner->ssl);
     state->open = false;
     if (!state->owned_ssl) state->owner->close();
@@ -531,4 +534,9 @@ task<connection> listener::accept(std::chrono::milliseconds timeout) {
     }
 }
 } // namespace pace::quic
+namespace pace::detail {
+void quic_driver::wake(quic::connection& connection) {
+    if (connection.state_) connection.state_->owner->schedule_tick();
+}
+} // namespace pace::detail
 #endif

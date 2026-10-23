@@ -13,68 +13,99 @@ concurrency:
 # correctness checks and discards benchmark timings; it publishes no rankings.
 jobs:
   native:
-    name: ${{ matrix.os }} / ${{ matrix.standard }} / supported protocols
+    name: ${{ matrix.id }} / native / supported protocols
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            standard: cxx20
-            quic: 'y'
-          - os: ubuntu-latest
-            standard: cxx23
-            quic: 'y'
-          - os: macos-latest
-            standard: cxx20
-            quic: 'y'
-          - os: windows-latest
-            standard: cxx20
-            quic: 'n'
+          - {id: linux-x86_64-gcc, os: ubuntu-24.04, arch: x86_64, toolchain: gcc, standard: cxx20, quic: 'y', smoke: 'y'}
+          - {id: linux-x86_64-cxx23, os: ubuntu-24.04, arch: x86_64, toolchain: gcc, standard: cxx23, quic: 'y', smoke: 'n'}
+          - {id: linux-x86_64-clang, os: ubuntu-24.04, arch: x86_64, toolchain: clang, standard: cxx20, quic: 'y', smoke: 'n'}
+          - {id: linux-aarch64, os: ubuntu-24.04-arm, arch: arm64, toolchain: gcc, standard: cxx20, quic: 'y', smoke: 'n'}
+          - {id: linux-i386, os: ubuntu-24.04, arch: i386, toolchain: gcc, standard: cxx20, quic: 'y', smoke: 'n'}
+          - {id: macos-x86_64, os: macos-15-intel, arch: x86_64, toolchain: xcode, standard: cxx20, quic: 'y', smoke: 'y'}
+          - {id: macos-arm64, os: macos-15, arch: arm64, toolchain: xcode, standard: cxx20, quic: 'y', smoke: 'n'}
+          - {id: windows-x64, os: windows-2025, arch: x64, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'y'}
+          - {id: windows-x86, os: windows-2025, arch: x86, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'n'}
+          - {id: windows-arm64, os: windows-11-arm, arch: arm64, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'n'}
     steps:
       - uses: actions/checkout@v4
+      - name: Install 32-bit Linux compiler and runtime
+        if: matrix.arch == 'i386'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-multilib
       - uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: '3.0.9'
           actions-cache-folder: '.xmake-cache'
           package-cache: true
-          package-cache-key: protocols-${{ matrix.os }}-${{ matrix.standard }}
+          package-cache-key: protocols-v2-${{ matrix.id }}
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - name: Configure all supported protocols, tutorials and benchmark executables
-        run: xmake f -c -m release -o build/ci --cxxstandard=${{ matrix.standard }} --http1=y --websocket=y --tls=y --dns=y --http2=y --quic=${{ matrix.quic }} --http3=${{ matrix.quic }} --benchmarks=y --components=y --scaling=y --profiling=n --sanitizers=n --examples=y --tests=y -y
+          python-version: '3.13'
+      - name: Configure supported protocols and tutorials for the explicit target architecture
+        run: xmake f -c -m release -a ${{ matrix.arch }} --toolchain=${{ matrix.toolchain }} -o build/ci --cxxstandard=${{ matrix.standard }} --http1=y --websocket=y --tls=y --dns=y --http2=y --quic=${{ matrix.quic }} --http3=${{ matrix.quic }} --benchmarks=${{ matrix.smoke }} --components=${{ matrix.smoke }} --scaling=${{ matrix.smoke }} --profiling=n --sanitizers=n --examples=y --tests=y -y
       - name: Build
         run: xmake -y
+      - name: Verify executable architecture (including 32-bit and ARM Windows)
+        run: python scripts/ci_portability.py --build-dir build/ci --target ${{ matrix.arch }} --mode native --metadata-only --output ci-results/architecture.json
+      - name: Isolate OpenSSL crypto, BIO, TLS versions and key exchange on Windows ARM64
+        id: openssl-diagnostic
+        if: matrix.id == 'windows-arm64'
+        continue-on-error: true
+        run: python scripts/ci_openssl_diagnostic.py --build-dir build/ci --output-dir ci-results/openssl-diagnostic
       - name: Run all supported protocol tests and tutorials
         run: xmake test -v
       - name: Verify WebSocket with independent Python peers
         run: python tests/websocket_interop.py --build-dir build/ci
       - name: Validate reporting code
+        if: matrix.smoke == 'y'
         run: python -m unittest discover -s tests -p "test_*.py"
       - name: Check benchmark payloads, counters and schemas (no performance report)
+        if: matrix.smoke == 'y'
         run: python scripts/ci_smoke.py --build-dir build/ci --output ci-results/smoke.json
       - name: Configure instrumented runtime coverage
-        run: xmake f -c -m release -o build/ci-profile --cxxstandard=${{ matrix.standard }} --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=y --components=n --scaling=n --profiling=y --sanitizers=n --examples=n --tests=y -y
+        if: matrix.smoke == 'y'
+        run: xmake f -c -m release -a ${{ matrix.arch }} --toolchain=${{ matrix.toolchain }} -o build/ci-profile --cxxstandard=${{ matrix.standard }} --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=y --components=n --scaling=n --profiling=y --sanitizers=n --examples=n --tests=y -y
       - name: Build instrumented runtime
+        if: matrix.smoke == 'y'
         run: xmake -y
       - name: Test instrumented runtime
+        if: matrix.smoke == 'y'
         run: xmake test -v
       - name: Check instrumentation schema (discard timing values)
+        if: matrix.smoke == 'y'
         run: python scripts/ci_smoke.py --build-dir build/ci-profile --profile-only --output ci-results/profile-smoke.json
       - name: Verify Windows explicitly rejects unsupported QUIC and HTTP3
         if: runner.os == 'Windows'
         run: python scripts/ci_smoke.py --check-windows-quic-rejection --output ci-results/unsupported-protocols.json
+      - name: Require every OpenSSL diagnostic stage to pass
+        if: always() && matrix.id == 'windows-arm64' && steps.openssl-diagnostic.outcome == 'failure'
+        run: exit 1
+      - name: Retain Windows ARM64 OpenSSL diagnostic symbols
+        if: always() && matrix.id == 'windows-arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: openssl-diagnostic-windows-arm64-symbols
+          path: |
+            build/ci/**/pace_openssl_diagnostic.exe
+            build/ci/**/pace_openssl_diagnostic.pdb
+            build/ci/**/pace_openssl_diagnostic.map
+            pace_openssl_diagnostic.map
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: functional-validation-${{ matrix.os }}-${{ matrix.standard }}
+          name: functional-validation-${{ matrix.id }}
           path: ci-results/
           if-no-files-found: warn
   sanitizers:
     name: Linux / all protocols / ASan + UBSan + leaks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -95,7 +126,7 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1
   protocol-layers:
     name: Linux / independent protocol layers
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -117,7 +148,7 @@ jobs:
           xmake test -v
   freebsd:
     name: FreeBSD 14.3 / C++20 / all protocols
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -138,7 +169,8 @@ jobs:
             xmake --version
             xmake f -c -m release -o build/ci --cxxstandard=cxx20 --http1=y --websocket=y --tls=y --dns=y --quic=y --http2=y --http3=y --benchmarks=y --components=y --scaling=y --profiling=n --sanitizers=n --examples=y --tests=y -y
             xmake -y
-            xmake test -v
+            python3 scripts/ci_portability.py --build-dir build/ci --target x86_64 --mode native --metadata-only --output ci-results/architecture.json
+            PACE_HTTP2_TRACE=1 xmake test -v
             python3 tests/websocket_interop.py --build-dir build/ci
             python3 -m unittest discover -s tests -p "test_*.py"
             python3 scripts/ci_smoke.py --build-dir build/ci --output ci-results/smoke.json

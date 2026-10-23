@@ -1,0 +1,62 @@
+[
+  {
+    "label": "before",
+    "bytes": 64,
+    "fragment_bytes": 0,
+    "iterations": 1000,
+    "recv_calls": 7000,
+    "send_calls": 2000,
+    "getrandom_calls": 1000,
+    "validated": true
+  },
+  {
+    "label": "after",
+    "bytes": 64,
+    "fragment_bytes": 0,
+    "iterations": 1000,
+    "recv_calls": 2000,
+    "send_calls": 2000,
+    "getrandom_calls": 1000,
+    "validated": true
+  },
+  {
+    "label": "before",
+    "bytes": 16384,
+    "fragment_bytes": 0,
+    "iterations": 1000,
+    "recv_calls": 9000,
+    "send_calls": 2000,
+    "getrandom_calls": 1000,
+    "validated": true
+  },
+  {
+    "label": "after",
+    "bytes": 16384,
+    "fragment_bytes": 0,
+    "iterations": 1000,
+    "recv_calls": 6000,
+    "send_calls": 2000,
+    "getrandom_calls": 1000,
+    "validated": true
+  },
+  {
+    "label": "before",
+    "bytes": 65536,
+    "fragment_bytes": 1024,
+    "iterations": 1000,
+    "recv_calls": 450000,
+    "send_calls": 128000,
+    "getrandom_calls": 64000,
+    "validated": true
+  },
+  {
+    "label": "after",
+    "bytes": 65536,
+    "fragment_bytes": 1024,
+    "iterations": 1000,
+    "recv_calls": 18000,
+    "send_calls": 128000,
+    "getrandom_calls": 64000,
+    "validated": true
+  }
+]

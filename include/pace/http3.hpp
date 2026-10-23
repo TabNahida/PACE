@@ -10,6 +10,9 @@ struct limits {
     std::size_t max_body_bytes = 1024 * 1024;
     std::size_t max_concurrent_streams = 32;
     std::size_t max_requests_per_connection = 1000;
+    // Cooperative application tasks per connection; 1 serializes handlers.
+    // The effective cap is min(this value, max_concurrent_streams).
+    std::size_t max_concurrent_handlers = 32;
 };
 
 // RFC 9114 over an authenticated QUIC connection with negotiated ALPN "h3".

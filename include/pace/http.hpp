@@ -34,6 +34,16 @@ struct limits {
     std::size_t max_informational_responses = 8;
 };
 
+enum class client_close_policy { no_wait, graceful };
+struct client_options {
+    // Applied only after a complete response ends persistence. no_wait attempts
+    // local FIN/TLS close_notify with zero wait; it never awaits the peer close.
+    // EOF-delimited responses still require EOF before either policy is applied.
+    client_close_policy close_policy = client_close_policy::no_wait;
+    // Only graceful waits for this nonnegative budget (zero attempts once).
+    std::chrono::milliseconds close_timeout{100};
+};
+
 // Borrowed, validated request metadata. Views are valid only during admission.
 // At most one bounded socket read may already contain body/pipelined bytes.
 struct request_head {
@@ -115,8 +125,7 @@ task<void> serve(tcp::listener& listener, server_handler handle, server_options 
 template<class Transport>
 class basic_client {
 public:
-    explicit basic_client(Transport stream, limits bounds = {})
-        : stream_(std::move(stream)), bounds_(bounds) {}
+    explicit basic_client(Transport stream, limits bounds = {}, client_options options = {});
     basic_client(const basic_client&) = delete;
     basic_client& operator=(const basic_client&) = delete;
     task<response> send(request outgoing);
@@ -126,6 +135,7 @@ public:
 private:
     Transport stream_;
     limits bounds_;
+    client_options options_;
     std::string pending_;
     bool busy_ = false;
     bool reusable_ = true;
@@ -135,8 +145,10 @@ extern template class basic_client<tcp::stream>;
 
 // One-shot helpers: connect, exchange one message, close. No DNS, redirects,
 // retries or decompression. A missing Host is supplied from the endpoint.
-task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoing, limits bounds = {});
-task<response> get(io_context& context, tcp::endpoint endpoint, std::string target = "/", limits bounds = {});
+task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoing,
+                     limits bounds = {}, client_options options = {});
+task<response> get(io_context& context, tcp::endpoint endpoint, std::string target = "/",
+                   limits bounds = {}, client_options options = {});
 
 #ifdef PACE_HAS_TLS
 using secure_client = basic_client<tls::stream>;
@@ -149,9 +161,11 @@ task<void> serve_connection(tls::stream stream, server_handler handle, server_op
 task<void> serve(tcp::listener& listener, const tls::context& configuration,
                  server_handler handle, server_options options = {});
 task<response> fetch(io_context& context, const tls::context& configuration,
-                     tcp::endpoint endpoint, std::string peer_name, request outgoing, limits bounds = {});
+                     tcp::endpoint endpoint, std::string peer_name, request outgoing,
+                     limits bounds = {}, client_options options = {});
 task<response> get(io_context& context, const tls::context& configuration,
-                   tcp::endpoint endpoint, std::string peer_name, std::string target = "/", limits bounds = {});
+                   tcp::endpoint endpoint, std::string peer_name, std::string target = "/",
+                   limits bounds = {}, client_options options = {});
 #endif
 
 } // namespace pace::http

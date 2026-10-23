@@ -1,0 +1,146 @@
+name: Architecture portability
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pace-portability-${{ github.ref }}
+  cancel-in-progress: true
+# These jobs complement ci.yml. QEMU runs functional tests on the host kernel;
+# mobile SDK jobs only compile archives. Neither provides performance evidence.
+jobs:
+  linux-qemu:
+    name: Linux ${{ matrix.arch }} / QEMU functional execution
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: armv7, triple: arm-linux-gnueabihf, emulator: qemu-arm}
+          - {arch: riscv64, triple: riscv64-linux-gnu, emulator: qemu-riscv64}
+          - {arch: ppc64le, triple: powerpc64le-linux-gnu, emulator: qemu-ppc64le}
+          - {arch: s390x, triple: s390x-linux-gnu, emulator: qemu-s390x}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ubuntu cross compiler, target libc and QEMU user emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-${{ matrix.triple }} qemu-user
+          ${{ matrix.triple }}-g++ --version
+          ${{ matrix.emulator }} --version
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.0.9'
+          actions-cache-folder: '.xmake-cache'
+      - name: Cross-compile core, HTTP1, WebSocket, tests and tutorials
+        run: xmake f -c -p linux -a ${{ matrix.arch }} --toolchain=cross --cross=${{ matrix.triple }}- --bin=/usr/bin -m release -o build/portability --cxxstandard=cxx20 --http1=y --websocket=y --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y
+      - name: Build target executables
+        run: xmake -y
+      - name: Verify ELF target, word size and endian; execute all enabled tests and tutorials
+        run: python3 scripts/ci_portability.py --build-dir build/portability --target ${{ matrix.arch }} --mode qemu-user --emulator ${{ matrix.emulator }} --sysroot /usr/${{ matrix.triple }} --output ci-results/qemu.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portability-linux-${{ matrix.arch }}-qemu
+          path: ci-results/
+          if-no-files-found: warn
+
+  android-compile:
+    name: Android ${{ matrix.arch }} / compile only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [armeabi-v7a, arm64-v8a, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.0.9'
+          actions-cache-folder: '.xmake-cache'
+      - name: Ensure the pinned Android NDK is installed
+        shell: bash
+        run: |
+          if [ ! -d "$ANDROID_HOME/ndk/27.3.13750724" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'ndk;27.3.13750724'
+          fi
+      - name: Compile core, HTTP1 and WebSocket against Android API 30
+        shell: bash
+        run: |
+          xmake f -c -p android -a ${{ matrix.arch }} --ndk="$ANDROID_HOME/ndk/27.3.13750724" --ndk_sdkver=30 -m release -o build/portability --cxxstandard=cxx20 --http1=y --websocket=y --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=n --tests=n -y
+          xmake -y
+      - name: Verify archive target architecture (no device execution)
+        run: python3 scripts/ci_portability.py --build-dir build/portability --target ${{ matrix.arch }} --mode compile-only --output ci-results/android-compile.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portability-android-${{ matrix.arch }}-compile-only
+          path: ci-results/
+          if-no-files-found: warn
+
+  ios-compile:
+    name: iOS arm64 ${{ matrix.device }} / compile only
+    runs-on: macos-15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iphone, simulator]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.0.9'
+          actions-cache-folder: '.xmake-cache'
+      - name: Compile core, HTTP1 and WebSocket against the iOS SDK
+        run: |
+          xcodebuild -version
+          xmake f -c -p iphoneos -a arm64 --appledev=${{ matrix.device }} --target_minver=15.0 -m release -o build/portability --cxxstandard=cxx20 --http1=y --websocket=y --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=n --tests=n -y
+          xmake -y
+      - name: Verify Mach-O archive architecture (no device or simulator execution)
+        run: python3 scripts/ci_portability.py --build-dir build/portability --target arm64 --mode compile-only --output ci-results/ios-compile.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portability-ios-arm64-${{ matrix.device }}-compile-only
+          path: ci-results/
+          if-no-files-found: warn
+
+  mingw:
+    name: Windows x86_64 / MinGW UCRT / native functional execution
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-xmake
+            mingw-w64-ucrt-x86_64-python
+      - name: Build core, HTTP1, WebSocket, tests and tutorials with MinGW
+        run: |
+          xmake --version
+          g++ --version
+          xmake f -c -p mingw -a x86_64 --mingw=/ucrt64 -m release -o build/portability --cxxstandard=cxx20 --http1=y --websocket=y --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y
+          xmake -y
+      - name: Verify PE architecture and execute enabled functional suites and tutorials
+        run: python scripts/ci_portability.py --build-dir build/portability --target x86_64 --mode native --output ci-results/mingw.json
+      - name: Verify WebSocket with independent Python peers
+        run: python tests/websocket_interop.py --build-dir build/portability
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portability-windows-x86_64-mingw
+          path: ci-results/
+          if-no-files-found: warn

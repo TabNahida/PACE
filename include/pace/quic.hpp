@@ -6,6 +6,7 @@
 #include <optional>
 #include <vector>
 
+namespace pace::detail { struct quic_driver; }
 namespace pace::quic {
 enum class role { client, server };
 enum class stream_type { bidirectional, unidirectional };
@@ -77,6 +78,7 @@ private:
     explicit connection(std::shared_ptr<detail::connection_state> state);
     std::shared_ptr<detail::connection_state> state_;
     friend class listener;
+    friend struct pace::detail::quic_driver;
 };
 class listener {
 public:

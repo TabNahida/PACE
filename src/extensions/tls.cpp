@@ -1,4 +1,5 @@
 #include <pace/tls.hpp>
+#include <pace/detail/protocol_driver.hpp>
 
 #ifdef PACE_HAS_TLS
 #include <openssl/ssl.h>
@@ -7,8 +8,10 @@
 #include <openssl/pem.h>
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <climits>
+#include <cstring>
 #include <map>
 #include <mutex>
 #include <stdexcept>
@@ -82,32 +85,81 @@ bool socket_would_block() noexcept {
 #endif
 }
 
-// OpenSSL's stock socket BIO takes an int descriptor. A custom BIO preserves
-// the full Winsock handle and uses SIGPIPE-safe sends on POSIX.
-int bio_read(BIO* bio, char* bytes, int size) {
-    BIO_clear_retry_flags(bio);
-    if (!bytes || size <= 0) return 0;
-    const auto fd = static_cast<tcp::stream*>(BIO_get_data(bio))->native_handle();
+int socket_read(tcp::stream& stream, char* bytes, int size) {
     int result;
-    do { result = static_cast<int>(::recv(fd, bytes, size, 0)); }
+    do { result = static_cast<int>(::recv(stream.native_handle(), bytes, size, 0)); }
     while (result < 0 && socket_interrupted());
-    if (result < 0 && socket_would_block()) BIO_set_retry_read(bio);
     return result;
 }
-int bio_write(BIO* bio, const char* bytes, int size) {
-    BIO_clear_retry_flags(bio);
-    if (!bytes || size <= 0) return 0;
-    const auto fd = static_cast<tcp::stream*>(BIO_get_data(bio))->native_handle();
+int socket_write(tcp::stream& stream, const char* bytes, int size) {
 #ifdef MSG_NOSIGNAL
     constexpr int flags = MSG_NOSIGNAL;
 #else
     constexpr int flags = 0;
 #endif
     int result;
-    do { result = static_cast<int>(::send(fd, bytes, size, flags)); }
+    do { result = static_cast<int>(::send(stream.native_handle(), bytes, size, flags)); }
     while (result < 0 && socket_interrupted());
-    if (result < 0 && socket_would_block()) BIO_set_retry_write(bio);
     return result;
+}
+
+struct ciphertext_buffer {
+    std::array<char, 64 * 1024> bytes;
+    std::size_t begin = 0, end = 0;
+    std::size_t size() const noexcept { return end - begin; }
+    std::size_t available() const noexcept { return bytes.size() - size(); }
+    void consume(std::size_t count) noexcept { begin += count; if (begin == end) begin = end = 0; }
+    void compact() noexcept {
+        if (begin) { std::memmove(bytes.data(), bytes.data() + begin, size()); end -= begin; begin = 0; }
+    }
+};
+struct multiplex_buffers { ciphertext_buffer input, output; };
+struct socket_bio {
+    tcp::stream& transport;
+    // Allocated only for an internal multiplexed protocol driver. Input stays
+    // with the stream so its later public shutdown sees prefetched close_notify.
+    std::unique_ptr<multiplex_buffers> buffers;
+    bool multiplexing = false, input_eof = false;
+};
+
+// OpenSSL's stock socket BIO takes an int descriptor. A custom BIO preserves
+// the full Winsock handle and uses SIGPIPE-safe sends on POSIX.
+int bio_read(BIO* bio, char* bytes, int size) {
+    BIO_clear_retry_flags(bio);
+    if (!bytes || size <= 0) return 0;
+    auto& state = *static_cast<socket_bio*>(BIO_get_data(bio));
+    if (state.buffers && state.buffers->input.size()) {
+        auto& input = state.buffers->input;
+        const auto count = std::min<std::size_t>(size, input.size());
+        std::memcpy(bytes, input.bytes.data() + input.begin, count); input.consume(count);
+        return static_cast<int>(count);
+    }
+    if (state.input_eof) return 0;
+    const int result = socket_read(state.transport, bytes, size);
+    if (result < 0 && socket_would_block()) BIO_set_retry_read(bio);
+    return result;
+}
+int bio_write(BIO* bio, const char* bytes, int size) {
+    BIO_clear_retry_flags(bio);
+    if (!bytes || size <= 0) return 0;
+    auto& state = *static_cast<socket_bio*>(BIO_get_data(bio));
+    if (!state.multiplexing) {
+        const int result = socket_write(state.transport, bytes, size);
+        if (result < 0 && socket_would_block()) BIO_set_retry_write(bio);
+        return result;
+    }
+    auto& output = state.buffers->output;
+    int sent = 0;
+    if (!output.size()) {
+        sent = socket_write(state.transport, bytes, size);
+        if (sent == size) return size; // No copy on the usual writable path.
+        if (sent < 0) { if (!socket_would_block()) return sent; sent = 0; }
+    }
+    output.compact();
+    const auto copied = std::min<std::size_t>(size - sent, output.available());
+    std::memcpy(output.bytes.data() + output.end, bytes + sent, copied); output.end += copied;
+    if (!sent && !copied) { BIO_set_retry_write(bio); return -1; }
+    return sent + static_cast<int>(copied);
 }
 BIO_METHOD* socket_method() {
     static const auto method = [] {
@@ -117,8 +169,15 @@ BIO_METHOD* socket_method() {
             !BIO_meth_set_write(result.get(), bio_write) ||
             !BIO_meth_set_create(result.get(), [](BIO* bio) { BIO_set_init(bio, 1); return 1; }) ||
             !BIO_meth_set_destroy(result.get(), [](BIO*) { return 1; }) ||
-            !BIO_meth_set_ctrl(result.get(), [](BIO*, int command, long, void*) -> long {
-                return command == BIO_CTRL_FLUSH ? 1 : 0;
+            !BIO_meth_set_ctrl(result.get(), [](BIO* bio, int command, long, void*) -> long {
+                const auto* state = static_cast<socket_bio*>(BIO_get_data(bio));
+                if (command == BIO_CTRL_FLUSH) return 1;
+                if (state && state->buffers) {
+                    if (command == BIO_CTRL_PENDING) return static_cast<long>(state->buffers->input.size());
+                    if (command == BIO_CTRL_WPENDING) return static_cast<long>(state->buffers->output.size());
+                    if (command == BIO_CTRL_EOF) return state->input_eof && !state->buffers->input.size();
+                }
+                return 0;
             })) tls_error("create socket BIO method");
         return result;
     }();
@@ -338,6 +397,7 @@ void context::set_server_name_policy(sni_policy missing, sni_policy unrecognized
 
 struct stream::implementation {
     tcp::stream transport;
+    socket_bio bio_state{transport, {}};
     std::shared_ptr<tls::context::implementation> configuration;
     std::unique_ptr<SSL, decltype(&SSL_free)> ssl{nullptr, SSL_free};
     bool active = false;
@@ -353,7 +413,7 @@ struct stream::implementation {
         if (!ssl) tls_error("create TLS session");
         auto* bio = BIO_new(socket_method());
         if (!bio) tls_error("create TLS socket BIO");
-        BIO_set_data(bio, &transport);
+        BIO_set_data(bio, &bio_state);
         SSL_set_bio(ssl.get(), bio, bio);
         if (configuration->mode == role::client) SSL_set_connect_state(ssl.get());
         else SSL_set_accept_state(ssl.get());
@@ -534,4 +594,104 @@ task<void> stream::shutdown(std::chrono::milliseconds timeout) {
 }
 
 } // namespace pace::tls
+
+namespace pace::detail {
+tls_driver::tls_driver(tls::stream& stream) : stream_(stream) {
+    if (!stream_.impl_) throw std::logic_error("moved-from TLS stream");
+    auto& p = *stream_.impl_;
+    if (p.active) throw std::logic_error("another TLS operation is pending");
+    p.check(true);
+    if (!p.bio_state.buffers) p.bio_state.buffers = std::make_unique<tls::multiplex_buffers>();
+    p.bio_state.multiplexing = true;
+    p.active = true;
+}
+tls_driver::~tls_driver() {
+    auto& p = *stream_.impl_;
+    // Normal protocol completion includes draining ciphertext. An exceptional
+    // exit must not silently drop queued records then attempt a TLS shutdown.
+    if (!drained()) p.transport.close();
+    p.bio_state.multiplexing = false;
+    p.active = false;
+}
+native_socket_type tls_driver::native_handle() const noexcept { return stream_.impl_->transport.native_handle(); }
+bool tls_driver::drained() const noexcept {
+    return !stream_.impl_->bio_state.buffers->output.size() && !write_retry_ && !read_wants_write_;
+}
+bool tls_driver::write_allowed() const noexcept {
+    return !read_wants_write_ && !stream_.impl_->bio_state.buffers->output.size();
+}
+bool tls_driver::write_wait() const noexcept {
+    return stream_.impl_->bio_state.buffers->output.size() || read_wants_write_ || (write_retry_ && write_wants_write_);
+}
+bool tls_driver::either_wait() const noexcept {
+    const auto& bio = stream_.impl_->bio_state;
+    const bool ssl_can_read = !write_retry_ && !read_wants_write_;
+    return write_wait() && !bio.input_eof && (ssl_can_read || bio.buffers->input.available());
+}
+bool tls_driver::progress() {
+    auto& p = *stream_.impl_;
+    p.check(true);
+    auto& bio = p.bio_state;
+    auto& output = bio.buffers->output;
+    bool changed = false;
+    if (output.size()) {
+        const int count = tls::socket_write(p.transport, output.bytes.data() + output.begin, static_cast<int>(output.size()));
+        if (count > 0) { output.consume(static_cast<std::size_t>(count)); changed = true; }
+        else if (count < 0 && !tls::socket_would_block()) tls::tls_error("TLS ciphertext write failed");
+    }
+    // A genuine SSL WANT_WRITE still forbids other SSL I/O. Raw ciphertext
+    // reception is independent and can release the peer's TCP send window.
+    auto& input = bio.buffers->input;
+    if ((write_retry_ || read_wants_write_) && !bio.input_eof && input.available()) {
+        input.compact();
+        const int count = tls::socket_read(p.transport, input.bytes.data() + input.end, static_cast<int>(input.available()));
+        if (count > 0) { input.end += static_cast<std::size_t>(count); changed = true; }
+        else if (!count) { bio.input_eof = true; changed = true; }
+        else if (!tls::socket_would_block()) tls::tls_error("TLS ciphertext read failed");
+    }
+    return changed;
+}
+std::optional<std::size_t> tls_driver::read(std::span<char> bytes) {
+    auto& p = *stream_.impl_;
+    p.check(true);
+    if (!read_allowed()) return std::nullopt;
+    if (p.eof || bytes.empty()) return 0;
+    std::size_t count = 0;
+    ERR_clear_error();
+    const int result = SSL_read_ex(p.ssl.get(), bytes.data(), bytes.size(), &count);
+    if (result == 1) { read_wants_write_ = false; return count; }
+    const int error = SSL_get_error(p.ssl.get(), result);
+    if (error == SSL_ERROR_ZERO_RETURN) { p.eof = true; read_wants_write_ = false; return 0; }
+    if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
+        read_wants_write_ = error == SSL_ERROR_WANT_WRITE;
+        return std::nullopt;
+    }
+    tls::tls_error("TLS protocol driver read failed", p.ssl.get());
+}
+std::size_t tls_driver::write(std::string_view bytes) {
+    auto& p = *stream_.impl_;
+    p.check(true);
+    // OpenSSL may have consumed part of the record even when it reports WANT.
+    // Neither its input pointer nor length/data may change until retry succeeds.
+    if (write_retry_ && (write_data_ != bytes.data() || write_size_ != bytes.size()))
+        throw std::logic_error("TLS write retry changed its buffer");
+    if (!write_allowed() || bytes.empty()) return 0;
+    std::size_t count = 0;
+    ERR_clear_error();
+    // Leave room for a full TLS record and control traffic. Partial-write mode
+    // is enabled and renegotiation disabled; the handshake completed before this
+    // driver was created. Kernel backpressure is then retained by the BIO, so
+    // application reads can continue while ciphertext waits for the socket.
+    const int result = SSL_write_ex(p.ssl.get(), bytes.data(), std::min<std::size_t>(bytes.size(), 16384), &count);
+    if (result == 1) { write_retry_ = false; write_wants_write_ = false; return count; }
+    const int error = SSL_get_error(p.ssl.get(), result);
+    if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
+        write_retry_ = true;
+        write_wants_write_ = error == SSL_ERROR_WANT_WRITE;
+        write_data_ = bytes.data(); write_size_ = bytes.size();
+        return 0;
+    }
+    tls::tls_error("TLS protocol driver write failed", p.ssl.get());
+}
+} // namespace pace::detail
 #endif // PACE_HAS_TLS

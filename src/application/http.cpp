@@ -677,6 +677,20 @@ std::string_view request_head::header(std::string_view name) const noexcept {
     return {};
 }
 
+namespace {
+void validate_client_options(const client_options& options) {
+    if ((options.close_policy != client_close_policy::no_wait &&
+         options.close_policy != client_close_policy::graceful) || options.close_timeout.count() < 0)
+        throw std::invalid_argument("HTTP client close policy must be valid and its timeout nonnegative");
+}
+}
+
+template<class Transport>
+basic_client<Transport>::basic_client(Transport stream, limits bounds, client_options options)
+    : stream_(std::move(stream)), bounds_(bounds), options_(options) {
+    validate_client_options(options_);
+}
+
 template<class Transport>
 task<response> basic_client<Transport>::send(request outgoing) {
     if (io_context::current() != &stream_.context())
@@ -694,7 +708,18 @@ task<response> basic_client<Transport>::send(request outgoing) {
         if (incoming.close || !outgoing.keep_alive) {
             incoming.close = true;
             reusable_ = false;
-            co_await stream_.close_gracefully();
+            if (options_.close_policy == client_close_policy::graceful) {
+                co_await stream_.close_gracefully(options_.close_timeout);
+            } else {
+                // Framing is complete. Attempt this endpoint's FIN/close_notify
+                // without waiting for the peer; teardown cannot add latency or
+                // invalidate the authenticated HTTP message already collected.
+                try { co_await stream_.close_gracefully(std::chrono::milliseconds::zero()); }
+                catch (const std::system_error& error) {
+                    stream_.close();
+                    if (error.code() == std::errc::operation_canceled || stream_.context().stopped()) throw;
+                }
+            }
         }
         co_return incoming;
     } catch (const parse_failure& error) {
@@ -743,18 +768,19 @@ task<void> serve(tcp::listener& listener, server_handler handle, server_options 
     }
 }
 
-task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoing, limits bounds) {
+task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoing, limits bounds, client_options options) {
+    validate_client_options(options);
     default_host(outgoing, endpoint.address, endpoint.port, 80);
     outgoing.keep_alive = false;
     tcp::stream stream(context);
     co_await stream.connect(std::move(endpoint));
-    client connection(std::move(stream), bounds);
+    client connection(std::move(stream), bounds, options);
     co_return co_await connection.send(std::move(outgoing));
 }
 
-task<response> get(io_context& context, tcp::endpoint endpoint, std::string target, limits bounds) {
+task<response> get(io_context& context, tcp::endpoint endpoint, std::string target, limits bounds, client_options options) {
     request outgoing{.method = "GET", .target = std::move(target), .version = "HTTP/1.1", .body = {}};
-    co_return co_await fetch(context, std::move(endpoint), std::move(outgoing), bounds);
+    co_return co_await fetch(context, std::move(endpoint), std::move(outgoing), bounds, options);
 }
 
 #ifdef PACE_HAS_TLS
@@ -820,19 +846,20 @@ task<void> serve(tcp::listener& listener, const tls::context& configuration,
 }
 
 task<response> fetch(io_context& context, const tls::context& configuration,
-                     tcp::endpoint endpoint, std::string peer_name, request outgoing, limits bounds) {
+                     tcp::endpoint endpoint, std::string peer_name, request outgoing, limits bounds, client_options options) {
+    validate_client_options(options);
     default_host(outgoing, peer_name, endpoint.port, 443);
     outgoing.keep_alive = false;
     tls::stream stream(context, configuration);
     co_await stream.connect(std::move(endpoint), std::move(peer_name));
-    secure_client connection(std::move(stream), bounds);
+    secure_client connection(std::move(stream), bounds, options);
     co_return co_await connection.send(std::move(outgoing));
 }
 
 task<response> get(io_context& context, const tls::context& configuration,
-                   tcp::endpoint endpoint, std::string peer_name, std::string target, limits bounds) {
+                   tcp::endpoint endpoint, std::string peer_name, std::string target, limits bounds, client_options options) {
     request outgoing{.method = "GET", .target = std::move(target), .version = "HTTP/1.1", .body = {}};
-    co_return co_await fetch(context, configuration, std::move(endpoint), std::move(peer_name), std::move(outgoing), bounds);
+    co_return co_await fetch(context, configuration, std::move(endpoint), std::move(peer_name), std::move(outgoing), bounds, options);
 }
 #endif
 } // namespace pace::http

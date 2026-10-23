@@ -483,6 +483,241 @@ pace::task<Transport> admitted_connect(pace::io_context& io, const http_fixture&
 #endif
 }
 
+struct close_probe_state {
+    bool response_written = false;
+    bool client_done = false;
+    bool peer_close_started = false;
+    bool server_done = false;
+};
+template<class Transport>
+http_fixture close_fixture(pace::io_context& io) {
+    http_fixture result;
+    result.listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
+#ifdef PACE_HAS_TLS
+    if constexpr (std::is_same_v<Transport, pace::tls::stream>) {
+        result.configuration = std::make_shared<pace::tls::context>(pace::tls::role::server);
+        result.configuration->use_certificate_chain(cert("localhost.pem"), cert("localhost-key.pem"));
+        result.trust = std::make_shared<pace::tls::context>(pace::tls::role::client, pace::tls::trust_source::application);
+        result.trust->load_verify_file(cert("ca.pem"));
+    }
+#endif
+    return result;
+}
+template<class Transport>
+pace::task<void> close_probe_peer(Transport socket, std::shared_ptr<close_probe_state> state,
+                                 std::string wire, bool gate_close, bool abrupt) {
+    socket.set_no_delay();
+    std::string head;
+    std::array<char, 2048> buffer{};
+    while (head.find("\r\n\r\n") == std::string::npos) {
+        const auto count = co_await socket.read_some(buffer);
+        require(count != 0, "close policy peer received a truncated request");
+        head.append(buffer.data(), count);
+    }
+    co_await socket.write_all(wire);
+    state->response_written = true;
+    if (gate_close) {
+        while (!state->client_done) co_await socket.context().sleep_for(1ms);
+    } else if (!abrupt) co_await socket.context().sleep_for(2ms);
+    state->peer_close_started = true;
+    if (abrupt) socket.close();
+    else {
+        try { co_await socket.close_gracefully(); }
+        catch (const std::system_error&) { /* The completed no-wait client may have already closed. */ }
+    }
+    state->server_done = true;
+}
+template<class Transport>
+pace::task<void> close_probe_accept(http_fixture fixture, std::shared_ptr<close_probe_state> state,
+                                   std::string wire, bool gate_close, bool abrupt) {
+    auto socket = co_await fixture.listener->accept();
+    if constexpr (std::is_same_v<Transport, pace::tcp::stream>) {
+        co_await close_probe_peer(std::move(socket), std::move(state), std::move(wire), gate_close, abrupt);
+    }
+#ifdef PACE_HAS_TLS
+    else {
+        pace::tls::stream secure(std::move(socket), *fixture.configuration);
+        secure.set_no_delay();
+        co_await secure.handshake();
+        co_await close_probe_peer(std::move(secure), std::move(state), std::move(wire), gate_close, abrupt);
+    }
+#endif
+}
+
+template<class Transport>
+pace::task<void> client_close_policies(pace::io_context& io) {
+    auto fixture = close_fixture<Transport>(io);
+    struct closing_case { const char* wire; const char* method; const char* body; unsigned status; };
+    const closing_case complete[]{
+        {"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok", "GET", "ok", 200},
+        {"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n2\r\nok\r\n0\r\nX-End: yes\r\n\r\n", "GET", "ok", 200},
+        {"HTTP/1.1 200 OK\r\nContent-Length: 999\r\nConnection: close\r\n\r\n", "HEAD", "", 200},
+        {"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n", "GET", "", 204},
+        {"HTTP/1.1 304 Not Modified\r\nContent-Length: 999\r\nConnection: close\r\n\r\n", "GET", "", 304},
+        {"HTTP/1.1 205 Reset Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", "GET", "", 205},
+        // The request alone can end an otherwise persistent response.
+        {"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: keep-alive\r\n\r\nok", "GET", "ok", 200},
+    };
+    for (const auto& test : complete) {
+        auto state = std::make_shared<close_probe_state>();
+        io.spawn(close_probe_accept<Transport>(fixture, state, test.wire, true, false));
+        auto socket = co_await admitted_connect<Transport>(io, fixture);
+        socket.set_no_delay();
+        // A very long graceful budget must be ignored by no_wait. The peer's
+        // close is gated on send() completion, not merely delayed on a timer.
+        pace::http::client_options options;
+        options.close_timeout = 1h;
+        pace::http::basic_client<Transport> client(std::move(socket), {}, options);
+        bool expired = false;
+        auto deadline = io.call_after(50ms, [&] { expired = true; client.close(); });
+        auto outgoing = message(test.method);
+        outgoing.keep_alive = std::string_view(test.wire).find("Connection: keep-alive") == std::string_view::npos;
+        const auto result = co_await client.send(std::move(outgoing));
+        deadline.cancel();
+        require(!expired && state->response_written && !state->peer_close_started &&
+                result.status == test.status && result.body == test.body && result.close && !client.is_open(),
+                "complete HTTP response waited for peer closure or lost framing");
+        state->client_done = true;
+        while (!state->server_done) co_await io.sleep_for(1ms);
+    }
+    // EOF framing still needs peer closure, with either selected cleanup policy.
+    for (auto policy : {pace::http::client_close_policy::no_wait, pace::http::client_close_policy::graceful}) {
+        auto state = std::make_shared<close_probe_state>();
+        io.spawn(close_probe_accept<Transport>(fixture, state, "HTTP/1.0 200 OK\r\n\r\neof-body", false, false));
+        pace::http::basic_client<Transport> client(co_await admitted_connect<Transport>(io, fixture), {},
+                                                  {.close_policy = policy});
+        const auto result = co_await client.send(message());
+        require(state->peer_close_started && result.body == "eof-body" && !client.is_open(),
+                "EOF-framed response completed without EOF");
+        state->client_done = true;
+        while (!state->server_done) co_await io.sleep_for(1ms);
+    }
+    // Explicit graceful waits for a cooperative peer, or the configured budget.
+    for (bool gate : {false, true}) {
+        auto state = std::make_shared<close_probe_state>();
+        io.spawn(close_probe_accept<Transport>(fixture, state, complete[0].wire, gate, false));
+        pace::http::basic_client<Transport> client(co_await admitted_connect<Transport>(io, fixture), {},
+            {.close_policy = pace::http::client_close_policy::graceful, .close_timeout = gate ? 2ms : 1s});
+        const auto result = co_await client.send(message());
+        require(state->peer_close_started != gate && result.body == "ok" && !client.is_open(),
+                "graceful policy ignored peer close or configured budget");
+        state->client_done = true;
+        while (!state->server_done) co_await io.sleep_for(1ms);
+    }
+    for (const char* wire : {"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\nok",
+                             "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n2\r\nok\r\n",
+                             "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n0\r\nContent-Length: 2\r\n\r\n"}) {
+        auto state = std::make_shared<close_probe_state>();
+        io.spawn(close_probe_accept<Transport>(fixture, state, wire, false, false));
+        pace::http::basic_client<Transport> client(co_await admitted_connect<Transport>(io, fixture));
+        bool failed = false;
+        try { co_await client.send(message()); } catch (const pace::http::protocol_error&) { failed = true; }
+        require(failed && !client.is_open(), "no-wait accepted an incomplete/malformed response");
+        state->client_done = true;
+        while (!state->server_done) co_await io.sleep_for(1ms);
+    }
+#ifdef PACE_HAS_TLS
+    if constexpr (std::is_same_v<Transport, pace::tls::stream>) {
+        for (bool framed : {false, true}) {
+            auto state = std::make_shared<close_probe_state>();
+            io.spawn(close_probe_accept<Transport>(fixture, state,
+                framed ? complete[0].wire : "HTTP/1.0 200 OK\r\n\r\neof-body", false, true));
+            pace::http::secure_client client(co_await admitted_connect<Transport>(io, fixture));
+            bool failed = false;
+            try {
+                const auto result = co_await client.send(message());
+                require(framed && result.body == "ok", "TLS incomplete close changed a fully framed response");
+            } catch (const std::system_error& error) { failed = error.code() == std::errc::protocol_error; }
+            require(failed != framed && !client.is_open(), "TLS EOF framing did not require close_notify");
+        }
+    }
+#endif
+    // One-shot get/fetch must forward the selected policy and budget too.
+    for (bool use_get : {false, true}) {
+        for (bool zero_budget : {false, true}) {
+            auto state = std::make_shared<close_probe_state>();
+            io.spawn(close_probe_accept<Transport>(fixture, state, complete[0].wire, zero_budget, false));
+            const pace::http::client_options options{
+                .close_policy = pace::http::client_close_policy::graceful,
+                .close_timeout = zero_budget ? 0ms : 1s,
+            };
+            response result;
+            if constexpr (std::is_same_v<Transport, pace::tcp::stream>) {
+                if (use_get) result = co_await pace::http::get(io, fixture.listener->local_endpoint(), "/", {}, options);
+                else result = co_await pace::http::fetch(io, fixture.listener->local_endpoint(), message(), {}, options);
+            }
+#ifdef PACE_HAS_TLS
+            else {
+                if (use_get) result = co_await pace::http::get(io, *fixture.trust, fixture.listener->local_endpoint(),
+                                                            "localhost", "/", {}, options);
+                else result = co_await pace::http::fetch(io, *fixture.trust, fixture.listener->local_endpoint(),
+                                                       "localhost", message(), {}, options);
+            }
+#endif
+            require(result.body == "ok" && state->peer_close_started != zero_budget,
+                    "one-shot helper did not forward client close options");
+            state->client_done = true;
+            while (!state->server_done) co_await io.sleep_for(1ms);
+        }
+    }
+    bool rejected = false;
+    try {
+        auto socket = [&] {
+            if constexpr (std::is_same_v<Transport, pace::tcp::stream>) return Transport(io);
+#ifdef PACE_HAS_TLS
+            else return Transport(io, *fixture.trust);
+#endif
+        }();
+        pace::http::basic_client<Transport> bad(std::move(socket), {},
+            {.close_policy = pace::http::client_close_policy::graceful, .close_timeout = -1ms});
+    } catch (const std::invalid_argument&) { rejected = true; }
+    require(rejected, "negative client close budget was accepted");
+}
+
+template<class Transport>
+pace::task<void> stop_at_client_close(Transport socket) {
+    socket.set_no_delay();
+    std::array<char, 2048> bytes{};
+    std::string request;
+    while (request.find("\r\n\r\n") == std::string::npos) {
+        const auto count = co_await socket.read_some(bytes);
+        require(count != 0, "graceful cancellation request was truncated");
+        request.append(bytes.data(), count);
+    }
+    co_await socket.write_all("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+    // The client's FIN/close_notify proves it parsed the complete response and
+    // entered graceful cleanup. Keep this side open, then cancel that wait.
+    require(co_await socket.read_some(bytes) == 0, "client did not begin graceful cleanup");
+    socket.context().stop();
+}
+template<class Transport>
+pace::task<void> graceful_stop_peer(http_fixture fixture) {
+    auto socket = co_await fixture.listener->accept();
+    if constexpr (std::is_same_v<Transport, pace::tcp::stream>) {
+        co_await stop_at_client_close(std::move(socket));
+    }
+#ifdef PACE_HAS_TLS
+    else {
+        pace::tls::stream secure(std::move(socket), *fixture.configuration);
+        secure.set_no_delay();
+        co_await secure.handshake();
+        co_await stop_at_client_close(std::move(secure));
+    }
+#endif
+}
+template<class Transport>
+pace::task<void> client_graceful_cancellation(pace::io_context& io) {
+    auto fixture = close_fixture<Transport>(io);
+    io.spawn(graceful_stop_peer<Transport>(fixture));
+    pace::http::basic_client<Transport> client(co_await admitted_connect<Transport>(io, fixture), {}, {
+        .close_policy = pace::http::client_close_policy::graceful, .close_timeout = 1h,
+    });
+    bool canceled = false;
+    try { co_await client.send(message()); }
+    catch (const std::system_error& error) { canceled = error.code() == std::errc::operation_canceled; }
+    require(canceled && !client.is_open(), "completed response swallowed cancellation during graceful cleanup");
+}
+
 template<class Transport>
 pace::task<std::string> admitted_raw(pace::io_context& io, const http_fixture& fixture, std::string wire,
                                     bool expect_truncation = false) {
@@ -697,6 +932,8 @@ int main(int argc, char** argv) {
         run_test("client validation and overlapping exchange protection", client_state);
         run_test("cancellation closes pending HTTP exchange", client_cancellation);
         run_test("TCP validated admission, early rejection and per-route body limits", admission_scenarios<pace::tcp::stream>);
+        run_test("TCP framed completion, EOF and configurable client close policy", client_close_policies<pace::tcp::stream>);
+        run_test("TCP context stop cancels graceful client cleanup", client_graceful_cancellation<pace::tcp::stream>);
         run_test("TCP bounded generated/file response and bodyless producer handling", streaming_scenarios<pace::tcp::stream>);
         run_test("TCP disconnect cancels and releases response producer", disconnect_scenarios<pace::tcp::stream>);
         run_test("TCP request/write deadlines and keep-alive timer cancellation", deadline_scenarios<pace::tcp::stream>);
@@ -709,6 +946,8 @@ int main(int argc, char** argv) {
 #ifdef PACE_HAS_TLS
         run_test("HTTPS verified HTTP/1.1 with chunked trailers", https_exchange);
         run_test("TLS validated admission, early rejection and per-route body limits", admission_scenarios<pace::tls::stream>);
+        run_test("TLS framed completion, authenticated EOF and configurable client close policy", client_close_policies<pace::tls::stream>);
+        run_test("TLS context stop cancels graceful client cleanup", client_graceful_cancellation<pace::tls::stream>);
         run_test("TLS bounded generated/file response and bodyless producer handling", streaming_scenarios<pace::tls::stream>);
         run_test("TLS disconnect cancels and releases response producer", disconnect_scenarios<pace::tls::stream>);
         run_test("TLS request/write deadlines and keep-alive timer cancellation", deadline_scenarios<pace::tls::stream>);

@@ -2,6 +2,21 @@
 
 [Complete performance results](../docs/performance.md) · [Worker/execution scaling](scaling.md)
 
+[HTTP/WebSocket protocol investigation](../docs/protocol-performance.md) uses
+separate probes for response completion, frame processing and multiplexed handlers:
+
+```sh
+xmake f -m release --protocol_benchmarks=y --tls=y --http2=y --http3=y -y
+xmake -y
+xmake run pace_http_close_probe --transport tcp --trials 10
+xmake run pace_websocket_bench --bytes 16384 --iterations 30000
+xmake run pace_protocol_multiplex --protocol h2 --handlers 8 --streams 8 --delay-ms 20 --batches 10
+```
+
+Only probes for enabled protocol modules are built. HTTP/3 requires POSIX;
+omit `--http3=y` on Windows. Published measurements use local Linux and preserve
+build manifests, individual trials and workload validation in the linked report.
+
 For isolated PACE operation timings before optimization, see the
 [component microbenchmarks](components.md). Their ns/op units are explicitly
 defined and separate from this end-to-end TCP workload.

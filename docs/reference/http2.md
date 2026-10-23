@@ -37,8 +37,33 @@ io.spawn(pace::http2::serve(listener, hello));
 ```
 
 The server accepts independent connections and receives multiplexed streams.
-Within one connection, completed requests invoke handlers sequentially; a slow
-handler delays that connection. Bodies are buffered, not streamed to handlers.
+Within one connection, completed requests invoke handlers concurrently, up to
+`min(max_concurrent_handlers, max_concurrent_streams)`. A handler suspended on
+asynchronous I/O does not block other streams or protocol progress. One driver
+owns nghttp2 and the TCP/TLS transport; handler completions wake it without
+polling. This is cooperative concurrency on the owning context, not CPU work on
+additional threads. A handler doing synchronous work still blocks that context.
+Bodies are buffered, not streamed to handlers.
+
+Ready requests remain within the connection's stream limit while handler slots
+are occupied; there is no unbounded application work queue. Set
+`max_concurrent_handlers = 1` to serialize application handlers while keeping the
+protocol driver responsive. Shared handler state must support coroutine
+interleaving. Responses may finish out of order; the batch client still returns
+results in request order. Reset streams discard their pending responses, but an
+already-running handler occupies its slot until it finishes.
+
+A clean TCP receive EOF preserves already-complete requests: handlers can finish
+and responses can use the peer's remaining flow-control credit. No further
+requests or WINDOW_UPDATE frames can arrive after EOF. Truncated requests fail
+the connection; a response that needs additional credit also fails instead of
+waiting indefinitely. Handler-completion waits do not poll the EOF socket.
+
+Aborting a connection discards queued requests and late handler results. The
+existing handler signature has no cancellation token: an application coroutine
+already suspended in its own operation is allowed to finish safely, and its
+handler captures must remain valid until then. Stopping the owning context
+cancels PACE I/O/timer waits in those handlers.
 An application exception produces HTTP 500. Direct `serve_connection` and
 `exchange` calls propagate connection cancellation and errors; `serve` isolates
 accepted-connection failures and returns normally when its listener is closed or
@@ -72,6 +97,16 @@ For the server, load its certificate/key and call
 The direct TLS `serve_connection` and `exchange` overloads require an already
 completed handshake whose selected protocol is `h2`; they reject other protocols.
 See [TLS setup](tls.md).
+
+The TLS driver stages ciphertext when the socket is backpressured, so two peers
+can keep reading while their outbound records wait for space. Each application
+write supplies at most 16 KiB of plaintext; the driver waits for staged output to drain
+before accepting another. This internal path reserves 64 KiB for output and
+64 KiB for input per HTTP/2 TLS connection (128 KiB total, retained until the TLS
+stream is destroyed). Ordinary HTTP/1 and WebSocket TLS streams do not allocate
+these buffers. Readiness wakes the driver without polling. Genuine OpenSSL
+WANT retries retain their original buffer, and normal completion drains queued
+ciphertext before the public TLS shutdown; errors discard it by closing TCP.
 
 ## API and limits
 
@@ -108,11 +143,12 @@ Custom Content-Length and Host fields are replaced by generated framing and
 | `max_body_bytes` | 1 MiB per stream, each direction |
 | `max_concurrent_streams` | 100 |
 | `max_requests_per_connection` | 1,000 |
+| `max_concurrent_handlers` | 100 |
 
 Header bytes use the HTTP/2 header-list definition: name and value lengths plus
 32 bytes per field. Initial headers and trailers share each stream's allowance.
 Header byte/field limits and the connection request limit must be nonzero.
-`max_concurrent_streams` must be between 1 and 10,000. `max_body_bytes = 0`
+`max_concurrent_streams` and `max_concurrent_handlers` must be between 1 and 10,000. `max_body_bytes = 0`
 permits empty bodies only; zero never means unlimited.
 
 A batch must contain 1–`max_concurrent_streams` requests and fit the connection
@@ -136,9 +172,15 @@ incremental client API are not provided. Use [HTTP/1.1](http.md) or
 传给 `exchange`。服务端的 TLS `serve` 重载会完成握手。
 
 请求、响应和 trailers 使用与 HTTP/1.1 相同的数据结构。消息体完整缓冲后再交给
-应用；同一连接内的 handler 按完成请求的顺序执行，慢 handler 会延迟该连接。
+应用；同一连接内最多同时运行 `min(max_concurrent_handlers, max_concurrent_streams)`
+个 handler。handler 等待异步 I/O 时，连接继续处理其他流；单个驱动协程独占协议
+状态和传输，完成事件会显式唤醒它，没有固定间隔轮询。这是单 context 上的协作式
+并发，不会把 CPU 计算自动放到多个线程。设置 `max_concurrent_handlers = 1` 可串行
+执行应用 handler；等待的请求仍受并发流上限约束。共享的 handler 状态需要允许协程
+交错执行。断连后会丢弃迟到结果，但已进入应用的 handler 没有单独取消令牌，会安全
+运行至结束；其捕获对象必须存活到结束。停止 context 会取消 handler 中的 PACE 等待。
 通过上表的 limits 限制消息、字段和并发流，避免随并发增加无限占用内存。
-请求头字节数、字段数和每连接请求数上限必须大于零，并发流上限为 1–10,000；
+请求头字节数、字段数和每连接请求数上限必须大于零，并发流与 handler 上限均为 1–10,000；
 body 上限为零时只允许空 body。HTTP/1 专用的 keep_alive、chunked、response.close
 等字段在此接口中不控制连接或分块；设置 response.close 不会关闭 HTTP/2 连接。
 关闭 listener 会结束接受新连接，已有连接继续运行；停止 context 才会取消全部工作。

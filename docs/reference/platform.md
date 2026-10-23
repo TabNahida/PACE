@@ -86,7 +86,7 @@ that listener strategy. See [architecture](../architecture.md) and the
 [benchmark methodology](../../benchmarks/README.md) for implementation and evidence.
 
 
-The functional CI matrix covers these configurations:
+The main functional CI matrix is configured for these module groups:
 
 | Module group | Linux | macOS | FreeBSD | Windows |
 |---|:---:|:---:|:---:|:---:|
@@ -94,7 +94,21 @@ The functional CI matrix covers these configurations:
 | TLS, DNS, HTTP/2 | ✓ | ✓ | ✓ | ✓ |
 | QUIC, HTTP/3 | ✓ | ✓ | ✓ | Unsupported |
 
-Linux also checks C++23, sanitizers and builds with all optional protocols disabled
-or only HTTP/3 enabled. [Workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml)
+Native CPU coverage includes x86_64 and aarch64 on Linux, macOS and Windows,
+plus 32-bit Linux i386 and Windows x86 processes. FreeBSD uses an x86_64 VM.
+Linux also checks GCC/Clang, C++23, sanitizers and builds with all optional
+protocols disabled or only HTTP/3 enabled. An additional MinGW x86_64 job runs
+core, HTTP1 and WebSocket tests on Windows.
+
+ARMv7, RISC-V64, PowerPC64 LE and s390x Linux run core, HTTP1 and WebSocket
+functional tests through QEMU user-mode emulation. These use the host Linux
+kernel and do not establish native-hardware support or performance. Android
+(three ABIs) and iOS (arm64 device/simulator) have compile-only library checks;
+their network runtime, application integration and device restrictions remain
+unverified.
+
+The [CI coverage guide](../ci.md) lists exact runners, dependencies and evidence
+limits. [Main workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml)
+and [portability results](https://github.com/TabNahida/PACE/actions/workflows/portability.yml)
 record which revisions passed. CI benchmark executables run short correctness
 checks; published performance comparisons use local Linux measurements.

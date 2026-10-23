@@ -1,0 +1,158 @@
+[
+  {
+    "label": "before",
+    "bytes": 64,
+    "fragment_bytes": 0,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 256430.613143,
+      "min": 248818.546714,
+      "max": 260058.09058
+    },
+    "p50_us": {
+      "median": 3.7295,
+      "min": 3.698,
+      "max": 3.759
+    },
+    "p95_us": {
+      "median": 3.983,
+      "min": 3.919,
+      "max": 4.107
+    },
+    "p99_us": {
+      "median": 6.644,
+      "min": 5.903,
+      "max": 7.269
+    }
+  },
+  {
+    "label": "after",
+    "bytes": 64,
+    "fragment_bytes": 0,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 330082.5973725,
+      "min": 326495.848211,
+      "max": 331567.992397
+    },
+    "p50_us": {
+      "median": 2.886,
+      "min": 2.877,
+      "max": 2.908
+    },
+    "p95_us": {
+      "median": 3.059,
+      "min": 3.034,
+      "max": 3.076
+    },
+    "p99_us": {
+      "median": 5.255,
+      "min": 4.022,
+      "max": 5.308
+    }
+  },
+  {
+    "label": "before",
+    "bytes": 16384,
+    "fragment_bytes": 0,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 44341.935415,
+      "min": 43711.134154,
+      "max": 44905.36838
+    },
+    "p50_us": {
+      "median": 21.553,
+      "min": 21.446,
+      "max": 21.828
+    },
+    "p95_us": {
+      "median": 24.3595,
+      "min": 23.202,
+      "max": 24.778
+    },
+    "p99_us": {
+      "median": 32.920500000000004,
+      "min": 32.008,
+      "max": 34.89
+    }
+  },
+  {
+    "label": "after",
+    "bytes": 16384,
+    "fragment_bytes": 0,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 158336.722404,
+      "min": 156181.662388,
+      "max": 161834.319073
+    },
+    "p50_us": {
+      "median": 5.807,
+      "min": 5.773,
+      "max": 6.025
+    },
+    "p95_us": {
+      "median": 6.263999999999999,
+      "min": 6.085,
+      "max": 6.416
+    },
+    "p99_us": {
+      "median": 11.727,
+      "min": 8.75,
+      "max": 13.662
+    }
+  },
+  {
+    "label": "before",
+    "bytes": 65536,
+    "fragment_bytes": 1024,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 3339.3993165,
+      "min": 3272.760797,
+      "max": 3374.829882
+    },
+    "p50_us": {
+      "median": 290.698,
+      "min": 288.835,
+      "max": 294.548
+    },
+    "p95_us": {
+      "median": 332.5245,
+      "min": 319.636,
+      "max": 345.708
+    },
+    "p99_us": {
+      "median": 414.6165,
+      "min": 369.309,
+      "max": 524.257
+    }
+  },
+  {
+    "label": "after",
+    "bytes": 65536,
+    "fragment_bytes": 1024,
+    "trials": 10,
+    "roundtrips_per_second": {
+      "median": 6251.6233365,
+      "min": 6107.443626,
+      "max": 6371.587816
+    },
+    "p50_us": {
+      "median": 153.25549999999998,
+      "min": 152.461,
+      "max": 155.321
+    },
+    "p95_us": {
+      "median": 174.7735,
+      "min": 169.651,
+      "max": 186.583
+    },
+    "p99_us": {
+      "median": 251.652,
+      "min": 197.234,
+      "max": 280.498
+    }
+  }
+]

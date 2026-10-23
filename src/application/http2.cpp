@@ -1,4 +1,6 @@
 #include <pace/http2.hpp>
+#include <pace/detail/http_dispatch.hpp>
+#include <pace/detail/protocol_driver.hpp>
 #ifdef PACE_HAS_HTTP2
 #include <nghttp2/nghttp2.h>
 #include <algorithm>
@@ -9,9 +11,69 @@
 #include <map>
 #include <stdexcept>
 #include <utility>
+#include <climits>
+#include <cerrno>
+#if !defined(_WIN32)
+#include <sys/socket.h>
+#endif
 
 namespace pace::http2 {
 namespace {
+class tcp_driver {
+public:
+    explicit tcp_driver(tcp::stream& stream) : stream_(stream) {}
+    native_socket_type native_handle() const noexcept { return stream_.native_handle(); }
+    bool write_wait() const noexcept { return blocked_write_; }
+    bool either_wait() const noexcept { return blocked_write_; }
+    bool read_allowed() const noexcept { return true; }
+    bool write_allowed() const noexcept { return true; }
+    bool progress() const noexcept { return false; }
+    bool drained() const noexcept { return true; }
+    std::optional<std::size_t> read(std::span<char> bytes) {
+        check();
+        for (;;) {
+            const auto count = ::recv(native_handle(), bytes.data(), static_cast<int>(std::min<std::size_t>(bytes.size(), INT_MAX)), 0);
+            if (count >= 0) return static_cast<std::size_t>(count);
+            if (would_block()) return std::nullopt;
+            if (!interrupted()) fail();
+        }
+    }
+    std::size_t write(std::string_view bytes) {
+        check();
+        for (;;) {
+            int flags = 0;
+#if defined(MSG_NOSIGNAL)
+            flags = MSG_NOSIGNAL;
+#endif
+            const auto count = ::send(native_handle(), bytes.data(), static_cast<int>(std::min<std::size_t>(bytes.size(), INT_MAX)), flags);
+            if (count >= 0) { blocked_write_ = false; return static_cast<std::size_t>(count); }
+            if (would_block()) { blocked_write_ = true; return 0; }
+            if (!interrupted()) fail();
+        }
+    }
+private:
+    tcp::stream& stream_;
+    bool blocked_write_ = false;
+    void check() {
+        if (stream_.context().stopped()) throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+        if (!stream_.is_open()) throw std::system_error(std::make_error_code(std::errc::bad_file_descriptor));
+        if (io_context::current() != &stream_.context()) throw std::logic_error("HTTP/2 must run on its owning context");
+    }
+#ifdef _WIN32
+    static bool would_block() { return WSAGetLastError() == WSAEWOULDBLOCK; }
+    static bool interrupted() { return WSAGetLastError() == WSAEINTR; }
+    [[noreturn]] static void fail() { throw std::system_error(WSAGetLastError(), std::system_category(), "HTTP/2 TCP I/O"); }
+#else
+    static bool would_block() { return errno == EAGAIN || errno == EWOULDBLOCK; }
+    static bool interrupted() { return errno == EINTR; }
+    [[noreturn]] static void fail() { throw std::system_error(errno, std::generic_category(), "HTTP/2 TCP I/O"); }
+#endif
+};
+tcp_driver driver_for(tcp::stream& stream) { return tcp_driver(stream); }
+#ifdef PACE_HAS_TLS
+detail::tls_driver driver_for(tls::stream& stream) { return detail::tls_driver(stream); }
+#endif
+
 void check(int result) {
     if (result < 0) throw std::runtime_error(std::string("HTTP/2: ") + nghttp2_strerror(result));
 }
@@ -98,7 +160,8 @@ struct session {
 
     explicit session(bool is_server, limits value) : bounds(value), server(is_server) {
         if (!bounds.max_header_bytes || !bounds.max_header_fields || !bounds.max_concurrent_streams ||
-            bounds.max_concurrent_streams > 10000 || !bounds.max_requests_per_connection)
+            bounds.max_concurrent_streams > 10000 || !bounds.max_requests_per_connection ||
+            !bounds.max_concurrent_handlers || bounds.max_concurrent_handlers > 10000)
             throw std::invalid_argument("invalid HTTP/2 limits");
         nghttp2_session_callbacks* callbacks = nullptr;
         check(nghttp2_session_callbacks_new(&callbacks));
@@ -226,6 +289,7 @@ struct session {
                 self.responses.at(state.result_index) = std::move(state.response);
                 ++self.completed;
             }
+            std::erase(self.ready, id);
             self.streams.erase(found);
         });
     }
@@ -303,14 +367,19 @@ struct session {
         check(nghttp2_submit_response(native,id,wire.data(),wire.size(),state.outgoing.empty() && state.trailers.empty() ? nullptr : &provider));
         state.replied = true;
     }
-    template<class Stream> task<void> flush(Stream& stream) {
-        for (;;) {
+    // Copy nghttp2-owned frame data before the next mem_send call. Batching
+    // reduces syscall/TLS-record overhead. The 64 KiB batching threshold may
+    // be exceeded by the final frame; protocol/message limits bound that frame.
+    std::string output() {
+        std::string bytes;
+        while (bytes.size() < 64 * 1024) {
             const uint8_t* data = nullptr;
-            const auto size = nghttp2_session_mem_send(native,&data);
+            const auto size = nghttp2_session_mem_send(native, &data);
             rethrow(); if (size < 0) check(static_cast<int>(size));
-            if (!size) co_return;
-            co_await stream.write_all(std::string_view(reinterpret_cast<const char*>(data),static_cast<std::size_t>(size)));
+            if (!size) break;
+            bytes.append(reinterpret_cast<const char*>(data), static_cast<std::size_t>(size));
         }
+        return bytes;
     }
     void receive(std::span<const char> input) {
         const auto count = nghttp2_session_mem_recv(native,reinterpret_cast<const uint8_t*>(input.data()),input.size());
@@ -318,51 +387,130 @@ struct session {
         if (static_cast<std::size_t>(count) != input.size()) throw std::runtime_error("incomplete HTTP/2 input consumption");
     }
 };
+// The driver alone touches nghttp2 and the transport. Its stable input and
+// pending-output buffers also satisfy OpenSSL's WANT_* retry requirements.
+template<class Driver> struct pump {
+    session& state;
+    Driver& driver;
+    std::array<char, 16384> input{};
+    std::string output;
+    std::size_t offset = 0;
+    bool eof = false;
+    pump(session& value, Driver& transport) : state(value), driver(transport) {}
+    bool step(bool receive = true) {
+        bool progress = driver.progress();
+        // A TLS read that needs a write must be retried before new SSL writes.
+        if (!eof && receive && driver.read_allowed()) {
+            for (unsigned attempt = 0; attempt < 16; ++attempt) {
+                const auto count = driver.read(input);
+                if (!count) break;
+                if (!*count) { eof = true; break; }
+                state.receive(std::span<const char>(input.data(), *count));
+                progress = true;
+            }
+        }
+        if (offset == output.size()) { output = state.output(); offset = 0; }
+        if (offset < output.size() && driver.write_allowed()) {
+            const auto count = driver.write(std::string_view(output).substr(offset));
+            offset += count;
+            progress = progress || count != 0;
+        }
+        return driver.progress() || progress;
+    }
+    bool drained() const { return offset == output.size() && !nghttp2_session_want_write(state.native) && driver.drained(); }
+};
+template<class Driver> task<void> wait_driver(io_context& io, Driver& driver, bool* wake = nullptr, bool output_only = false) {
+    try {
+        if (output_only) co_await io.wait_writable(driver.native_handle());
+        else if (driver.either_wait()) co_await io.wait_ready(driver.native_handle());
+        else if (driver.write_wait()) co_await io.wait_writable(driver.native_handle());
+        else co_await io.wait_readable(driver.native_handle());
+    } catch (const std::system_error& error) {
+        if (io.stopped() || !wake || !*wake || error.code() != std::errc::operation_canceled) throw;
+    }
+}
 template<class Stream> task<std::vector<http::response>> exchange_impl(Stream transport, std::string authority,
         std::vector<http::request> requests, limits bounds, std::string scheme) {
     session state(false,bounds);
     state.submit(std::move(authority),std::move(requests),std::move(scheme));
-    std::array<char,16384> buffer{};
-    while (state.completed < state.responses.size()) {
-        co_await state.flush(transport);
-        if (state.completed == state.responses.size()) break;
-        if (!nghttp2_session_want_read(state.native))
-            throw std::runtime_error("HTTP/2 peer ended session before responses completed");
-        const auto size = co_await transport.read_some(buffer);
-        if (!size) throw std::runtime_error("HTTP/2 truncated response");
-        state.receive(std::span<const char>(buffer.data(),size));
-    }
-    check(nghttp2_session_terminate_session(state.native,NGHTTP2_NO_ERROR));
-    co_await state.flush(transport);
-    co_await transport.close_gracefully();
+    try {
+        {
+            auto driver = driver_for(transport);
+            pump pending{state, driver};
+            bool terminating = false;
+            for (;;) {
+                const bool progress = pending.step();
+                if (state.completed == state.responses.size() && !terminating) {
+                    check(nghttp2_session_terminate_session(state.native, NGHTTP2_NO_ERROR));
+                    terminating = true;
+                    continue;
+                }
+                if (terminating && pending.drained()) break;
+                if (pending.eof) throw std::runtime_error("HTTP/2 truncated response");
+                if (!terminating && !nghttp2_session_want_read(state.native))
+                    throw std::runtime_error("HTTP/2 peer ended session before responses completed");
+                if (progress || (terminating && pending.drained())) co_await transport.context().yield();
+                else co_await wait_driver(transport.context(), driver);
+            }
+        }
+        co_await transport.close_gracefully();
+    } catch (...) { transport.close(); throw; }
     co_return std::move(state.responses);
 }
 template<class Stream> task<void> serve_impl(Stream transport,http::handler handle,limits bounds) {
     session state(true,bounds);
-    std::array<char,16384> buffer{};
-    for (;;) {
-        while (!state.ready.empty()) {
-            const auto id = state.ready.front(); state.ready.pop_front();
-            auto found = state.streams.find(id);
-            if (found == state.streams.end()) continue; // A reset can follow END_STREAM in the same read.
-            auto request = std::move(found->second.request);
-            found->second.request.method = request.method;
-            http::response response;
-            if (request.method == "CONNECT") response = {.status=405,.body="CONNECT is not supported\n"};
-            else {
-                try { response = co_await handle(std::move(request)); }
-                catch (const std::system_error& e) { if (e.code()==std::errc::operation_canceled) throw; response={.status=500,.body="Internal Server Error\n"}; }
-                catch (...) { response={.status=500,.body="Internal Server Error\n"}; }
+    auto dispatch = std::make_shared<detail::http_dispatch>(transport.context(), std::move(handle));
+    try {
+        {
+            auto driver = driver_for(transport);
+            pump pending{state, driver};
+            bool wake = false;
+            dispatch->wake = [&] {
+                if (!wake) { wake = true; transport.context().cancel(driver.native_handle()); }
+            };
+            detail::close_http_dispatch close{dispatch};
+            for (;;) {
+                wake = false;
+                bool progress = false;
+                if (dispatch->failure) std::rethrow_exception(dispatch->failure);
+                while (!dispatch->completed.empty()) {
+                    auto result = std::move(dispatch->completed.front()); dispatch->completed.pop_front();
+                    if (result.error) std::rethrow_exception(result.error);
+                    if (state.streams.contains(static_cast<int32_t>(result.id)))
+                        state.respond(static_cast<int32_t>(result.id), std::move(result.response));
+                    progress = true;
+                }
+                while (!state.ready.empty() && dispatch->active < std::min(bounds.max_concurrent_handlers, bounds.max_concurrent_streams)) {
+                    const auto id = state.ready.front(); state.ready.pop_front();
+                    auto found = state.streams.find(id);
+                    if (found == state.streams.end()) continue;
+                    auto request = std::move(found->second.request);
+                    found->second.request.method = request.method;
+                    dispatch->start(id, std::move(request)); progress = true;
+                }
+                progress = pending.step() || progress;
+                if (pending.eof) {
+                    // TCP FIN closes only the peer's send direction. Preserve
+                    // complete requests and replies that fit existing credit.
+                    for (const auto& [id, stream] : state.streams) {
+                        (void)id;
+                        if (!stream.incoming_complete) throw http::protocol_error("HTTP/2 truncated request");
+                    }
+                    if (state.streams.empty() && pending.drained()) break;
+                } else if (((state.goaway && state.streams.empty()) || !nghttp2_session_want_read(state.native)) && pending.drained()) break;
+                if (progress) co_await transport.context().yield();
+                else if (!pending.eof) co_await wait_driver(transport.context(), driver, &wake);
+                else if (pending.offset < pending.output.size() || !driver.drained()) {
+                    // There can be no new TLS input or HTTP/2 WINDOW_UPDATE
+                    // after EOF; watching readability would spin indefinitely.
+                    if (!driver.write_wait()) throw http::protocol_error("HTTP/2 EOF blocked response output");
+                    co_await wait_driver(transport.context(), driver, &wake, true);
+                } else if (dispatch->active) co_await dispatch->wait_completion();
+                else throw http::protocol_error("HTTP/2 EOF exhausted response flow control");
             }
-            state.respond(id,std::move(response));
         }
-        co_await state.flush(transport);
-        if ((state.goaway && state.streams.empty()) || !nghttp2_session_want_read(state.native)) break;
-        const auto size=co_await transport.read_some(buffer);
-        if (!size) break;
-        state.receive(std::span<const char>(buffer.data(),size));
-    }
-    co_await transport.close_gracefully();
+        co_await transport.close_gracefully();
+    } catch (...) { dispatch->close(); transport.close(); throw; }
 }
 template<class Stream> task<void> isolated(Stream stream,http::handler handle,limits bounds) {
     try { co_await serve_impl(std::move(stream),std::move(handle),bounds); }

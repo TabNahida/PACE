@@ -1,0 +1,3 @@
+transport,framing,close_policy,close_timeout_ms,no_delay,keep_alive,peer_close_delay_ms,trial,request_ms,after_response_written_ms,actual_peer_delay_ms,completed_before_peer_close,validated
+tls,head,default,100,1,0,50,1,0.127692,0.039156,50.134630,1,1
+tls,head,default,100,1,0,50,2,0.123918,0.036399,50.143662,1,1

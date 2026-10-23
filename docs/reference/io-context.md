@@ -48,6 +48,7 @@ There is no restart, polling-one-handler or work-guard API.
 ```cpp
 io_awaiter wait_readable(native_socket_type fd) noexcept;
 io_awaiter wait_writable(native_socket_type fd) noexcept;
+io_awaiter wait_ready(native_socket_type fd) noexcept;
 void cancel(native_socket_type fd) noexcept;
 ```
 
@@ -55,10 +56,16 @@ Readiness waits suspend on this context; they do not read or write bytes and do
 not own the descriptor. Keep its native resource alive and preserve its identity
 until cancellation or completion. Retry the nonblocking operation after wakeup:
 readiness can also represent EOF or an error. PACE's TCP methods handle that loop.
+`wait_ready` wakes when either reading or writing may make progress. It returns
+no readiness mask: retry the relevant nonblocking operations. A single event
+containing both directions still resumes the coroutine exactly once.
 
 Only one pending waiter per descriptor **per direction** is supported. A second
 read or second write registration throws `std::logic_error`; one of each is
-allowed. Await from the owning context. Native registration failures propagate as
+allowed. `wait_ready` occupies both directions until completion or cancellation;
+it conflicts with any other pending readiness wait on that descriptor. Both
+slots are released together before its continuation runs. Await from the owning
+context. Native registration failures propagate as
 `std::system_error`. A stopped context makes the wait fail with cancellation.
 
 `cancel(fd)` unregisters that descriptor's current waits and schedules their
@@ -131,6 +138,7 @@ struct io_awaiter {
     bool writable;
     std::error_code error;
     std::coroutine_handle<> continuation;
+    bool either = false;
     bool await_ready() noexcept;
     bool await_suspend(std::coroutine_handle<> handle);
     void await_resume();

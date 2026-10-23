@@ -41,6 +41,29 @@ auto response = co_await pace::http::fetch(io, endpoint, std::move(request));
 需要 chunked 时设置 `request.chunked = true`；可在 `request.trailers` 中放入
 `X-Checksum` 等安全元数据。body 仍然完整保存在内存中，这不是流式上传接口。
 
+## 完整响应与连接关闭
+
+默认的 `get`、`fetch` 和 `client.send` 在完整解析 Content-Length、chunked 或无 body
+响应后返回，不因 `Connection: close` 继续等待对端 FIN。库会尝试发送本端 TCP FIN / TLS
+`close_notify` 并释放连接，没有后台清理任务。完整响应后的清理错误不会覆盖结果；上下文
+取消仍会传播。没有长度或分块 framing 的响应仍须等到 EOF，HTTPS 还须验证 TLS 关闭通知。
+
+需要保留有界等待时，在原有 `limits` 参数之后传入 `client_options`：
+
+```cpp
+pace::http::client_options closing{
+    .close_policy = pace::http::client_close_policy::graceful,
+    .close_timeout = std::chrono::milliseconds(25),
+};
+auto response = co_await pace::http::get(io, endpoint, "/health", {}, closing);
+// 对持久客户端：http::client client(std::move(socket), {}, closing);
+```
+
+`graceful` 等待对端关闭或预算耗尽，并传播清理错误和取消。预算为 0 时只尝试本端通知，
+负数会被拒绝；默认 `no_wait` 不使用这个预算。它不是请求或读取超时。截断 body、未完成
+chunk、非法 trailer 仍会失败。服务端发送最终响应后的有界 drain 保持不变，包括提前拒绝
+尚未收完的请求 body。[完整语义](../reference/http.md#final-response-close-policy)。
+
 ## 启动服务
 
 handler 是一个按值接收 request 的具名协程：
