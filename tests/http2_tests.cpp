@@ -408,19 +408,23 @@ pace::task<void> secure_client(pace::io_context& io, pace::tcp::endpoint endpoin
     check_responses(co_await pace::http2::exchange(std::move(stream),"localhost",requests())); done.arrive();
 }
 pace::task<void> concurrent_tls_server(pace::tcp::listener& listener, const pace::tls::context& config,
-                                        concurrent_handlers& handler, completion& done) {
+                                        concurrent_handlers& handler, completion& done, bool small_receive) {
     auto tcp = co_await listener.accept();
-    const int small = 4096;
+    tcp.set_no_delay(); const int small = 4096;
     require(::setsockopt(tcp.native_handle(), SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "small TLS send buffer");
+    if (small_receive) require(::setsockopt(tcp.native_handle(), SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "small TLS receive buffer");
     pace::tls::stream stream(std::move(tcp), config); co_await stream.handshake();
     co_await concurrent_server(std::move(stream), handler, 2, done);
 }
 pace::task<void> concurrent_tls_client(pace::io_context& io, pace::tcp::endpoint endpoint,
-                                      const pace::tls::context& config, completion& done) {
-    pace::tls::stream stream(io, config); co_await stream.connect(endpoint, "localhost");
+                                      const pace::tls::context& config, completion& done, bool small_receive) {
+    pace::tcp::stream tcp(io); tcp.set_no_delay(); const int small = 4096;
+    require(::setsockopt(tcp.native_handle(), SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "small TLS client send buffer");
+    if (small_receive) require(::setsockopt(tcp.native_handle(), SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "small TLS client receive buffer");
+    co_await tcp.connect(endpoint); pace::tls::stream stream(std::move(tcp), config); co_await stream.handshake("localhost");
     concurrent_results(co_await pace::http2::exchange(std::move(stream), "localhost", concurrent_requests())); done.arrive();
 }
-pace::task<void> tls_driver_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done) {
+pace::task<void> tls_driver_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done, bool withhold_close) {
     pace::tls::stream stream(co_await listener.accept(), config); co_await stream.handshake();
     co_await listener.context().sleep_for(20ms);
     std::array<char, 16384> buffer{}; std::size_t received = 0;
@@ -428,9 +432,14 @@ pace::task<void> tls_driver_server(pace::tcp::listener& listener, const pace::tl
         const auto count = co_await stream.read_some(buffer); require(count != 0, "TLS driver truncated retry");
         require(std::all_of(buffer.begin(), buffer.begin() + count, [](char c) { return c == 'x'; }), "TLS retry corrupted data"); received += count;
     }
-    co_await stream.write_all("ok"); co_await stream.close_gracefully(); done.arrive();
+    co_await stream.write_all("ok");
+    if (withhold_close) {
+        require(co_await stream.read_some(buffer) == 0, "TLS driver shutdown omitted close_notify");
+        co_await listener.context().sleep_for(20ms); stream.close();
+    } else co_await stream.close_gracefully();
+    done.arrive();
 }
-pace::task<void> tls_driver_client(pace::io_context& io, pace::tcp::endpoint endpoint, const pace::tls::context& config, completion& done) {
+pace::task<void> tls_driver_client(pace::io_context& io, pace::tcp::endpoint endpoint, const pace::tls::context& config, completion& done, bool withhold_close) {
     pace::tcp::stream tcp(io); tcp.set_no_delay(); const int small = 4096;
     require(::setsockopt(tcp.native_handle(), SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "TLS driver small send buffer");
     co_await tcp.connect(endpoint); pace::tls::stream stream(std::move(tcp), config); co_await stream.handshake("localhost");
@@ -441,20 +450,27 @@ pace::task<void> tls_driver_client(pace::io_context& io, pace::tcp::endpoint end
         try { (void)co_await stream.read_some(input); } catch (const std::logic_error&) { guarded = true; }
         require(guarded, "TLS protocol driver did not retain single-operation guard");
         const std::string payload(1024 * 1024, 'x'); std::size_t offset = 0; bool blocked = false;
-        while (offset < payload.size()) {
-            const auto count = driver.write(std::string_view(payload).substr(offset));
-            if (count) { offset += count; continue; }
-            require(!driver.read_allowed(), "TLS pending write must be retried before reads");
-            if (!blocked) {
-                bool rejected = false;
-                try { (void)driver.write(std::string_view(payload).substr(offset + 1)); }
-                catch (const std::logic_error&) { rejected = true; }
-                require(rejected, "TLS WANT write must retain buffer identity"); blocked = true;
+        while (offset < payload.size() || !driver.drained()) {
+            bool progress = driver.progress();
+            if (offset < payload.size() && driver.write_allowed()) {
+                const auto count = driver.write(std::string_view(payload).substr(offset));
+                offset += count; progress = progress || count != 0;
             }
-            if (driver.write_wait()) co_await io.wait_writable(driver.native_handle());
+            if (!driver.drained()) {
+                // Backpressure now lives below SSL_write: completing one
+                // bounded record leaves application reads free to make progress.
+                blocked = true;
+                require(driver.read_allowed(), "queued ciphertext blocked application reads");
+                require(!driver.write_allowed(), "queued ciphertext allowed unbounded writes");
+            }
+            progress = driver.progress() || progress;
+            if (offset == payload.size() && driver.drained()) break;
+            if (progress) { co_await io.yield(); continue; }
+            if (driver.either_wait()) co_await io.wait_ready(driver.native_handle());
+            else if (driver.write_wait()) co_await io.wait_writable(driver.native_handle());
             else co_await io.wait_readable(driver.native_handle());
         }
-        require(blocked, "TLS backpressure did not exercise WANT retry");
+        require(blocked, "TLS backpressure did not exercise bounded ciphertext staging");
         std::string response;
         while (response.size() < 2) {
             const auto count = driver.read(input);
@@ -464,7 +480,33 @@ pace::task<void> tls_driver_client(pace::io_context& io, pace::tcp::endpoint end
         }
         require(response == "ok", "TLS retry response");
     }
-    co_await stream.close_gracefully(); done.arrive();
+    require(stream.is_open(), "TLS driver closed a successfully drained transport");
+    co_await stream.close_gracefully(withhold_close ? 5ms : 100ms);
+    require(!stream.is_open(), "TLS driver graceful close deadline did not close transport"); done.arrive();
+}
+pace::task<void> tls_abort_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done) {
+    pace::tls::stream stream(co_await listener.accept(), config); co_await stream.handshake();
+    // Leave the peer's tiny send buffer blocked while it abandons queued output.
+    co_await listener.context().sleep_for(10ms);
+    std::array<char, 16384> input{};
+    bool truncated = false;
+    try { while (co_await stream.read_some(input)) {} }
+    catch (const std::system_error& error) { truncated = error.code() == std::errc::protocol_error; }
+    require(truncated, "exceptional TLS driver exit sent a clean close after dropping ciphertext"); done.arrive();
+}
+pace::task<void> tls_abort_client(pace::io_context& io, pace::tcp::endpoint endpoint, const pace::tls::context& config, completion& done) {
+    pace::tcp::stream tcp(io); tcp.set_no_delay(); const int small = 4096;
+    require(::setsockopt(tcp.native_handle(), SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "TLS abort small send buffer");
+    co_await tcp.connect(endpoint); pace::tls::stream stream(std::move(tcp), config); co_await stream.handshake("localhost");
+    struct abandon {};
+    try {
+        pace::detail::tls_driver driver(stream); const std::string bytes(16384, 'x');
+        unsigned count = 0;
+        while (driver.drained() && count++ < 1024) require(driver.write(bytes) != 0, "TLS abort staging made no progress");
+        require(!driver.drained(), "TLS abort did not queue ciphertext");
+        throw abandon{};
+    } catch (const abandon&) {}
+    require(!stream.is_open(), "TLS driver exception retained unsent ciphertext on an open stream"); done.arrive();
 }
 void secure_roundtrip(const std::filesystem::path& certs) {
     pace::io_context io; pace::tcp::listener listener(io,{"127.0.0.1",0}); completion done{io};
@@ -475,18 +517,30 @@ void secure_roundtrip(const std::filesystem::path& certs) {
     io.spawn(secure_server(listener,server_config,done)); io.spawn(secure_client(io,listener.local_endpoint(),client_config,done));
     std::cerr << "HTTP2 stage: TLS roundtrip\n";
     io.run(); require(done.count==2,"secure roundtrip incomplete");
-    pace::io_context concurrent_io; pace::tcp::listener concurrent_listener(concurrent_io, {"127.0.0.1", 0});
-    completion concurrent_done{concurrent_io}; concurrent_handlers handler{concurrent_io};
-    concurrent_io.spawn(concurrent_tls_server(concurrent_listener, server_config, handler, concurrent_done));
-    concurrent_io.spawn(concurrent_tls_client(concurrent_io, concurrent_listener.local_endpoint(), client_config, concurrent_done));
-    std::cerr << "HTTP2 stage: TLS concurrent duplex/backpressure\n";
-    concurrent_io.run();
-    require(concurrent_done.count == 2 && handler.peak == 2 && handler.completed.front() == 1, "TLS HTTP2 concurrent handlers/backpressure");
-    pace::io_context driver_io; pace::tcp::listener driver_listener(driver_io, {"127.0.0.1", 0}); completion driver_done{driver_io};
-    driver_io.spawn(tls_driver_server(driver_listener, server_config, driver_done));
-    driver_io.spawn(tls_driver_client(driver_io, driver_listener.local_endpoint(), client_config, driver_done));
-    std::cerr << "HTTP2 stage: TLS driver WANT retry\n"; driver_io.run();
-    require(driver_done.count == 2, "TLS protocol driver retry test incomplete");
+    for (const bool small_receive : {false, true}) {
+        pace::io_context concurrent_io; pace::tcp::listener concurrent_listener(concurrent_io, {"127.0.0.1", 0});
+        completion concurrent_done{concurrent_io}; concurrent_handlers handler{concurrent_io};
+        concurrent_io.spawn(concurrent_tls_server(concurrent_listener, server_config, handler, concurrent_done, small_receive));
+        concurrent_io.spawn(concurrent_tls_client(concurrent_io, concurrent_listener.local_endpoint(), client_config, concurrent_done, small_receive));
+        std::cerr << "HTTP2 stage: TLS " << (small_receive ? "small receive-window duplex" : "concurrent duplex/backpressure") << '\n';
+        concurrent_io.run();
+        require(concurrent_done.count == 2 && handler.active == 0 && handler.peak <= 2, "TLS HTTP2 duplex/backpressure");
+        // Tiny TCP receive windows can delay the second complete request until
+        // after the first handler finishes; use normal windows to test overlap.
+        if (!small_receive) require(handler.peak == 2 && handler.completed.front() == 1, "TLS HTTP2 concurrent handlers");
+    }
+    for (const bool withhold_close : {false, true}) {
+        pace::io_context driver_io; pace::tcp::listener driver_listener(driver_io, {"127.0.0.1", 0}); completion driver_done{driver_io};
+        driver_io.spawn(tls_driver_server(driver_listener, server_config, driver_done, withhold_close));
+        driver_io.spawn(tls_driver_client(driver_io, driver_listener.local_endpoint(), client_config, driver_done, withhold_close));
+        std::cerr << "HTTP2 stage: TLS driver " << (withhold_close ? "close deadline" : "ciphertext backpressure") << '\n'; driver_io.run();
+        require(driver_done.count == 2, "TLS protocol driver backpressure test incomplete");
+    }
+    pace::io_context abort_io; pace::tcp::listener abort_listener(abort_io, {"127.0.0.1", 0}); completion abort_done{abort_io};
+    abort_io.spawn(tls_abort_server(abort_listener, server_config, abort_done));
+    abort_io.spawn(tls_abort_client(abort_io, abort_listener.local_endpoint(), client_config, abort_done));
+    std::cerr << "HTTP2 stage: TLS driver abandoned ciphertext\n"; abort_io.run();
+    require(abort_done.count == 2, "TLS protocol driver abandonment test incomplete");
 }
 #endif
 }

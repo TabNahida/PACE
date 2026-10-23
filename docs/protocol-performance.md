@@ -53,6 +53,14 @@ UTF-8 checks and limits retain their existing semantics. The tradeoff is an
 additional 8 KiB per stream and retained send-buffer capacity; this is not a
 claim of lower connection memory usage.
 
+Median roundtrips per second from ten alternating trials per workload:
+
+| Payload / fragmentation | v0.1.1 | Updated | Change |
+|---|---:|---:|---:|
+| 64 B / single frame | 256,431 | 330,083 | +28.7% |
+| 16 KiB / single frame | 44,342 | 158,337 | +257.1% |
+| 64 KiB / 1 KiB fragments | 3,339 | 6,252 | +87.2% |
+
 [WebSocket measurements and reproducible commands](../benchmarks/results/websocket-linux-2026-10-23/README.md)
 include ten alternating trials per fixed workload and separate syscall-count
 diagnostics. Both peers share a single reactor and thread. Every binary message

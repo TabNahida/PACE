@@ -15,11 +15,13 @@ public:
     tls_driver(const tls_driver&) = delete;
     std::optional<std::size_t> read(std::span<char> bytes);
     std::size_t write(std::string_view bytes);
+    bool progress();
+    bool drained() const noexcept;
     native_socket_type native_handle() const noexcept;
     bool write_wait() const noexcept;
-    bool either_wait() const noexcept { return false; }
+    bool either_wait() const noexcept;
     bool read_allowed() const noexcept { return !write_retry_; }
-    bool write_allowed() const noexcept { return !read_wants_write_; }
+    bool write_allowed() const noexcept;
 private:
     tls::stream& stream_;
     const char* write_data_ = nullptr;

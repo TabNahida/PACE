@@ -5,6 +5,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import pathlib
 import platform
 import statistics
@@ -25,7 +26,8 @@ def main():
         parser.error("batches must be in 1..1000")
     root = pathlib.Path(__file__).resolve().parent.parent
     binary = args.binary.resolve()
-    args.output.mkdir(parents=True, exist_ok=True)
+    # Preserve the provenance of previous measurements, including partial runs.
+    args.output.mkdir(parents=True, exist_ok=False)
     commands, samples = [], []
     # Alternate the serial/concurrent order between protocols. Each invocation
     # performs ten authenticated or cleartext batches on fresh connections.
@@ -38,7 +40,13 @@ def main():
             result = subprocess.run(command, cwd=root, text=True, capture_output=True, timeout=120, check=True)
             (args.output / f"{protocol}-cap{cap}.csv").write_text(result.stdout)
             rows = list(csv.DictReader(io.StringIO(result.stdout)))
-            if len(rows) != args.batches or any(row["validated"] != "true" for row in rows):
+            if len(rows) != args.batches or any(
+                    row["validated"] != "true" or row["protocol"] != protocol or
+                    int(row["handlers"]) != cap or int(row["streams"]) != 16 or
+                    int(row["handler_delay_ms"]) != 10 or int(row["body_bytes"]) != 1024 or
+                    int(row["trial"]) != trial or int(row["peak_handlers"]) != cap or
+                    not math.isfinite(float(row["batch_ms"])) or float(row["batch_ms"]) <= 0
+                    for trial, row in enumerate(rows)):
                 raise RuntimeError("probe did not validate every sample")
             samples.extend(rows)
     with (args.output / "samples.csv").open("w", newline="") as output:

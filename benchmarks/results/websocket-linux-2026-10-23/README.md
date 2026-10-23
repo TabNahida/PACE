@@ -9,6 +9,8 @@ adds read-ahead, direct fragment assembly, reusable send storage, word-at-a-time
 masking and the runtime readiness helper. Compiled source/binary hashes, compiler
 flags and commands are in [final/build.json](final/build.json); the checkout was
 dirty during measurement, so its HEAD alone does not identify the candidate.
+The candidate's recorded compilation inputs match commit
+[`40aa5e0`](https://github.com/TabNahida/PACE/commit/40aa5e0a06c75139b1ab794f93426bbfc3f56469).
 
 The 64 B, 16 KiB and 64 KiB/1 KiB-fragment workloads were fixed before measuring.
 Each has 1,000 excluded warmup exchanges, followed by 300,000, 30,000 or 3,000

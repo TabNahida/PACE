@@ -28,7 +28,14 @@ if enable_quic and is_plat("windows", "mingw") then
     target_end()
     return
 end
-if has_config("tls") or enable_quic then add_requires("openssl3 3.5.7") end
+if has_config("tls") or enable_quic then
+    if is_plat("windows") and is_arch("arm64") then
+        includes("xmake/openssl_arm64.lua")
+        add_requires("pace-openssl3-arm64 3.5.7", {alias = "openssl3", system = false})
+    else
+        add_requires("openssl3 3.5.7")
+    end
+end
 if has_config("http2") then add_requires("nghttp2 1.70.0") end
 if has_config("dns") then add_requires("c-ares 1.34.8") end
 if has_config("http3") then add_requires("nghttp3 v1.18.0") end

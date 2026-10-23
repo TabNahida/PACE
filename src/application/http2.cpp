@@ -27,6 +27,8 @@ public:
     bool either_wait() const noexcept { return blocked_write_; }
     bool read_allowed() const noexcept { return true; }
     bool write_allowed() const noexcept { return true; }
+    bool progress() const noexcept { return false; }
+    bool drained() const noexcept { return true; }
     std::optional<std::size_t> read(std::span<char> bytes) {
         check();
         for (;;) {
@@ -396,7 +398,7 @@ template<class Driver> struct pump {
     bool eof = false;
     pump(session& value, Driver& transport) : state(value), driver(transport) {}
     bool step(bool receive = true) {
-        bool progress = false;
+        bool progress = driver.progress();
         // A TLS read that needs a write must be retried before new SSL writes.
         if (!eof && receive && driver.read_allowed()) {
             for (unsigned attempt = 0; attempt < 16; ++attempt) {
@@ -413,9 +415,9 @@ template<class Driver> struct pump {
             offset += count;
             progress = progress || count != 0;
         }
-        return progress;
+        return driver.progress() || progress;
     }
-    bool drained() const { return offset == output.size() && !nghttp2_session_want_write(state.native); }
+    bool drained() const { return offset == output.size() && !nghttp2_session_want_write(state.native) && driver.drained(); }
 };
 template<class Driver> task<void> wait_driver(io_context& io, Driver& driver, bool* wake = nullptr, bool output_only = false) {
     try {
@@ -498,7 +500,7 @@ template<class Stream> task<void> serve_impl(Stream transport,http::handler hand
                 } else if (((state.goaway && state.streams.empty()) || !nghttp2_session_want_read(state.native)) && pending.drained()) break;
                 if (progress) co_await transport.context().yield();
                 else if (!pending.eof) co_await wait_driver(transport.context(), driver, &wake);
-                else if (pending.offset < pending.output.size()) {
+                else if (pending.offset < pending.output.size() || !driver.drained()) {
                     // There can be no new TLS input or HTTP/2 WINDOW_UPDATE
                     // after EOF; watching readability would spin indefinitely.
                     if (!driver.write_wait()) throw http::protocol_error("HTTP/2 EOF blocked response output");

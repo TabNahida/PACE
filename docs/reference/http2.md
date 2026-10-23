@@ -98,6 +98,16 @@ The direct TLS `serve_connection` and `exchange` overloads require an already
 completed handshake whose selected protocol is `h2`; they reject other protocols.
 See [TLS setup](tls.md).
 
+The TLS driver stages ciphertext when the socket is backpressured, so two peers
+can keep reading while their outbound records wait for space. Each application
+write supplies at most 16 KiB of plaintext; the driver waits for staged output to drain
+before accepting another. This internal path reserves 64 KiB for output and
+64 KiB for input per HTTP/2 TLS connection (128 KiB total, retained until the TLS
+stream is destroyed). Ordinary HTTP/1 and WebSocket TLS streams do not allocate
+these buffers. Readiness wakes the driver without polling. Genuine OpenSSL
+WANT retries retain their original buffer, and normal completion drains queued
+ciphertext before the public TLS shutdown; errors discard it by closing TCP.
+
 ## API and limits
 
 Include `<pace/http2.hpp>`; APIs are available with `PACE_HAS_HTTP2` (provided by
