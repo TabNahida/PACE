@@ -1,5 +1,6 @@
 #include <pace/quic.hpp>
 #ifdef PACE_HAS_QUIC
+#include <pace/detail/socket_address.hpp>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
@@ -45,12 +46,6 @@ struct guard {
     explicit guard(bool& value) : flag(value) { if (flag) throw std::logic_error("overlapping QUIC operation"); flag = true; }
     ~guard() { flag = false; }
 };
-sockaddr_in address(const udp::endpoint& endpoint) {
-    sockaddr_in out{}; out.sin_family = AF_INET; out.sin_port = htons(endpoint.port);
-    if (endpoint.address.find('\0') != std::string::npos || inet_pton(AF_INET, endpoint.address.c_str(), &out.sin_addr) != 1)
-        throw std::invalid_argument("QUIC endpoint requires numeric IPv4");
-    return out;
-}
 void set_bio(SSL* ssl, udp::socket& socket) {
     BIO* bio = BIO_new_dgram(socket.native_handle(), BIO_NOCLOSE);
     if (!bio) fail("QUIC datagram BIO");
@@ -394,13 +389,30 @@ task<void> connection::connect(udp::endpoint peer, std::string name, std::chrono
     if (state->connected || state->owned_ssl) throw std::logic_error("QUIC connect state");
     try {
         if (name.empty() || name.find('\0') != std::string::npos) throw std::invalid_argument("QUIC client requires certificate identity");
-        auto remote = address(peer); if (!peer.port) throw std::invalid_argument("QUIC remote port must be nonzero");
+        const auto remote = pace::detail::parse_socket_address(peer.address, peer.port, peer.family, peer.scope_id);
+        if (!peer.port) throw std::invalid_argument("QUIC remote port must be nonzero");
+        // BIO_ADDR_rawmake cannot carry an IPv6 interface scope. Reject rather
+        // than silently sending a link-local destination on the wrong interface.
+        if (peer.scope_id) throw std::invalid_argument("scoped QUIC destinations are not supported");
+        if (remote.family() == address_family::ipv6) {
+            state->owner->socket = udp::socket(state->owner->io, udp::endpoint{"::", 0});
+            set_bio(state->ssl, state->owner->socket);
+        }
         std::unique_ptr<BIO_ADDR, decltype(&BIO_ADDR_free)> addr(BIO_ADDR_new(), BIO_ADDR_free);
         if (!addr) fail("QUIC peer allocation");
-        required(BIO_ADDR_rawmake(addr.get(), AF_INET, &remote.sin_addr, sizeof(remote.sin_addr), remote.sin_port), "QUIC peer address");
+        if (remote.family() == address_family::ipv6) {
+            sockaddr_in6 v6{};
+            std::memcpy(&v6, &remote.storage, sizeof(v6));
+            required(BIO_ADDR_rawmake(addr.get(), AF_INET6, &v6.sin6_addr, sizeof(v6.sin6_addr), v6.sin6_port), "QUIC peer address");
+        } else {
+            sockaddr_in v4{};
+            std::memcpy(&v4, &remote.storage, sizeof(v4));
+            required(BIO_ADDR_rawmake(addr.get(), AF_INET, &v4.sin_addr, sizeof(v4.sin_addr), v4.sin_port), "QUIC peer address");
+        }
         required(SSL_set1_initial_peer_addr(state->ssl, addr.get()), "QUIC initial peer");
-        in_addr ip{};
-        if (inet_pton(AF_INET, name.c_str(), &ip) == 1) required(X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(state->ssl), name.c_str()), "QUIC peer IP");
+        in_addr ip{}; in6_addr ip6{};
+        if (inet_pton(AF_INET, name.c_str(), &ip) == 1 || inet_pton(AF_INET6, name.c_str(), &ip6) == 1)
+            required(X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(state->ssl), name.c_str()), "QUIC peer IP");
         else { required(SSL_set_tlsext_host_name(state->ssl, name.c_str()), "QUIC SNI"); required(SSL_set1_host(state->ssl, name.c_str()), "QUIC hostname"); }
         start(state->owner); co_await handshake(state, timeout);
     } catch (...) { close(); throw; }

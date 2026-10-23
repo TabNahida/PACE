@@ -1,15 +1,16 @@
 # `pace::http`: HTTP/1.1 and HTTPS
 
-Include `<pace/http.hpp>`. PACE supplies a buffered HTTP/1.0–1.1 server and client,
+Include `<pace/http.hpp>`. PACE supplies an HTTP/1.0–1.1 server and client,
 with Content-Length, chunked transfer, trailers, persistence and strict framing
-validation. TLS overloads use the same parser and require `--tls=y`
+validation. Buffered messages are the default; an opt-in server API adds
+request-head admission, per-request body limits and bounded response streaming. TLS overloads use the same parser and require `--tls=y`
 (`PACE_HAS_TLS`). HTTP/2 and WebSocket have separate APIs; this namespace neither
 negotiates protocol upgrades nor implements CONNECT or HTTP/3.
 
 ## Start with the short API
 
 ```cpp
-// Inside a coroutine running on io; the endpoint is numeric IPv4.
+// Inside a coroutine running on io; endpoints accept numeric IPv4 or IPv6.
 auto response = co_await pace::http::get(io, {"127.0.0.1", 8080}, "/health");
 
 // HTTPS: configuration uses certificate verification by default.
@@ -56,7 +57,9 @@ Strings and vectors own their contents. Method/target retain wire spelling and
 are not URL-decoded or routed. Parsed versions are `HTTP/1.0` or `HTTP/1.1`.
 A client's empty request version means HTTP/1.1. Bodies contain decoded framing
 payload, including binary bytes; transfer chunk boundaries and chunk extensions
-are not retained. This is fully buffered transfer, not a streaming-body API.
+are not retained. These shared message types describe buffered transfer. The HTTP/1 server also
+provides the opt-in admission and streaming API below; HTTP/2 and HTTP/3 keep
+their existing message APIs.
 
 `header(name)` returns the first ASCII case-insensitive match in `headers`, or an
 empty view. Missing and empty are indistinguishable through that accessor alone.
@@ -149,7 +152,8 @@ The request-count limit applies to server connections; the final permitted reply
 closes. The informational-response cap applies to clients. Other byte/field limits
 apply when receiving in either role. These limits do not cap locally constructed
 outgoing messages, global memory, connection count or wall-clock lifetime. No
-request/connect/handshake deadline is imposed by the HTTP layer. Zero does not
+request/connect/handshake deadline is imposed by the original buffered API.
+The opt-in server API below adds receive/write deadlines. Zero does not
 mean unlimited: a zero allowance forbids that resource; a zero body allowance
 still permits an empty body, and zero server requests closes without serving.
 
@@ -220,7 +224,8 @@ These helpers connect, request one closing exchange, and release the connection.
 `get` creates a GET; `fetch` uses the owned request you supply. Both override
 `keep_alive=false`. If no Host exists, plain HTTP uses the endpoint address and
 HTTPS uses `peer_name`; a nondefault port is appended (80 for HTTP, 443 for HTTPS).
-A supplied Host is retained and validated separately from TLS certificate identity.
+Numeric IPv6 authorities are bracketed (for example `[::1]:8080`). A supplied
+Host is retained and validated separately from TLS certificate identity.
 
 Values are owned by the lazy task; the I/O context and referenced TLS configuration
 must outlive its use. TLS streams retain configuration ownership once constructed,
@@ -272,7 +277,184 @@ therefore produce 500. The final response uses the transport's bounded graceful
 close (100 ms by default); neither response delivery nor peer acknowledgment is
 guaranteed after transport failure.
 
+## Admission before receiving a request body
+
+The original `handler` and `limits` overloads remain supported. To opt in, use a
+`server_handler`, which returns `task<server_response>`, and `server_options`:
+
+```cpp
+using server_response = std::variant<response, streaming_response>;
+using server_handler = std::function<task<server_response>(request)>;
+
+pace::task<pace::http::server_response> route(pace::http::request request) {
+    co_return pace::http::response{.body = request.body};
+}
+
+pace::http::server_options options;
+options.admit = [](const pace::http::request_head& head) {
+    if (head.header("Authorization") != "Bearer example") {
+        return pace::http::admission::reject(
+            pace::http::response{.status = 401, .body = "unauthorized\n"});
+    }
+    return pace::http::admission::accept(
+        head.target == "/mail" ? 16 * 1024 * 1024 : 64 * 1024);
+};
+options.request_timeout = std::chrono::seconds(15);
+options.write_timeout = std::chrono::seconds(30);
+// listener and its context remain alive while serving.
+io.spawn(pace::http::serve(listener, route, options));
+```
+
+The same overloads exist for `serve_connection(tcp::stream, ...)`,
+`serve_connection(tls::stream, ...)`, and `serve(listener, tls_configuration, ...)`.
+The TLS path applies the same parser and policies after its handshake.
+
+`request_head` exposes `method`, `target`, and `version` as string views,
+`headers` as `span<const header_field>`, `content_length` as
+`optional<size_t>`, and the `chunked` and `keep_alive` flags. Its `header(name)`
+accessor matches ASCII names case-insensitively. These views are valid **only
+inside the synchronous callback**; copy anything to retain. The request line,
+headers, and framing have already passed the normal checks. Malformed or
+ambiguous framing never reaches admission. No body or trailer collection takes
+place first, although the final bounded socket read may include up to 8 KiB of
+body or pipelined data alongside the head.
+
+`admission::reject(response)` sends that response immediately and forces
+`Connection: close`, regardless of `response::close`. PACE does not wait for the
+advertised body. After writing, the existing bounded transport graceful-close
+policy may discard unread input; it is not a prerequisite to sending the reply.
+No final handler is invoked. A throwing admission callback produces a closing
+500, except `operation_canceled`, which terminates the connection.
+
+`admission::accept(n)` replaces `bounds.max_body_bytes` for **this request**.
+It may choose a larger or smaller limit; it is not clamped to the connection's
+default. `accept()` keeps that default and `accept(0)` permits only an empty
+body. Content-Length exceeding the selected limit receives 413 before body
+collection, and chunked input is checked cumulatively at each chunk-size line,
+before reading that chunk. Metadata/trailer/chunk-count caps remain unchanged.
+Admission is rerun for every keep-alive request, including already-pipelined
+heads; no selected limit leaks into the next request. Accepted request bodies
+are still buffered up to the selected cap before the final handler runs.
+
+## Bounded response producers
+
+```cpp
+class body_source {
+public:
+    virtual ~body_source() = default;
+    virtual std::size_t read(std::span<char> destination) = 0;
+};
+struct streaming_response {
+    response head;
+    std::uint64_t content_length = 0;
+    std::unique_ptr<body_source> source;
+};
+```
+
+Return either an ordinary `response` or a `streaming_response` from a
+`server_handler`. Streaming uses the supplied Content-Length, works for
+HTTP/1.0 and HTTP/1.1, and owns its source until completion or failure. Its
+`head.body` and `head.trailers` must be empty and `head.chunked` false. Metadata
+is validated before writing; invalid metadata produces a closing 500. Unknown
+length streaming and streamed trailers are not supported by this interface.
+
+PACE gives `read()` a writable span no larger than
+`server_options::response_buffer_bytes` (64 KiB by default), or the remaining
+Content-Length if smaller. Return a positive count no greater than that span's
+size. The producer is pulled again only after the preceding `write_all`
+finishes: the library never queues the full response in application memory.
+Kernel and TLS transport buffers have their own bounded buffering. Exactly
+Content-Length bytes are sent; the producer is not called once that length is
+reached. A zero result before then, an oversized count, or a producer exception
+closes the connection without trying to append a second response. Disconnect,
+context cancellation, and write expiry stop future pulls and release the owned
+source as the pending write unwinds. An OS send succeeding means local acceptance,
+not acknowledgment by the peer; a disconnect is observed when the transport
+reports it.
+
+Calls run synchronously on the owning event-loop thread and must return
+promptly. They are suitable for bounded generation and reads from an already
+open local file. Blocking disk/network work or expensive computation should be
+prepared by the application outside the event loop; this API cannot interrupt
+an executing user callback. There is no asynchronous producer coroutine to
+leave suspended after a disconnect. Different connections may call their own
+producers concurrently on different worker contexts.
+
+HEAD retains the applicable Content-Length but does not pull the source. 204,
+205, and 304 also never pull it and follow the existing bodyless framing rules.
+A source is optional when no bytes will be pulled (zero length or a bodyless
+reply). Its destructor runs on all those paths too.
+
+An open file can pin a selected snapshot instead of reopening its pathname for
+each chunk. This example obtains its length from the same open handle:
+
+```cpp
+#include <fstream>
+
+class file_body final : public pace::http::body_source {
+public:
+    explicit file_body(const std::string& path)
+        : file_(path, std::ios::binary | std::ios::ate) {
+        if (!file_) throw std::runtime_error("cannot open snapshot");
+        const auto end = file_.tellg();
+        if (end < 0) throw std::runtime_error("cannot size snapshot");
+        size_ = static_cast<std::uint64_t>(end);
+        file_.seekg(0);
+        if (!file_) throw std::runtime_error("cannot seek snapshot");
+    }
+    std::uint64_t size() const noexcept { return size_; }
+    std::size_t read(std::span<char> destination) override {
+        file_.read(destination.data(), static_cast<std::streamsize>(destination.size()));
+        if (file_.bad()) throw std::runtime_error("cannot read snapshot");
+        return static_cast<std::size_t>(file_.gcount());
+    }
+private:
+    std::ifstream file_;
+    std::uint64_t size_ = 0;
+};
+
+pace::task<pace::http::server_response> backup(pace::http::request) {
+    auto file = std::make_unique<file_body>("backup.tar");
+    pace::http::streaming_response result;
+    result.head.content_type = "application/octet-stream";
+    result.content_length = file->size();
+    result.source = std::move(file);
+    co_return result;
+}
+```
+
+The application must ensure the contents of that open file remain a stable
+snapshot; retaining a handle does not prevent another writer modifying the same
+file in place.
+
+## Server deadlines
+
+`server_options` contains `bounds`, `admit`, `request_timeout`, `write_timeout`,
+and `response_buffer_bytes`. Both timeout values are `chrono::milliseconds`,
+default zero (disabled), and reject negative values. A zero response buffer is
+invalid. The timer handles are canceled when their phase ends, so completed
+requests do not retain long-lived sleeping tasks or timers.
+
+* The request budget starts before reading each head, including the wait for the
+  next keep-alive request, and ends when the accepted body/trailers are complete
+  or admission rejects. It includes synchronous admission. This is an absolute
+  budget, not an inactivity timeout: trickling bytes does not restart it.
+* The write budget starts when the response is ready, before encoding its head,
+  and covers all response bytes and producer calls. Early rejection and parser
+  error replies use the same write budget. It ends before graceful close, whose
+  existing separate transport bound still applies.
+* Expiry closes the connection and cancels pending transport operations. It does
+  not promise an HTTP 408 or any complete response after a partial write. A
+  rejected request does not continue running its request timer while its reply
+  is sent.
+* These budgets do not cover the final application handler, connection setup,
+  or the TLS handshake. Application work and transport setup require their own
+  lifetime/cancellation policy. Synchronous callbacks cannot be preempted;
+  expiry is also checked after each admission/producer call, but a callback that
+  never returns blocks the event loop.
+
 ## Strict framing and current boundaries
+
 
 | Input | Server result / client behavior |
 |---|---|
@@ -297,10 +479,11 @@ headers are preserved rather than generically combined. Host checking is syntact
 virtual hosting, authentication, authorization and origin policy belong to the
 application. There is no implicit URL decoding, JSON parser or router.
 
-HTTP/1.1 support here is bounded buffered request/response messaging. It does not
-claim every HTTP feature: no content-coding decompression, Expect handshake,
-CONNECT tunnel, server informational emission, streaming bodies, request deadline,
-automatic redirect/retry, proxy or HTTP/3 within this HTTP/1 module.
+HTTP/1.1 provides bounded buffered requests and either buffered or known-length
+streamed server responses. It does not claim every HTTP feature: no content-coding
+decompression, Expect handshake, CONNECT tunnel, server informational emission,
+streamed request bodies, automatic redirect/retry, proxy or HTTP/3 within this
+HTTP/1 module.
 HTTP/2, [HTTP/3](http3.md) and WebSocket use their own APIs; explicit hostname
 resolution is available through the optional [DNS extension](dns.md).
 EOF-delimited TLS responses additionally require a clean TLS close_notify; TLS

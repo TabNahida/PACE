@@ -83,9 +83,16 @@ no other operations active on that stream. It then stops its own context.
 
 ## Common adjustments
 
-- Pass `{"0.0.0.0", port}` to listen on all interfaces when that is intended.
+- Pass `{"::1", port}` to listen/connect over IPv6 loopback. Both default streams
+  and listeners infer the family from the address; `local_endpoint()` and
+  `remote_endpoint()` return the actual family and port.
+- Pass `{"0.0.0.0", port}` for all IPv4 interfaces, or `{"::", port}` for IPv6.
+  IPv6 listeners are IPv6-only by default. Explicitly pass
+  `{.ipv6_only = false}` when a wildcard listener should accept both families;
+  IPv4 peers then have mapped IPv6 endpoint addresses such as `::ffff:127.0.0.1`.
 - Pass port `0` and use `listener.local_endpoint().port` for an ephemeral test port.
-- Keep hostname resolution outside the I/O loop; endpoints currently accept only numeric IPv4.
+- Resolve hostnames with `pace::dns`; TCP endpoints accept numeric IPv4/IPv6.
+  Use the endpoint's numeric `scope_id` for scoped IPv6, without a `%zone` suffix.
 - Catch connect/read/write failures in the connection task. No per-operation timeout is built in.
 - For same-port multiworker servers, use separate listeners with supported `reuse_port`; see [execution](05-execution.md).
 

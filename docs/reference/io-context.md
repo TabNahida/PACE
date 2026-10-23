@@ -87,8 +87,36 @@ other ready work or blocking application code; they provide no real-time guarant
 
 `yield()` always schedules the current coroutine for a later ready-queue turn.
 Both waits belong to the owning context, and both throw cancellation when the
-context stops. There is no individual timer handle or timer-cancel API. They are
+context stops. These awaiters have no individual cancellation handle. They are
 cooperative scheduling tools, not CPU preemption or a task join.
+
+### Cancellable callback timers
+
+```cpp
+[[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline,
+                                   std::function<void()> callback);
+template<class Rep, class Period>
+[[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> delay,
+                                      std::function<void()> callback);
+// timer_handle is default-constructible and move-only.
+void timer_handle::cancel() noexcept;
+```
+
+Keep the returned handle alive to arm a one-shot callback. `cancel()`, handle
+destruction and move assignment release the old callback and its captures
+immediately. The handle may outlive its context. A due callback is removed before
+invocation, runs on the owning reactor, and is never invoked inline by `call_at`.
+Callbacks with equal deadlines run in registration order. Exceptions follow the
+same stop/drain/rethrow policy as `post`. Stopping the context discards remaining
+callbacks without invoking them. Dispatch is bounded so recursively scheduling
+already-due callbacks cannot starve other reactor work.
+
+Registration and cancellation are context-affine, or allowed while no thread is
+running the context. Use `post` from another thread. Empty callbacks are rejected;
+registration after stop throws `operation_canceled`. These timers are useful for
+scoped I/O deadlines: the callback can close the operation's stream, and normal
+completion destroys its timer handle without retaining a sleeping coroutine.
+They cannot interrupt a callback or coroutine that blocks the reactor thread.
 
 ## Awaiter types
 

@@ -351,16 +351,7 @@ struct basic_stream<Transport>::implementation {
             fragmented = true;
         }
     }
-    struct deadline_state { Transport* transport; bool expired = false; };
-    static task<void> deadline(std::shared_ptr<deadline_state> state, io_context& io,
-                               std::chrono::milliseconds timeout) {
-        try { co_await io.sleep_for(timeout); }
-        catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled) co_return;
-            throw;
-        }
-        if (state->transport) { state->expired = true; state->transport->close(); }
-    }
+
 };
 
 template<class T> basic_stream<T>::basic_stream(T transport, role mode, limits bounds)
@@ -533,18 +524,17 @@ template<class T> task<bool> basic_stream<T>::close_gracefully(std::uint16_t cod
     if (!impl_) throw std::logic_error("moved-from WebSocket stream");
     auto& p = *impl_; typename implementation::operation operation(p);
     if (p.close_received) { close(); co_return true; }
-    auto state = std::make_shared<typename implementation::deadline_state>();
-    state->transport = &p.transport;
-    struct detach { std::shared_ptr<typename implementation::deadline_state>& state; ~detach() { state->transport = nullptr; } } cleanup{state};
+    bool expired = false;
+    io_context::timer_handle deadline;
     try {
         p.check();
         const auto payload = close_payload(code, reason);
-        p.transport.context().spawn(implementation::deadline(state, p.transport.context(), timeout));
+        deadline = p.transport.context().call_after(timeout, [&] { expired = true; p.transport.close(); });
         if (!p.close_sent) { co_await p.frame(8, payload); p.close_sent = true; }
         while (!p.close_received) (void)co_await p.receive_message();
     } catch (...) {
         close();
-        if (!state->expired) throw;
+        if (!expired) throw;
     }
     close();
     co_return p.close_received;

@@ -3,12 +3,6 @@
 </p>
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="本地 Linux TCP echo：PACE 的吞吐和 p50 领先，Asio 的 p95 与 p99 领先。三库柱状图均从零开始，展示各轮范围。" width="100%"></a>
-</p>
-
-<p align="center"><a href="docs/performance.md">完整性能数据、测试方法与原始记录 →</a></p>
-
-<p align="center">
   <a href="https://github.com/TabNahida/PACE/actions/workflows/ci.yml"><img src="https://github.com/TabNahida/PACE/actions/workflows/ci.yml/badge.svg" alt="构建与测试"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-70dfc3" alt="MIT 许可证"></a>
 </p>
@@ -20,6 +14,12 @@
 - **按顺序编写异步代码。** 通过 `co_await` 等待连接、读写与定时器。
 - **自己决定任务在哪里执行。** 每个工作线程拥有独立事件循环，任务放置和线程归属清晰可控。
 - **只构建需要的模块。** 核心没有第三方运行时依赖，协议模块按需启用。
+
+<p align="center">
+  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="本地 Linux TCP echo：PACE 的吞吐和 p50 领先，Asio 的 p95 与 p99 领先。三库柱状图均从零开始，展示各轮范围。" width="100%"></a>
+</p>
+
+<p align="center"><a href="docs/performance.md">完整性能数据、测试方法与原始记录 →</a></p>
 
 ## 四层架构，按需组合
 

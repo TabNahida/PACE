@@ -4,10 +4,13 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
+#include <openssl/pem.h>
 
 #include <algorithm>
 #include <cerrno>
 #include <climits>
+#include <map>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 #if !defined(_WIN32)
@@ -35,6 +38,33 @@ namespace {
 void check_path(const std::string& path) {
     if (path.empty() || path.find('\0') != std::string::npos)
         throw std::invalid_argument("TLS PEM path must be nonempty without NUL bytes");
+}
+
+std::string dns_name(std::string_view value) {
+    if (value.empty() || value.size() > 253)
+        throw std::invalid_argument("TLS SNI requires an ASCII DNS name");
+    std::string result(value);
+    std::size_t label = 0;
+    char previous = '\0';
+    for (auto& c : result) {
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + ('a' - 'A'));
+        if (c == '.') {
+            if (label == 0 || label > 63 || previous == '-')
+                throw std::invalid_argument("invalid TLS SNI DNS label");
+            label = 0;
+        } else {
+            if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') ||
+                (label == 0 && c == '-'))
+                throw std::invalid_argument("invalid TLS SNI DNS name");
+            ++label;
+        }
+        previous = c;
+    }
+    unsigned char address[16];
+    if (label == 0 || label > 63 || result.back() == '-' ||
+        ::inet_pton(AF_INET, result.c_str(), address) == 1)
+        throw std::invalid_argument("TLS SNI requires a DNS name, not an IP address");
+    return result;
 }
 
 bool socket_interrupted() noexcept {
@@ -98,11 +128,18 @@ BIO_METHOD* socket_method() {
 
 struct context::implementation {
     role mode;
+    std::mutex mutex;
+    bool frozen = false;
     std::vector<unsigned char> alpn;
+    std::map<std::string, std::shared_ptr<implementation>, std::less<>> names;
+    sni_policy missing = sni_policy::use_default;
+    sni_policy unrecognized = sni_policy::use_default;
     std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)> handle{nullptr, SSL_CTX_free};
-    explicit implementation(role value) : mode(value) {
+    explicit implementation(role value, trust_source trust) : mode(value) {
         if (mode != role::client && mode != role::server)
             throw std::invalid_argument("invalid TLS context role");
+        if (trust != trust_source::system && trust != trust_source::application)
+            throw std::invalid_argument("invalid TLS trust source");
         ERR_clear_error();
         handle.reset(SSL_CTX_new(mode == role::client ? TLS_client_method() : TLS_server_method()));
         if (!handle || SSL_CTX_set_min_proto_version(handle.get(), TLS1_2_VERSION) != 1)
@@ -113,34 +150,138 @@ struct context::implementation {
         SSL_CTX_set_default_passwd_cb(handle.get(), [](char*, int, int, void*) { return 0; });
         if (mode == role::client) {
             SSL_CTX_set_verify(handle.get(), SSL_VERIFY_PEER, nullptr);
-            if (SSL_CTX_set_default_verify_paths(handle.get()) != 1)
+            if (trust == trust_source::system && SSL_CTX_set_default_verify_paths(handle.get()) != 1)
                 tls_error("load OpenSSL default trust paths");
         }
     }
+    void check_mutable() const {
+        if (frozen) throw std::logic_error("TLS configuration is frozen");
+    }
+    void freeze() {
+        std::lock_guard lock(mutex);
+        frozen = true;
+    }
+    void enable_sni() {
+        // The servername callback runs after session resumption. Disable both
+        // TLS 1.2 and TLS 1.3 resumption on routing contexts so a ticket cannot
+        // bypass this connection's independent hostname/certificate selection.
+        SSL_CTX_set_session_cache_mode(handle.get(), SSL_SESS_CACHE_OFF);
+        SSL_CTX_set_options(handle.get(), SSL_OP_NO_TICKET);
+        if (SSL_CTX_set_num_tickets(handle.get(), 0) != 1)
+            tls_error("disable TLS SNI session tickets");
+        SSL_CTX_set_tlsext_servername_arg(handle.get(), this);
+        // OpenSSL casts this callback inside a macro. Keep the lambda outside
+        // that expansion so MSVC parses its parameter list and body correctly.
+        const auto callback =
+            +[](SSL* ssl, int* alert, void* argument) noexcept -> int {
+                const auto& config = *static_cast<implementation*>(argument);
+                try {
+                    const char* requested = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+                    if (requested) {
+                        const auto name = dns_name(requested);
+                        const auto found = config.names.find(name);
+                        if (found != config.names.end()) {
+                            if (!SSL_set_SSL_CTX(ssl, found->second->handle.get())) {
+                                *alert = SSL_AD_INTERNAL_ERROR;
+                                return SSL_TLSEXT_ERR_ALERT_FATAL;
+                            }
+                            return SSL_TLSEXT_ERR_OK;
+                        }
+                    }
+                    if ((requested ? config.unrecognized : config.missing) == sni_policy::reject) {
+                        *alert = SSL_AD_UNRECOGNIZED_NAME;
+                        return SSL_TLSEXT_ERR_ALERT_FATAL;
+                    }
+                    return SSL_TLSEXT_ERR_NOACK;
+                } catch (...) {
+                    // No C++ exception may cross OpenSSL's callback boundary.
+                    *alert = SSL_AD_UNRECOGNIZED_NAME;
+                    return SSL_TLSEXT_ERR_ALERT_FATAL;
+                }
+            };
+        SSL_CTX_set_tlsext_servername_callback(handle.get(), callback);
+    }
 };
 
-context::context(role mode) : impl_(std::make_shared<implementation>(mode)) {}
+context::context(role mode, trust_source trust) : impl_(std::make_shared<implementation>(mode, trust)) {}
 context::~context() = default;
 context::context(context&&) noexcept = default;
 context& context::operator=(context&&) noexcept = default;
 void context::load_verify_file(const std::string& file) {
     check_path(file);
     if (!impl_) throw std::logic_error("moved-from TLS context");
+    std::lock_guard lock(impl_->mutex);
+    impl_->check_mutable();
     ERR_clear_error();
     if (SSL_CTX_load_verify_locations(impl_->handle.get(), file.c_str(), nullptr) != 1)
         tls_error("load TLS trust file");
 }
+void context::load_verify_pem(std::string_view certificates) {
+    if (!impl_) throw std::logic_error("moved-from TLS context");
+    std::lock_guard lock(impl_->mutex);
+    impl_->check_mutable();
+    std::vector<std::unique_ptr<X509, decltype(&X509_free)>> parsed;
+    constexpr std::string_view begin = "-----BEGIN CERTIFICATE-----";
+    constexpr std::string_view end = "-----END CERTIFICATE-----";
+    while (!certificates.empty()) {
+        const auto first = certificates.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) break;
+        certificates.remove_prefix(first);
+        const auto last = certificates.find(end);
+        if (!certificates.starts_with(begin) || last == std::string_view::npos ||
+            last + end.size() > INT_MAX)
+            throw std::invalid_argument("TLS trust PEM must contain only complete CERTIFICATE blocks");
+        const auto block = certificates.substr(0, last + end.size());
+        ERR_clear_error();
+        std::unique_ptr<BIO, decltype(&BIO_free)> input(
+            BIO_new_mem_buf(block.data(), static_cast<int>(block.size())), BIO_free);
+        if (!input) tls_error("create TLS trust PEM input");
+        std::unique_ptr<X509, decltype(&X509_free)> cert(
+            PEM_read_bio_X509(input.get(), nullptr, nullptr, nullptr), X509_free);
+        if (!cert) tls_error("parse TLS trust PEM");
+        parsed.push_back(std::move(cert));
+        certificates.remove_prefix(block.size());
+    }
+    if (parsed.empty()) throw std::invalid_argument("TLS trust PEM contains no certificates");
+    // Parse the entire bundle before changing the store. The store takes its own
+    // X509 references, with no application memory or mutable native handle kept.
+    auto* store = SSL_CTX_get_cert_store(impl_->handle.get());
+    for (const auto& cert : parsed) {
+        ERR_clear_error();
+        if (X509_STORE_add_cert(store, cert.get()) != 1) {
+            const auto error = ERR_peek_last_error();
+            if (ERR_GET_LIB(error) != ERR_LIB_X509 ||
+                ERR_GET_REASON(error) != X509_R_CERT_ALREADY_IN_HASH_TABLE)
+                tls_error("add TLS trust certificate");
+            ERR_clear_error();
+        }
+    }
+}
 void context::use_certificate_chain(const std::string& certificate, const std::string& key) {
     check_path(certificate); check_path(key);
     if (!impl_) throw std::logic_error("moved-from TLS context");
+    std::lock_guard lock(impl_->mutex);
+    impl_->check_mutable();
     ERR_clear_error();
-    if (SSL_CTX_use_certificate_chain_file(impl_->handle.get(), certificate.c_str()) != 1 ||
-        SSL_CTX_use_PrivateKey_file(impl_->handle.get(), key.c_str(), SSL_FILETYPE_PEM) != 1 ||
-        SSL_CTX_check_private_key(impl_->handle.get()) != 1)
+    // Stage the entire pair before touching the live configuration. In
+    // particular, a failed key load must not replace a previously valid leaf.
+    std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)> staged(SSL_CTX_new(TLS_method()), SSL_CTX_free);
+    if (!staged) tls_error("create TLS certificate staging context");
+    SSL_CTX_set_default_passwd_cb(staged.get(), [](char*, int, int, void*) { return 0; });
+    if (SSL_CTX_use_certificate_chain_file(staged.get(), certificate.c_str()) != 1 ||
+        SSL_CTX_use_PrivateKey_file(staged.get(), key.c_str(), SSL_FILETYPE_PEM) != 1 ||
+        SSL_CTX_check_private_key(staged.get()) != 1)
         tls_error("load TLS certificate/private key");
+    STACK_OF(X509)* chain = nullptr;
+    SSL_CTX_get0_chain_certs(staged.get(), &chain);
+    if (SSL_CTX_use_cert_and_key(impl_->handle.get(), SSL_CTX_get0_certificate(staged.get()),
+                                SSL_CTX_get0_privatekey(staged.get()), chain, 1) != 1)
+        tls_error("install TLS certificate/private key");
 }
 void context::set_alpn_protocols(const std::vector<std::string>& protocols) {
     if (!impl_) throw std::logic_error("moved-from TLS context");
+    std::lock_guard lock(impl_->mutex);
+    impl_->check_mutable();
     std::vector<unsigned char> encoded;
     for (const auto& protocol : protocols) {
         if (protocol.empty() || protocol.size() > 255 || encoded.size() + protocol.size() + 1 > 65535)
@@ -167,6 +308,33 @@ void context::set_alpn_protocols(const std::vector<std::string>& protocols) {
     }
     impl_->alpn = std::move(encoded);
 }
+void context::add_server_name(std::string name, const context& configuration) {
+    if (!impl_ || !configuration.impl_) throw std::logic_error("moved-from TLS context");
+    if (impl_ == configuration.impl_) throw std::invalid_argument("TLS SNI target cannot be itself");
+    name = dns_name(name);
+    std::scoped_lock lock(impl_->mutex, configuration.impl_->mutex);
+    impl_->check_mutable();
+    if (impl_->mode != role::server || configuration.impl_->mode != role::server)
+        throw std::invalid_argument("TLS SNI requires server contexts");
+    if (!configuration.impl_->names.empty())
+        throw std::invalid_argument("TLS SNI target cannot contain another routing table");
+    if (impl_->names.contains(name)) throw std::invalid_argument("duplicate TLS SNI name");
+    impl_->enable_sni();
+    impl_->names.emplace(std::move(name), configuration.impl_);
+    configuration.impl_->frozen = true;
+}
+void context::set_server_name_policy(sni_policy missing, sni_policy unrecognized) {
+    if (!impl_) throw std::logic_error("moved-from TLS context");
+    if ((missing != sni_policy::use_default && missing != sni_policy::reject) ||
+        (unrecognized != sni_policy::use_default && unrecognized != sni_policy::reject))
+        throw std::invalid_argument("invalid TLS SNI policy");
+    std::lock_guard lock(impl_->mutex);
+    impl_->check_mutable();
+    if (impl_->mode != role::server) throw std::invalid_argument("TLS SNI requires a server context");
+    impl_->enable_sni();
+    impl_->missing = missing;
+    impl_->unrecognized = unrecognized;
+}
 
 struct stream::implementation {
     tcp::stream transport;
@@ -179,6 +347,7 @@ struct stream::implementation {
     implementation(tcp::stream socket, std::shared_ptr<tls::context::implementation> config)
         : transport(std::move(socket)), configuration(std::move(config)) {
         if (!configuration) throw std::logic_error("moved-from TLS context");
+        configuration->freeze();
         ERR_clear_error();
         ssl.reset(SSL_new(configuration->handle.get()));
         if (!ssl) tls_error("create TLS session");
@@ -331,10 +500,20 @@ task<void> stream::shutdown(std::chrono::milliseconds timeout) {
     if (!impl_) throw std::logic_error("moved-from TLS stream");
     auto& p = *impl_;
     implementation::operation operation(p);
+    bool timed_out = false;
+    io_context::timer_handle deadline;
     try {
         p.check(true);
-        const auto start = std::chrono::steady_clock::now();
+        if (timeout > std::chrono::milliseconds::zero()) {
+            deadline = p.transport.context().call_after(timeout, [&] {
+                timed_out = true;
+                p.transport.close();
+            });
+        }
         for (;;) {
+            // Readiness may already have queued this continuation before the
+            // deadline closed the fd; in that case the waiter has no cancel code.
+            if (timed_out && !p.transport.context().stopped()) break;
             p.check(true);
             ERR_clear_error();
             const int result = SSL_shutdown(p.ssl.get());
@@ -342,12 +521,14 @@ task<void> stream::shutdown(std::chrono::milliseconds timeout) {
             const int error = result < 0 ? SSL_get_error(p.ssl.get(), result) : SSL_ERROR_WANT_READ;
             if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE)
                 tls_error("TLS shutdown failed", p.ssl.get());
-            if (std::chrono::duration<long double>(std::chrono::steady_clock::now() - start) >=
-                std::chrono::duration<long double>(timeout)) break;
-            // Timer polling makes the bound independent of a peer's close_notify.
-            // No detached timeout coroutine can outlive the stream.
-            co_await p.transport.context().sleep_for(std::chrono::milliseconds(1));
+            if (timeout <= std::chrono::milliseconds::zero()) break;
+            co_await p.wait(error);
         }
+    } catch (const std::system_error& error) {
+        close();
+        if (timed_out && error.code() == std::errc::operation_canceled &&
+            !p.transport.context().stopped()) co_return;
+        throw;
     } catch (...) { close(); throw; }
     close();
 }

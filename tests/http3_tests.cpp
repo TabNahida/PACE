@@ -23,11 +23,11 @@ struct fixture {
     pace::io_context io;
     pace::quic::context server{pace::quic::role::server}, client;
     std::unique_ptr<pace::quic::listener> listener;
-    fixture(const std::filesystem::path& certs, std::string protocol = "h3") {
+    fixture(const std::filesystem::path& certs, std::string protocol = "h3", const char* address = "127.0.0.1") {
         server.use_certificate_chain((certs/"localhost.pem").string(), (certs/"localhost-key.pem").string());
         client.load_verify_file((certs/"ca.pem").string());
         server.set_alpn_protocols({protocol}); client.set_alpn_protocols({protocol});
-        listener = std::make_unique<pace::quic::listener>(io, pace::udp::endpoint{"127.0.0.1", 0}, server);
+        listener = std::make_unique<pace::quic::listener>(io, pace::udp::endpoint{address, 0}, server);
     }
 };
 std::string payload() {
@@ -80,8 +80,8 @@ pace::task<void> batch_client(fixture& test, bool& complete) {
     require(replies[4].body == "ok", "batch input ordering");
     complete = true; test.io.stop();
 }
-void roundtrip(const std::filesystem::path& certs) {
-    fixture test(certs); bool complete = false;
+void roundtrip(const std::filesystem::path& certs, const char* address = "127.0.0.1") {
+    fixture test(certs, "h3", address); bool complete = false;
     test.io.spawn(pace::http3::serve(*test.listener, echo));
     test.io.spawn(batch_client(test, complete)); test.io.run(); require(complete, "roundtrip incomplete");
 }
@@ -270,7 +270,7 @@ int main(int argc, char** argv) {
     watchdog deadline;
     try {
         const auto certs = argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path()/"certs";
-        roundtrip(certs); stream_credit(certs); interop(certs); errors(certs);
+        roundtrip(certs); roundtrip(certs, "::1"); stream_credit(certs); interop(certs); errors(certs);
         std::cout << "HTTP/3 encrypted multiplexing, flow control, trailers, independent wire peers, limits, ALPN and cancellation passed\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

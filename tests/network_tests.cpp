@@ -1,5 +1,9 @@
 #include <pace/tcp.hpp>
 #include <pace/pace.hpp>
+#include <pace/detail/socket_address.hpp>
+#ifndef _WIN32
+#include <netinet/tcp.h>
+#endif
 
 #include <array>
 #include <atomic>
@@ -87,6 +91,124 @@ pace::task<void> connect_errors(pace::io_context& context) {
     try { co_await client.connect(std::move(malformed)); }
     catch (const std::invalid_argument&) { invalid = true; }
     require(invalid, "embedded NUL address validation");
+}
+
+pace::task<void> endpoint_exchange(pace::io_context& io, pace::tcp::listener& listener,
+                                  pace::tcp::endpoint destination, bool explicit_family = false) {
+    pace::tcp::stream client(io, explicit_family ? pace::address_family::ipv6 : pace::address_family::unspecified);
+    client.set_no_delay();
+    const auto original_handle = client.native_handle();
+    co_await client.connect(std::move(destination));
+    if (explicit_family) require(client.native_handle() == original_handle, "explicit family changed native handle");
+    int no_delay = 0;
+    pace::detail::socket_address_length option_length = sizeof(no_delay);
+    require(::getsockopt(client.native_handle(), IPPROTO_TCP, TCP_NODELAY,
+                        reinterpret_cast<char*>(&no_delay), &option_length) == 0 && no_delay != 0,
+            "TCP_NODELAY was lost while selecting IPv6");
+    auto accepted = co_await listener.accept();
+    const auto client_local = client.local_endpoint(), client_remote = client.remote_endpoint();
+    const auto server_local = accepted.local_endpoint(), server_remote = accepted.remote_endpoint();
+    require(client_local.family == client_remote.family && client_local.scope_id == 0,
+            "client endpoint family/scope");
+    require(server_local.family == listener.local_endpoint().family && server_remote.family == server_local.family,
+            "accepted endpoint family");
+    require(client_remote.port == server_local.port && client_local.port == server_remote.port,
+            "local/remote TCP port inspection");
+    if (client_local.family != server_remote.family) {
+        require(server_remote.family == pace::address_family::ipv6 && server_remote.address == "::ffff:127.0.0.1",
+                "dual-stack peer must retain IPv4-mapped IPv6 identity");
+    } else require(client_local.address == server_remote.address, "TCP peer address inspection");
+    const std::string payload("IPv6\0payload", 12);
+    co_await client.write_all(payload);
+    std::array<char, 64> buffer{};
+    std::size_t received = 0;
+    while (received < payload.size()) {
+        const auto size = co_await accepted.read_some(std::span<char>(buffer).subspan(received));
+        require(size != 0, "IPv6 premature EOF"); received += size;
+    }
+    require(std::string_view(buffer.data(), received) == payload, "IPv6 binary transfer");
+    co_await accepted.write_all("ok");
+    received = 0;
+    while (received < 2) {
+        const auto size = co_await client.read_some(std::span<char>(buffer).subspan(received));
+        require(size != 0, "IPv6 reply EOF"); received += size;
+    }
+    require(std::string_view(buffer.data(), received) == "ok", "IPv6 reply");
+    pace::tcp::stream moved(std::move(accepted));
+    require(moved.remote_endpoint().address == server_remote.address, "IPv6 move lost peer endpoint");
+    moved.close();
+    bool closed = false;
+    try { (void)moved.remote_endpoint(); }
+    catch (const std::system_error& error) { closed = error.code() == std::errc::bad_file_descriptor; }
+    require(closed, "closed peer endpoint inspection");
+}
+
+pace::task<void> ipv6_loopback(pace::io_context& io) {
+    pace::tcp::listener listener(io, {"::1", 0});
+    const auto local = listener.local_endpoint();
+    require(local.address == "::1" && local.port != 0 && local.family == pace::address_family::ipv6 && local.scope_id == 0,
+            "IPv6 listener endpoint");
+    co_await endpoint_exchange(io, listener, local);
+    co_await endpoint_exchange(io, listener, local, true);
+    pace::tcp::stream fixed(io, pace::address_family::ipv4);
+    bool rejected = false;
+    try { co_await fixed.connect(local); }
+    catch (const std::system_error& error) { rejected = error.code() == std::errc::address_family_not_supported; }
+    require(rejected, "explicit TCP family mismatch");
+}
+
+pace::task<void> ipv6_wildcards(pace::io_context& io) {
+    pace::tcp::listener only_v6(io, {"::", 0});
+    auto local = only_v6.local_endpoint();
+    require(local.address == "::" && local.family == pace::address_family::ipv6, "IPv6 wildcard inspection");
+    int only = 0;
+    pace::detail::socket_address_length length = sizeof(only);
+    require(::getsockopt(only_v6.native_handle(), IPPROTO_IPV6, IPV6_V6ONLY,
+                        reinterpret_cast<char*>(&only), &length) == 0 && only == 1,
+            "IPv6 listeners must default to IPV6_V6ONLY");
+    // A separate IPv4 listener must be able to own the same port.
+    pace::tcp::listener v4(io, {"0.0.0.0", local.port});
+    co_await endpoint_exchange(io, only_v6, {"::1", local.port});
+    co_await endpoint_exchange(io, v4, {"127.0.0.1", local.port});
+
+    pace::tcp::listener dual(io, {"::", 0}, {.ipv6_only = false});
+    local = dual.local_endpoint();
+    co_await endpoint_exchange(io, dual, {"::1", local.port});
+    co_await endpoint_exchange(io, dual, {"127.0.0.1", local.port});
+    // Explicit IPv4-mapped numeric destinations also work on an IPv6 stream.
+    co_await endpoint_exchange(io, dual, {"::ffff:127.0.0.1", local.port}, true);
+}
+
+pace::task<void> ipv6_address_validation(pace::io_context& io) {
+    using pace::address_family;
+    for (const pace::tcp::endpoint& endpoint : {
+            pace::tcp::endpoint{"::1", 0, address_family::ipv4},
+            pace::tcp::endpoint{"127.0.0.1", 0, address_family::ipv6},
+            pace::tcp::endpoint{"127.0.0.1", 0, address_family::unspecified, 1},
+            pace::tcp::endpoint{"::1%1", 0}, pace::tcp::endpoint{"fe80::1%lo", 0},
+            pace::tcp::endpoint{"[::1]", 0}, pace::tcp::endpoint{"::gg", 0},
+            pace::tcp::endpoint{"::1", 0, static_cast<address_family>(99)},
+            pace::tcp::endpoint{std::string("::1\0suffix", 10), 0}}) {
+        bool rejected = false;
+        try { pace::tcp::listener listener(io, endpoint); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        require(rejected, "invalid IPv6 listener endpoint accepted");
+        pace::tcp::stream client(io);
+        rejected = false;
+        try { co_await client.connect(endpoint); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        require(rejected, "invalid IPv6 connect endpoint accepted");
+    }
+    bool rejected = false;
+    try { pace::tcp::listener listener(io, {"127.0.0.1", 0}, {.ipv6_only = false}); }
+    catch (const std::invalid_argument&) { rejected = true; }
+    require(rejected, "dual-stack option on IPv4 must be rejected");
+    // Link-local reachability depends on host interfaces. The shared conversion
+    // must preserve its interface index without a DNS/interface-name lookup.
+    const auto native = pace::detail::parse_socket_address("fe80::1234", 321, address_family::ipv6, 42);
+    const auto scoped = pace::detail::socket_endpoint<pace::tcp::endpoint>(native.data(), native.length);
+    require(scoped.address == "fe80::1234" && scoped.port == 321 && scoped.scope_id == 42 &&
+            scoped.family == address_family::ipv6, "IPv6 scope must survive native endpoint conversion");
 }
 
 pace::task<void> short_read_server(std::shared_ptr<pace::tcp::listener> listener,
@@ -368,6 +490,22 @@ pace::task<void> graceful_close_bounds(pace::io_context& context) {
     require(co_await client.read_some(reply) == 0, "drained connection must close without reset");
 }
 
+pace::task<void> graceful_close_timer_cleanup(pace::io_context& context) {
+    pace::tcp::listener listener(context, {"::1", 0});
+    {
+        pace::tcp::stream client(context);
+        co_await client.connect(listener.local_endpoint());
+        auto accepted = co_await listener.accept();
+        client.close();
+        co_await accepted.close_gracefully(10ms);
+        require(!accepted.is_open(), "peer EOF must finish graceful close");
+    }
+    // The deadline captured the destroyed stream and coroutine frame. It must
+    // already have been removed, including when EOF completed synchronously.
+    co_await context.sleep_for(25ms);
+    co_await endpoint_exchange(context, listener, listener.local_endpoint());
+}
+
 pace::task<void> hold_connection(std::shared_ptr<pace::tcp::listener> listener) {
     auto stream = co_await listener->accept();
     try { co_await stream.context().sleep_for(24h); }
@@ -431,6 +569,9 @@ int main() {
 #endif
         run_test("TCP binary roundtrip and ownership", tcp_roundtrip);
         run_test("connect and endpoint errors", connect_errors);
+        run_test("IPv6 loopback, endpoint inspection and family selection", ipv6_loopback);
+        run_test("IPv6 wildcard, IPv6-only and dual-stack listeners", ipv6_wildcards);
+        run_test("IPv6 family, scope and malformed endpoint validation", ipv6_address_validation);
         run_test("short-read rearm, queued bytes, move, empty buffer and EOF", short_read_rearm);
 #ifndef PACE_CORE_ONLY_TESTS
         run_test("HTTP framing, fragmentation, limits and keep-alive", http_protocol);
@@ -439,6 +580,7 @@ int main() {
         run_test("stop cancels pending read", stop_pending_read);
         run_test("socket close cancels pending read", close_pending_read);
         run_test("graceful close drains input and bounds peer wait", graceful_close_bounds);
+        run_test("completed IPv6 graceful close removes its deadline", graceful_close_timer_cleanup);
         run_test("stop cancels graceful close", graceful_close_cancellation);
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

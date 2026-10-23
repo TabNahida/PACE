@@ -1,12 +1,16 @@
 #include <pace/http.hpp>
 
+#include <algorithm>
 #include <array>
+#include <cstdio>
+#include <type_traits>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <limits>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
@@ -26,6 +30,7 @@ request message(std::string method = "GET", std::string target = "/") {
 }
 
 pace::task<response> route(request value) {
+    if (value.target == "/host") co_return response{.body = std::string(value.header("Host"))};
     if (value.target == "/chunks") {
         response result{.body = value.body.empty() ? "chunk response" : value.body};
         result.chunked = true;
@@ -88,6 +93,18 @@ pace::task<void> normal_client(pace::io_context& io) {
     bool rejected = false;
     try { co_await client.send(message()); } catch (const std::logic_error&) { rejected = true; }
     require(rejected, "closed HTTP client accepted another request");
+}
+
+pace::task<void> ipv6_http_authority(pace::io_context& io) {
+    auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"::1", 0});
+    io.spawn(server(listener));
+    const auto endpoint = listener->local_endpoint();
+    const auto result = co_await pace::http::get(io, endpoint, "/host");
+    require(result.body == "[::1]:" + std::to_string(endpoint.port), "IPv6 default Host must bracket the literal");
+    auto outgoing = message("GET", "/host");
+    outgoing.headers.front().value = "[::1]";
+    const auto supplied = co_await pace::http::fetch(io, endpoint, outgoing);
+    require(supplied.body == "[::1]", "supplied IPv6 Host was not preserved");
 }
 
 pace::task<void> chunk_pipeline(pace::io_context& io) {
@@ -307,7 +324,348 @@ pace::task<void> https_exchange(pace::io_context& io) {
 }
 #endif
 
-using test_body = pace::task<void>(*)(pace::io_context&);
+
+struct producer_state {
+    std::size_t admissions = 0, handled = 0, reads = 0, destroyed = 0, largest_buffer = 0;
+    std::uint64_t produced = 0;
+};
+constexpr std::uint64_t large_response_bytes = 4 * 1024 * 1024 + 113;
+constexpr std::uint64_t stalled_response_bytes = 128 * 1024 * 1024;
+
+class generated_body final : public pace::http::body_source {
+public:
+    generated_body(std::shared_ptr<producer_state> state, std::uint64_t length, unsigned failure = 0)
+        : state_(std::move(state)), length_(length), failure_(failure) {}
+    ~generated_body() override { ++state_->destroyed; }
+    std::size_t read(std::span<char> output) override {
+        ++state_->reads;
+        state_->largest_buffer = std::max(state_->largest_buffer, output.size());
+        if (failure_ == 1) return 0;
+        if (failure_ == 2) throw std::runtime_error("producer read failure");
+        if (failure_ == 3) return output.size() + 1;
+        const auto count = static_cast<std::size_t>(std::min<std::uint64_t>(output.size(), length_ - offset_));
+        for (std::size_t index = 0; index < count; ++index)
+            output[index] = static_cast<char>((offset_ + index) % 251);
+        offset_ += count; state_->produced += count;
+        return count;
+    }
+private:
+    std::shared_ptr<producer_state> state_;
+    std::uint64_t length_, offset_ = 0;
+    unsigned failure_;
+};
+
+class open_file_body final : public pace::http::body_source {
+public:
+    explicit open_file_body(std::shared_ptr<producer_state> state) : state_(std::move(state)), file_(std::tmpfile()) {
+        if (!file_) throw std::runtime_error("cannot open temporary streaming test file");
+        std::array<char, 4096> block{};
+        std::uint64_t offset = 0;
+        while (offset < large_response_bytes) {
+            const auto count = static_cast<std::size_t>(std::min<std::uint64_t>(block.size(), large_response_bytes - offset));
+            for (std::size_t i = 0; i < count; ++i) block[i] = static_cast<char>((offset + i) % 251);
+            if (std::fwrite(block.data(), 1, count, file_) != count) {
+                std::fclose(file_); file_ = nullptr;
+                throw std::runtime_error("cannot prepare streaming test file");
+            }
+            offset += count;
+        }
+        std::rewind(file_);
+    }
+    ~open_file_body() override { std::fclose(file_); ++state_->destroyed; }
+    std::size_t read(std::span<char> output) override {
+        ++state_->reads;
+        state_->largest_buffer = std::max(state_->largest_buffer, output.size());
+        const auto count = std::fread(output.data(), 1, output.size(), file_);
+        if (std::ferror(file_)) throw std::runtime_error("streaming test file read failed");
+        state_->produced += count;
+        return count;
+    }
+private:
+    std::shared_ptr<producer_state> state_;
+    std::FILE* file_;
+};
+
+pace::task<pace::http::server_response> admitted_route(std::shared_ptr<producer_state> state, request value) {
+    ++state->handled;
+    if (value.target == "/generated" || value.target == "/stalled" || value.target == "/broken" ||
+        value.target == "/file" || value.target == "/bodyless" || value.target == "/invalid-stream" ||
+        value.target == "/throw-source" || value.target == "/overrun-source" || value.target == "/huge") {
+        const auto length = value.target == "/huge" ? std::numeric_limits<std::uint64_t>::max() :
+                            value.target == "/stalled" ? stalled_response_bytes : large_response_bytes;
+        pace::http::streaming_response result;
+        result.content_length = length;
+        if (value.target == "/file") result.source = std::make_unique<open_file_body>(state);
+        else result.source = std::make_unique<generated_body>(state, length,
+            value.target == "/broken" ? 1 : value.target == "/throw-source" ? 2 : value.target == "/overrun-source" ? 3 : 0);
+        if (value.target == "/bodyless") result.head.status = 205;
+        if (value.target == "/invalid-stream") result.head.body = "conflicting buffered body";
+        co_return result;
+    }
+    co_return response{.body = value.body.empty() ? value.target : value.body};
+}
+
+struct http_fixture {
+    std::shared_ptr<pace::tcp::listener> listener;
+    std::shared_ptr<producer_state> state = std::make_shared<producer_state>();
+#ifdef PACE_HAS_TLS
+    std::shared_ptr<pace::tls::context> configuration;
+    std::shared_ptr<pace::tls::context> trust;
+#endif
+};
+
+pace::task<void> admitted_server(http_fixture fixture, pace::http::server_options options) {
+    pace::http::server_handler handle = [state = fixture.state](request value) {
+        return admitted_route(state, std::move(value));
+    };
+#ifdef PACE_HAS_TLS
+    if (fixture.configuration) {
+        co_await pace::http::serve(*fixture.listener, *fixture.configuration, handle, options);
+        co_return;
+    }
+#endif
+    co_await pace::http::serve(*fixture.listener, handle, options);
+}
+
+template<class Transport>
+http_fixture start_admitted_server(pace::io_context& io, std::chrono::milliseconds request_timeout = 1s,
+                                  std::chrono::milliseconds write_timeout = 2s,
+                                  std::size_t response_buffer_bytes = 4096,
+                                  std::shared_ptr<producer_state> state = {}) {
+    http_fixture result;
+    if (state) result.state = std::move(state);
+    result.listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
+#ifdef PACE_HAS_TLS
+    if constexpr (std::is_same_v<Transport, pace::tls::stream>) {
+        result.configuration = std::make_shared<pace::tls::context>(pace::tls::role::server);
+        result.configuration->use_certificate_chain(cert("localhost.pem"), cert("localhost-key.pem"));
+        result.configuration->set_alpn_protocols({"http/1.1"});
+        result.trust = std::make_shared<pace::tls::context>();
+        result.trust->load_verify_file(cert("ca.pem"));
+        result.trust->set_alpn_protocols({"http/1.1"});
+    }
+#endif
+    pace::http::server_options options;
+    options.bounds.max_body_bytes = 2;
+    options.response_buffer_bytes = response_buffer_bytes;
+    options.request_timeout = request_timeout;
+    options.write_timeout = write_timeout;
+    options.admit = [state = result.state](const pace::http::request_head& head) {
+        ++state->admissions;
+        require(head.header("HOST") == "localhost", "admission lost validated Host");
+        if (head.target == "/unauthorized") {
+            require(head.content_length == 1024 && !head.chunked, "admission lost parsed content length");
+            return pace::http::admission::reject(response{.status = 401, .body = "unauthorized\n"});
+        }
+        if (head.target == "/throw-admission") throw std::runtime_error("admission failure");
+        if (head.target == "/small") return pace::http::admission::accept(4);
+        if (head.target == "/large") return pace::http::admission::accept(16);
+        if (head.target == "/zero") return pace::http::admission::accept(0);
+        return pace::http::admission::accept();
+    };
+    io.spawn(admitted_server(result, options));
+    return result;
+}
+
+template<class Transport>
+pace::task<Transport> admitted_connect(pace::io_context& io, const http_fixture& fixture) {
+    if constexpr (std::is_same_v<Transport, pace::tcp::stream>) {
+        Transport socket(io);
+        co_await socket.connect(fixture.listener->local_endpoint());
+        co_return socket;
+    }
+#ifdef PACE_HAS_TLS
+    else {
+        Transport socket(io, *fixture.trust);
+        co_await socket.connect(fixture.listener->local_endpoint(), "localhost");
+        co_return socket;
+    }
+#endif
+}
+
+template<class Transport>
+pace::task<std::string> admitted_raw(pace::io_context& io, const http_fixture& fixture, std::string wire,
+                                    bool expect_truncation = false) {
+    auto socket = co_await admitted_connect<Transport>(io, fixture);
+    co_await socket.write_all(wire);
+    std::array<char, 2048> buffer{};
+    std::string result;
+    try {
+        while (const auto count = co_await socket.read_some(buffer)) {
+            result.append(buffer.data(), count);
+            require(result.size() < 16384, "small response exceeded bound");
+        }
+    } catch (const std::system_error&) { if (!expect_truncation) throw; }
+    co_return result;
+}
+
+template<class Transport>
+pace::task<void> admission_scenarios(pace::io_context& io) {
+    auto fixture = start_admitted_server<Transport>(io, 500ms);
+    struct test_case { const char* wire; unsigned status; bool callback; };
+    const test_case cases[]{
+        {"POST /unauthorized HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1024\r\n\r\n", 401, true},
+        {"POST /small HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n", 413, true},
+        {"POST /small HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n2\r\n", 413, true},
+        {"POST /zero HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n1\r\n", 413, true},
+        {"POST /default HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\n\r\n", 413, true},
+        {"POST /throw-admission HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\n\r\n", 500, true},
+        {"POST /small HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\nContent-Length: 1\r\n\r\n", 400, false},
+        {"POST /small HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nContent-Length: 1\r\n\r\n", 400, false},
+    };
+    for (const auto& test : cases) {
+        const auto callbacks = fixture.state->admissions;
+        const auto result = co_await admitted_raw<Transport>(io, fixture, test.wire);
+        require(result.starts_with("HTTP/1.1 " + std::to_string(test.status)), "head admission failed before withheld body upload");
+        require(result.find("Connection: close\r\n") != std::string::npos, "early rejection must close");
+        require(fixture.state->admissions == callbacks + test.callback, "admission called before framing validation");
+        require(fixture.state->handled == 0, "rejected body reached final handler");
+    }
+    pace::http::basic_client<Transport> client(co_await admitted_connect<Transport>(io, fixture));
+    for (auto target : {"/small", "/large", "/small", "/large", "/zero"}) {
+        auto outgoing = message("POST", target);
+        outgoing.body = target == std::string_view("/large") ? "0123456789abcdef" :
+                        target == std::string_view("/zero") ? "" : "1234";
+        outgoing.chunked = target == std::string_view("/large");
+        const auto expected = outgoing.body.empty() ? std::string(target) : outgoing.body;
+        const auto result = co_await client.send(std::move(outgoing));
+        require(result.status == 200 && result.body == expected && client.is_open(), "keep-alive did not select fresh body limit");
+    }
+    client.close();
+    // The larger previous route must not raise the next request's limit, even
+    // when both heads and the accepted body arrived in one transport read.
+    const auto pipelined = co_await admitted_raw<Transport>(io, fixture,
+        "POST /large HTTP/1.1\r\nHost: localhost\r\nContent-Length: 16\r\n\r\n0123456789abcdef"
+        "POST /small HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n");
+    require(pipelined.starts_with("HTTP/1.1 200") && pipelined.find("HTTP/1.1 413") != std::string::npos,
+            "pipelined route inherited previous body limit");
+}
+
+template<class Transport>
+pace::task<void> consume_large(pace::io_context& io, const http_fixture& fixture, const char* target) {
+    auto socket = co_await admitted_connect<Transport>(io, fixture);
+    co_await socket.write_all(std::string("GET ") + target + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    std::array<char, 8192> buffer{};
+    std::string head;
+    std::uint64_t received = 0;
+    bool parsed_head = false;
+    while (const auto count = co_await socket.read_some(buffer)) {
+        std::string_view payload(buffer.data(), count);
+        if (!parsed_head) {
+            head.append(payload);
+            const auto end = head.find("\r\n\r\n");
+            require(head.size() < 16384, "streamed response head exceeded bound");
+            if (end == std::string::npos) continue;
+            require(head.starts_with("HTTP/1.1 200") &&
+                    head.find("Content-Length: " + std::to_string(large_response_bytes) + "\r\n") != std::string::npos,
+                    "streamed response has wrong framing");
+            payload = std::string_view(head).substr(end + 4);
+            parsed_head = true;
+        }
+        for (unsigned char byte : payload) {
+            require(byte == received % 251, "streamed generated/file body corrupted");
+            ++received;
+        }
+    }
+    require(parsed_head && received == large_response_bytes, "streamed response was truncated");
+}
+
+template<class Transport>
+pace::task<void> streaming_scenarios(pace::io_context& io) {
+    auto fixture = start_admitted_server<Transport>(io);
+    for (const auto* target : {"/generated", "/file"}) {
+        const auto destroyed = fixture.state->destroyed;
+        co_await consume_large<Transport>(io, fixture, target);
+        require(fixture.state->destroyed == destroyed + 1 && fixture.state->largest_buffer <= 4096,
+                "response source lifetime or buffering was unbounded");
+    }
+    pace::http::basic_client<Transport> client(co_await admitted_connect<Transport>(io, fixture));
+    auto reads = fixture.state->reads;
+    auto result = co_await client.send(message("HEAD", "/generated"));
+    require(result.status == 200 && result.body.empty() && fixture.state->reads == reads &&
+            result.header("Content-Length") == std::to_string(large_response_bytes), "HEAD pulled response producer");
+    result = co_await client.send(message("GET", "/bodyless"));
+    require(result.status == 205 && result.body.empty() && fixture.state->reads == reads, "bodyless status pulled response producer");
+    result = co_await client.send(message("GET", "/invalid-stream"));
+    require(result.status == 500 && result.close && fixture.state->reads == reads, "invalid streaming metadata was sent");
+    for (const auto* target : {"/broken", "/throw-source", "/overrun-source"}) {
+        const auto destroyed = fixture.state->destroyed;
+        const auto broken = co_await admitted_raw<Transport>(io, fixture,
+            std::string("GET ") + target + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n", true);
+        require(broken.starts_with("HTTP/1.1 200") && broken.ends_with("\r\n\r\n") &&
+                fixture.state->destroyed == destroyed + 1, "source failure must close without another status line");
+    }
+    // Oversized local buffer configuration produces length_error, not an actual
+    // allocation. It must only terminate this response, retaining accept service.
+    auto huge = start_admitted_server<Transport>(io, 1s, 2s, std::numeric_limits<std::size_t>::max());
+    const auto failed = co_await admitted_raw<Transport>(io, huge,
+        "GET /huge HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n", true);
+    require(failed.starts_with("HTTP/1.1 200") && huge.state->destroyed == 1 && huge.state->reads == 0,
+            "buffer allocation failure escaped connection scope");
+    pace::http::basic_client<Transport> recovered(co_await admitted_connect<Transport>(io, huge));
+    result = co_await recovered.send(message("GET", "/ok"));
+    require(result.status == 200, "producer failure killed accepting service");
+    recovered.close();
+}
+
+template<class Transport>
+pace::task<void> disconnect_scenarios(pace::io_context& io) {
+    auto fixture = start_admitted_server<Transport>(io);
+    auto socket = co_await admitted_connect<Transport>(io, fixture);
+    co_await socket.write_all("GET /stalled HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    std::array<char, 1024> buffer{};
+    require(co_await socket.read_some(buffer) != 0, "stream never began");
+    socket.close();
+    for (unsigned i = 0; fixture.state->destroyed == 0 && i < 100; ++i) co_await io.sleep_for(5ms);
+    require(fixture.state->destroyed == 1 && fixture.state->produced < stalled_response_bytes &&
+            fixture.state->largest_buffer <= 4096, "disconnect did not release backpressured source");
+}
+
+template<class Transport>
+pace::task<void> deadline_scenarios(pace::io_context& io) {
+    auto fixture = start_admitted_server<Transport>(io, 40ms, 80ms);
+    for (auto wire : {"POST /small HTTP/1.1\r\nHost:",
+                     "POST /small HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\nx"}) {
+        auto socket = co_await admitted_connect<Transport>(io, fixture);
+        co_await socket.write_all(wire);
+        std::array<char, 32> buffer{};
+        bool closed = false;
+        try { closed = co_await socket.read_some(buffer) == 0; }
+        catch (const std::system_error&) { closed = true; }
+        require(closed && fixture.state->handled == 0, "receive deadline failed on partial head/body");
+    }
+    auto socket = co_await admitted_connect<Transport>(io, fixture);
+    co_await socket.write_all("GET /stalled HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    // Never read: writes must reach backpressure, then the write deadline must
+    // destroy the producer without waiting for the peer or retaining a timer.
+    for (unsigned i = 0; fixture.state->destroyed == 0 && i < 100; ++i) co_await io.sleep_for(5ms);
+    require(fixture.state->destroyed == 1 && fixture.state->produced < stalled_response_bytes &&
+            fixture.state->largest_buffer <= 4096, "write deadline did not cancel stalled response");
+    socket.close();
+    // Completed phase timers must not close a later phase/request on this socket.
+    auto normal = start_admitted_server<Transport>(io, 80ms, 80ms);
+    pace::http::basic_client<Transport> client(co_await admitted_connect<Transport>(io, normal));
+    for (unsigned i = 0; i < 5; ++i) {
+        const auto result = co_await client.send(message("GET", "/ok"));
+        require(result.status == 200 && client.is_open(), "stale deadline closed keep-alive connection");
+        co_await io.sleep_for(25ms);
+    }
+    client.close();
+}
+
+
+template<class Transport>
+pace::task<void> context_stop_scenario(pace::io_context& io, std::shared_ptr<producer_state> state) {
+    auto fixture = start_admitted_server<Transport>(io, 1s, 2s, 4096, std::move(state));
+    auto socket = co_await admitted_connect<Transport>(io, fixture);
+    co_await socket.write_all("GET /stalled HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    std::array<char, 1024> buffer{};
+    require(co_await socket.read_some(buffer) != 0, "stream never began before context stop");
+    io.stop();
+    // run() drains the canceled server write after this client task returns.
+}
+
+using test_body = std::function<pace::task<void>(pace::io_context&)>;
 pace::task<void> run_body(pace::io_context& io, test_body body, bool& completed) {
     co_await body(io); completed = true; io.stop();
 }
@@ -332,13 +690,34 @@ int main(int argc, char** argv) {
     try {
         if (argc > 1) certificate_directory = argv[1];
         run_test("HTTP client/server, binary chunks, trailers and HEAD reuse", normal_client);
+        run_test("HTTP IPv6 endpoint and bracketed Host authority", ipv6_http_authority);
         run_test("chunk extensions, fragmentation and pipeline preservation", chunk_pipeline);
         run_test("request smuggling and resource-limit rejection", rejected_requests);
         run_test("client informational, EOF framing and malformed responses", response_framing);
         run_test("client validation and overlapping exchange protection", client_state);
         run_test("cancellation closes pending HTTP exchange", client_cancellation);
+        run_test("TCP validated admission, early rejection and per-route body limits", admission_scenarios<pace::tcp::stream>);
+        run_test("TCP bounded generated/file response and bodyless producer handling", streaming_scenarios<pace::tcp::stream>);
+        run_test("TCP disconnect cancels and releases response producer", disconnect_scenarios<pace::tcp::stream>);
+        run_test("TCP request/write deadlines and keep-alive timer cancellation", deadline_scenarios<pace::tcp::stream>);
+        auto stopped = std::make_shared<producer_state>();
+        run_test("TCP context stop cancels streamed response", [stopped](pace::io_context& io) {
+            return context_stop_scenario<pace::tcp::stream>(io, stopped);
+        });
+        require(stopped->destroyed == 1 && stopped->produced < stalled_response_bytes,
+                "TCP context stop retained producer");
 #ifdef PACE_HAS_TLS
         run_test("HTTPS verified HTTP/1.1 with chunked trailers", https_exchange);
+        run_test("TLS validated admission, early rejection and per-route body limits", admission_scenarios<pace::tls::stream>);
+        run_test("TLS bounded generated/file response and bodyless producer handling", streaming_scenarios<pace::tls::stream>);
+        run_test("TLS disconnect cancels and releases response producer", disconnect_scenarios<pace::tls::stream>);
+        run_test("TLS request/write deadlines and keep-alive timer cancellation", deadline_scenarios<pace::tls::stream>);
+        stopped = std::make_shared<producer_state>();
+        run_test("TLS context stop cancels streamed response", [stopped](pace::io_context& io) {
+            return context_stop_scenario<pace::tls::stream>(io, stopped);
+        });
+        require(stopped->destroyed == 1 && stopped->produced < stalled_response_bytes,
+                "TLS context stop retained producer");
 #endif
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

@@ -21,4 +21,16 @@ if has_config("tests") then
             add_tests("default")
         target_end()
     end
+    -- Force default trust loading to fail without a production test hook. The
+    -- application trust path must still perform real verified handshakes.
+    if has_config("tls") and is_plat("linux") then
+        target("pace_tls_trust_failure_tests")
+            set_kind("binary")
+            add_files(path.join(pace_root, "tests", "tls_trust_failure_tests.cpp"))
+            add_deps("pace_tls")
+            add_ldflags("-Wl,--wrap=SSL_CTX_set_default_verify_paths", {force = true})
+            set_rundir(pace_root)
+            add_tests("default")
+        target_end()
+    end
 end
