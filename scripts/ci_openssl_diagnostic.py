@@ -19,7 +19,8 @@ def main():
     binary = binaries[0].resolve()
     fixtures = Path(__file__).resolve().parents[1] / "tests" / "certs"
     report = {"kind": "openssl_diagnostic", "stages": [], "status": "running"}
-    for stage in ("crypto", "context", "bio", "handshake"):
+    for stage in ("crypto", "context", "bio", "handshake", "handshake-tls12",
+                  "handshake-tls13", "handshake-x25519", "handshake-p256", "crypto-mlkem"):
         print(f"OpenSSL diagnostic stage: {stage}", flush=True)
         record = {"stage": stage, "status": "failed"}
         try:

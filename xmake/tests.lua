@@ -39,7 +39,12 @@ if has_config("tests") then
             set_kind("binary")
             add_files(path.join(pace_root, "tests", "openssl_diagnostic.cpp"))
             add_packages("openssl3")
-            if is_plat("windows") then add_cxxflags("/utf-8") end
+            if is_plat("windows") then
+                add_cxxflags("/utf-8")
+                set_symbols("debug")
+                add_syslinks("dbghelp")
+                add_ldflags("/DEBUG", "/MAP", {force = true})
+            end
             set_rundir(pace_root)
             add_tests("default")
         target_end()

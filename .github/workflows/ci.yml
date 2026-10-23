@@ -52,7 +52,7 @@ jobs:
         run: xmake -y
       - name: Verify executable architecture (including 32-bit and ARM Windows)
         run: python scripts/ci_portability.py --build-dir build/ci --target ${{ matrix.arch }} --mode native --metadata-only --output ci-results/architecture.json
-      - name: Isolate OpenSSL crypto, context, BIO and handshake on Windows ARM64
+      - name: Isolate OpenSSL crypto, BIO, TLS versions and key exchange on Windows ARM64
         id: openssl-diagnostic
         if: matrix.id == 'windows-arm64'
         continue-on-error: true
@@ -85,6 +85,18 @@ jobs:
       - name: Require every OpenSSL diagnostic stage to pass
         if: always() && matrix.id == 'windows-arm64' && steps.openssl-diagnostic.outcome == 'failure'
         run: exit 1
+      - name: Retain Windows ARM64 OpenSSL diagnostic symbols
+        if: always() && matrix.id == 'windows-arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: openssl-diagnostic-windows-arm64-symbols
+          path: |
+            build/ci/**/pace_openssl_diagnostic.exe
+            build/ci/**/pace_openssl_diagnostic.pdb
+            build/ci/**/pace_openssl_diagnostic.map
+            pace_openssl_diagnostic.map
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
         with:

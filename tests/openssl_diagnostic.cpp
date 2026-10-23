@@ -1,4 +1,14 @@
 // Isolate the OpenSSL dependency from PACE sockets/coroutines during platform CI.
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <dbghelp.h>
+#endif
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -13,6 +23,54 @@
 #include <string>
 
 namespace {
+#ifdef _WIN32
+LONG WINAPI crash_trace(EXCEPTION_POINTERS* failure) {
+    static bool tracing = false;
+    if (tracing) return EXCEPTION_CONTINUE_SEARCH;
+    tracing = true;
+    const auto process = GetCurrentProcess();
+    const auto base = reinterpret_cast<DWORD64>(GetModuleHandleW(nullptr));
+    const auto pc = reinterpret_cast<DWORD64>(failure->ExceptionRecord->ExceptionAddress);
+    std::fprintf(stderr, "OPENSSL_DIAGNOSTIC unhandled exception=0x%08lx pc=0x%llx image=0x%llx rva=0x%llx\n",
+        failure->ExceptionRecord->ExceptionCode, static_cast<unsigned long long>(pc),
+        static_cast<unsigned long long>(base), static_cast<unsigned long long>(pc - base));
+    std::fflush(stderr);
+    CONTEXT context = *failure->ContextRecord;
+    STACKFRAME64 frame{};
+#if defined(_M_ARM64)
+    constexpr DWORD machine = IMAGE_FILE_MACHINE_ARM64;
+    frame.AddrPC.Offset = context.Pc; frame.AddrFrame.Offset = context.Fp; frame.AddrStack.Offset = context.Sp;
+#elif defined(_M_X64)
+    constexpr DWORD machine = IMAGE_FILE_MACHINE_AMD64;
+    frame.AddrPC.Offset = context.Rip; frame.AddrFrame.Offset = context.Rbp; frame.AddrStack.Offset = context.Rsp;
+#else
+    constexpr DWORD machine = IMAGE_FILE_MACHINE_I386;
+    frame.AddrPC.Offset = context.Eip; frame.AddrFrame.Offset = context.Ebp; frame.AddrStack.Offset = context.Esp;
+#endif
+    frame.AddrPC.Mode = frame.AddrFrame.Mode = frame.AddrStack.Mode = AddrModeFlat;
+    for (unsigned index = 0; index < 32 && frame.AddrPC.Offset != 0; ++index) {
+        alignas(SYMBOL_INFO) char storage[sizeof(SYMBOL_INFO) + MAX_SYM_NAME]{};
+        auto* symbol = reinterpret_cast<SYMBOL_INFO*>(storage);
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO); symbol->MaxNameLen = MAX_SYM_NAME;
+        DWORD64 displacement = 0;
+        const bool found = SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol) != FALSE;
+        std::fprintf(stderr, "OPENSSL_DIAGNOSTIC stack[%u] pc=0x%llx rva=0x%llx %s+0x%llx\n", index,
+            static_cast<unsigned long long>(frame.AddrPC.Offset),
+            static_cast<unsigned long long>(frame.AddrPC.Offset - base), found ? symbol->Name : "?",
+            static_cast<unsigned long long>(displacement));
+        std::fflush(stderr);
+        if (!StackWalk64(machine, process, GetCurrentThread(), &frame, &context, nullptr,
+                         SymFunctionTableAccess64, SymGetModuleBase64, nullptr)) break;
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+void install_crash_trace() {
+    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+    if (!SymInitialize(GetCurrentProcess(), nullptr, TRUE))
+        std::fprintf(stderr, "OPENSSL_DIAGNOSTIC SymInitialize failed: %lu\n", GetLastError());
+    SetUnhandledExceptionFilter(crash_trace);
+}
+#endif
 void stage(const char* text) { std::fprintf(stderr, "OPENSSL_DIAGNOSTIC %s\n", text); std::fflush(stderr); }
 void require(bool value, const char* message) {
     if (!value) {
@@ -70,6 +128,27 @@ void crypto() {
     owner<EVP_PKEY, EVP_PKEY_free> ec(EVP_PKEY_Q_keygen(nullptr, nullptr, "EC", "P-256"), EVP_PKEY_free);
     require(bool(ec), "P-256 key generation");
     stage("crypto passed");
+}
+
+void mlkem() {
+    stage("ML-KEM-768 keygen begin");
+    owner<EVP_PKEY, EVP_PKEY_free> key(EVP_PKEY_Q_keygen(nullptr, nullptr, "ML-KEM-768"), EVP_PKEY_free);
+    require(bool(key), "ML-KEM-768 key generation");
+    owner<EVP_PKEY_CTX, EVP_PKEY_CTX_free> enc(EVP_PKEY_CTX_new_from_pkey(nullptr, key.get(), nullptr), EVP_PKEY_CTX_free);
+    owner<EVP_PKEY_CTX, EVP_PKEY_CTX_free> dec(EVP_PKEY_CTX_new_from_pkey(nullptr, key.get(), nullptr), EVP_PKEY_CTX_free);
+    require(enc && dec, "ML-KEM contexts");
+    stage("ML-KEM-768 encapsulate begin");
+    std::array<unsigned char, 1088> ciphertext{};
+    std::array<unsigned char, 32> shared{}, actual{};
+    std::size_t cipher_size = ciphertext.size(), shared_size = shared.size(), actual_size = actual.size();
+    require(EVP_PKEY_encapsulate_init(enc.get(), nullptr) == 1 &&
+            EVP_PKEY_encapsulate(enc.get(), ciphertext.data(), &cipher_size, shared.data(), &shared_size) == 1,
+            "ML-KEM encapsulation");
+    stage("ML-KEM-768 decapsulate begin");
+    require(EVP_PKEY_decapsulate_init(dec.get(), nullptr) == 1 &&
+            EVP_PKEY_decapsulate(dec.get(), actual.data(), &actual_size, ciphertext.data(), cipher_size) == 1 &&
+            actual_size == shared_size && shared_size == shared.size() && actual == shared, "ML-KEM roundtrip");
+    stage("ML-KEM passed");
 }
 
 struct contexts {
@@ -130,8 +209,23 @@ void custom_bio() {
     stage("custom BIO passed");
 }
 
-void handshake(const std::filesystem::path& fixtures) {
+void handshake(const std::filesystem::path& fixtures, int version = 0, const char* groups = nullptr) {
     contexts config(fixtures);
+    if (version) {
+        require(SSL_CTX_set_min_proto_version(config.server.get(), version) == 1 &&
+                SSL_CTX_set_max_proto_version(config.server.get(), version) == 1 &&
+                SSL_CTX_set_min_proto_version(config.client.get(), version) == 1 &&
+                SSL_CTX_set_max_proto_version(config.client.get(), version) == 1, "diagnostic TLS version");
+    }
+    if (groups) require(SSL_CTX_set1_groups_list(config.server.get(), groups) == 1 &&
+                        SSL_CTX_set1_groups_list(config.client.get(), groups) == 1, "diagnostic TLS groups");
+    const auto trace = +[](const SSL* ssl, int where, int result) {
+        std::fprintf(stderr, "OPENSSL_DIAGNOSTIC state %s where=0x%x result=%d %s\n",
+            SSL_is_server(ssl) ? "server" : "client", where, result, SSL_state_string_long(ssl));
+        std::fflush(stderr);
+    };
+    SSL_CTX_set_info_callback(config.server.get(), trace);
+    SSL_CTX_set_info_callback(config.client.get(), trace);
     stage("SSL_new begin");
     session server(SSL_new(config.server.get()), SSL_free), client(SSL_new(config.client.get()), SSL_free);
     require(server && client, "TLS sessions");
@@ -140,6 +234,7 @@ void handshake(const std::filesystem::path& fixtures) {
     require(BIO_new_bio_pair(&client_bio, 65536, &server_bio, 65536) == 1, "memory BIO pair");
     SSL_set_bio(client.get(), client_bio, client_bio); SSL_set_bio(server.get(), server_bio, server_bio);
     SSL_set_connect_state(client.get()); SSL_set_accept_state(server.get());
+    std::fprintf(stderr, "OPENSSL_DIAGNOSTIC selected_version=0x%x groups=%s\n", version, groups ? groups : "default");
     stage("verified memory-BIO TLS handshake begin");
     bool client_done = false, server_done = false;
     auto advance = [](SSL* ssl, bool& done) {
@@ -167,10 +262,15 @@ void handshake(const std::filesystem::path& fixtures) {
 } // namespace
 int main(int argc, char** argv) {
     try {
+#ifdef _WIN32
+        install_crash_trace();
+#endif
         const std::string selected = argc > 1 ? argv[1] : "all";
         const auto fixtures = argc > 2 ? std::filesystem::path(argv[2]) : std::filesystem::path(__FILE__).parent_path() / "certs";
-        require(argc <= 3 && (selected == "all" || selected == "crypto" || selected == "context" || selected == "bio" || selected == "handshake"),
-                "usage: openssl_diagnostic [all|crypto|context|bio|handshake] [fixtures]");
+        require(argc <= 3 && (selected == "all" || selected == "crypto" || selected == "context" || selected == "bio" || selected == "handshake" || selected == "crypto-mlkem" ||
+                selected == "handshake-tls12" || selected == "handshake-tls13" ||
+                selected == "handshake-x25519" || selected == "handshake-p256"),
+                "usage: openssl_diagnostic [all|crypto|crypto-mlkem|context|bio|handshake|handshake-tls12|handshake-tls13|handshake-x25519|handshake-p256] [fixtures]");
         stage("process entered");
         std::fprintf(stderr, "OPENSSL_DIAGNOSTIC headers=%s runtime=%s platform=%s compiler=%s pointers=%zu long=%zu\n",
             OPENSSL_VERSION_TEXT, OpenSSL_version(OPENSSL_VERSION), OpenSSL_version(OPENSSL_PLATFORM),
@@ -178,9 +278,14 @@ int main(int argc, char** argv) {
         std::fflush(stderr);
         stage("OPENSSL_init_ssl begin"); require(OPENSSL_init_ssl(0, nullptr) == 1, "OpenSSL initialization");
         if (selected == "all" || selected == "crypto") crypto();
+        if (selected == "crypto-mlkem") mlkem();
         if (selected == "all" || selected == "context") { contexts config(fixtures); }
         if (selected == "all" || selected == "bio") custom_bio();
         if (selected == "all" || selected == "handshake") handshake(fixtures);
+        if (selected == "handshake-tls12") handshake(fixtures, TLS1_2_VERSION);
+        if (selected == "handshake-tls13") handshake(fixtures, TLS1_3_VERSION);
+        if (selected == "handshake-x25519") handshake(fixtures, TLS1_3_VERSION, "X25519");
+        if (selected == "handshake-p256") handshake(fixtures, TLS1_3_VERSION, "P-256");
         stage("selected checks passed");
     } catch (const std::exception& error) { std::fprintf(stderr, "FAIL: %s\n", error.what()); return 1; }
 }
