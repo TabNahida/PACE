@@ -4,10 +4,12 @@
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 using namespace std::chrono_literals;
 namespace {
@@ -294,6 +296,276 @@ void configuration_errors(const std::filesystem::path& fixtures) {
     io.spawn(missing_peer_name(io, config));
     io.run();
 }
+
+std::string read_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) throw std::runtime_error("cannot read TLS test fixture");
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+pace::tls::context sni_configuration(const std::filesystem::path& fixtures,
+                                     pace::tls::sni_policy missing = pace::tls::sni_policy::use_default,
+                                     pace::tls::sni_policy unknown = pace::tls::sni_policy::use_default,
+                                     bool broken_localhost = false) {
+    pace::tls::context server(pace::tls::role::server);
+    server.use_certificate_chain((fixtures / "localhost.pem").string(), (fixtures / "localhost-key.pem").string());
+    server.set_alpn_protocols({"default"});
+    for (const auto* name : {"a.example", "b.example"}) {
+        pace::tls::context selected(pace::tls::role::server);
+        selected.use_certificate_chain((fixtures / (std::string(name) + ".pem")).string(),
+                                       (fixtures / (std::string(name) + "-key.pem")).string());
+        selected.set_alpn_protocols({name});
+        server.add_server_name(name, selected);
+        // selected's public object dies here; routing owns its immutable state.
+    }
+    if (broken_localhost) {
+        pace::tls::context without_certificate(pace::tls::role::server);
+        server.add_server_name("localhost", without_certificate);
+    }
+    server.set_server_name_policy(missing, unknown);
+    return server;
+}
+
+pace::tls::context application_trust(const std::filesystem::path& fixtures) {
+    pace::tls::context client(pace::tls::role::client, pace::tls::trust_source::application);
+    // Both roots come from owned memory, never OpenSSL's defaults or a temp file.
+    auto pem = read_file(fixtures / "sni-ca.pem") + read_file(fixtures / "ca.pem");
+    client.load_verify_pem(pem);
+    client.load_verify_pem(pem); // Adding existing roots is harmless.
+    client.set_alpn_protocols({"a.example", "b.example", "default"});
+    return client;
+}
+
+struct group_finished {
+    pace::io_context& io;
+    unsigned total;
+    unsigned completed = 0;
+    unsigned server_success = 0;
+    unsigned server_failure = 0;
+    void arrive() { if (++completed == total) io.stop(); }
+};
+struct client_case {
+    std::string name;
+    std::string protocol;
+    bool accept = true;
+};
+
+template<class Stream>
+pace::task<void> read_exact(Stream& stream, std::span<char> bytes) {
+    while (!bytes.empty()) {
+        const auto count = co_await stream.read_some(bytes);
+        require(count != 0, "early EOF in TLS test exchange");
+        bytes = bytes.subspan(count);
+    }
+}
+
+pace::task<void> selected_server(pace::tcp::stream transport, const pace::tls::context& configuration,
+                                 bool starttls, group_finished& done, bool own_configuration = false,
+                                 std::filesystem::path fixtures = {}) {
+    if (starttls) {
+        std::array<char, 10> command{};
+        co_await read_exact(transport, command);
+        require(std::string_view(command.data(), command.size()) == "STARTTLS\r\n", "STARTTLS command mismatch");
+        co_await transport.write_all("220 ready\r\n");
+    }
+    // This path also proves that the root mapping (not only its targets) can be
+    // destroyed before ClientHello arrives while the stream retains everything.
+    auto socket = [&] {
+        if (own_configuration) {
+            auto temporary = sni_configuration(fixtures);
+            return pace::tls::stream(std::move(transport), temporary);
+        }
+        return pace::tls::stream(std::move(transport), configuration);
+    }();
+    bool accepted = false;
+    try { co_await socket.handshake(); accepted = true; }
+    catch (const std::system_error& error) {
+        require(error.code() == std::errc::protocol_error && !socket.is_open(),
+                "SNI failure must only close its connection");
+    }
+    if (accepted) {
+        ++done.server_success;
+        std::array<char, 1> byte{};
+        co_await read_exact(socket, byte);
+        co_await socket.write_all(std::string_view(byte.data(), byte.size()));
+        co_await socket.shutdown();
+    } else ++done.server_failure;
+    done.arrive();
+}
+
+pace::task<void> selected_acceptor(pace::tcp::listener& listener, const pace::tls::context& config,
+                                   unsigned count, bool starttls, group_finished& done,
+                                   bool own_configuration, std::filesystem::path fixtures) {
+    for (unsigned i = 0; i < count; ++i)
+        listener.context().spawn(selected_server(co_await listener.accept(), config, starttls, done,
+                                                own_configuration, fixtures));
+}
+pace::task<void> selected_client(pace::io_context& io, const pace::tls::context& config,
+                                 pace::tcp::endpoint endpoint, client_case test, bool starttls,
+                                 group_finished& done) {
+    pace::tcp::stream transport(io);
+    if (starttls) {
+        co_await transport.connect(endpoint);
+        co_await transport.write_all("STARTTLS\r\n");
+        std::array<char, 11> ready{};
+        co_await read_exact(transport, ready);
+        require(std::string_view(ready.data(), ready.size()) == "220 ready\r\n", "STARTTLS reply mismatch");
+    }
+    pace::tls::stream socket(std::move(transport), config);
+    bool accepted = false;
+    try {
+        if (starttls) co_await socket.handshake(test.name);
+        else co_await socket.connect(endpoint, test.name);
+        accepted = true;
+    } catch (const std::system_error& error) {
+        require(error.code() == std::errc::protocol_error && !socket.is_open(),
+                "SNI/custom trust rejection must close this client");
+    }
+    require(accepted == test.accept, "unexpected SNI/custom trust handshake result");
+    if (accepted) {
+        require(socket.selected_protocol() == test.protocol, "SNI selected the wrong context/ALPN");
+        co_await socket.write_all("x");
+        std::array<char, 1> reply{};
+        co_await read_exact(socket, reply);
+        require(reply[0] == 'x', "SNI data exchange mismatch");
+        co_await socket.shutdown();
+    }
+    done.arrive();
+}
+
+void handshake_group(const pace::tls::context& server, const pace::tls::context& client,
+                     std::vector<client_case> cases, bool starttls,
+                     bool own_configuration = false, const std::filesystem::path& fixtures = {},
+                     std::string bind_address = "127.0.0.1") {
+    pace::io_context io;
+    pace::tcp::listener listener(io, {std::move(bind_address), 0});
+    group_finished done{io, static_cast<unsigned>(cases.size() * 2)};
+    io.spawn(selected_acceptor(listener, server, static_cast<unsigned>(cases.size()), starttls, done,
+                               own_configuration, fixtures));
+    unsigned accepted = 0;
+    for (const auto& test : cases) {
+        accepted += test.accept;
+        io.spawn(selected_client(io, client, listener.local_endpoint(), test, starttls, done));
+    }
+    io.run();
+    require(done.completed == done.total && done.server_success == accepted &&
+            done.server_failure == cases.size() - accepted,
+            "SNI failures affected other connections or did not reach both peers");
+}
+
+void sni_and_application_trust(const std::filesystem::path& fixtures, bool starttls) {
+    auto client = application_trust(fixtures);
+    auto server = sni_configuration(fixtures);
+    handshake_group(server, client,
+                    {{"a.example", "a.example"}, {"b.example", "b.example"},
+                     {"A.Example", "a.example"}, {"b.example", "b.example"},
+                     {"localhost", "default"}, {"127.0.0.1", "default"}}, starttls);
+    handshake_group(server, client, {{"b.example", "b.example"}}, starttls, true, fixtures);
+
+    auto strict = sni_configuration(fixtures, pace::tls::sni_policy::reject, pace::tls::sni_policy::reject);
+    handshake_group(strict, client, {{"127.0.0.1", "", false}, {"localhost", "", false},
+                                     {"a.example", "a.example"}, {"b.example", "b.example"}}, starttls);
+    auto missing_only = sni_configuration(fixtures, pace::tls::sni_policy::reject);
+    handshake_group(missing_only, client, {{"127.0.0.1", "", false}, {"localhost", "default"}}, starttls);
+    auto unknown_only = sni_configuration(fixtures, pace::tls::sni_policy::use_default, pace::tls::sni_policy::reject);
+    handshake_group(unknown_only, client, {{"127.0.0.1", "default"}, {"localhost", "", false}}, starttls);
+
+    auto broken = sni_configuration(fixtures, pace::tls::sni_policy::use_default,
+                                    pace::tls::sni_policy::use_default, true);
+    // The default certificate is valid for localhost, but an explicitly selected
+    // context without a certificate must fail, never silently fall back.
+    handshake_group(broken, client, {{"localhost", "", false}, {"a.example", "a.example"},
+                                     {"b.example", "b.example"}}, starttls);
+
+    pace::tls::context untrusted(pace::tls::role::client, pace::tls::trust_source::application);
+    handshake_group(server, untrusted, {{"a.example", "", false}}, starttls);
+    untrusted = pace::tls::context(pace::tls::role::client, pace::tls::trust_source::application);
+    untrusted.load_verify_pem(read_file(fixtures / "ca.pem")); // Trust an unrelated CA only.
+    handshake_group(server, untrusted, {{"a.example", "", false}}, starttls);
+    handshake_group(server, client, {{"wrong.example", "", false}}, starttls);
+}
+
+template<class Function>
+void rejects_frozen(Function operation) {
+    bool rejected = false;
+    try { operation(); } catch (const std::logic_error&) { rejected = true; }
+    require(rejected, "frozen TLS configuration accepted a setter");
+}
+
+void configuration_freeze_and_atomicity(const std::filesystem::path& fixtures) {
+    pace::tls::context server(pace::tls::role::server), target(pace::tls::role::server);
+    target.use_certificate_chain((fixtures / "a.example.pem").string(), (fixtures / "a.example-key.pem").string());
+    target.set_alpn_protocols({"a.example"});
+    bool rejected = false;
+    try { target.use_certificate_chain((fixtures / "b.example.pem").string(), (fixtures / "a.example-key.pem").string()); }
+    catch (const std::system_error&) { rejected = true; }
+    require(rejected, "mismatched certificate/key was accepted");
+    server.add_server_name("a.example", target);
+    rejects_frozen([&] { target.set_alpn_protocols({"changed"}); });
+    rejects_frozen([&] { target.load_verify_file((fixtures / "ca.pem").string()); });
+    rejects_frozen([&] { target.load_verify_pem(read_file(fixtures / "ca.pem")); });
+    rejects_frozen([&] { target.use_certificate_chain((fixtures / "localhost.pem").string(), (fixtures / "localhost-key.pem").string()); });
+    rejects_frozen([&] { target.set_server_name_policy(pace::tls::sni_policy::reject, pace::tls::sni_policy::reject); });
+
+    for (const auto& name : {"a.example", "A.EXAMPLE", "*.example", "127.0.0.1", "-a.example", "a..example", "a.example."}) {
+        rejected = false;
+        try { server.add_server_name(name, target); } catch (const std::invalid_argument&) { rejected = true; }
+        require(rejected, "duplicate/invalid SNI name was accepted");
+    }
+    rejected = false;
+    try { server.add_server_name("self.example", server); } catch (const std::invalid_argument&) { rejected = true; }
+    require(rejected, "self-referential SNI context was accepted");
+    pace::tls::context outer(pace::tls::role::server);
+    rejected = false;
+    try { outer.add_server_name("nested.example", server); } catch (const std::invalid_argument&) { rejected = true; }
+    require(rejected, "nested SNI table was accepted");
+
+    auto client = application_trust(fixtures);
+    // Valid A certificate survives the failed B/key change.
+    handshake_group(server, client, {{"a.example", "a.example"}}, false);
+    rejects_frozen([&] { server.add_server_name("b.example", target); });
+    rejects_frozen([&] { client.load_verify_pem(read_file(fixtures / "ca.pem")); });
+
+    pace::tls::context empty(pace::tls::role::client, pace::tls::trust_source::application);
+    for (const auto& pem : {std::string{}, std::string(" "), std::string("not PEM"),
+                            read_file(fixtures / "sni-ca.pem") + "trailing garbage"}) {
+        rejected = false;
+        try { empty.load_verify_pem(pem); } catch (const std::invalid_argument&) { rejected = true; }
+        require(rejected, "invalid PEM trust bundle was accepted");
+    }
+    // A valid prefix in an invalid bundle must not partially add trust.
+    handshake_group(server, empty, {{"a.example", "", false}}, false);
+}
+
+void shared_sni_threads(const std::filesystem::path& fixtures) {
+    auto server = sni_configuration(fixtures);
+    auto client = application_trust(fixtures);
+    std::array<std::exception_ptr, 4> failures{};
+    std::array<std::thread, 4> threads;
+    for (std::size_t i = 0; i < threads.size(); ++i) {
+        threads[i] = std::thread([&, i] {
+            try {
+                handshake_group(server, client, {{"a.example", "a.example"}, {"b.example", "b.example"},
+                                                 {"a.example", "a.example"}, {"b.example", "b.example"}}, i % 2);
+            } catch (...) { failures[i] = std::current_exception(); }
+        });
+    }
+    for (auto& thread : threads) thread.join();
+    for (const auto& failure : failures) if (failure) std::rethrow_exception(failure);
+}
+
+void ipv6_application_trust(const std::filesystem::path& fixtures, bool starttls) {
+    pace::tls::context server(pace::tls::role::server);
+    server.use_certificate_chain((fixtures / "a.example.pem").string(), (fixtures / "a.example-key.pem").string());
+    server.set_alpn_protocols({"a.example"});
+    auto client = application_trust(fixtures);
+    // ::1 is an IP SAN, not a DNS name/SNI. The client transport starts as IPv4
+    // and connect switches its native descriptor before the socket BIO is used.
+    handshake_group(server, client, {{"::1", "a.example"}, {"::2", "", false},
+                                     {"a.example", "a.example"}, {"b.example", "", false}},
+                    starttls, false, {}, "::1");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -313,6 +585,12 @@ int main(int argc, char** argv) {
         shutdown_bounds(fixtures, false);
         shutdown_bounds(fixtures, true);
         configuration_errors(fixtures);
+        sni_and_application_trust(fixtures, false);
+        sni_and_application_trust(fixtures, true);
+        configuration_freeze_and_atomicity(fixtures);
+        shared_sni_threads(fixtures);
+        ipv6_application_trust(fixtures, false);
+        ipv6_application_trust(fixtures, true);
         std::cout << "TLS tests passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

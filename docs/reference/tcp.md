@@ -12,19 +12,42 @@ namespace pace::tcp {
 struct endpoint {
     std::string address = "127.0.0.1";
     std::uint16_t port = 0;
+    pace::address_family family = pace::address_family::unspecified;
+    std::uint32_t scope_id = 0;
 };
 struct listen_options {
     bool reuse_port = false;
     int backlog = 1024;
+    bool ipv6_only = true;
 };
 }
 ```
 
-An endpoint owns its address string. Only numeric IPv4 is accepted, for example
-`127.0.0.1` or `0.0.0.0`; hostnames and IPv6 are rejected with
-`std::invalid_argument`. A listener's port `0` requests an OS-assigned port,
-retrievable through `local_endpoint()`. `0.0.0.0` binds all local IPv4 interfaces;
-use loopback for examples intended to stay local.
+An endpoint owns its numeric IPv4 or IPv6 address, such as `127.0.0.1` or `::1`.
+Existing `{address, port}` initializers remain valid. `pace::address_family`,
+declared in `<pace/ip.hpp>`, has `unspecified`, `ipv4` and `ipv6` values. Input
+defaults to automatic inference; an explicit family must match the address.
+Endpoint inspection always returns the concrete family. Hostnames, brackets,
+embedded NUL bytes and malformed addresses throw `std::invalid_argument`.
+Resolve hostnames explicitly with the [DNS extension](dns.md).
+
+For scoped IPv6, set `scope_id` to the numeric interface index; native endpoint
+inspection preserves that index separately from the address string. A nonzero
+scope on IPv4 is invalid. Textual zone suffixes such as `fe80::1%eth0` or
+`fe80::1%3` are explicitly rejected: use `{"fe80::1", port,
+pace::address_family::ipv6, 3}`. Interface-index selection and link-local
+reachability are the application's responsibility.
+
+A listener's port `0` requests an OS-assigned port, retrievable through
+`local_endpoint()`. `0.0.0.0` binds all local IPv4 interfaces and `::` binds all
+local IPv6 interfaces. IPv6 listeners explicitly set `IPV6_V6ONLY=1` by default,
+so a separate IPv4 listener can bind the same port. To accept both families on
+one wildcard listener, use `listener(io, {"::", port}, {.ipv6_only = false})`.
+PACE sets `IPV6_V6ONLY=0` before bind and propagates native failures; it does not
+silently fall back to another policy. This option is invalid on an IPv4 endpoint.
+An accepted IPv4 peer is reported as IPv6 with an IPv4-mapped address, for example
+`::ffff:127.0.0.1`. Access-control and logging code must handle mapped addresses.
+Use `::1` or `127.0.0.1` for examples intended to stay local.
 
 `backlog` must be positive or construction throws `invalid_argument`. The OS can
 cap the requested queue length. `reuse_port` requests native same-port listener
@@ -39,6 +62,7 @@ use on Windows independently of this option.
 
 ```cpp
 explicit stream(io_context& context);
+stream(io_context& context, pace::address_family family);
 ~stream();
 stream(stream&& other) noexcept;
 stream& operator=(stream&& other) noexcept;
@@ -48,14 +72,29 @@ stream& operator=(const stream&) = delete;
 native_socket_type native_handle() const noexcept;
 io_context& context() const noexcept;
 bool is_open() const noexcept;
+endpoint local_endpoint() const;
+endpoint remote_endpoint() const;
 void close() noexcept;
 ```
 
 Construction creates an unconnected nonblocking socket and may throw a native
-`system_error`. It may happen before the context runs. `context()` returns the
+`system_error`. It may happen before the context runs. The default constructor
+starts with IPv4 and chooses the destination family on the first `connect`.
+For IPv6 it replaces the initial handle while preserving `set_no_delay()`.
+Use `stream(io, pace::address_family::ipv6)` or `ipv4` when configuring other
+native socket options before connect: an explicit family keeps the handle and
+rejects a destination from the other family. Outbound IPv6 sockets support
+IPv4-mapped numeric destinations consistently through `IPV6_V6ONLY=0`.
+`context()` returns the
 same owning context; it does not transfer ownership. `native_handle()` returns a
 borrowed handle; do not independently close it or change nonblocking state.
 `is_open()` reports ownership of a handle, not whether it is connected or healthy.
+
+`local_endpoint()` and `remote_endpoint()` query the native socket and return an
+owned numeric address, actual port, concrete family and scope. The remote query
+requires a connected stream. Query before run or on the owning loop, without
+concurrent close/move; native unavailable-endpoint errors propagate. Closed
+sockets throw `bad_file_descriptor` (a stopped context takes precedence).
 
 Move only when no operation references the source or destination object. A move
 empties the source handle while retaining its context association. Move assignment
@@ -83,8 +122,11 @@ void set_no_delay(bool enabled = true);
 `connect` owns its endpoint value. Await it on the stream's context, before
 starting other operations on that stream. Native pending connection completion is
 checked through `SO_ERROR`; refusal and other failures throw `system_error`.
-There is no built-in connect timeout or hostname resolution. After connection
-failure, close the socket and create a fresh stream for a retry.
+There is no built-in connect timeout or hostname resolution. Once a native
+connection attempt has started, another `connect` on that stream throws
+`logic_error`. After connection failure, close the socket and create a fresh
+stream for a retry. Endpoint/family validation failures before a native attempt
+leave the stream available for a corrected endpoint.
 
 `read_some` waits until at least some bytes are available, an error occurs, or EOF
 is observed. It can return fewer bytes than the buffer size. With a **nonempty**
@@ -121,8 +163,9 @@ task<void> close_gracefully(
 
 Await this only when **no other socket operations are outstanding**. It half-closes
 the send direction, then reads and discards incoming bytes until peer EOF, the
-time allowance or the discard allowance is reached. A cancellable 1 ms timer
-waits between would-block results. The socket is closed on success, timeout/limit
+time allowance or the discard allowance is reached. It waits for socket readiness
+with one cancellable deadline; successful completion removes that timer immediately.
+The socket is closed on success, timeout/limit
 completion, cancellation and errors. Native errors and cancellation still
 propagate after close. This supports delivering a final response even when unread
 request data would otherwise cause an immediate reset.

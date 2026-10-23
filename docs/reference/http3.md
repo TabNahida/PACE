@@ -55,7 +55,7 @@ and outgoing messages. Bodies are buffered, so memory scales with the concurrent
 stream count and body limit. Excessive peer streams are rejected. The API does
 not provide streaming bodies, CONNECT tunnels, server push, HTTP Datagram,
 WebTransport, or a reusable client connection pool. QUIC currently accepts
-numeric IPv4 endpoints; DNS resolution belongs to the separate DNS extension.
+numeric IPv4/IPv6 endpoints; DNS resolution belongs to the separate DNS extension.
 
 `examples/tutorial_http3.cpp` runs an authenticated localhost server and client.
 `tests/http3_tests.cpp` covers multiplexed binary bodies beyond a QUIC send

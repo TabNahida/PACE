@@ -5,6 +5,7 @@
 #include <atomic>
 #include <climits>
 #include <deque>
+#include <map>
 #include <mutex>
 #include <queue>
 #include <unordered_map>
@@ -20,6 +21,16 @@ void check_affinity(io_context* context) {
     if (active_context != context) throw std::logic_error("I/O must execute on its owning io_context");
 }
 }
+
+struct io_context::callback_timers {
+    using key = std::pair<std::chrono::steady_clock::time_point, std::uint64_t>;
+    std::map<key, std::function<void()>> callbacks;
+    std::uint64_t next_id = 0;
+    void clear() noexcept {
+        // Extract before destroying captures: a capture may own another handle.
+        while (!callbacks.empty()) { auto node = callbacks.extract(callbacks.begin()); }
+    }
+};
 
 struct io_context::implementation {
     detail::poller poller{detail::poller::supports_persistent};
@@ -53,6 +64,7 @@ struct io_context::implementation {
         }
     };
     std::priority_queue<timer_awaiter*, std::vector<timer_awaiter*>, later> timers;
+    std::shared_ptr<callback_timers> callbacks;
 
     void finish(io_awaiter*& operation, std::error_code error = {}) {
         if (!operation) return;
@@ -72,6 +84,7 @@ struct io_context::implementation {
             auto* timer = timers.top(); timers.pop();
             timer->error = canceled(); ready.push_back(timer->continuation);
         }
+        if (callbacks) callbacks->clear();
         cancellation_started = true;
     }
     void update(fd_state& state, std::uint64_t token) {
@@ -95,6 +108,46 @@ struct io_context::implementation {
         dirty_descriptors.clear();
     }
 };
+
+io_context::timer_handle::~timer_handle() { cancel(); }
+io_context::timer_handle::timer_handle(timer_handle&& other) noexcept
+    : timers_(std::move(other.timers_)), deadline_(other.deadline_),
+      id_(std::exchange(other.id_, 0)) {}
+io_context::timer_handle& io_context::timer_handle::operator=(timer_handle&& other) noexcept {
+    if (this != &other) {
+        cancel();
+        timers_ = std::move(other.timers_);
+        deadline_ = other.deadline_;
+        id_ = std::exchange(other.id_, 0);
+    }
+    return *this;
+}
+void io_context::timer_handle::cancel() noexcept {
+    const auto id = std::exchange(id_, 0);
+    if (id) {
+        if (auto timers = timers_.lock()) {
+            // Captures can cancel other timers, so destroy outside the map.
+            auto node = timers->callbacks.extract({deadline_, id});
+        }
+    }
+    timers_.reset();
+}
+io_context::timer_handle io_context::call_at(std::chrono::steady_clock::time_point deadline,
+                                            std::function<void()> callback) {
+    if (impl_->running.load(std::memory_order_acquire)) check_affinity(this);
+    if (stopped()) throw std::system_error(canceled());
+    if (!callback) throw std::invalid_argument("empty timer callback");
+    if (!impl_->callbacks) impl_->callbacks = std::make_shared<callback_timers>();
+    auto& timers = *impl_->callbacks;
+    if (timers.next_id == UINT64_MAX) throw std::overflow_error("timer identity exhausted");
+    ++timers.next_id;
+    timer_handle handle;
+    handle.deadline_ = deadline;
+    handle.id_ = timers.next_id;
+    handle.timers_ = impl_->callbacks;
+    timers.callbacks.emplace(callback_timers::key{deadline, handle.id_}, std::move(callback));
+    return handle;
+}
 
 io_context::io_context() : impl_(std::make_unique<implementation>()) {}
 io_context::~io_context() {
@@ -307,10 +360,23 @@ void io_context::run() {
         while (!p.timers.empty() && p.timers.top()->deadline <= now) {
             p.ready.push_back(p.timers.top()->continuation); p.timers.pop();
         }
+        for (std::size_t i = 0; i < 256 && p.callbacks && !p.callbacks->callbacks.empty(); ++i) {
+            auto it = p.callbacks->callbacks.begin();
+            if (it->first.first > now) break;
+            auto node = p.callbacks->callbacks.extract(it);
+            try { node.mapped()(); } catch (...) { record_error(std::current_exception()); }
+            if (stopped()) break;
+        }
+        if (stopped()) continue;
         int timeout = -1;
         if (!p.ready.empty() || !p.posts.empty()) timeout = 0;
-        else if (!p.timers.empty()) {
-            auto ms = std::chrono::ceil<std::chrono::milliseconds>(p.timers.top()->deadline - now).count();
+        else if (!p.timers.empty() || (p.callbacks && !p.callbacks->callbacks.empty())) {
+            auto deadline = p.timers.empty() ? std::chrono::steady_clock::time_point::max()
+                                           : p.timers.top()->deadline;
+            if (p.callbacks && !p.callbacks->callbacks.empty())
+                deadline = std::min(deadline, p.callbacks->callbacks.begin()->first.first);
+            const auto current = std::chrono::steady_clock::now();
+            auto ms = deadline <= current ? 0 : std::chrono::ceil<std::chrono::milliseconds>(deadline - current).count();
             timeout = static_cast<int>(std::min<decltype(ms)>(ms, INT_MAX));
         }
         timer_timing.close();

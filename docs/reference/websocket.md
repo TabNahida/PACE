@@ -158,9 +158,8 @@ call `receive()` to process its reply. `close_gracefully(code = 1000, reason = {
 timeout = 100ms)` sends close, receives until peer close or timeout, and always
 closes the transport. It returns true for a completed peer close, false for a
 timeout; non-timeout errors propagate. The timeout is cooperative and cannot
-preempt blocking handlers. A small internal timer stays registered until its
-original deadline or reactor shutdown, even if the exchange finishes early;
-it safely detaches from the stream on completion.
+preempt blocking handlers. Its scoped timer is canceled and releases its callback
+immediately when the exchange finishes, including early completion and errors.
 
 `receive()` replies to a peer close automatically, gracefully closes the
 underlying TCP/TLS transport, and returns `nullopt`. `peer_close_code()` and

@@ -40,5 +40,7 @@ public test-only certificates under `tests/certs`.
 - [Performance](performance.md) — full local Linux measurements, tradeoffs and reproduction.
 - [Platform support](reference/platform.md) — backends and supported configurations.
 
-Current API boundaries include IPv4 transport and buffered HTTP bodies. DNS
-resolves both A and AAAA records. Protocol references describe individual limits.
+TCP, UDP and QUIC support numeric IPv4 and IPv6 endpoints; DNS resolves A and
+AAAA records. HTTP/1 offers request-head admission, per-request limits and bounded
+streaming responses. HTTP/2 and HTTP/3 bodies remain buffered. Protocol references
+describe deadlines, ownership and individual limits.

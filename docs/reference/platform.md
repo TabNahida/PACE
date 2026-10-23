@@ -12,8 +12,8 @@ APIs enabled in the build. It retains the old TCP aliases.
 | `<pace/task.hpp>` | Lazy coroutine return types |
 | `<pace/io_context.hpp>` | Reactor and awaiters |
 | `<pace/runtime.hpp>` | Fixed-context worker runtime |
-| `<pace/tcp.hpp>` | Numeric IPv4 TCP |
-| `<pace/udp.hpp>` | Numeric IPv4 datagrams |
+| `<pace/tcp.hpp>` | Numeric IPv4/IPv6 TCP |
+| `<pace/udp.hpp>` | Numeric IPv4/IPv6 datagrams |
 | `<pace/http.hpp>` | HTTP/1.0–1.1 client and server; HTTPS with TLS enabled |
 | `<pace/tls.hpp>` | Verified TLS streams, with `--tls=y` |
 | `<pace/http2.hpp>` | HTTP/2 batch client and server, with `--http2=y` |

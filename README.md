@@ -3,12 +3,6 @@
 </p>
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="Local Linux TCP echo: PACE leads throughput and p50; Asio leads p95 and p99. Zero-based charts include all three libraries and trial ranges." width="100%"></a>
-</p>
-
-<p align="center"><a href="docs/performance.md">Full benchmark results, methodology &amp; raw data →</a></p>
-
-<p align="center">
   <a href="https://github.com/TabNahida/PACE/actions/workflows/ci.yml"><img src="https://github.com/TabNahida/PACE/actions/workflows/ci.yml/badge.svg" alt="Build and test"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-70dfc3" alt="MIT license"></a>
 </p>
@@ -20,6 +14,12 @@
 - **Write asynchronous code in sequence.** Await connections, reads, writes and timers with `co_await`.
 - **Choose where work runs.** One reactor per worker, explicit task placement, caller-owned execution.
 - **Build only what you use.** A core without third-party runtime dependencies, with optional protocol modules above it.
+
+<p align="center">
+  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="Local Linux TCP echo: PACE leads throughput and p50; Asio leads p95 and p99. Zero-based charts include all three libraries and trial ranges." width="100%"></a>
+</p>
+
+<p align="center"><a href="docs/performance.md">Full benchmark results, methodology &amp; raw data →</a></p>
 
 ## Four layers. Your stack.
 

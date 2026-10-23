@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pace/io_context.hpp>
+#include <pace/ip.hpp>
 #include <pace/platform.hpp>
 #include <pace/task.hpp>
 
@@ -13,15 +14,19 @@
 
 namespace pace::tcp {
 
-// Numeric IPv4 addresses only. Name resolution should run outside the I/O loop.
+// Numeric, unbracketed IPv4/IPv6. Resolve hostnames through pace::dns.
+// Use scope_id for an IPv6 interface index; textual %zone suffixes are rejected.
 struct endpoint {
     std::string address = "127.0.0.1";
     std::uint16_t port = 0;
+    address_family family = address_family::unspecified;
+    std::uint32_t scope_id = 0;
 };
 
 struct listen_options {
     bool reuse_port = false;
     int backlog = 1024;
+    bool ipv6_only = true; // Set false on an IPv6 endpoint for explicit dual-stack.
 };
 
 // Move-only, context-affine TCP socket. The context must outlive the socket.
@@ -32,6 +37,7 @@ struct listen_options {
 class stream {
 public:
     explicit stream(io_context& context);
+    stream(io_context& context, address_family family);
     ~stream();
     stream(stream&& other) noexcept;
     stream& operator=(stream&& other) noexcept;
@@ -57,15 +63,21 @@ public:
     [[nodiscard]] native_socket_type native_handle() const noexcept { return fd_; }
     [[nodiscard]] io_context& context() const noexcept { return *context_; }
     [[nodiscard]] bool is_open() const noexcept { return fd_ != invalid_socket; }
+    [[nodiscard]] endpoint local_endpoint() const;
+    [[nodiscard]] endpoint remote_endpoint() const;
 
 private:
     friend class listener;
     // A short read commonly drains a socket. Wait for level readiness before
     // the next attempt instead of issuing a predictable failing recv syscall.
     bool read_may_be_ready_ = true;
-    stream(io_context& context, native_socket_type fd) noexcept;
+    stream(io_context& context, native_socket_type fd, address_family family) noexcept;
     io_context* context_;
     native_socket_type fd_ = invalid_socket;
+    address_family family_ = address_family::ipv4;
+    bool automatic_family_ = true;
+    bool connect_started_ = false;
+    bool no_delay_ = false;
 };
 
 class listener {
@@ -87,6 +99,7 @@ public:
 private:
     io_context* context_;
     native_socket_type fd_ = invalid_socket;
+    address_family family_ = address_family::ipv4;
 };
 
 } // namespace pace::tcp

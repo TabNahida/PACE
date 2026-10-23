@@ -23,7 +23,7 @@ std::cout << response.status << " " << response.body << '\n';
 ```
 
 库负责连接、Host、响应长度/分块解析和关闭。404、500 等是正常 HTTP 响应，
-需要检查 `status`；传输失败或非法协议消息通过异常报告。endpoint 目前是数字 IPv4，
+需要检查 `status`；传输失败或非法协议消息通过异常报告。endpoint 支持数字 IPv4 和 IPv6，
 不自动解析域名，也不自动重定向、重试或解压。
 
 POST 使用拥有数据的 request：
@@ -108,6 +108,44 @@ io.run();
 给 `serve`、`get`、`fetch` 或 client 构造传入 `http::limits` 可调整请求头、body、
 trailer、字段数量、chunk 行长、chunk 数量等上限。默认 body 上限为 1 MiB；
 歧义 Content-Length/Transfer-Encoding、非法 chunk 或危险 trailer 都会被拒绝并关闭连接。
-这些限额不是超时、全局连接数或全局内存策略。Expect、CONNECT、流式 body、HTTP/3
-不在这个接口范围内；HTTP/2、[HTTP/3](../reference/http3.md) 和 WebSocket
+这些限额不是全局连接数或全局内存策略。下方可选服务端 API 另提供超时和流式响应。
+Expect、CONNECT、流式请求 body、HTTP/3 不在这个接口范围内；HTTP/2、[HTTP/3](../reference/http3.md) 和 WebSocket
 使用各自独立接口。主机名可先用可选的 [DNS 扩展](../reference/dns.md)显式解析。
+
+
+## 先检查请求头，再决定是否收取 body
+
+把新 handler 的返回类型设为 `task<http::server_response>`，即可通过
+`server_options` 启用准入，仍可直接返回原有 `response`：
+
+```cpp
+pace::task<pace::http::server_response> admitted_route(pace::http::request request) {
+    co_return pace::http::response{.body = request.body};
+}
+
+pace::http::server_options options;
+options.admit = [](const pace::http::request_head& head) {
+    if (head.header("Authorization") != "Bearer example")
+        return pace::http::admission::reject(pace::http::response{.status = 401});
+    return pace::http::admission::accept(head.target == "/import" ? 1024 * 1024 : 4096);
+};
+options.request_timeout = std::chrono::seconds(10);
+options.write_timeout = std::chrono::seconds(30);
+io.spawn(pace::http::serve(listener, admitted_route, options));
+```
+
+准入回调拿到已经检查请求行、头字段和 framing 的只读视图；视图只在同步回调内有效。
+拒绝时立即发送所选响应，再关闭连接，不等待客户端上传其声明的 body。接受时选择的限额
+只作用于本次请求，同时约束 Content-Length 和 chunked；下一个 keep-alive 请求重新选择。
+小量 socket 预读允许带入少量 body，但不会先等待或收集完整 body。最终 handler 仍收到
+限额内完整缓冲的请求。
+
+响应也可返回 `streaming_response`，提供已知的 `content_length` 和独占的 `body_source`。
+PACE 给 `read(span<char>)` 的缓冲区默认最多 64 KiB；上一块写完才继续读取。断连、取消或
+写超时会停止后续读取并释放 source。可把已经打开的文件句柄放进 source，使发送期间一直
+持有同一个快照，避免把整个归档载入内存。详见[已打开文件的完整示例](../reference/http.md#bounded-response-producers)。
+
+请求超时覆盖每次请求头和 body 的接收（含 keep-alive 等待），写超时覆盖响应头和 body 的
+发送；两者均为绝对期限，收到少量数据不会重新计时。提前拒绝后撤销请求定时器，响应使用
+写期限。过期直接关闭连接，不保证另发 408。最终业务 handler 和 TLS 握手不在这两段期限内。
+准入和 producer 是同步调用，必须及时返回；期限无法抢占一个阻塞的应用回调。

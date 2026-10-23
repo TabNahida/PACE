@@ -1,5 +1,6 @@
 #include <pace/tcp.hpp>
 #include <pace/detail/profiling.hpp>
+#include <pace/detail/socket_address.hpp>
 
 #if defined(_WIN32)
 #include <winsock2.h>
@@ -68,21 +69,17 @@ int set_option(native_socket_type fd, int level, int name, int value) {
     return ::setsockopt(fd, level, name, reinterpret_cast<const char*>(&value), sizeof(value));
 }
 
-sockaddr_in socket_address(const endpoint& endpoint) {
-    sockaddr_in address{};
-    address.sin_family = AF_INET;
-    address.sin_port = htons(endpoint.port);
-    if (endpoint.address.find('\0') != std::string::npos ||
-        ::inet_pton(AF_INET, endpoint.address.c_str(), &address.sin_addr) != 1)
-        throw std::invalid_argument("expected a numeric IPv4 address");
-    return address;
-}
-
-native_socket_type create_socket() {
+native_socket_type create_socket(address_family family) {
     detail::initialize_sockets();
-    native_socket_type fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    native_socket_type fd = ::socket(detail::native_address_family(family), SOCK_STREAM, 0);
     if (fd == invalid_socket) socket_error("socket");
-    try { configure_socket(fd); }
+    try {
+        configure_socket(fd);
+        // Outbound mapped IPv4 destinations work consistently across systems.
+        // A listener overrides this before binding, defaulting to IPv6-only.
+        if (family == address_family::ipv6 && set_option(fd, IPPROTO_IPV6, IPV6_V6ONLY, 0) < 0)
+            socket_error("setsockopt(IPV6_V6ONLY)");
+    }
     catch (...) { close_socket(fd); throw; }
     return fd;
 }
@@ -97,27 +94,51 @@ void check_operation(io_context& context, native_socket_type fd) {
 }
 } // namespace
 
-stream::stream(io_context& context) : context_(&context), fd_(create_socket()) {}
-stream::stream(io_context& context, native_socket_type fd) noexcept : context_(&context), fd_(fd) {}
+stream::stream(io_context& context) : stream(context, address_family::unspecified) {}
+stream::stream(io_context& context, address_family family)
+    : context_(&context), fd_(create_socket(family == address_family::unspecified ? address_family::ipv4 : family)),
+      family_(family == address_family::unspecified ? address_family::ipv4 : family),
+      automatic_family_(family == address_family::unspecified) {}
+stream::stream(io_context& context, native_socket_type fd, address_family family) noexcept
+    : context_(&context), fd_(fd), family_(family), automatic_family_(false), connect_started_(true) {}
 stream::~stream() { close(); }
 stream::stream(stream&& other) noexcept
     : read_may_be_ready_(other.read_may_be_ready_), context_(other.context_),
-      fd_(std::exchange(other.fd_, invalid_socket)) {}
+      fd_(std::exchange(other.fd_, invalid_socket)), family_(other.family_),
+      automatic_family_(other.automatic_family_), connect_started_(other.connect_started_), no_delay_(other.no_delay_) {}
 stream& stream::operator=(stream&& other) noexcept {
     if (this != &other) {
         close();
         read_may_be_ready_ = other.read_may_be_ready_;
         context_ = other.context_;
         fd_ = std::exchange(other.fd_, invalid_socket);
+        family_ = other.family_;
+        automatic_family_ = other.automatic_family_;
+        connect_started_ = other.connect_started_;
+        no_delay_ = other.no_delay_;
     }
     return *this;
 }
 
 task<void> stream::connect(endpoint endpoint) {
     check_operation(*context_, fd_);
-    const auto address = socket_address(endpoint);
+    const auto address = detail::parse_socket_address(endpoint.address, endpoint.port, endpoint.family, endpoint.scope_id);
+    if (connect_started_) throw std::logic_error("TCP connect may only be started once per stream");
+    if (address.family() != family_) {
+        if (!automatic_family_)
+            throw std::system_error(std::make_error_code(std::errc::address_family_not_supported), "TCP connect family");
+        const auto replacement = create_socket(address.family());
+        try {
+            if (no_delay_ && set_option(replacement, IPPROTO_TCP, TCP_NODELAY, 1) < 0)
+                socket_error("setsockopt(TCP_NODELAY)");
+        } catch (...) { close_socket(replacement); throw; }
+        context_->cancel(fd_);
+        close_socket(std::exchange(fd_, replacement));
+        family_ = address.family();
+    }
+    connect_started_ = true;
     int result;
-    do { result = ::connect(fd_, reinterpret_cast<const sockaddr*>(&address), sizeof(address)); }
+    do { result = ::connect(fd_, address.data(), address.length); }
     while (result < 0 && interrupted(last_socket_error()));
     if (result == 0) co_return;
     const auto pending_error = last_socket_error();
@@ -183,6 +204,21 @@ void stream::set_no_delay(bool enabled) {
     const int value = enabled ? 1 : 0;
     if (set_option(fd_, IPPROTO_TCP, TCP_NODELAY, value) < 0)
         socket_error("setsockopt(TCP_NODELAY)");
+    no_delay_ = enabled;
+}
+
+endpoint stream::local_endpoint() const {
+    check_operation(*context_, fd_);
+    detail::socket_address address;
+    if (::getsockname(fd_, address.data(), &address.length) < 0) socket_error("getsockname");
+    return detail::socket_endpoint<endpoint>(address.data(), address.length);
+}
+
+endpoint stream::remote_endpoint() const {
+    check_operation(*context_, fd_);
+    detail::socket_address address;
+    if (::getpeername(fd_, address.data(), &address.length) < 0) socket_error("getpeername");
+    return detail::socket_endpoint<endpoint>(address.data(), address.length);
 }
 
 task<void> stream::close_gracefully(std::chrono::milliseconds timeout, std::size_t discard_limit) {
@@ -197,12 +233,18 @@ task<void> stream::close_gracefully(std::chrono::milliseconds timeout, std::size
         do { result = ::shutdown(fd_, send_side); }
         while (result < 0 && interrupted(last_socket_error()));
         if (result < 0) socket_error("shutdown(send)");
+        if (timeout.count() <= 0 || discard_limit == 0) { close(); co_return; }
 
         const auto started = std::chrono::steady_clock::now();
         const auto allowed_time = std::chrono::duration<long double>(timeout);
+        bool expired = false;
+        auto deadline = context_->call_after(timeout, [this, &expired] {
+            expired = true;
+            close();
+        });
         std::array<char, 4096> discarded{};
         std::size_t total = 0;
-        while (total < discard_limit &&
+        while (!expired && total < discard_limit &&
                std::chrono::duration<long double>(std::chrono::steady_clock::now() - started) < allowed_time) {
             check_operation(*context_, fd_);
             const auto wanted = static_cast<int>(std::min(discarded.size(), discard_limit - total));
@@ -215,10 +257,18 @@ task<void> stream::close_gracefully(std::chrono::milliseconds timeout, std::size
             const auto error = last_socket_error();
             if (interrupted(error)) continue;
             if (!would_block(error)) socket_error("recv during graceful close");
-            // A short cancellable timer bounds shutdown even when a peer keeps
-            // its send side open. No detached timer can outlive this socket.
-            co_await context_->sleep_for(std::chrono::milliseconds(1));
+            try {
+                co_await context_->wait_readable(fd_);
+            } catch (const std::system_error&) {
+                // Timeout closes and cancels the readiness wait. If readiness
+                // was already queued, the loop's expiry check avoids using the
+                // closed handle; an independent context stop still propagates.
+                if (expired && !context_->stopped()) break;
+                throw;
+            }
         }
+        if (context_->stopped())
+            throw std::system_error(std::make_error_code(std::errc::operation_canceled));
     } catch (...) {
         close();
         throw;
@@ -235,10 +285,16 @@ void stream::close() noexcept {
 
 listener::listener(io_context& context, endpoint endpoint, listen_options options)
     : context_(&context) {
-    const auto address = socket_address(endpoint);
+    const auto address = detail::parse_socket_address(endpoint.address, endpoint.port, endpoint.family, endpoint.scope_id);
     if (options.backlog <= 0) throw std::invalid_argument("listen backlog must be positive");
-    fd_ = create_socket();
+    if (address.family() == address_family::ipv4 && !options.ipv6_only)
+        throw std::invalid_argument("dual-stack listen requires an IPv6 endpoint");
+    family_ = address.family();
+    fd_ = create_socket(family_);
     try {
+        if (family_ == address_family::ipv6 &&
+            set_option(fd_, IPPROTO_IPV6, IPV6_V6ONLY, options.ipv6_only ? 1 : 0) < 0)
+            socket_error("setsockopt(IPV6_V6ONLY)");
 #if defined(_WIN32)
         if (set_option(fd_, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, 1) < 0)
             socket_error("setsockopt(SO_EXCLUSIVEADDRUSE)");
@@ -258,7 +314,7 @@ listener::listener(io_context& context, endpoint endpoint, listen_options option
         if (options.reuse_port)
             throw std::system_error(std::make_error_code(std::errc::operation_not_supported), "SO_REUSEPORT");
 #endif
-        if (::bind(fd_, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) < 0)
+        if (::bind(fd_, address.data(), address.length) < 0)
             socket_error("bind");
         if (::listen(fd_, options.backlog) < 0) socket_error("listen");
     } catch (...) {
@@ -269,12 +325,13 @@ listener::listener(io_context& context, endpoint endpoint, listen_options option
 
 listener::~listener() { close(); }
 listener::listener(listener&& other) noexcept
-    : context_(other.context_), fd_(std::exchange(other.fd_, invalid_socket)) {}
+    : context_(other.context_), fd_(std::exchange(other.fd_, invalid_socket)), family_(other.family_) {}
 listener& listener::operator=(listener&& other) noexcept {
     if (this != &other) {
         close();
         context_ = other.context_;
         fd_ = std::exchange(other.fd_, invalid_socket);
+        family_ = other.family_;
     }
     return *this;
 }
@@ -286,7 +343,7 @@ task<stream> listener::accept() {
         if (accepted != invalid_socket) {
             try { configure_socket(accepted); }
             catch (...) { close_socket(accepted); throw; }
-            co_return stream(*context_, accepted);
+            co_return stream(*context_, accepted, family_);
         }
         const auto error = last_socket_error();
         if (interrupted(error)) continue;
@@ -301,14 +358,11 @@ task<stream> listener::accept() {
 }
 
 endpoint listener::local_endpoint() const {
-    sockaddr_in address{};
-    socket_length length = sizeof(address);
-    if (::getsockname(fd_, reinterpret_cast<sockaddr*>(&address), &length) < 0)
+    check_operation(*context_, fd_);
+    detail::socket_address address;
+    if (::getsockname(fd_, address.data(), &address.length) < 0)
         socket_error("getsockname");
-    char text[INET_ADDRSTRLEN]{};
-    if (::inet_ntop(AF_INET, &address.sin_addr, text, sizeof(text)) == nullptr)
-        socket_error("inet_ntop");
-    return {text, ntohs(address.sin_port)};
+    return detail::socket_endpoint<endpoint>(address.data(), address.length);
 }
 
 void listener::close() noexcept {

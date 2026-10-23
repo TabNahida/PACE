@@ -11,12 +11,16 @@
 namespace pace::tls {
 
 enum class role { client, server };
+enum class trust_source { system, application };
+enum class sni_policy { use_default, reject };
 
-// Configure before constructing streams or sharing across threads. Streams retain
-// shared ownership of the OpenSSL configuration. Clients always verify the peer.
+// Configuration freezes on first stream construction or registration as an SNI
+// target; subsequent setters throw logic_error. Streams retain shared ownership
+// of their configuration and every SNI target. Clients always verify the peer.
 class context {
 public:
-    explicit context(role mode = role::client);
+    // application starts with no trusted roots and never loads default paths.
+    explicit context(role mode = role::client, trust_source trust = trust_source::system);
     ~context();
     context(context&&) noexcept;
     context& operator=(context&&) noexcept;
@@ -24,11 +28,21 @@ public:
     context& operator=(const context&) = delete;
 
     void load_verify_file(const std::string& pem_file);
+    // Copies one or more PEM CERTIFICATE blocks into the owned trust store.
+    // No filesystem access; the input may be released immediately after return.
+    void load_verify_pem(std::string_view certificates);
     void use_certificate_chain(const std::string& certificate_chain_file,
                                const std::string& private_key_file);
     // Server preference order; an offered list without overlap fails negotiation.
     // An empty list disables ALPN. Clients must check the negotiated protocol.
     void set_alpn_protocols(const std::vector<std::string>& protocols);
+    // Exact ASCII DNS names, case-insensitive; no wildcards or IP literals.
+    // Registration freezes and retains the server target. Targets cannot contain
+    // their own SNI mappings. A selected target's failure never uses the default.
+    void add_server_name(std::string name, const context& configuration);
+    // Missing and unrecognized SNI independently use the default certificate or
+    // fail this handshake. Both default to use_default. Server contexts only.
+    void set_server_name_policy(sni_policy missing, sni_policy unrecognized);
 private:
     struct implementation;
     std::shared_ptr<implementation> impl_;

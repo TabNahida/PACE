@@ -35,7 +35,7 @@ co_await client.connect({"127.0.0.1", 4433}, "localhost");
 Clients always verify certificate trust and the supplied DNS name or IP subject
 alternative name. The network address is independent from the expected certificate
 identity. An empty identity or embedded NUL is rejected. DNS identities send SNI;
-IPv4 identities check IP SANs. System trust paths are loaded by default, and
+IPv4 and IPv6 identities check IP SANs. System trust paths are loaded by default, and
 `load_verify_file()` adds a PEM trust file. There is no insecure client mode.
 Server keys must be unencrypted PEM files; key loading never prompts on stdin.
 Mutual TLS is not exposed in this API.
@@ -55,7 +55,9 @@ individual handshake deadlines propagate to the caller. A server can continue
 accepting after such a peer failure while `listener.is_open()` is true. Reactor
 cancellation and engine failures are propagated and close the engine.
 
-Endpoints currently accept numeric IPv4 addresses only. Resolve hostnames with
+Endpoints accept numeric IPv4 and IPv6 addresses. IPv6 listeners are IPv6-only;
+scoped QUIC destinations are explicitly rejected because OpenSSL's public
+`BIO_ADDR_rawmake` API cannot encode an interface scope. Resolve hostnames with
 the separate DNS extension before connecting.
 
 ## Independent streams
@@ -140,13 +142,13 @@ arguments throw `invalid_argument`; operation overlap/state errors use
 root tasks.
 
 This initial transport API does not expose 0-RTT, session resumption controls,
-connection migration, QUIC DATAGRAM, IPv6, custom congestion algorithms or
+connection migration, QUIC DATAGRAM, custom congestion algorithms or
 application-level graceful shutdown. It is not a replacement implementation of
 QUIC cryptography: those protocol mechanisms remain in OpenSSL.
 
 ## Validation and references
 
-`tests/quic_tests.cpp` uses Linux loopback only: real TLS 1.3/QUIC handshakes,
+`tests/quic_tests.cpp` uses local IPv4/IPv6 loopback: real TLS 1.3/QUIC handshakes,
 certificate hostname/IP matching, untrusted/expired certificate rejection, ALPN
 rejection, concurrent binary bidirectional streams, unidirectional streams in
 both directions, FIN, handshake timeouts, cancellation, connection/listener close,

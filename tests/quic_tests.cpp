@@ -103,9 +103,13 @@ pace::task<void> client_roundtrip(pace::quic::connection& connection,
     require(co_await read_to_end(reply) == "server uni", "unidirectional response mismatch");
     done.arrive();
 }
-void roundtrip(const std::filesystem::path& fixtures, std::string name) {
+void roundtrip(const std::filesystem::path& fixtures, std::string name, const char* bind = "127.0.0.1") {
     pace::io_context io; configurations config(fixtures);
-    pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
+    if (name == "::1") {
+        config.server.use_certificate_chain((fixtures / "a.example.pem").string(), (fixtures / "a.example-key.pem").string());
+        config.client.load_verify_file((fixtures / "sni-ca.pem").string());
+    }
+    pace::quic::listener listener(io, {bind, 0}, config.server);
     pace::quic::connection client(io, config.client);
     completion done{io, 0, 10};
     io.spawn(server_roundtrip(listener, done));
@@ -126,13 +130,14 @@ pace::task<void> rejecting_client(pace::io_context& io, const pace::quic::contex
     require(rejected && !connection.is_open(), "unverified QUIC peer was accepted or left open");
     io.stop();
 }
-void rejects(const std::filesystem::path& fixtures, std::string name, bool trusted, bool expired, bool alpn) {
+void rejects(const std::filesystem::path& fixtures, std::string name, bool trusted, bool expired, bool alpn,
+             const char* bind = "127.0.0.1") {
     pace::io_context io;
     pace::quic::context server(pace::quic::role::server), client;
     server.use_certificate_chain((fixtures / (expired ? "expired.pem" : "localhost.pem")).string(), (fixtures / "localhost-key.pem").string());
     if (trusted) client.load_verify_file((fixtures / "ca.pem").string());
     if (alpn) client.set_alpn_protocols({"unsupported-protocol"});
-    pace::quic::listener listener(io, {"127.0.0.1", 0}, server);
+    pace::quic::listener listener(io, {bind, 0}, server);
     bool rejected = false;
     io.spawn(accept_failure(listener));
     io.spawn(rejecting_client(io, client, listener.local_endpoint(), std::move(name), rejected));
@@ -275,6 +280,9 @@ int main(int argc, char** argv) {
         const auto fixtures = argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path() / "certs";
         roundtrip(fixtures, "localhost");
         roundtrip(fixtures, "127.0.0.1");
+        roundtrip(fixtures, "localhost", "::1");
+        roundtrip(fixtures, "::1", "::1");
+        rejects(fixtures, "::1", true, false, false, "::1");
         rejects(fixtures, "wrong.example", true, false, false);
         rejects(fixtures, "localhost", false, false, false);
         rejects(fixtures, "localhost", true, true, false);

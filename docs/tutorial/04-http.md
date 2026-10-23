@@ -25,7 +25,8 @@ pace::task<void> use_http(pace::io_context& io, pace::tcp::endpoint endpoint) {
 ```
 
 `get` connects, generates Host, handles response framing and closes. Its endpoint
-is numeric IPv4; a DNS lookup is not performed. A 404 or 500 is a normal response
+is numeric IPv4 or IPv6; a DNS lookup is not performed. IPv6 addresses such as
+`::1` remain unbracketed in the endpoint; generated Host authorities are bracketed. A 404 or 500 is a normal response
 whose `status` you inspect. Protocol/transport failures throw.
 
 To POST, use `fetch` with an owned message:
@@ -150,11 +151,53 @@ line bytes, chunk count and client informational responses. Malformed or ambiguo
 Content-Length/chunked framing is rejected and the connection is closed. Trailers
 cannot redefine framing, Host, connection control or authentication fields.
 
-These limits bound individual messages and parsing metadata. They do not provide
-request deadlines, global memory limits or a connection-count policy. Bodies are
-buffered; automatic DNS, redirects, retries and decompression are absent. HTTP/2,
+These limits bound individual messages and parsing metadata. The opt-in server
+options below add receive/write deadlines; global memory and connection-count
+policy remain application responsibilities. Automatic DNS, redirects, retries
+and decompression are absent. HTTP/2,
 [HTTP/3](../reference/http3.md) and WebSocket have separate APIs. Hostnames can
 be resolved explicitly with the optional [DNS extension](../reference/dns.md).
+
+## Check headers before accepting a body
+
+Use the new `server_handler` return type to opt in while retaining ordinary
+buffered responses:
+
+```cpp
+pace::task<pace::http::server_response> admitted_route(pace::http::request request) {
+    co_return pace::http::response{.body = request.body};
+}
+
+pace::http::server_options options;
+options.admit = [](const pace::http::request_head& head) {
+    if (head.header("Authorization") != "Bearer example")
+        return pace::http::admission::reject(pace::http::response{.status = 401});
+    return pace::http::admission::accept(head.target == "/import" ? 1024 * 1024 : 4096);
+};
+options.request_timeout = std::chrono::seconds(10);
+options.write_timeout = std::chrono::seconds(30);
+io.spawn(pace::http::serve(listener, admitted_route, options));
+```
+
+Admission runs after framing validation and before body collection. A rejection
+is sent immediately, even if the peer withholds the body, and then closes the
+connection. The selected limit applies to both Content-Length and chunked input,
+and is selected again on each keep-alive request. The borrowed head is valid only
+during the synchronous callback. Accepted requests still reach the final handler
+with a complete buffered body.
+
+The same handler can return `streaming_response` with an owned `body_source` and
+a known `content_length`. PACE calls `source->read(span<char>)` with a bounded
+buffer, waits for each chunk to be written, then asks for another. Disconnect,
+cancellation or write expiry releases the source. See the
+[open-file producer example](../reference/http.md#bounded-response-producers)
+for serving a snapshot without loading the whole file into memory.
+
+Request/write timeouts are absolute budgets for their receive/send phases;
+they exclude the final handler and TLS handshake. Expiry closes the transport.
+The request budget ends on early rejection and the write budget then covers its
+reply. Producer/admission calls are synchronous and must return promptly.
+[Deadline details](../reference/http.md#server-deadlines) describe these boundaries.
 
 Reference: [HTTP/1.1 and HTTPS API](../reference/http.md).
 Next: [execution and worker selection](05-execution.md).

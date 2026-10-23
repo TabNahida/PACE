@@ -18,7 +18,8 @@ pace::task<void> lookup(pace::io_context& io) {
 `result` with `canonical_name` and deduplicated `addresses`. Each address has a
 `family` (`ipv4` or `ipv6`) and numeric `text`. `any` queries A and AAAA. Numeric
 addresses and hosts-file results can complete without DNS packets. Resolving an
-AAAA record does **not** add IPv6 transport support to PACE's IPv4 sockets.
+AAAA record can be used with PACE's numeric IPv6 TCP/UDP endpoints. Address
+selection and IPv4/IPv6 connection racing remain application responsibilities.
 
 `options` selects the whole-lookup `timeout` (default 5 seconds), c-ares `tries`
 (default 2), and optional comma-separated numeric DNS `servers`, including ports
@@ -38,8 +39,8 @@ Whole-lookup expiry reports `timed_out`; other DNS failures preserve their c-are
 status in `pace::dns::error_category()`. A failed or canceled resolver is reusable
 until destroyed. The context must outlive all lookup tasks.
 
-The current runtime cannot individually remove a timer. Completed lookup state
-may remain owned by its timer for up to 100 ms; it holds no active DNS sockets
+The DNS adapter currently uses a bounded coroutine timer. Completed lookup state
+may remain owned by that timer for up to 100 ms; it holds no active DNS sockets
 after completion. This is a resource-lifetime bound, not polling for DNS packets.
 
 `xmake run tutorial_dns` uses numeric loopback and is deterministic offline.

@@ -39,5 +39,6 @@ HTTP/1.1 和 WebSocket 默认启用；TLS、DNS、QUIC、HTTP/2、HTTP/3 按需�
 - [性能](performance.md)：本地 Linux 完整数据、取舍与复现方法。
 - [平台支持](reference/platform.md)：各平台后端与支持的配置。
 
-当前传输使用 IPv4，HTTP body 采用缓冲方式；DNS 可解析 A 和 AAAA 记录。
+TCP、UDP 与 QUIC 支持数字 IPv4/IPv6 地址，DNS 可解析 A 和 AAAA。
+HTTP/1 支持请求头准入、逐请求 body 限额和有界流式响应；HTTP/2、HTTP/3 的 body 仍采用缓冲方式。
 各协议的具体边界见对应参考页。

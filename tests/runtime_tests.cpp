@@ -176,6 +176,74 @@ void timer_fairness_with_ready_work() {
             "due timer must make progress while callbacks and coroutines are ready");
 }
 
+void cancellable_callback_timers() {
+    pace::io_context::timer_handle survivor;
+    std::weak_ptr<int> released;
+    {
+        pace::io_context io;
+        auto capture = std::make_shared<int>(42);
+        released = capture;
+        survivor = io.call_after(24h, [capture] {});
+        capture.reset();
+        require(!released.expired(), "armed timer must own its callback");
+        survivor.cancel();
+        require(released.expired(), "cancel must release callback immediately");
+        capture = std::make_shared<int>(1);
+        released = capture;
+        survivor = io.call_after(24h, [capture] {});
+        capture.reset();
+    }
+    require(released.expired(), "context destruction must release callback");
+    survivor.cancel(); // An expired context must never be dereferenced.
+    {
+        pace::io_context io;
+        std::vector<int> order;
+        const auto now = std::chrono::steady_clock::now();
+        auto canceled = io.call_at(now, [&] { order.push_back(99); });
+        auto first = io.call_at(now, [&] { order.push_back(1); });
+        auto moved = std::move(first);
+        first.cancel();
+        auto second = io.call_at(now, [&] { order.push_back(2); io.stop(); });
+        canceled.cancel();
+        io.run();
+        require(order == std::vector<int>{1, 2}, "timers must fire once in deadline/registration order");
+    }
+    {
+        pace::io_context io;
+        auto other = std::make_shared<pace::io_context::timer_handle>(io.call_after(24h, [] {}));
+        auto outer = io.call_after(24h, [other] {});
+        other.reset();
+        outer.cancel(); // Capture destruction cancels another timer reentrantly.
+        bool fired = false;
+        auto pending = io.call_after(0ms, [&] { fired = true; });
+        io.stop(); io.run();
+        require(!fired, "stop discards callbacks without firing");
+    }
+    {
+        pace::io_context io;
+        auto error = io.call_after(0ms, [] { throw std::runtime_error("callback timer failure"); });
+        bool caught = false;
+        try { io.run(); } catch (const std::runtime_error&) { caught = true; }
+        require(caught, "timer callback errors must reach run");
+    }
+    {
+        pace::io_context io;
+        pace::io_context::timer_handle again;
+        unsigned fires = 0, posts = 0;
+        std::function<void()> repeat = [&] {
+            ++fires;
+            again = io.call_at(std::chrono::steady_clock::time_point::min(), repeat);
+        };
+        again = io.call_at(std::chrono::steady_clock::time_point::min(), repeat);
+        std::function<void()> progress = [&] {
+            if (++posts == 3) { require(fires > 0, "due callbacks must progress"); io.stop(); }
+            else io.post(progress);
+        };
+        io.post(progress); io.run();
+        require(posts == 3 && fires <= 512, "callbacks must not starve reactor work");
+    }
+}
+
 pace::task<void> counted_cancellation(pace::io_context& io, unsigned& canceled,
                                       unsigned& destroyed, completion_signal& started) {
     struct lifetime {
@@ -701,6 +769,7 @@ void run_tests() {
     mixed_concurrent_submissions();
     repeated_sleep_and_wake();
     timer_fairness_with_ready_work();
+    cancellable_callback_timers();
     shutdown_exactly_once();
     runtime_thread_modes();
     runtime_caller_failures();

@@ -176,8 +176,8 @@ struct lookup : std::enable_shared_from_this<lookup> {
             while (!self->done) {
                 const auto now = std::chrono::steady_clock::now();
                 if (now >= self->deadline) { self->cancel(std::errc::timed_out); break; }
-                // Timers cannot yet be individually removed from io_context. A
-                // short cap releases completed operation state promptly.
+                // This coroutine also propagates context shutdown to lookups.
+                // A short cap bounds retention of completed operation state.
                 timeval maximum{0, 100000}, next{};
                 const auto* wait = ares_timeout(self->channel, &maximum, &next);
                 auto delay = std::chrono::microseconds(wait->tv_sec * 1000000LL + wait->tv_usec);

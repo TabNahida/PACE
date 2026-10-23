@@ -51,7 +51,7 @@ N 是 context 总数，必须大于零；N=1 的调用线程模式不创建 runt
 
 ## TCP 和 HTTP 边界
 
-TCP endpoint 仅支持数字 IPv4。每个 socket 最多并行一个读和一个写，
+TCP endpoint 支持数字 IPv4/IPv6、地址族与数字 scope_id；IPv6 监听默认仅 IPv6，可显式选择双栈。每个 socket 最多并行一个读和一个写，
 不能并行两个读、两个写或移动有未完成操作的 socket。
 `read_some` 不保证填满缓冲区；非空缓冲区返回零表示 EOF。
 `write_all` 完成表示数据已交给本机网络栈，不代表对端已经处理。

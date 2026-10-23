@@ -322,9 +322,14 @@ task<void> read_body(Transport& stream, std::string& pending, const framing& fra
     }
 }
 
+struct parsed_request {
+    request message;
+    framing frame;
+};
+
 template<class Transport>
-task<std::optional<request>> read_request(Transport& stream, std::string& pending,
-                                         limits bounds, bool& head_request) {
+task<std::optional<parsed_request>> read_request_head(Transport& stream, std::string& pending,
+                                                     limits bounds, bool& head_request) {
     auto head = co_await read_head(stream, pending, bounds, &head_request);
     if (!head) co_return std::nullopt;
     const auto line_end = head->find("\r\n");
@@ -341,11 +346,10 @@ task<std::optional<request>> read_request(Transport& stream, std::string& pendin
     if (result.version != "HTTP/1.1" && result.version != "HTTP/1.0") throw parse_failure{505};
     if (result.method == "CONNECT") throw parse_failure{501};
     result.headers = parse_fields(std::string_view(*head).substr(line_end + 2), bounds.max_header_fields);
-    const auto frame = parse_framing(result.headers, result.version, true);
+    auto frame = parse_framing(result.headers, result.version, true);
     result.keep_alive = frame.keep_alive;
     result.chunked = frame.chunked;
-    co_await read_body(stream, pending, frame, bounds, result.body, result.trailers);
-    co_return result;
+    co_return parsed_request{std::move(result), std::move(frame)};
 }
 
 void validate_output_field(const header_field& field) {
@@ -384,10 +388,13 @@ std::string encode_chunks(std::string_view body, const std::vector<header_field>
     return result;
 }
 
-std::string encode_response(const response& result, bool keep_alive, bool head_request, bool http10 = false) {
+std::string encode_response(const response& result, bool keep_alive, bool head_request, bool http10 = false,
+                            std::optional<std::uint64_t> streamed_length = {}) {
     if (result.status < 200 || result.status > 599)
         throw std::invalid_argument("HTTP final response status must be in [200, 599]");
     if (!valid_value(result.content_type)) throw std::invalid_argument("invalid HTTP content type");
+    if (streamed_length && (!result.body.empty() || result.chunked || !result.trailers.empty()))
+        throw std::invalid_argument("streamed responses require an empty body and Content-Length framing");
     const bool omit_length = result.status == 204 || result.status == 304;
     const bool no_body = omit_length || result.status == 205;
     if (!result.trailers.empty() && (!result.chunked || http10))
@@ -396,7 +403,7 @@ std::string encode_response(const response& result, bool keep_alive, bool head_r
     const auto declared = trailer_declaration(result.trailers);
     std::string output = "HTTP/1.1 " + std::to_string(result.status) + " " + std::string(reason(result.status)) + "\r\n";
     if (chunked) output += "Transfer-Encoding: chunked\r\n" + (head_request ? std::string{} : declared);
-    else if (!omit_length) output += "Content-Length: " + std::to_string(result.status == 205 ? 0 : result.body.size()) + "\r\n";
+    else if (!omit_length) output += "Content-Length: " + std::to_string(result.status == 205 ? 0 : streamed_length.value_or(result.body.size())) + "\r\n";
     if (!result.content_type.empty()) output += "Content-Type: " + result.content_type + "\r\n";
     output += keep_alive ? "Connection: keep-alive\r\n" : "Connection: close\r\n";
     for (const auto& field : result.headers) {
@@ -406,7 +413,7 @@ std::string encode_response(const response& result, bool keep_alive, bool head_r
         output += field.name + ": " + field.value + "\r\n";
     }
     output += "\r\n";
-    if (!head_request && !no_body) output += chunked ? encode_chunks(result.body, result.trailers) : result.body;
+    if (!streamed_length && !head_request && !no_body) output += chunked ? encode_chunks(result.body, result.trailers) : result.body;
     return output;
 }
 
@@ -485,27 +492,150 @@ task<response> read_response(Transport& stream, std::string& pending, limits bou
     }
 }
 
+// Deadlines own cancellable runtime timers, so a fast persistent connection does
+// not retain one sleeping coroutine/timer for each completed request.
+class phase_deadline {
+public:
+    template<class Transport>
+    phase_deadline(Transport& stream, std::chrono::milliseconds duration) {
+        if (duration.count() == 0) return;
+        close_ = [&stream] { stream.close(); };
+        const auto now = std::chrono::steady_clock::now();
+        const auto room = std::chrono::steady_clock::time_point::max() - now;
+        end_ = duration >= std::chrono::duration_cast<std::chrono::milliseconds>(room)
+            ? std::chrono::steady_clock::time_point::max() : now + duration;
+        timer_ = stream.context().call_at(end_, [this] {
+            expired_ = true;
+            close_();
+        });
+    }
+    phase_deadline(const phase_deadline&) = delete;
+    void check() {
+        if (close_ && (expired_ || std::chrono::steady_clock::now() >= end_)) {
+            close_();
+            throw std::system_error(std::make_error_code(std::errc::timed_out), "HTTP deadline expired");
+        }
+    }
+private:
+    std::function<void()> close_;
+    std::chrono::steady_clock::time_point end_{};
+    bool expired_ = false;
+    io_context::timer_handle timer_;
+};
+
+void validate_options(const server_options& options) {
+    if (options.request_timeout.count() < 0 || options.write_timeout.count() < 0 ||
+        options.response_buffer_bytes == 0)
+        throw std::invalid_argument("HTTP server deadlines must be nonnegative and response buffer must be nonzero");
+}
+
+response& response_metadata(server_response& outgoing) {
+    if (auto* buffered = std::get_if<response>(&outgoing)) return *buffered;
+    return std::get<streaming_response>(outgoing).head;
+}
+
 template<class Transport>
-task<void> process_connection(Transport& stream, const handler& handle, limits bounds) {
+task<bool> write_response(Transport& stream, server_response& outgoing, bool& keep_alive,
+                          bool head_request, bool http10, const server_options& options) {
+    phase_deadline deadline(stream, options.write_timeout);
+    std::string encoded;
+    auto* streamed = std::get_if<streaming_response>(&outgoing);
+    bool send_body = false;
+    try {
+        const auto& metadata = response_metadata(outgoing);
+        send_body = streamed && !head_request && metadata.status != 204 &&
+                    metadata.status != 205 && metadata.status != 304;
+        if (send_body && streamed->content_length != 0 && !streamed->source)
+            throw std::invalid_argument("streamed HTTP response requires a body source");
+        encoded = encode_response(metadata, keep_alive, head_request, http10,
+                                  streamed ? std::optional(streamed->content_length) : std::nullopt);
+    } catch (const std::invalid_argument&) {
+        keep_alive = false;
+        outgoing = response{.status = 500, .body = "Internal Server Error\n"};
+        streamed = nullptr;
+        send_body = false;
+        encoded = encode_response(std::get<response>(outgoing), false, head_request);
+    }
+    deadline.check();
+    co_await stream.write_all(encoded);
+    deadline.check();
+    if (send_body) {
+        std::uint64_t remaining = streamed->content_length;
+        try {
+            std::vector<char> buffer(static_cast<std::size_t>(
+                std::min<std::uint64_t>(options.response_buffer_bytes, remaining)));
+            while (remaining != 0) {
+                deadline.check();
+                if (stream.context().stopped() || !stream.is_open())
+                    throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+                const auto wanted = static_cast<std::size_t>(std::min<std::uint64_t>(buffer.size(), remaining));
+                const auto count = streamed->source->read(std::span<char>(buffer.data(), wanted));
+                deadline.check();
+                if (count == 0 || count > wanted)
+                    throw protocol_error("HTTP response producer returned an invalid byte count");
+                co_await stream.write_all(std::string_view(buffer.data(), count));
+                deadline.check();
+                remaining -= count;
+            }
+        } catch (...) {
+            // Headers may already be on the wire. A second status line would
+            // corrupt framing; terminate this connection and release the source.
+            streamed->source.reset();
+            stream.close();
+            co_return false;
+        }
+    }
+    if (streamed) streamed->source.reset();
+    co_return true;
+}
+
+template<class Transport, class Handler>
+task<void> process_connection(Transport& stream, const Handler& handle, const server_options& options) {
+    const auto bounds = options.bounds;
     std::string pending;
     for (std::size_t count = 0; count < bounds.max_requests_per_connection; ++count) {
-        std::optional<request> incoming;
-        response outgoing;
-        bool keep_alive = false, head_request = false, http10 = false;
+        std::optional<parsed_request> incoming;
+        server_response outgoing;
+        bool keep_alive = false, head_request = false, http10 = false, rejected = false;
         unsigned error_status = 0;
-        try { incoming = co_await read_request(stream, pending, bounds, head_request); }
-        catch (const parse_failure& error) { error_status = error.status; }
-        if (error_status) {
-            outgoing.status = error_status;
-            outgoing.body = std::string(reason(error_status)) + "\n";
-        } else {
+        try {
+            phase_deadline deadline(stream, options.request_timeout);
+            incoming = co_await read_request_head(stream, pending, bounds, head_request);
+            deadline.check();
             if (!incoming) co_return;
-            keep_alive = incoming->keep_alive && count + 1 < bounds.max_requests_per_connection;
-            head_request = incoming->method == "HEAD";
-            http10 = incoming->version == "HTTP/1.0";
+            auto& message = incoming->message;
+            head_request = message.method == "HEAD";
+            http10 = message.version == "HTTP/1.0";
+            auto selected_bounds = bounds;
+            if (options.admit) {
+                admission selected;
+                try {
+                    selected = options.admit(request_head{message.method, message.target, message.version,
+                        message.headers, incoming->frame.length, message.chunked, message.keep_alive});
+                } catch (const std::system_error& error) {
+                    if (error.code() == std::errc::operation_canceled) throw;
+                    error_status = 500;
+                } catch (...) { error_status = 500; }
+                deadline.check();
+                if (selected.rejection) {
+                    outgoing = std::move(*selected.rejection);
+                    rejected = true;
+                } else if (selected.max_body_bytes) {
+                    selected_bounds.max_body_bytes = *selected.max_body_bytes;
+                }
+            }
+            if (!rejected && !error_status) {
+                co_await read_body(stream, pending, incoming->frame, selected_bounds, message.body, message.trailers);
+                deadline.check();
+            }
+        } catch (const parse_failure& error) { error_status = error.status; }
+        if (error_status) {
+            outgoing = response{.status = error_status, .body = std::string(reason(error_status)) + "\n"};
+        } else if (!rejected) {
+            keep_alive = incoming->message.keep_alive && count + 1 < bounds.max_requests_per_connection;
             try {
-                outgoing = co_await handle(std::move(*incoming));
-                keep_alive = keep_alive && !outgoing.close;
+                outgoing = co_await handle(std::move(incoming->message));
+                keep_alive = keep_alive && !response_metadata(outgoing).close;
             } catch (const std::system_error& error) {
                 if (error.code() == std::errc::operation_canceled) throw;
                 error_status = 500;
@@ -515,13 +645,7 @@ task<void> process_connection(Transport& stream, const handler& handle, limits b
                 keep_alive = false;
             }
         }
-        std::string encoded;
-        try { encoded = encode_response(outgoing, keep_alive, head_request, http10); }
-        catch (const std::invalid_argument&) {
-            keep_alive = false;
-            encoded = encode_response(response{.status = 500, .body = "Internal Server Error\n"}, false, head_request);
-        }
-        co_await stream.write_all(encoded);
+        if (!co_await write_response(stream, outgoing, keep_alive, head_request, http10, options)) co_return;
         if (!keep_alive) { co_await stream.close_gracefully(); co_return; }
     }
 }
@@ -530,6 +654,9 @@ void default_host(request& outgoing, std::string host, std::uint16_t port, std::
     const bool exists = std::any_of(outgoing.headers.begin(), outgoing.headers.end(),
                                   [](const auto& field) { return equal_ci(field.name, "host"); });
     if (!exists) {
+        // The endpoint/name is an unbracketed numeric literal; HTTP authority
+        // syntax needs brackets to distinguish its colons from the port.
+        if (host.find(':') != std::string::npos && !host.starts_with('[')) host = "[" + host + "]";
         if (port != default_port) host += ":" + std::to_string(port);
         outgoing.headers.push_back({"Host", std::move(host)});
     }
@@ -544,6 +671,11 @@ void check_http_protocol(const tls::stream& stream) {
 }
 #endif
 } // namespace
+
+std::string_view request_head::header(std::string_view name) const noexcept {
+    for (const auto& field : headers) if (equal_ci(field.name, name)) return field.value;
+    return {};
+}
 
 template<class Transport>
 task<response> basic_client<Transport>::send(request outgoing) {
@@ -578,13 +710,32 @@ template class basic_client<tcp::stream>;
 task<void> serve_connection(tcp::stream stream, handler handle, limits bounds) {
     try {
         stream.set_no_delay();
-        co_await process_connection(stream, handle, bounds);
+        co_await process_connection(stream, handle, server_options{.bounds = bounds});
     } catch (const std::system_error&) { /* A transport error belongs to this client. */ }
 }
 
 task<void> serve(tcp::listener& listener, handler handle, limits bounds) {
     for (;;) {
         try { listener.context().spawn(serve_connection(co_await listener.accept(), handle, bounds)); }
+        catch (const std::system_error& error) {
+            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+            throw;
+        }
+    }
+}
+
+task<void> serve_connection(tcp::stream stream, server_handler handle, server_options options) {
+    validate_options(options);
+    try {
+        stream.set_no_delay();
+        co_await process_connection(stream, handle, options);
+    } catch (const std::system_error&) { /* A transport error belongs to this client. */ }
+}
+
+task<void> serve(tcp::listener& listener, server_handler handle, server_options options) {
+    validate_options(options);
+    for (;;) {
+        try { listener.context().spawn(serve_connection(co_await listener.accept(), handle, options)); }
         catch (const std::system_error& error) {
             if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
             throw;
@@ -613,7 +764,16 @@ task<void> serve_connection(tls::stream stream, handler handle, limits bounds) {
     try {
         check_http_protocol(stream);
         stream.set_no_delay();
-        co_await process_connection(stream, handle, bounds);
+        co_await process_connection(stream, handle, server_options{.bounds = bounds});
+    } catch (const std::system_error&) { /* TLS/transport failure is per connection. */ }
+}
+
+task<void> serve_connection(tls::stream stream, server_handler handle, server_options options) {
+    validate_options(options);
+    try {
+        check_http_protocol(stream);
+        stream.set_no_delay();
+        co_await process_connection(stream, handle, options);
     } catch (const std::system_error&) { /* TLS/transport failure is per connection. */ }
 }
 
@@ -624,6 +784,13 @@ task<void> handshake_and_serve(tls::stream stream, handler handle, limits bounds
         co_await serve_connection(std::move(stream), std::move(handle), bounds);
     } catch (const std::system_error&) { /* A bad TLS peer must not stop the listener. */ }
 }
+
+task<void> handshake_and_serve(tls::stream stream, server_handler handle, server_options options) {
+    try {
+        co_await stream.handshake();
+        co_await serve_connection(std::move(stream), std::move(handle), std::move(options));
+    } catch (const std::system_error&) { /* A bad TLS peer must not stop the listener. */ }
+}
 }
 
 task<void> serve(tcp::listener& listener, const tls::context& configuration, handler handle, limits bounds) {
@@ -631,6 +798,20 @@ task<void> serve(tcp::listener& listener, const tls::context& configuration, han
         try {
             tls::stream stream(co_await listener.accept(), configuration);
             listener.context().spawn(handshake_and_serve(std::move(stream), handle, bounds));
+        } catch (const std::system_error& error) {
+            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+            throw;
+        }
+    }
+}
+
+task<void> serve(tcp::listener& listener, const tls::context& configuration,
+                 server_handler handle, server_options options) {
+    validate_options(options);
+    for (;;) {
+        try {
+            tls::stream stream(co_await listener.accept(), configuration);
+            listener.context().spawn(handshake_and_serve(std::move(stream), handle, options));
         } catch (const std::system_error& error) {
             if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
             throw;

@@ -42,10 +42,11 @@ Include `<pace/udp.hpp>`. All types are in `pace::udp`.
 
 | API | Purpose |
 |---|---|
-| `endpoint{address, port}` | Numeric IPv4 address and UDP port; port 0 chooses a local ephemeral port |
-| `socket(io)` | Create a nonblocking datagram socket; the OS binds it on first send |
-| `socket(io, endpoint)` | Create and bind a socket |
-| `bind(endpoint)` | Bind an unbound socket |
+| `endpoint{address, port, family, scope_id}` | Numeric IPv4/IPv6 and UDP port; the last two fields are optional |
+| `socket(io)` | Create a nonblocking socket; first bind/send selects its family |
+| `socket(io, pace::address_family)` | Create a socket with an explicit IPv4 or IPv6 family |
+| `socket(io, endpoint, bind_options = {})` | Create and bind a socket |
+| `bind(endpoint, bind_options = {})` | Bind an unbound socket |
 | `local_endpoint()` | Return the bound local address and port |
 | `send_to(bytes, endpoint)` | Send one datagram; returns its size |
 | `receive_from(buffer)` | Receive one datagram into a `span<char>` or `span<byte>` |
@@ -71,9 +72,45 @@ throws `system_error(message_size)`; a network may impose a smaller effective
 limit. Cancellation throws `system_error(operation_canceled)`. Other OS failures
 throw `system_error`. UDP does not guarantee delivery, order, or uniqueness.
 
-This API currently supports numeric IPv4 unicast and broadcast. Resolve hostnames
-explicitly with the separate [DNS extension](dns.md). IPv6 transport and multicast
-membership are not exposed.
+## IPv6 and dual-stack policy
+
+`endpoint` retains its original `address` and `port` fields, followed by
+`pace::address_family family = pace::address_family::unspecified` and
+`uint32_t scope_id = 0`. Existing `{address, port}` initializers remain valid.
+An unspecified input family is inferred from the numeric address; an explicit
+`ipv4` or `ipv6` must match. Local and sender endpoints report the concrete
+family. `::1` is IPv6 loopback; `::` is the IPv6 wildcard. IPv6 addresses are
+unbracketed. Hostnames and malformed addresses throw `invalid_argument`.
+Resolve hostnames with the separate [DNS extension](dns.md).
+
+Use a numeric interface index in `scope_id` for scoped IPv6 addresses. Native
+sender/local inspection preserves it separately from the address string.
+`%zone` strings, including numeric suffixes, are rejected; for example, use
+`{"fe80::1", port, pace::address_family::ipv6, 3}` instead of `fe80::1%3`.
+Nonzero scope on IPv4 is invalid. Link-local reachability depends on the selected
+host interface; PACE does not resolve interface names.
+
+An IPv6 socket defaults to `IPV6_V6ONLY=1`, independent of the OS default. To
+receive both families on one wildcard socket, use:
+
+```cpp
+pace::udp::socket receiver(io, {"::", 0}, {.ipv6_only = false});
+```
+
+This explicitly sets `IPV6_V6ONLY=0` before bind; native option failures propagate.
+`ipv6_only=false` is invalid on an IPv4 endpoint. IPv4 senders appear as mapped
+IPv6 endpoints, such as `::ffff:127.0.0.1`, and can be passed directly to
+`send_to` for a reply. On a dual-stack socket, `send_to` also maps an ordinary
+IPv4 destination to the required native IPv6 form. IPv6-only sockets reject
+IPv4 destinations. There is no multicast membership API, and IPv6 has no
+broadcast: `set_broadcast` is only supported on IPv4 sockets.
+
+The default constructor initially owns an IPv4 handle. Before the first bind,
+send or receive, it can replace that handle to select IPv6. After the family is
+selected, it cannot change. Calling `set_broadcast` also selects IPv4. Use an
+explicit family constructor when applying native socket options before setup;
+it keeps the handle and rejects a mismatched family. Bind requires an idle
+socket. Auto-selection does not change the socket's context or ownership rules.
 
 ## 中文：先运行，再使用
 
@@ -85,7 +122,9 @@ membership are not exposed.
 
 同一 socket 可同时挂起一次发送和一次接收；同方向重复操作会报错。协程操作在
 socket 所属的 `io_context` 上执行，完成前要保留 socket 和缓冲区，不能移动它。
-`close()` 或停止 context 会取消等待。当前地址支持数字形式的 IPv4；主机名可先用
-独立的 [DNS 扩展](dns.md)解析。尚无 IPv6 传输或加入组播组的接口。
+`close()` 或停止 context 会取消等待。地址支持数字形式的 IPv4/IPv6，主机名可先用
+独立的 [DNS 扩展](dns.md)解析。IPv6 默认只接收 IPv6；在 `::` 上绑定时显式设置
+`{.ipv6_only = false}` 可启用双栈。IPv4 来源保留为 `::ffff:...` 映射地址，方便直接回复。
+作用域使用独立的数字 `scope_id`，不接受 `%接口名` 或 `%数字` 后缀。尚无加入组播组的接口。
 
 [Tutorials](../tutorial/README.md) · [Reference index](README.md)
