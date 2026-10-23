@@ -1,7 +1,7 @@
 # Windows ARM64 OpenSSL handshake diagnosis
 
 This is a functional correctness investigation, not a performance measurement.
-The candidate build correction is restricted to native Windows ARM64 and
+The verified build correction is restricted to native Windows ARM64 and
 OpenSSL 3.5.7. Other platforms continue to use the upstream xmake package.
 
 ## Reproduction and captured failure
@@ -78,10 +78,35 @@ elliptic curves and post-quantum algorithms are unchanged. The rationale is
 documented in Microsoft's [stack-checking option reference](https://learn.microsoft.com/en-us/cpp/build/reference/gs-control-stack-checking-calls)
 and [ARM64 prologue/unwind reference](https://learn.microsoft.com/en-us/cpp/build/arm64-exception-handling).
 
-At this revision this is a candidate correction. Acceptance requires a fresh
-native ARM64 build, all nine independent OpenSSL diagnostic processes, and the
-ordinary TLS-dependent test suites. No TLS tests are skipped or allowed to
-pass by ignoring failures.
+## Native verification
+
+[CI run 40021430370, Windows ARM64 job 120646677124](https://github.com/TabNahida/PACE/actions/runs/40021430370/job/120646677124)
+passed at revision `ea6ca4141d64044ed0084bc75f224c5dad5c8321`. The dependency
+was built under the new package identity. Its runtime compiler metadata
+confirms `/Gs4096` and `/O2` with the same OpenSSL 3.5.7 `VC-WIN64-ARM` target.
+
+All nine independent diagnostic processes passed, including every previously
+failing handshake variant. All 20 ordinary native test targets passed,
+including TLS, HTTP/2, HTTP extended tests, WebSocket and the TLS tutorial.
+Independent Python/PACE WebSocket interoperability also passed. No TLS tests
+were skipped or allowed to pass by ignoring failures.
+
+The successful executable's SHA-256 is
+`c18adb0e45790c0c3c5e93bfbce6b349fd6ffe2ab0458934dc12ac555d138ec3`.
+Its `tls_parse_all_extensions` starts at RVA `0x845e0`:
+
+```asm
+sub sp, sp, #0x60
+sub sp, sp, #0x10            ; no stack-probe call for this small frame
+ldr x8, [x0, #0x878]
+; ... register saves, with no BL/BLR before saving LR ...
+str x30, [sp, #0x60]         ; RVA 0x84610: preserves caller's return address
+```
+
+Thus the machine-code defect identified in the failing executable is absent
+in the successful executable. The independent diagnostic links no PACE
+production objects, so concurrent changes to PACE's TLS transport cannot
+explain this diagnostic's before/after result.
 
 ## Inspecting the evidence
 

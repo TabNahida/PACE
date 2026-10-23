@@ -169,7 +169,8 @@ jobs:
             xmake --version
             xmake f -c -m release -o build/ci --cxxstandard=cxx20 --http1=y --websocket=y --tls=y --dns=y --quic=y --http2=y --http3=y --benchmarks=y --components=y --scaling=y --profiling=n --sanitizers=n --examples=y --tests=y -y
             xmake -y
-            xmake test -v
+            python3 scripts/ci_portability.py --build-dir build/ci --target x86_64 --mode native --metadata-only --output ci-results/architecture.json
+            PACE_HTTP2_TRACE=1 xmake test -v
             python3 tests/websocket_interop.py --build-dir build/ci
             python3 -m unittest discover -s tests -p "test_*.py"
             python3 scripts/ci_smoke.py --build-dir build/ci --output ci-results/smoke.json

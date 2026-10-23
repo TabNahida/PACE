@@ -4,6 +4,7 @@
 
 - HTTP/1 clients complete fully framed responses without waiting for the peer's FIN; an explicit graceful close policy retains a configurable drain budget (#15).
 - HTTP/2 and HTTP/3 dispatch bounded concurrent application handlers while a single driver owns each protocol session.
+- HTTP/2 preserves completed requests after a TCP half-close and keeps TLS duplex transfers progressing under small socket buffers.
 - WebSocket reads ahead into a bounded buffer, assembles data directly into the returned message, and reuses outgoing frame storage.
 - Expand remote checks to native 32/64-bit and ARM systems, Linux QEMU architectures including big-endian s390x, Android/iOS compilation, and MinGW.
 

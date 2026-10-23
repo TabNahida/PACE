@@ -16,19 +16,21 @@ measurement.
 
 | Protocol | 1 handler median | 8 handlers median | Ratio |
 |---|---:|---:|---:|
-| HTTP/2 over TCP | 162.411 ms | 20.322 ms | 7.99× |
-| HTTP/2 over TLS | 162.775 ms | 20.576 ms | 7.91× |
-| HTTP/3 over QUIC | 163.877 ms | 20.923 ms | 7.83× |
+| HTTP/2 over TCP | 163.036 ms | 20.500 ms | 7.95× |
+| HTTP/2 over TLS | 163.167 ms | 20.847 ms | 7.83× |
+| HTTP/3 over QUIC | 164.040 ms | 21.016 ms | 7.81× |
 
 The expected timer floor changes from roughly 160 ms to 20 ms. These numbers
 show that independent handler waits overlap; they are not general throughput
 multipliers. No claim is made about CPU-bound handlers, production latency,
 other reactor/thread layouts, or Asio/libuv HTTP performance.
 
-[All samples](samples.csv), [summary](summary.json), and
-[environment, exact commands and SHA-256 provenance](metadata.json) are retained.
-The metadata identifies an uncommitted working tree by per-source hashes as well
-as its base Git revision. Dependencies are OpenSSL 3.5.7, nghttp2 1.70.0 and
+[All final samples](final/samples.csv), [summary](final/summary.json), and
+[environment, exact commands and SHA-256 provenance](final/metadata.json) are retained.
+The final measurement uses the clean source revision
+[`ea6ca41`](https://github.com/TabNahida/PACE/commit/ea6ca4141d64044ed0084bc75f224c5dad5c8321),
+including the TLS duplex/backpressure and TCP half-close fixes. The metadata
+also records per-source and binary hashes. Dependencies are OpenSSL 3.5.7, nghttp2 1.70.0 and
 nghttp3 1.18.0, pinned by the recorded xmake files. The release build command was:
 
 ```sh
@@ -39,8 +41,13 @@ XMAKE_GLOBALDIR=/tmp/pace-xmake XMAKE_CONFIGDIR=/tmp/pace-protocol-perf-config \
   xmake b -j 4 pace_protocol_multiplex
 python3 scripts/run_protocol_multiplex.py \
   /tmp/pace-protocol-perf/linux/x86_64/release/pace_protocol_multiplex \
-  --output benchmarks/results/protocol-multiplex-linux-2026-10-23 --batches 10
+  --output /tmp/pace-protocol-multiplex-results --batches 10
 ```
 
 The runner enforces Linux-only measurement. Remote CI may run the probe to check
 correctness, but its times are not used in these results or performance rankings.
+Use a new output directory; the recorder refuses to overwrite earlier evidence.
+
+The earlier driver iteration's [samples](samples.csv), [summary](summary.json)
+and [source manifest](metadata.json) remain available separately. Those values
+precede the bounded TLS ciphertext driver and are not used in the table above.

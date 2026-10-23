@@ -1,0 +1,11 @@
+protocol,handlers,streams,handler_delay_ms,body_bytes,trial,batch_ms,peak_handlers,validated
+h2tls,8,16,10,1024,0,20.991094,8,true
+h2tls,8,16,10,1024,1,20.733058,8,true
+h2tls,8,16,10,1024,2,20.874328,8,true
+h2tls,8,16,10,1024,3,20.614242,8,true
+h2tls,8,16,10,1024,4,20.949689,8,true
+h2tls,8,16,10,1024,5,20.641427,8,true
+h2tls,8,16,10,1024,6,20.784520,8,true
+h2tls,8,16,10,1024,7,21.027105,8,true
+h2tls,8,16,10,1024,8,20.845869,8,true
+h2tls,8,16,10,1024,9,20.848280,8,true

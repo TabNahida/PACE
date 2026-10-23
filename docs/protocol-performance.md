@@ -87,9 +87,9 @@ binary and excluding connect/handshake, produced these medians:
 
 | Protocol | Handler limit 1 | Handler limit 8 |
 |---|---:|---:|
-| HTTP/2 over TCP | 162.411 ms | 20.322 ms |
-| HTTP/2 over TLS | 162.775 ms | 20.576 ms |
-| HTTP/3 | 163.877 ms | 20.923 ms |
+| HTTP/2 over TCP | 163.036 ms | 20.500 ms |
+| HTTP/2 over TLS | 163.167 ms | 20.847 ms |
+| HTTP/3 | 164.040 ms | 21.016 ms |
 
 All responses and observed handler peaks were validated. The approximately
 eightfold improvement is the expected overlap of this synthetic asynchronous
@@ -98,7 +98,9 @@ work, not a general throughput result or a direct old/new binary comparison.
 
 HTTP/2 uses nonblocking TCP/TLS progress with explicit readiness wakeups and
 preserves TLS retry buffers. It also batches generated frames at a 64 KiB
-threshold, potentially including one final frame. HTTP/3 wakes its existing
+threshold, potentially including one final frame. The TLS path reserves 128 KiB
+of bounded ciphertext buffers per connection so simultaneous writes can keep
+receiving under socket backpressure. HTTP/3 wakes its existing
 QUIC event driver. Neither path polls on a millisecond timer. Setting the handler
 limit to one retains sequential application dispatch.
 

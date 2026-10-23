@@ -1,0 +1,50 @@
+[
+  {
+    "protocol": "h2",
+    "handlers": 1,
+    "samples": 10,
+    "median_batch_ms": 163.03633050000002,
+    "min_batch_ms": 162.669942,
+    "max_batch_ms": 163.353278
+  },
+  {
+    "protocol": "h2",
+    "handlers": 8,
+    "samples": 10,
+    "median_batch_ms": 20.5001265,
+    "min_batch_ms": 20.437959,
+    "max_batch_ms": 20.624996
+  },
+  {
+    "protocol": "h2tls",
+    "handlers": 1,
+    "samples": 10,
+    "median_batch_ms": 163.16746999999998,
+    "min_batch_ms": 162.591985,
+    "max_batch_ms": 164.671665
+  },
+  {
+    "protocol": "h2tls",
+    "handlers": 8,
+    "samples": 10,
+    "median_batch_ms": 20.847074499999998,
+    "min_batch_ms": 20.614242,
+    "max_batch_ms": 21.027105
+  },
+  {
+    "protocol": "h3",
+    "handlers": 1,
+    "samples": 10,
+    "median_batch_ms": 164.03996899999999,
+    "min_batch_ms": 163.461216,
+    "max_batch_ms": 164.739161
+  },
+  {
+    "protocol": "h3",
+    "handlers": 8,
+    "samples": 10,
+    "median_batch_ms": 21.016098999999997,
+    "min_batch_ms": 20.885817,
+    "max_batch_ms": 21.13276
+  }
+]
