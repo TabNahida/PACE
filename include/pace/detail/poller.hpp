@@ -16,11 +16,19 @@ struct poll_event {
 };
 
 // All operations except wake() belong to the owning reactor thread.
-// Delivery disarms the entire descriptor, including its other direction.
+// In the default one-shot mode, delivery disarms the entire descriptor,
+// including its other direction. Persistent mode retains explicit interests.
 // UINT64_MAX is reserved for the internal wakeup notification.
 class poller {
 public:
-    poller();
+#if defined(__linux__)
+    static constexpr bool supports_persistent = true;
+#else
+    static constexpr bool supports_persistent = false;
+#endif
+    // Persistent level-triggered subscriptions are an internal Linux reactor
+    // mode. The default retains the one-shot contract for standalone callers.
+    explicit poller(bool persistent = false);
     ~poller();
     poller(const poller&) = delete;
     poller& operator=(const poller&) = delete;

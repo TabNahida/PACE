@@ -545,15 +545,6 @@ void check_http_protocol(const tls::stream& stream) {
 #endif
 } // namespace
 
-std::string_view request::header(std::string_view name) const noexcept {
-    for (const auto& field : headers) if (equal_ci(field.name, name)) return field.value;
-    return {};
-}
-std::string_view response::header(std::string_view name) const noexcept {
-    for (const auto& field : headers) if (equal_ci(field.name, name)) return field.value;
-    return {};
-}
-
 template<class Transport>
 task<response> basic_client<Transport>::send(request outgoing) {
     if (io_context::current() != &stream_.context())

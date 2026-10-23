@@ -1,0 +1,44 @@
+running tests ...
+[  0%]: running.test pace_network_tests/default
+[  0%]: running.test pace_runtime_tests/default
+[  0%]: running.test pace_udp_tests/default
+[  0%]: running.test tutorial_shutdown/default
+[  0%]: running.test tutorial_tasks/default
+[  0%]: running.test tutorial_tcp/default
+[  0%]: running.test tutorial_udp/default
+[  0%]: running.test tutorial_workers/default
+
+report of tests:
+[ 12%]: tutorial_udp/default ...... passed 0.001s
+stdout: Hello, UDP!
+
+[ 25%]: tutorial_workers/default .. passed 0.001s
+stdout: Two contexts completed in caller mode
+
+[ 37%]: tutorial_tcp/default ...... passed 0.003s
+stdout: TCP echo verified: Hello from PACE
+
+[ 50%]: tutorial_shutdown/default . passed 0.006s
+stdout: Cancellation observed; coroutine resources released
+
+[ 62%]: tutorial_tasks/default .... passed 0.006s
+stdout: Hello, PACE
+
+[ 75%]: pace_udp_tests/default .... passed 0.022s
+stdout: UDP datagrams, endpoints, boundaries, truncation and cancellation passed
+
+[ 87%]: pace_network_tests/default  passed 0.049s
+stdout: PASS TCP binary roundtrip and ownership
+PASS connect and endpoint errors
+PASS short-read rearm, queued bytes, move, empty buffer and EOF
+PASS stop cancels pending accept
+PASS stop cancels pending read
+PASS socket close cancels pending read
+PASS graceful close drains input and bounds peer wait
+PASS stop cancels graceful close
+
+[100%]: pace_runtime_tests/default  passed 0.172s
+stdout: runtime tests passed
+
+
+100% tests passed, 0 test(s) failed out of 8, spent 0.173s

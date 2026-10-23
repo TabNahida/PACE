@@ -1,4 +1,4 @@
-name: Build, test and compare
+name: Build and functional validation
 on:
   push:
     branches: [main]
@@ -9,165 +9,146 @@ permissions:
 concurrency:
   group: pace-ci-${{ github.ref }}
   cancel-in-progress: true
+# Performance evidence is collected only on local Linux. CI runs bounded
+# correctness checks and discards benchmark timings; it publishes no rankings.
 jobs:
   native:
-    name: ${{ matrix.os }} / ${{ matrix.standard }}
+    name: ${{ matrix.os }} / ${{ matrix.standard }} / supported protocols
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 50
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        standard: [cxx20]
         include:
           - os: ubuntu-latest
+            standard: cxx20
+            quic: 'y'
+          - os: ubuntu-latest
             standard: cxx23
+            quic: 'y'
+          - os: macos-latest
+            standard: cxx20
+            quic: 'y'
+          - os: windows-latest
+            standard: cxx20
+            quic: 'n'
     steps:
       - uses: actions/checkout@v4
       - uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: '3.0.9'
           actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: protocols-${{ matrix.os }}-${{ matrix.standard }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Configure
-        run: xmake f -m release -o build/fair --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=y --scaling=y --profiling=n --tls=n --http2=n --examples=y --tests=y -y
+      - name: Configure all supported protocols, tutorials and benchmark executables
+        run: xmake f -c -m release -o build/ci --cxxstandard=${{ matrix.standard }} --http1=y --websocket=y --tls=y --dns=y --http2=y --quic=${{ matrix.quic }} --http3=${{ matrix.quic }} --benchmarks=y --components=y --scaling=y --profiling=n --sanitizers=n --examples=y --tests=y -y
       - name: Build
         run: xmake -y
-      - name: Tests
-        run: xmake test -v
-      - name: Validate benchmark reporting
-        run: python -m unittest discover -s tests -p "test_*.py"
-      - name: Verify peak memory belongs to the benchmark image
-        run: python scripts/run_benchmarks.py --build-dir build/fair --check-memory
-      - name: Measure PACE components without instrumentation
-        run: python scripts/run_components.py --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/components-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 5
-      - name: Compare PACE, libuv and Asio
-        run: python scripts/run_benchmarks.py --build-dir build/fair --require-all --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/${{ matrix.os }}-${{ matrix.standard }}.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
-      - name: Measure worker counts and execution placement
-        run: python scripts/run_scaling.py --build-dir build/fair --label ${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/scaling-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 3 --requests 5000 --warmup 500 --clients 8
-      - name: Configure separate profiling build
-        run: xmake f -m release -o build/profile --cxxstandard=${{ matrix.standard }} --benchmarks=y --components=n --scaling=n --examples=n --tests=y --profiling=y -y
-      - name: Build with profiling
-        run: xmake -y
-      - name: Test with profiling
-        run: xmake test -v
-      - name: Collect PACE stage diagnostics
-        run: python scripts/run_benchmarks.py --build-dir build/profile --backends pace --label profile-${{ matrix.os }}-${{ matrix.standard }} --output benchmark-results/profile-${{ matrix.os }}-${{ matrix.standard }}.json --repeats 3 --requests 10000 --warmup 1000 --clients 4 --message-size 64
-      - name: Summarize PACE stage diagnostics
-        run: python scripts/run_profile.py --input benchmark-results/profile-${{ matrix.os }}-${{ matrix.standard }}.json
-      - name: Configure TLS and HTTP2 protocol coverage
-        run: xmake f -m release -o build/protocols --cxxstandard=${{ matrix.standard }} --benchmarks=n --components=n --scaling=n --profiling=n --tls=y --http2=y --examples=y --tests=y -y
-      - name: Build all protocols and examples
-        run: xmake -y
-      - name: Test UDP, TLS, HTTPS, HTTP2 and WebSocket
+      - name: Run all supported protocol tests and tutorials
         run: xmake test -v
       - name: Verify WebSocket with independent Python peers
-        run: python tests/websocket_interop.py --build-dir build/protocols
+        run: python tests/websocket_interop.py --build-dir build/ci
+      - name: Validate reporting code
+        run: python -m unittest discover -s tests -p "test_*.py"
+      - name: Check benchmark payloads, counters and schemas (no performance report)
+        run: python scripts/ci_smoke.py --build-dir build/ci --output ci-results/smoke.json
+      - name: Configure instrumented runtime coverage
+        run: xmake f -c -m release -o build/ci-profile --cxxstandard=${{ matrix.standard }} --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=y --components=n --scaling=n --profiling=y --sanitizers=n --examples=n --tests=y -y
+      - name: Build instrumented runtime
+        run: xmake -y
+      - name: Test instrumented runtime
+        run: xmake test -v
+      - name: Check instrumentation schema (discard timing values)
+        run: python scripts/ci_smoke.py --build-dir build/ci-profile --profile-only --output ci-results/profile-smoke.json
+      - name: Verify Windows explicitly rejects unsupported QUIC and HTTP3
+        if: runner.os == 'Windows'
+        run: python scripts/ci_smoke.py --check-windows-quic-rejection --output ci-results/unsupported-protocols.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: benchmark-${{ matrix.os }}-${{ matrix.standard }}
-          path: benchmark-results/
+          name: functional-validation-${{ matrix.os }}-${{ matrix.standard }}
+          path: ci-results/
           if-no-files-found: warn
   sanitizers:
+    name: Linux / all protocols / ASan + UBSan + leaks
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: '3.0.9'
-      - run: xmake f -m debug --sanitizers=y --examples=n --profiling=n --tls=y --http2=y -y
-      - run: xmake -y
-      - run: xmake test -v
+          actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: sanitizers-ubuntu
+      - name: Configure every protocol with sanitizers
+        run: xmake f -c -m debug -o build/ci-sanitizers --cxxstandard=cxx20 --http1=y --websocket=y --tls=y --dns=y --quic=y --http2=y --http3=y --sanitizers=y --benchmarks=n --components=n --scaling=n --profiling=n --examples=y --tests=y -y
+      - name: Build
+        run: xmake -y
+      - name: Run every protocol test and tutorial with sanitizer failures fatal
+        run: xmake test -v
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1
-  freebsd:
-    name: FreeBSD 14 / C++20
+  protocol-layers:
+    name: Linux / independent protocol layers
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Build, test and benchmark in FreeBSD
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.0.9'
+          actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: independent-protocols-ubuntu
+      - name: Core with no optional protocols
+        run: |
+          xmake f -c -m release -o build/ci-core --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y
+          xmake -y
+          xmake test -v
+      - name: HTTP3 without HTTP1, HTTP2 or TCP TLS
+        run: |
+          xmake f -c -m release -o build/ci-http3 --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=y --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y
+          xmake -y
+          xmake test -v
+  freebsd:
+    name: FreeBSD 14.3 / C++20 / all protocols
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and functionally test every protocol in FreeBSD
         uses: vmactions/freebsd-vm@v1
         with:
           release: '14.3'
-          usesh: true
+          envs: GITHUB_SHA
           cache-after-prepare: true
           prepare: |
             set -eu
-            pkg install -y python3 git pkgconf libuv asio gmake curl unzip gsed bash perl5
+            pkg install -y python3 git pkgconf gmake cmake ninja curl unzip gsed bash perl5
             git clone --recursive --depth 1 --branch v3.0.9 https://github.com/xmake-io/xmake.git /tmp/pace-xmake-source
             (cd /tmp/pace-xmake-source && ./configure && gmake -j4 && gmake install)
           run: |
             set -eu
             export XMAKE_ROOT=y
             xmake --version
-            xmake f -m release -o build/fair --cxxstandard=cxx20 --benchmarks=y --components=y --scaling=y --profiling=n --tls=n --http2=n --examples=y --tests=y -y
+            xmake f -c -m release -o build/ci --cxxstandard=cxx20 --http1=y --websocket=y --tls=y --dns=y --quic=y --http2=y --http3=y --benchmarks=y --components=y --scaling=y --profiling=n --sanitizers=n --examples=y --tests=y -y
             xmake -y
             xmake test -v
+            python3 tests/websocket_interop.py --build-dir build/ci
             python3 -m unittest discover -s tests -p "test_*.py"
-            python3 scripts/run_benchmarks.py --build-dir build/fair --check-memory
-            python3 scripts/run_components.py --label freebsd-cxx20 --output benchmark-results/components-freebsd.json --repeats 5
-            python3 scripts/run_benchmarks.py --build-dir build/fair --require-all --label freebsd-cxx20 --output benchmark-results/freebsd.json --repeats 5 --requests 10000 --warmup 1000 --clients 4 --message-size 64
-            python3 scripts/run_scaling.py --build-dir build/fair --label freebsd-cxx20 --output benchmark-results/scaling-freebsd.json --repeats 3 --requests 5000 --warmup 500 --clients 8
-            xmake f -m release -o build/profile --cxxstandard=cxx20 --benchmarks=y --components=n --scaling=n --examples=n --tests=y --profiling=y -y
+            python3 scripts/ci_smoke.py --build-dir build/ci --output ci-results/smoke.json
+            xmake f -c -m release -o build/ci-profile --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=y --components=n --scaling=n --profiling=y --sanitizers=n --examples=n --tests=y -y
             xmake -y
             xmake test -v
-            python3 scripts/run_benchmarks.py --build-dir build/profile --backends pace --label profile-freebsd-cxx20 --output benchmark-results/profile-freebsd.json --repeats 3 --requests 10000 --warmup 1000 --clients 4 --message-size 64
-            python3 scripts/run_profile.py --input benchmark-results/profile-freebsd.json
-            xmake f -m release -o build/protocols --cxxstandard=cxx20 --benchmarks=n --components=n --scaling=n --profiling=n --tls=y --http2=y --examples=y --tests=y -y
-            xmake -y
-            xmake test -v
-            python3 tests/websocket_interop.py --build-dir build/protocols
+            python3 scripts/ci_smoke.py --build-dir build/ci-profile --profile-only --output ci-results/profile-smoke.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: benchmark-freebsd
-          path: benchmark-results/
-          if-no-files-found: warn
-  runtime-comparison:
-    name: Runtime before/after / Linux
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          # Last merged runtime before the inbox/polling optimizations. Keep the
-          # reference fixed so repeated runs remain interpretable.
-          ref: 0c42dcc9c1e481909e3283d2f80e2891ec4c2b89
-          path: _baseline
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Build matching uninstrumented GCC variants
-        shell: bash
-        run: |
-          set -eu
-          mkdir -p build/paired
-          g++ -std=c++20 -O3 -DNDEBUG -pthread -I_baseline/include _baseline/benchmarks/echo_bench.cpp _baseline/src/*.cpp -o build/paired/tcp-before
-          g++ -std=c++20 -O3 -DNDEBUG -pthread -Iinclude benchmarks/echo_bench.cpp src/*.cpp -o build/paired/tcp-after
-          g++ -std=c++20 -O3 -DNDEBUG -pthread -I_baseline/include benchmarks/components_bench.cpp _baseline/src/*.cpp -o build/paired/components-before
-          g++ -std=c++20 -O3 -DNDEBUG -pthread -Iinclude benchmarks/components_bench.cpp src/*.cpp -o build/paired/components-after
-          git -C _baseline rev-parse HEAD > build/paired/baseline-revision.txt
-          git rev-parse HEAD > build/paired/candidate-revision.txt
-      - name: Alternate TCP and component comparisons
-        shell: bash
-        run: |
-          set -eu
-          python scripts/compare_builds.py --before build/paired/tcp-before --after build/paired/tcp-after --tcp --pairs 8 --requests 100000 --output benchmark-results/paired-tcp.json --label ubuntu-runtime-paired
-          for component in lazy_task await_chain empty_poll yield post cross_thread_post spawn_completion zero_timer; do
-            python scripts/compare_builds.py --before build/paired/components-before --after build/paired/components-after --component "$component" --pairs 8 --iterations 1000000 --output "benchmark-results/paired-$component.json" --label ubuntu-runtime-paired
-          done
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: runtime-before-after-linux
-          path: |
-            benchmark-results/
-            build/paired/*-revision.txt
+          name: functional-validation-freebsd-cxx20
+          path: ci-results/
           if-no-files-found: warn

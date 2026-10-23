@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pace/http_types.hpp>
 #include <pace/tcp.hpp>
 #ifdef PACE_HAS_TLS
 #include <pace/tls.hpp>
@@ -15,37 +16,6 @@
 
 namespace pace::http {
 
-struct header_field {
-    std::string name;
-    std::string value;
-};
-
-struct request {
-    std::string method;
-    std::string target;
-    std::string version;
-    std::vector<header_field> headers{};
-    std::string body;
-    bool keep_alive = true;
-    std::vector<header_field> trailers{};
-    bool chunked = false;
-
-    [[nodiscard]] std::string_view header(std::string_view name) const noexcept;
-};
-
-struct response {
-    unsigned status = 200;
-    std::string body;
-    std::string content_type = "text/plain; charset=utf-8";
-    std::vector<header_field> headers{};
-    bool close = false;
-    std::string version = "HTTP/1.1";
-    std::vector<header_field> trailers{};
-    bool chunked = false;
-
-    [[nodiscard]] std::string_view header(std::string_view name) const noexcept;
-};
-
 struct limits {
     std::size_t max_header_bytes = 16 * 1024;
     std::size_t max_body_bytes = 1024 * 1024;
@@ -57,14 +27,6 @@ struct limits {
     std::size_t max_chunks = 65536;
     std::size_t max_informational_responses = 8;
 };
-
-// Peer protocol/framing failure reported by the client. The connection closes.
-class protocol_error : public std::runtime_error {
-public:
-    explicit protocol_error(const std::string& message) : std::runtime_error(message) {}
-};
-
-using handler = std::function<task<response>(request)>;
 
 // HTTP/1.0 and HTTP/1.1 with Content-Length/chunked framing and keep-alive.
 // Bodies are buffered; upgrades/CONNECT belong to separate protocol APIs.

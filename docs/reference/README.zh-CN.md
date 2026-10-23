@@ -5,6 +5,9 @@
 
 | 功能 | 公开接口 | 参考 |
 |---|---|---|
+| DNS 扩展 | `dns::resolver`、A/AAAA/CNAME、超时、取消 | [DNS](dns.md) |
+| QUIC 扩展 | `quic::context/listener/connection/stream`、TLS 1.3、多路流 | [QUIC](quic.md) |
+| HTTP/3 应用协议 | `http3::exchange/serve_connection/serve`、nghttp3/QPACK | [HTTP/3](http3.md) |
 | 协程任务 | `task<T>`、`task<void>`、移动、`release`、右值 `co_await`、promise/awaiter 协议 | [task](task.md) |
 | 提交与运行 | `io_context::spawn/post/run/stop/stopped/current` | [io_context](io-context.md) |
 | 等待与取消 | `wait_readable/wait_writable/cancel/sleep_for/yield` 及 awaiter 类型 | [io_context](io-context.md) |

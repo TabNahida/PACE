@@ -1,80 +1,96 @@
-# PACE
-
 <p align="center">
-  <img src="docs/assets/project-card.svg" alt="PACE — C++20 coroutine networking with independent worker reactors" width="100%">
+  <img src="docs/assets/project-card.svg" alt="PACE — C++20 coroutine networking. Your threads. Your pace." width="100%">
 </p>
 
 <p align="center">
-  <a href="https://github.com/TabNahida/PACE/actions/workflows/ci.yml"><img src="https://github.com/TabNahida/PACE/actions/workflows/ci.yml/badge.svg" alt="Build, test and compare"></a>
-  <img src="https://img.shields.io/badge/C%2B%2B-20%20%2F%2023-7c83ff" alt="C++20 and newer">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-63d7bf" alt="MIT license"></a>
+  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="Local Linux TCP echo: PACE leads throughput and p50; Asio leads p95 and p99. Zero-based charts include all three libraries and trial ranges." width="100%"></a>
 </p>
 
-<p align="center">English · <a href="README.zh-CN.md">简体中文</a> · <a href="docs/README.md">Get started</a> · <a href="docs/reference/README.md">API reference</a> · <a href="docs/performance.md">Performance</a></p>
-
-PACE (Parallel Async Coroutine Engine) is a C++20 coroutine networking library. Run tasks on a fixed set of independent worker reactors, on the calling thread, or on threads your application owns. Use `co_await` with TCP, UDP, HTTP/1.1, WebSocket, and optional TLS/HTTPS and HTTP/2.
-
-## Selected performance advantages
+<p align="center"><a href="docs/performance.md">Full benchmark results, methodology &amp; raw data →</a></p>
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/selected-performance.svg" alt="Selected TCP echo medians: macOS throughput 17.7% higher than Asio; local Linux p95 30.5% lower than libuv; Windows whole-process peak memory 13.3% lower than libuv. Different hosts and workloads; whiskers show trial ranges." width="100%"></a>
+  <a href="https://github.com/TabNahida/PACE/actions/workflows/ci.yml"><img src="https://github.com/TabNahida/PACE/actions/workflows/ci.yml/badge.svg" alt="Build and test"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-70dfc3" alt="MIT license"></a>
 </p>
 
-Selected **21 October 2026 TCP echo medians** across different hosts and workloads. Memory includes clients and server. These pairwise results are not an overall ranking or an HTTP/TLS benchmark. [All three libraries, throughput, latency, memory, raw trials and methodology →](docs/performance.md)
+<p align="center">English · <a href="README.zh-CN.md">简体中文</a> · <a href="docs/README.md">Documentation</a> · <a href="docs/reference/README.md">API</a></p>
 
-## Run your first task
+**C++20 coroutine networking, from sockets to HTTP/3.** PACE (Parallel Async Coroutine Engine) runs on one thread, a fixed worker pool, or threads your application owns.
 
-Install [xmake](https://xmake.io/guide/quick-start.html) 2.9.8+ and a compiler with C++20 coroutine support, then run:
+- **Write asynchronous code in sequence.** Await connections, reads, writes and timers with `co_await`.
+- **Choose where work runs.** One reactor per worker, explicit task placement, caller-owned execution.
+- **Build only what you use.** A core without third-party runtime dependencies, with optional protocol modules above it.
+
+## Four layers. Your stack.
+
+| Layer | Modules | Aggregate target |
+|:--|:--|:--|
+| **3 · Applications** | [HTTP/1.1](docs/reference/http.md) · [HTTP/2](docs/reference/http2.md) · [HTTP/3](docs/reference/http3.md) · [WebSocket](docs/reference/websocket.md) | `pace_application` |
+| **2 · Extensions** | [TLS](docs/reference/tls.md) · [DNS](docs/reference/dns.md) · [QUIC](docs/reference/quic.md) | `pace_extensions` |
+| **1 · Networking** | [TCP](docs/reference/tcp.md) · [UDP](docs/reference/udp.md) · Socket API | `pace_net` |
+| **0 · Runtime** | Event loop · Native polling · Tasks · Timers · Workers | `pace_runtime` |
+
+Link individual modules, layer aggregates, or `pace` for the enabled stack. HTTP/1.1 and WebSocket are enabled by default; TLS, DNS, QUIC, HTTP/2 and HTTP/3 are opt-in. QUIC and HTTP/3 require POSIX; see the [platform matrix](docs/reference/platform.md).
+
+[Architecture →](docs/architecture.md) · [Build options & integration →](docs/tutorial/01-build.md)
+
+## A small HTTP server
+
+```cpp
+#include <pace/http.hpp>
+
+pace::task<pace::http::response> hello(pace::http::request) {
+    co_return pace::http::response{.body = "Hello, PACE!\n"};
+}
+
+int main() {
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 8080});
+    io.spawn(pace::http::serve(listener, hello));
+    io.run();
+}
+```
+
+Link with `add_deps("pace_http1")`. [Complete example with routing and graceful shutdown →](examples/tutorial_http.cpp)
+
+More examples: [TCP](examples/tutorial_tcp.cpp) · [UDP](examples/tutorial_udp.cpp) · [DNS](examples/tutorial_dns.cpp) · [QUIC](examples/tutorial_quic.cpp) · [HTTP/3](examples/tutorial_http3.cpp) · [WebSocket](examples/tutorial_websocket.cpp)
+
+## Get started
+
+You need [xmake](https://xmake.io/guide/quick-start.html) 2.9.8+ and a C++20 compiler.
 
 ```sh
 git clone https://github.com/TabNahida/PACE.git
 cd PACE
 xmake f -m release -y
-xmake -y tutorial_tasks
-xmake run tutorial_tasks
+xmake -y tutorial_http
+xmake run tutorial_http
 ```
 
-This prints `Hello, PACE` and exits. The smallest complete application is:
+The example starts a local server, verifies a request and exits. To keep it listening on port 8080, run `xmake run tutorial_http serve`.
 
-```cpp
-#include <pace/pace.hpp>
-#include <iostream>
+<details>
+<summary>Enable all protocols on Linux</summary>
 
-pace::task<void> hello(pace::io_context& io) {
-    std::cout << "Hello, PACE\n";
-    io.stop();
-    co_return;
-}
-
-int main() {
-    pace::io_context io;
-    io.spawn(hello(io));
-    io.run();
-}
+```sh
+xmake f -m release --tls=y --dns=y --quic=y --http2=y --http3=y -y
+xmake -y
 ```
 
-`io.run()` executes on the caller and stays alive until stopped. For multiple workers, use `pace::runtime workers(4)`, submit through `workers.context(index)`, and call `workers.run()`; `run_on_current_thread()` uses the caller plus three background threads. [Execution choices →](docs/tutorial/05-execution.md)
+For a sockets-only build, disable the default application protocols with `--http1=n --websocket=n`. See the [build guide](docs/tutorial/01-build.md) for dependencies and per-module targets.
 
-## Choose a protocol
+</details>
 
-| Task | Runnable example | Guide |
-|---|---|---|
-| TCP client and echo server | `xmake run tutorial_tcp` | [TCP](docs/tutorial/03-tcp.md) |
-| UDP datagrams | `xmake run tutorial_udp` | [UDP](docs/reference/udp.md) |
-| HTTP client / server | `xmake run tutorial_http_client` / `tutorial_http` | [HTTP](docs/tutorial/04-http.md) |
-| TLS / HTTPS | `xmake run tutorial_tls` | [TLS](docs/reference/tls.md) · [HTTPS](docs/reference/http.md) |
-| HTTP/2 requests | `xmake run tutorial_http2` | [HTTP/2](docs/reference/http2.md) |
-| WebSocket messages | `xmake run tutorial_websocket` | [WebSocket](docs/reference/websocket.md) |
+## Explore
 
-Build examples with `xmake -y`. TLS and HTTP/2 are optional: configure `xmake f -m release --tls=y --http2=y -y` first to resolve OpenSSL and nghttp2. The default core has no third-party runtime dependencies; Asio and libuv are only optional benchmark dependencies. [Build options and application integration →](docs/tutorial/01-build.md)
+| | |
+|:--|:--|
+| [Tutorials](docs/tutorial/README.md) | Tasks, protocols, workers and graceful shutdown |
+| [API reference](docs/reference/README.md) | Signatures, ownership, errors and protocol limits |
+| [Execution models](docs/tutorial/05-execution.md) | Calling thread, fixed workers and application-owned threads |
+| [Platform support](docs/reference/platform.md) | Linux, macOS, FreeBSD and Windows backends |
+| [Performance](docs/performance.md) | Local Linux measurements, tradeoffs and reproduction |
 
-## Where to go next
+PACE is under active development; APIs and protocol coverage are evolving. See the [reference](docs/reference/README.md) for current limits.
 
-- [Tutorials](docs/tutorial/README.md): tasks, protocols, workers and orderly shutdown.
-- [API reference](docs/reference/README.md): signatures, ownership, errors and concurrency limits.
-- [Performance and tuning](docs/performance.md): throughput, latency, process memory, worker scaling and reproduction commands.
-- [Architecture](docs/architecture.md): Linux `epoll`, macOS/FreeBSD `kqueue`, Windows `WSAPoll`.
-
-PACE is under active development and is not production-hardened. Endpoints currently use numeric IPv4; DNS, IPv6, asynchronous file I/O, streaming HTTP bodies and per-operation deadlines remain future work. Windows IOCP is not implemented. Keep sockets and borrowed buffers alive until operations finish, and keep blocking application work off reactor threads. See each protocol reference for its current limits.
-
-[MIT](LICENSE) · Copyright © 2026 Tab Nahida.
+[MIT](LICENSE) · © 2026 Tab Nahida

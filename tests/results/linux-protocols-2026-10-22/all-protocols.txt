@@ -1,0 +1,113 @@
+running tests ...
+[  0%]: running.test pace_dns_tests/default
+[  0%]: running.test pace_http2_tests/default
+[  0%]: running.test pace_http3_tests/default
+[  0%]: running.test pace_http_extended_tests/default
+[  0%]: running.test pace_network_tests/default
+[  0%]: running.test pace_quic_tests/default
+[  0%]: running.test pace_runtime_tests/default
+[  0%]: running.test pace_tls_tests/default
+[  0%]: running.test pace_udp_tests/default
+[  0%]: running.test pace_websocket_tests/default
+[  0%]: running.test tutorial_dns/default
+[  0%]: running.test tutorial_http/default
+[  0%]: running.test tutorial_http2/default
+[  0%]: running.test tutorial_http3/default
+[  0%]: running.test tutorial_http_client/default
+[  0%]: running.test tutorial_quic/default
+[  0%]: running.test tutorial_shutdown/default
+[  0%]: running.test tutorial_tasks/default
+[  0%]: running.test tutorial_tcp/default
+[  0%]: running.test tutorial_tls/default
+[  0%]: running.test tutorial_udp/default
+[  0%]: running.test tutorial_websocket/default
+[  0%]: running.test tutorial_workers/default
+
+report of tests:
+[  4%]: tutorial_dns/default ............ passed 0.037s
+stdout: IPv4 127.0.0.1
+
+[  8%]: tutorial_http/default ........... passed 0.036s
+stdout: HTTP /health verified
+
+[ 13%]: tutorial_http2/default .......... passed 0.034s
+stdout: Hello, /one!
+Hello, /two!
+
+[ 17%]: pace_http_extended_tests/default  passed 0.042s
+stdout: PASS HTTP client/server, binary chunks, trailers and HEAD reuse
+PASS chunk extensions, fragmentation and pipeline preservation
+PASS request smuggling and resource-limit rejection
+PASS client informational, EOF framing and malformed responses
+PASS client validation and overlapping exchange protection
+PASS cancellation closes pending HTTP exchange
+PASS HTTPS verified HTTP/1.1 with chunked trailers
+
+[ 21%]: pace_udp_tests/default .......... passed 0.040s
+stdout: UDP datagrams, endpoints, boundaries, truncation and cancellation passed
+
+[ 26%]: tutorial_http3/default .......... passed 0.031s
+stdout: Hello over HTTP/3, /one!
+Hello over HTTP/3, /two!
+
+[ 30%]: tutorial_http_client/default .... passed 0.027s
+stdout: Hello from /PACE
+
+[ 34%]: tutorial_tcp/default ............ passed 0.005s
+stdout: TCP echo verified: Hello from PACE
+
+[ 39%]: tutorial_udp/default ............ passed 0.004s
+stdout: Hello, UDP!
+
+[ 43%]: tutorial_websocket/default ...... passed 0.003s
+stdout: WebSocket echo verified: Hello from PACE
+
+[ 47%]: tutorial_workers/default ........ passed 0.002s
+stdout: Two contexts completed in caller mode
+
+[ 52%]: tutorial_shutdown/default ....... passed 0.007s
+stdout: Cancellation observed; coroutine resources released
+
+[ 56%]: tutorial_quic/default ........... passed 0.008s
+stdout: Hello over verified QUIC!
+
+[ 60%]: tutorial_tasks/default .......... passed 0.007s
+stdout: Hello, PACE
+
+[ 65%]: pace_http3_tests/default ........ passed 0.051s
+stdout: HTTP/3 encrypted multiplexing, flow control, trailers, independent wire peers, limits, ALPN and cancellation passed
+
+[ 69%]: pace_network_tests/default ...... passed 0.052s
+stdout: PASS TCP binary roundtrip and ownership
+PASS connect and endpoint errors
+PASS short-read rearm, queued bytes, move, empty buffer and EOF
+PASS HTTP framing, fragmentation, limits and keep-alive
+PASS stop cancels pending accept
+PASS stop cancels pending read
+PASS socket close cancels pending read
+PASS graceful close drains input and bounds peer wait
+PASS stop cancels graceful close
+
+[ 73%]: pace_quic_tests/default ......... passed 0.075s
+stdout: QUIC tests passed
+
+[ 78%]: tutorial_tls/default ............ passed 0.052s
+stdout: Hello over verified TLS!
+
+[ 82%]: pace_tls_tests/default .......... passed 0.130s
+stdout: TLS tests passed
+
+[ 86%]: pace_runtime_tests/default ...... passed 0.178s
+stdout: runtime tests passed
+
+[ 91%]: pace_http2_tests/default ........ passed 0.370s
+stdout: HTTP/2 multiplexing, flow control, trailers, raw interoperability and limits passed
+
+[ 95%]: pace_dns_tests/default .......... passed 0.396s
+stdout: DNS A/AAAA/CNAME, TCP fallback, local errors, malformed replies, timeout, cancellation and lifetime passed
+
+[100%]: pace_websocket_tests/default .... passed 0.396s
+stdout: WebSocket tests passed
+
+
+100% tests passed, 0 test(s) failed out of 23, spent 0.402s

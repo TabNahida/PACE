@@ -13,6 +13,10 @@ a public header; it has no compatibility guarantee.
 | [`runtime.hpp`](runtime.md) | `runtime`, construction/destruction, `size`, `context`, `run`, `run_on_current_thread`, `stop` |
 | [`tcp.hpp`](tcp.md) | `tcp::endpoint`, `tcp::listen_options`, `tcp::stream`, `tcp::listener` and all their members |
 | [`udp.hpp`](udp.md) | `udp::endpoint`, `udp::datagram`, `udp::socket`, `send_to`, `receive_from` |
+| [`dns.hpp`](dns.md) | Optional `dns::resolver`, A/AAAA results, deadlines and cancellation |
+| [`quic.hpp`](quic.md) | Optional authenticated QUIC contexts, listeners, connections and multiplexed streams |
+| [`http3.hpp`](http3.md) | Optional HTTP/3 batch `exchange`, `serve_connection`, `serve`, limits |
+| `http_types.hpp` | Transport-independent `http::request`, `response`, `header_field`, `handler`, `protocol_error` |
 | [`http.hpp`](http.md) | HTTP/1.1 message types/limits/errors, `handler`, `serve_connection`, `serve`, `client`/`secure_client`, `basic_client`, `fetch`, `get`, and optional HTTPS overloads |
 | [`tls.hpp`](tls.md) | Optional verified TLS: `tls::context`, `tls::stream`, handshake, ALPN, record I/O and shutdown |
 | [`http2.hpp`](http2.md) | Optional HTTP/2: `http2::limits`, batch `exchange`, `serve_connection`, `serve` |
@@ -24,7 +28,10 @@ a public header; it has no compatibility guarantee.
 ## Rules shared by the APIs
 
 For a runnable starting point, [choose a protocol example](../tutorial/README.md).
-TLS needs `--tls=y`; HTTP/2 needs `--http2=y`. Enable both for HTTP/2 over TLS.
+TLS needs `--tls=y`; DNS needs `--dns=y`; QUIC needs `--quic=y`.
+HTTP/2 needs `--http2=y`; enable TLS as well for HTTP/2 over TLS.
+HTTP/3 needs `--http3=y`, which also enables QUIC. See the
+[four-layer module and header map](../architecture.md#four-independently-linkable-layers).
 
 **Ownership.** A task is lazy and consumed once. Parameters passed by value become
 part of its coroutine frame, but references, pointers, spans and string views do

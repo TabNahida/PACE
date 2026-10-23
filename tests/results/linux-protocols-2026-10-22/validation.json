@@ -1,0 +1,99 @@
+{
+  "platform": "Local Linux x86_64 / WSL2",
+  "toolchain": "GCC 13.3.0, C++20",
+  "dependencies": {
+    "OpenSSL": "3.5.7",
+    "c-ares": "1.34.8",
+    "nghttp2": "1.70.0",
+    "nghttp3": "1.18.0"
+  },
+  "checks": [
+    {
+      "name": "All protocol modules and tutorials",
+      "passed": 23,
+      "log": "all-protocols.txt"
+    },
+    {
+      "name": "Core-only, all optional protocols disabled",
+      "passed": 8,
+      "log": "core-only.txt"
+    },
+    {
+      "name": "HTTP3-only, no HTTP1/HTTP2/TCP TLS",
+      "passed": 12,
+      "log": "http3-only.txt"
+    },
+    {
+      "name": "Python benchmark/reporting regression tests",
+      "passed": 47,
+      "log": "python.txt"
+    },
+    {
+      "name": "Additional DNS cancellation reentrancy and TCP-fallback cancellation regressions",
+      "result": "passed",
+      "command": "build/all-protocols/linux/x86_64/release/pace_dns_tests",
+      "note": "Run after all-protocol log above; includes final added regressions."
+    },
+    {
+      "name": "ASan+UBSan+LeakSanitizer: runtime, TCP, DNS, QUIC, HTTP3",
+      "result": "passed",
+      "note": "Individually instrumented PACE/test sources; third-party dependencies are prebuilt. Runtime/TCP checks also recorded in benchmarks/results/linux-optimization-2026-10-22/validation.json."
+    },
+    {
+      "name": "Layered benchmark/components/scaling build",
+      "result": "passed",
+      "configuration": "--benchmarks=y --components=y --scaling=y --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n"
+    }
+  ],
+  "source_sha256": {
+    "include/pace/application.hpp": "46036920d65abbfa14b3001f59ea0953e0230491458e82c9982d1385f0a84601",
+    "include/pace/detail/poller.hpp": "a667cc596630902abac6032d17a4175eff57d0dc524e71cd40bc34b351371480",
+    "include/pace/detail/profiling.hpp": "8296366efdaf1c39f5fc61372836880dc6cb4271dafd53b4de5206c528b85fc0",
+    "include/pace/dns.hpp": "731b749d510dcb31be9f8c3eb5e91fa1a328d8d500e13daa0bd38f0a67f853af",
+    "include/pace/extensions.hpp": "e7b6c803b077232380fdfa10b1a10656a27f68e736f17f08d408df19df0ec2c1",
+    "include/pace/http.hpp": "804f1398b7739ecdbd9031ce80c62e84108cbf49d2667e69f5bc0d800ca0b413",
+    "include/pace/http2.hpp": "28cb47082a6ce2a00ed75cb66e1126cbcbfa0368eb7218561300d8a093f1df4c",
+    "include/pace/http3.hpp": "88187636ea943871ef625ac333a4984bb6c88ecfab34b44c6b946d89b730348d",
+    "include/pace/http_types.hpp": "86614e4bf84e033f9fcf57b56ccb3237750db3ec1d3a026d903acb11b905946b",
+    "include/pace/io_context.hpp": "d817697d603b55b36bc3eeda9ab62b78d9954b904d9a2b06a27a7a79b898e058",
+    "include/pace/net.hpp": "bcf33f0b76222f8b98eaa83416c0686194558bd7909754b9ea9e113a8352ea67",
+    "include/pace/networking.hpp": "9243ccf206d0b22e13449ec356d5d20331e8f77a73d33d26de4a62d642d2deb7",
+    "include/pace/pace.hpp": "b76227007fa64a9a01b2bb3c4f157ed89fa036cdb1ab365232f79029f7d77357",
+    "include/pace/platform.hpp": "7aa182d1635d51ea0706d2828ff8375ee41afe5480c1aa59ad0f317a6e1a906f",
+    "include/pace/quic.hpp": "1f4444f7d53022598134f8e4957ec0c69abdc7a2258a854417cfe677ddc8e558",
+    "include/pace/runtime.hpp": "afff16a61a547df078815d05fa7c84c02ac186b27b60a3719b1ae1caae081279",
+    "include/pace/task.hpp": "7de346df1fb4c59377586b89fe9ea16b271ac9bfcc3d0469f89d823331d2f7d5",
+    "include/pace/tcp.hpp": "1aa93dd22ec0607ea6f746652fe42da1659ba5687e28f7148556fbad9f291ecd",
+    "include/pace/tls.hpp": "47f833850c9b6e1f985477245ae9dd855e569358d9168da0e989707370a44e44",
+    "include/pace/udp.hpp": "b859a87f4475fb6e831d766a5f360cbaa171c6f9fb065726e45162114963a353",
+    "include/pace/websocket.hpp": "aec9d967963c4d8f26fb9a67c0904777e62d66142504bfcfcbc429f6805665af",
+    "src/application/http.cpp": "9ac9016765c3778afa3dcd7b18fa715e9994f0325a921a6ee6fe26daf882e9e7",
+    "src/application/http2.cpp": "cad549a08aeee6516697de1226fda59299bdc16f75f5385969ed61ad3176f258",
+    "src/application/http3.cpp": "1517ce8c23574c18b722317491a61427482377a2853341cf8b8c8d8f626247c2",
+    "src/application/websocket.cpp": "6d63a9bdd566ee1aa3dddcda25af4710e70009ec651fe0c99604973b7f63c2e5",
+    "src/extensions/dns.cpp": "3d778f3661d2cbd929e7aaf611aef667746eaec3a2447dfd20be28154e298560",
+    "src/extensions/quic.cpp": "aca142bf3ffe56cf1cbf63f04af61326c8b92da8a70e9428c073253595a97e42",
+    "src/extensions/tls.cpp": "033fe49fd125009842eb9cb2900df4030fc0983f06a8f1a4869bbe84b79758e7",
+    "src/networking/net.cpp": "8fe9ba480b20c2845e11cbfb9b43907ecfd89f5ca1faa41e6da94817529b01b8",
+    "src/networking/udp.cpp": "18b60cdab0f9db135bd2386b00d6f3c5a9d2f1faae1124f5a5c07d5102bd6758",
+    "src/runtime/io_context.cpp": "3dafc82cde25f0291690e5bf22080b299c032f309dd0cd582bdbd9c0806e0e7f",
+    "src/runtime/poller.cpp": "8bbcd158c23e9f683fb5ffaf62b50864699f1c86b68e10f18e9561e9eceb760f",
+    "src/runtime/runtime.cpp": "fa99174c679e6e02372c7b22d931f1ca0c06318e3fb4db0701d3419afb399006",
+    "tests/dns_tests.cpp": "e64be35be4c9aac708cb1d81a59f0e37553ff87c07040857d1e1bbfceb021da2",
+    "tests/http2_tests.cpp": "45685b941e467d288dbd0f1b505b271eff0914b652abaf45b998026a0bda4bf1",
+    "tests/http3_tests.cpp": "be5e8c23651ba0abf3bf17a4f4f2133cf76030e876d1a7b8aeea17362398a080",
+    "tests/http_extended_tests.cpp": "02a103c3b20e75e700d72efa036f74da2fdd5a89439cdf603a72f96415770c67",
+    "tests/network_tests.cpp": "1160ea7da715d69b846054ea8abc13ead522fb098f0b56a3523994f0066dedd5",
+    "tests/quic_tests.cpp": "71880474b1f5fd374e73750c76bbd415c190ae429eeb96983bdd2e4928d28be2",
+    "tests/runtime_tests.cpp": "37d103f6b47d2eb3a0f2bd4a44221d7765358baaeec64a816eeb96d6d4dba220",
+    "tests/tls_tests.cpp": "cafb5b6ac24cb19ebab3d9466219caeb271754d4574b6afe65223196fd901039",
+    "tests/udp_tests.cpp": "6d8a43ca183e9c46202539fe5559e3d273ee3c69c1d89a341fdc63eca0a8a640",
+    "tests/websocket_tests.cpp": "7ee03762568b04592301694740430c8871f68b1746d7a2978d961cc7cdf9729f",
+    "xmake.lua": "a0fa7d4b505c8f5dc1cffde897006e098742b6b3d36eb48f2d433df35c00d4a8"
+  },
+  "limits": [
+    "No new remote CI, Windows, macOS or BSD validation was run.",
+    "QUIC/HTTP3 explicitly unsupported on Windows; other POSIX fallback is unvalidated.",
+    "Functional test durations are not protocol performance measurements."
+  ]
+}

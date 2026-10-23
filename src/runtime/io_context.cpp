@@ -22,7 +22,7 @@ void check_affinity(io_context* context) {
 }
 
 struct io_context::implementation {
-    detail::poller poller;
+    detail::poller poller{detail::poller::supports_persistent};
     std::atomic<bool> stopping{false};
     std::atomic<bool> running{false};
     bool has_run = false;
@@ -40,10 +40,13 @@ struct io_context::implementation {
         io_awaiter* reader = nullptr;
         io_awaiter* writer = nullptr;
         native_socket_type fd = invalid_socket;
+        unsigned interests = 0;
+        bool dirty = false;
     };
     std::unordered_map<std::uint64_t, fd_state> descriptors;
     std::unordered_map<native_socket_type, std::uint64_t> tokens;
     std::uint64_t next_token = 0;
+    std::vector<std::uint64_t> dirty_descriptors;
     struct later {
         bool operator()(const timer_awaiter* a, const timer_awaiter* b) const noexcept {
             return a->deadline > b->deadline;
@@ -64,11 +67,32 @@ struct io_context::implementation {
             finish(state.writer, canceled());
         }
         descriptors.clear(); tokens.clear();
+        dirty_descriptors.clear();
         while (!timers.empty()) {
             auto* timer = timers.top(); timers.pop();
             timer->error = canceled(); ready.push_back(timer->continuation);
         }
         cancellation_started = true;
+    }
+    void update(fd_state& state, std::uint64_t token) {
+        const unsigned interests = (state.reader ? 1U : 0U) | (state.writer ? 2U : 0U);
+        if constexpr (detail::poller::supports_persistent) {
+            if (interests == state.interests) return;
+        }
+        poller.update(state.fd, state.reader != nullptr, state.writer != nullptr, token);
+        state.interests = interests;
+    }
+    void reconcile_descriptors() {
+        // Resumed I/O usually rearms the same direction before the next poll.
+        // Keep that subscription unchanged; remove only truly idle interests.
+        for (const auto token : dirty_descriptors) {
+            const auto found = descriptors.find(token);
+            if (found == descriptors.end()) continue;
+            auto& state = found->second;
+            update(state, token);
+            state.dirty = false;
+        }
+        dirty_descriptors.clear();
     }
 };
 
@@ -162,7 +186,7 @@ bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle) {
     if (slot) throw std::logic_error("only one pending operation per socket direction is allowed");
     operation.continuation = handle;
     slot = &operation;
-    try { p.poller.update(state.fd, state.reader != nullptr, state.writer != nullptr, token); }
+    try { p.update(state, token); }
     catch (...) {
         slot = nullptr;
         if (inserted) { p.tokens.erase(operation.fd); p.descriptors.erase(token); }
@@ -294,6 +318,7 @@ void io_context::run() {
         // timers are still checked on every bounded dispatch turn above.
         if (timeout == 0 && p.descriptors.empty()) continue;
         try {
+            if constexpr (detail::poller::supports_persistent) p.reconcile_descriptors();
             const auto count = profiling::measure(timeout == 0 ? profiling::stage::poll_nonblocking
                 : profiling::stage::poll_blocking, [&] { return p.poller.wait(events, timeout); });
             profiling::scope event_timing(profiling::stage::event_dispatch);
@@ -304,8 +329,12 @@ void io_context::run() {
                 auto& state = it->second;
                 if (event.readable || event.error) p.finish(state.reader);
                 if (event.writable || event.error) p.finish(state.writer);
-                if (state.reader || state.writer)
-                    p.poller.update(state.fd, state.reader != nullptr, state.writer != nullptr, event.token);
+                if constexpr (detail::poller::supports_persistent) {
+                    if (!state.dirty) {
+                        p.dirty_descriptors.push_back(event.token);
+                        state.dirty = true;
+                    }
+                } else if (state.reader || state.writer) p.update(state, event.token);
             }
         } catch (...) { record_error(std::current_exception()); }
     }

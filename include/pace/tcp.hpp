@@ -60,6 +60,9 @@ public:
 
 private:
     friend class listener;
+    // A short read commonly drains a socket. Wait for level readiness before
+    // the next attempt instead of issuing a predictable failing recv syscall.
+    bool read_may_be_ready_ = true;
     stream(io_context& context, native_socket_type fd) noexcept;
     io_context* context_;
     native_socket_type fd_ = invalid_socket;

@@ -17,10 +17,16 @@ APIs enabled in the build. It retains the old TCP aliases.
 | `<pace/http.hpp>` | HTTP/1.0–1.1 client and server; HTTPS with TLS enabled |
 | `<pace/tls.hpp>` | Verified TLS streams, with `--tls=y` |
 | `<pace/http2.hpp>` | HTTP/2 batch client and server, with `--http2=y` |
+| `<pace/dns.hpp>` | DNS resolver, with `--dns=y` |
+| `<pace/quic.hpp>` | POSIX QUIC streams, with `--quic=y` |
+| `<pace/http3.hpp>` | HTTP/3 over QUIC, with `--http3=y` |
 | `<pace/websocket.hpp>` | WebSocket client and server; wss with TLS enabled |
 | `<pace/platform.hpp>` | Portable native socket handle types |
 | `<pace/net.hpp>` | Previous TCP naming aliases |
-| `<pace/pace.hpp>` | All of the above through public includes |
+| `<pace/networking.hpp>` | Core runtime and sockets |
+| `<pace/extensions.hpp>` | Core plus enabled Layer 2 extensions |
+| `<pace/application.hpp>` | Shared HTTP messages plus enabled application protocols |
+| `<pace/pace.hpp>` | All enabled modules through public includes |
 
 ## Native socket values
 
@@ -78,3 +84,17 @@ does not imply equal scaling or measured performance. Same-port listener reuse
 is platform-dependent; the worker runtime itself is available independently of
 that listener strategy. See [architecture](../architecture.md) and the
 [benchmark methodology](../../benchmarks/README.md) for implementation and evidence.
+
+
+The functional CI matrix covers these configurations:
+
+| Module group | Linux | macOS | FreeBSD | Windows |
+|---|:---:|:---:|:---:|:---:|
+| Runtime, TCP, UDP, HTTP/1.1, WebSocket | ✓ | ✓ | ✓ | ✓ |
+| TLS, DNS, HTTP/2 | ✓ | ✓ | ✓ | ✓ |
+| QUIC, HTTP/3 | ✓ | ✓ | ✓ | Unsupported |
+
+Linux also checks C++23, sanitizers and builds with all optional protocols disabled
+or only HTTP/3 enabled. [Workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml)
+record which revisions passed. CI benchmark executables run short correctness
+checks; published performance comparisons use local Linux measurements.

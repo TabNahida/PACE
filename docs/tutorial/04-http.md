@@ -152,8 +152,9 @@ cannot redefine framing, Host, connection control or authentication fields.
 
 These limits bound individual messages and parsing metadata. They do not provide
 request deadlines, global memory limits or a connection-count policy. Bodies are
-buffered; automatic DNS, redirects, retries and decompression are absent. HTTP/2
-and WebSocket have separate APIs; HTTP/3 is not implemented.
+buffered; automatic DNS, redirects, retries and decompression are absent. HTTP/2,
+[HTTP/3](../reference/http3.md) and WebSocket have separate APIs. Hostnames can
+be resolved explicitly with the optional [DNS extension](../reference/dns.md).
 
 Reference: [HTTP/1.1 and HTTPS API](../reference/http.md).
 Next: [execution and worker selection](05-execution.md).

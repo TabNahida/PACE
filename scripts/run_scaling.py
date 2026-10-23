@@ -159,7 +159,7 @@ def main():
     if markdown_path.exists():
         markdown_path.unlink()
     source_paths = [root / "benchmarks/scaling_bench.cpp", Path(__file__).resolve(),
-                    *sorted((root / "include").rglob("*.hpp")), *sorted((root / "src").glob("*.cpp"))]
+                    *sorted((root / "include").rglob("*.hpp")), *sorted((root / "src").rglob("*.cpp"))]
     report = {
         "schema_version": 1, "status": "running", "measurement_kind": "uninstrumented_worker_scaling",
         "label": args.label, "started_utc": datetime.now(timezone.utc).isoformat(),

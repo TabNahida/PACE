@@ -1,0 +1,431 @@
+{
+  "schema_version": 1,
+  "status": "completed",
+  "label": "local-linux-readiness-vs-persistent",
+  "started_utc": "2026-10-22T21:44:17.391044+00:00",
+  "binaries": {
+    "before": {
+      "path": "/media/data1/Project/Network/PACE/build/performance-2026-10-22/after-bench",
+      "sha256": "f63a3bb7b6e4482360a49de9009f8e60f76db5beb05f27876f5aad3df7625d1d",
+      "build": {
+        "backends": [
+          "pace",
+          "asio",
+          "libuv"
+        ],
+        "extended_metrics_version": 2,
+        "peak_process_memory_source": "/proc/self/status.VmHWM_KiB",
+        "pace_profiling": false,
+        "asio_version": 103402,
+        "libuv_version": "1.52.1",
+        "cpp_standard": 202002,
+        "compiler": "GCC 13.3.0",
+        "ndebug": true
+      }
+    },
+    "after": {
+      "path": "/media/data1/Project/Network/PACE/build/performance-2026-10-22/readiness-first/bench",
+      "sha256": "e372cb913fde4ed53550f858b37c4c14ddcf97ac44f4054e73c89506442f11a2",
+      "build": {
+        "backends": [
+          "pace",
+          "asio",
+          "libuv"
+        ],
+        "extended_metrics_version": 2,
+        "peak_process_memory_source": "/proc/self/status.VmHWM_KiB",
+        "pace_profiling": false,
+        "asio_version": 103402,
+        "libuv_version": "1.52.1",
+        "cpp_standard": 202002,
+        "compiler": "GCC 13.3.0",
+        "ndebug": true
+      }
+    }
+  },
+  "environment": {
+    "platform": "Linux-6.18.40.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_model": "Intel(R) Core(TM) Ultra 7 270K Plus",
+    "git_commit": "e2e4cf2b2c3a79cae53d8cc6e12137293f04ca25",
+    "git_status": "M docs/architecture.md\n M docs/tutorial/01-build.md\n M include/pace/detail/poller.hpp\n M include/pace/http.hpp\n M include/pace/http2.hpp\n M include/pace/pace.hpp\n D src/http.cpp\n D src/http2.cpp\n M src/io_context.cpp\n M src/poller.cpp\n D src/tls.cpp\n D src/websocket.cpp\n M tests/network_tests.cpp\n M tests/runtime_tests.cpp\n M xmake.lua\n?? benchmarks/results/linux-optimization-2026-10-22/\n?? docs/reference/dns.md\n?? docs/reference/http3.md\n?? examples/tutorial_dns.cpp\n?? examples/tutorial_http3.cpp\n?? include/pace/application.hpp\n?? include/pace/dns.hpp\n?? include/pace/extensions.hpp\n?? include/pace/http3.hpp\n?? include/pace/http_types.hpp\n?? include/pace/networking.hpp\n?? include/pace/quic.hpp\n?? src/application/\n?? src/extensions/\n?? tests/dns_tests.cpp\n?? tests/http3_tests.cpp\n?? tests/quic_tests.cpp"
+  },
+  "configuration": {
+    "component": null,
+    "tcp": true,
+    "pairs": 3,
+    "iterations": 1000000,
+    "depth": 4,
+    "batch": 256,
+    "clients": 32,
+    "requests": 10000,
+    "bytes": 64,
+    "warmup": 1000,
+    "timeout": 120,
+    "bootstrap_samples": 10000,
+    "seed": 0,
+    "label": "local-linux-readiness-vs-persistent"
+  },
+  "operation": "TCP echo throughput, one PACE server thread",
+  "ratio_definition": "after / before; above 1 favors after for requests/s, below 1 favors after for ns/op",
+  "uncertainty_method": "Resample whole paired ratios with replacement; percentile interval of bootstrap medians",
+  "limitations": [
+    "Exploratory interval assumes representative independent pairs; scheduling/frequency drift and autocorrelation can violate this",
+    "Small samples and short runs do not establish a portable performance improvement",
+    "No performance threshold changes the process exit code; correctness/measurement failures do"
+  ],
+  "commands": [
+    {
+      "pair": 1,
+      "variant": "before",
+      "command": [
+        "/media/data1/Project/Network/PACE/build/performance-2026-10-22/after-bench",
+        "--backend",
+        "pace",
+        "--clients",
+        "32",
+        "--requests",
+        "10000",
+        "--bytes",
+        "64",
+        "--warmup",
+        "1000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 1,
+      "variant": "after",
+      "command": [
+        "/media/data1/Project/Network/PACE/build/performance-2026-10-22/readiness-first/bench",
+        "--backend",
+        "pace",
+        "--clients",
+        "32",
+        "--requests",
+        "10000",
+        "--bytes",
+        "64",
+        "--warmup",
+        "1000",
+        "--trial",
+        "1"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "after",
+      "command": [
+        "/media/data1/Project/Network/PACE/build/performance-2026-10-22/readiness-first/bench",
+        "--backend",
+        "pace",
+        "--clients",
+        "32",
+        "--requests",
+        "10000",
+        "--bytes",
+        "64",
+        "--warmup",
+        "1000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 2,
+      "variant": "before",
+      "command": [
+        "/media/data1/Project/Network/PACE/build/performance-2026-10-22/after-bench",
+        "--backend",
+        "pace",
+        "--clients",
+        "32",
+        "--requests",
+        "10000",
+        "--bytes",
+        "64",
+        "--warmup",
+        "1000",
+        "--trial",
+        "2"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "before",
+      "command": [
+        "/media/data1/Project/Network/PACE/build/performance-2026-10-22/after-bench",
+        "--backend",
+        "pace",
+        "--clients",
+        "32",
+        "--requests",
+        "10000",
+        "--bytes",
+        "64",
+        "--warmup",
+        "1000",
+        "--trial",
+        "3"
+      ]
+    },
+    {
+      "pair": 3,
+      "variant": "after",
+      "command": [
+        "/media/data1/Project/Network/PACE/build/performance-2026-10-22/readiness-first/bench",
+        "--backend",
+        "pace",
+        "--clients",
+        "32",
+        "--requests",
+        "10000",
+        "--bytes",
+        "64",
+        "--warmup",
+        "1000",
+        "--trial",
+        "3"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "benchmark": "tcp_echo",
+      "backend": "pace",
+      "trial": 1,
+      "server_threads": 1,
+      "client_threads": 32,
+      "connections": 32,
+      "pipeline": 1,
+      "payload_bytes": 64,
+      "requests_per_client": 10000,
+      "warmup_per_client": 1000,
+      "completed_requests": 320000,
+      "seconds": 0.988922055,
+      "requests_per_second": 323584.652988652,
+      "roundtrip_mib_per_second": 39.500079711,
+      "p50_us": 81.06,
+      "p95_us": 164.34,
+      "p99_us": 202.447,
+      "max_us": 1534.839,
+      "payload_verified": true,
+      "extended_metrics_version": 2,
+      "latency_samples": 320000,
+      "peak_process_memory": {
+        "bytes": 9396224,
+        "source": "/proc/self/status.VmHWM_KiB",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "instrumented": false,
+      "variant": "before"
+    },
+    {
+      "benchmark": "tcp_echo",
+      "backend": "pace",
+      "trial": 1,
+      "server_threads": 1,
+      "client_threads": 32,
+      "connections": 32,
+      "pipeline": 1,
+      "payload_bytes": 64,
+      "requests_per_client": 10000,
+      "warmup_per_client": 1000,
+      "completed_requests": 320000,
+      "seconds": 0.945475009,
+      "requests_per_second": 338454.212912993,
+      "roundtrip_mib_per_second": 41.315211537,
+      "p50_us": 77.056,
+      "p95_us": 156.241,
+      "p99_us": 183.974,
+      "max_us": 6461.999,
+      "payload_verified": true,
+      "extended_metrics_version": 2,
+      "latency_samples": 320000,
+      "peak_process_memory": {
+        "bytes": 9383936,
+        "source": "/proc/self/status.VmHWM_KiB",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "instrumented": false,
+      "variant": "after"
+    },
+    {
+      "benchmark": "tcp_echo",
+      "backend": "pace",
+      "trial": 2,
+      "server_threads": 1,
+      "client_threads": 32,
+      "connections": 32,
+      "pipeline": 1,
+      "payload_bytes": 64,
+      "requests_per_client": 10000,
+      "warmup_per_client": 1000,
+      "completed_requests": 320000,
+      "seconds": 0.938506584,
+      "requests_per_second": 340967.240353425,
+      "roundtrip_mib_per_second": 41.621977582,
+      "p50_us": 77.279,
+      "p95_us": 156.59,
+      "p99_us": 182.253,
+      "max_us": 470.526,
+      "payload_verified": true,
+      "extended_metrics_version": 2,
+      "latency_samples": 320000,
+      "peak_process_memory": {
+        "bytes": 9453568,
+        "source": "/proc/self/status.VmHWM_KiB",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "instrumented": false,
+      "variant": "after"
+    },
+    {
+      "benchmark": "tcp_echo",
+      "backend": "pace",
+      "trial": 2,
+      "server_threads": 1,
+      "client_threads": 32,
+      "connections": 32,
+      "pipeline": 1,
+      "payload_bytes": 64,
+      "requests_per_client": 10000,
+      "warmup_per_client": 1000,
+      "completed_requests": 320000,
+      "seconds": 0.998554204,
+      "requests_per_second": 320463.324592843,
+      "roundtrip_mib_per_second": 39.119058178,
+      "p50_us": 82.22,
+      "p95_us": 167.19,
+      "p99_us": 212.75,
+      "max_us": 1376.275,
+      "payload_verified": true,
+      "extended_metrics_version": 2,
+      "latency_samples": 320000,
+      "peak_process_memory": {
+        "bytes": 9474048,
+        "source": "/proc/self/status.VmHWM_KiB",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "instrumented": false,
+      "variant": "before"
+    },
+    {
+      "benchmark": "tcp_echo",
+      "backend": "pace",
+      "trial": 3,
+      "server_threads": 1,
+      "client_threads": 32,
+      "connections": 32,
+      "pipeline": 1,
+      "payload_bytes": 64,
+      "requests_per_client": 10000,
+      "warmup_per_client": 1000,
+      "completed_requests": 320000,
+      "seconds": 0.985987512,
+      "requests_per_second": 324547.721046593,
+      "roundtrip_mib_per_second": 39.617641729,
+      "p50_us": 81.824,
+      "p95_us": 165.615,
+      "p99_us": 189.653,
+      "max_us": 455.731,
+      "payload_verified": true,
+      "extended_metrics_version": 2,
+      "latency_samples": 320000,
+      "peak_process_memory": {
+        "bytes": 9482240,
+        "source": "/proc/self/status.VmHWM_KiB",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "instrumented": false,
+      "variant": "before"
+    },
+    {
+      "benchmark": "tcp_echo",
+      "backend": "pace",
+      "trial": 3,
+      "server_threads": 1,
+      "client_threads": 32,
+      "connections": 32,
+      "pipeline": 1,
+      "payload_bytes": 64,
+      "requests_per_client": 10000,
+      "warmup_per_client": 1000,
+      "completed_requests": 320000,
+      "seconds": 0.943799261,
+      "requests_per_second": 339055.149991265,
+      "roundtrip_mib_per_second": 41.388568114,
+      "p50_us": 77.36,
+      "p95_us": 156.244,
+      "p99_us": 174.33,
+      "max_us": 7981.832,
+      "payload_verified": true,
+      "extended_metrics_version": 2,
+      "latency_samples": 320000,
+      "peak_process_memory": {
+        "bytes": 9461760,
+        "source": "/proc/self/status.VmHWM_KiB",
+        "scope": "whole process including server, blocking clients and latency samples",
+        "window": "current process image through server/client shutdown, before result aggregation",
+        "available": true
+      },
+      "instrumented": false,
+      "variant": "after"
+    }
+  ],
+  "pairs": [
+    {
+      "pair": 1,
+      "before": 323584.652988652,
+      "after": 338454.212912993,
+      "after_before_ratio": 1.0459526117416404
+    },
+    {
+      "pair": 2,
+      "after": 340967.240353425,
+      "before": 320463.324592843,
+      "after_before_ratio": 1.0639820977537218
+    },
+    {
+      "pair": 3,
+      "before": 324547.721046593,
+      "after": 339055.149991265,
+      "after_before_ratio": 1.044700449283356
+    }
+  ],
+  "summary": {
+    "metric": "requests_per_second",
+    "lower_is_better": false,
+    "before_median": 323584.652988652,
+    "after_median": 339055.149991265,
+    "before_min": 320463.324592843,
+    "before_max": 324547.721046593,
+    "after_min": 338454.212912993,
+    "after_max": 340967.240353425,
+    "median_paired_after_before_ratio": 1.0459526117416404,
+    "min_paired_after_before_ratio": 1.044700449283356,
+    "max_paired_after_before_ratio": 1.0639820977537218,
+    "median_ratio_bootstrap_95_percentile_interval": [
+      1.044700449283356,
+      1.0639820977537218
+    ],
+    "after_wins": 3,
+    "ties": 0,
+    "pairs": 3,
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 0
+  },
+  "failure": null,
+  "finished_utc": "2026-10-22T21:44:24.104532+00:00"
+}

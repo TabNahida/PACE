@@ -7,6 +7,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
@@ -599,6 +600,56 @@ struct owned_eventfd {
     explicit owned_eventfd(pace::io_context& io) : context(io) { require(fd >= 0, "eventfd creation"); }
     ~owned_eventfd() { context.cancel(fd); ::close(fd); }
 };
+
+void persistent_poller_contract() {
+    pace::io_context owner;
+    owned_eventfd descriptor(owner);
+    pace::detail::poller poller(true);
+    std::array<pace::detail::poll_event, 1> events{};
+    const std::uint64_t value = 1;
+    require(::write(descriptor.fd, &value, sizeof(value)) == sizeof(value), "persistent eventfd write");
+    poller.update(descriptor.fd, true, false, 41);
+    for (unsigned i = 0; i < 2; ++i)
+        require(poller.wait(events, 0) == 1 && events[0].token == 41 && events[0].readable,
+                "persistent readiness must remain subscribed without rearm");
+    poller.update(descriptor.fd, false, true, 42);
+    require(poller.wait(events, 0) == 1 && events[0].token == 42 && events[0].writable && !events[0].readable,
+            "persistent interest change must replace the old direction and token");
+    poller.update(descriptor.fd, false, false, 43);
+    require(poller.wait(events, 0) == 0, "idle persistent descriptor must be removed");
+}
+
+pace::task<void> batched_descriptor_reader(pace::io_context& io, int fd, std::size_t index,
+                                          std::size_t total, std::size_t& completed) {
+    co_await io.wait_readable(fd);
+    // Leave the descriptor readable while some tasks suspend on a different
+    // primitive. Its retained kernel interest must not resume this task twice.
+    if (index % 2) co_await io.sleep_for(1ms);
+    co_await io.wait_readable(fd);
+    std::uint64_t value = 0;
+    require(::read(fd, &value, sizeof(value)) == sizeof(value) && value == index + 1,
+            "batched readiness was lost, duplicated or assigned to another descriptor");
+    io.cancel(fd);
+    if (++completed == total) io.stop();
+}
+
+void persistent_reactor_batches() {
+    pace::io_context io;
+    // Exceed both the poll event capacity and the bounded ready dispatch batch.
+    constexpr std::size_t count = 600;
+    std::vector<std::unique_ptr<owned_eventfd>> descriptors;
+    std::size_t completed = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        descriptors.push_back(std::make_unique<owned_eventfd>(io));
+        const std::uint64_t value = i + 1;
+        const int fd = descriptors.back()->fd;
+        require(::write(fd, &value, sizeof(value)) == sizeof(value), "batched eventfd write");
+        io.spawn(batched_descriptor_reader(io, fd, i, count, completed));
+    }
+    io.run();
+    require(completed == count, "all batched descriptors must complete exactly once");
+}
+
 pace::task<void> descriptor_reader(pace::io_context& io, int fd, int& count) {
     co_await io.wait_readable(fd);
     std::uint64_t value = 0;
@@ -707,6 +758,8 @@ void run_tests() {
         require(negative.deadline <= std::chrono::steady_clock::now(), "negative duration must be ready immediately");
     }
 #if defined(__linux__)
+    persistent_poller_contract();
+    persistent_reactor_batches();
     {
         pace::io_context io;
         owned_eventfd descriptor(io);

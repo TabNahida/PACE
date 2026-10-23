@@ -101,10 +101,12 @@ stream::stream(io_context& context) : context_(&context), fd_(create_socket()) {
 stream::stream(io_context& context, native_socket_type fd) noexcept : context_(&context), fd_(fd) {}
 stream::~stream() { close(); }
 stream::stream(stream&& other) noexcept
-    : context_(other.context_), fd_(std::exchange(other.fd_, invalid_socket)) {}
+    : read_may_be_ready_(other.read_may_be_ready_), context_(other.context_),
+      fd_(std::exchange(other.fd_, invalid_socket)) {}
 stream& stream::operator=(stream&& other) noexcept {
     if (this != &other) {
         close();
+        read_may_be_ready_ = other.read_may_be_ready_;
         context_ = other.context_;
         fd_ = std::exchange(other.fd_, invalid_socket);
     }
@@ -135,11 +137,17 @@ task<void> stream::connect(endpoint endpoint) {
 }
 
 task<std::size_t> stream::read_some(std::span<char> buffer) {
+    check_operation(*context_, fd_);
+    if (buffer.empty()) co_return 0;
+    if (!read_may_be_ready_) co_await context_->wait_readable(fd_);
     for (;;) {
         check_operation(*context_, fd_);
         if (buffer.empty()) co_return 0;
         const auto count = detail::profiling::measure(detail::profiling::stage::recv, [&] { return ::recv(fd_, buffer.data(), static_cast<int>(std::min<std::size_t>(buffer.size(), INT_MAX)), 0); });
-        if (count >= 0) co_return static_cast<std::size_t>(count);
+        if (count >= 0) {
+            read_may_be_ready_ = static_cast<std::size_t>(count) == std::min<std::size_t>(buffer.size(), INT_MAX);
+            co_return static_cast<std::size_t>(count);
+        }
         const auto error = last_socket_error();
         if (interrupted(error)) continue;
         if (!would_block(error)) socket_error("recv");

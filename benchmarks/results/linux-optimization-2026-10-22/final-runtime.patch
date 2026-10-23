@@ -1,0 +1,206 @@
+diff --git a/include/pace/detail/poller.hpp b/include/pace/detail/poller.hpp
+index 15b45f0..84dbff4 100644
+--- a/include/pace/detail/poller.hpp
++++ b/include/pace/detail/poller.hpp
+@@ -16,11 +16,19 @@ struct poll_event {
+ };
+ 
+ // All operations except wake() belong to the owning reactor thread.
+-// Delivery disarms the entire descriptor, including its other direction.
++// In the default one-shot mode, delivery disarms the entire descriptor,
++// including its other direction. Persistent mode retains explicit interests.
+ // UINT64_MAX is reserved for the internal wakeup notification.
+ class poller {
+ public:
+-    poller();
++#if defined(__linux__)
++    static constexpr bool supports_persistent = true;
++#else
++    static constexpr bool supports_persistent = false;
++#endif
++    // Persistent level-triggered subscriptions are an internal Linux reactor
++    // mode. The default retains the one-shot contract for standalone callers.
++    explicit poller(bool persistent = false);
+     ~poller();
+     poller(const poller&) = delete;
+     poller& operator=(const poller&) = delete;
+diff --git a/include/pace/tcp.hpp b/include/pace/tcp.hpp
+index 5afd0f4..33ad9bd 100644
+--- a/include/pace/tcp.hpp
++++ b/include/pace/tcp.hpp
+@@ -60,6 +60,9 @@ public:
+ 
+ private:
+     friend class listener;
++    // A short read commonly drains a socket. Wait for level readiness before
++    // the next attempt instead of issuing a predictable failing recv syscall.
++    bool read_may_be_ready_ = true;
+     stream(io_context& context, native_socket_type fd) noexcept;
+     io_context* context_;
+     native_socket_type fd_ = invalid_socket;
+diff --git a/src/io_context.cpp b/src/io_context.cpp
+index c561c1c..a8f2e47 100644
+--- a/src/io_context.cpp
++++ b/src/io_context.cpp
+@@ -22,7 +22,7 @@ void check_affinity(io_context* context) {
+ }
+ 
+ struct io_context::implementation {
+-    detail::poller poller;
++    detail::poller poller{detail::poller::supports_persistent};
+     std::atomic<bool> stopping{false};
+     std::atomic<bool> running{false};
+     bool has_run = false;
+@@ -40,10 +40,13 @@ struct io_context::implementation {
+         io_awaiter* reader = nullptr;
+         io_awaiter* writer = nullptr;
+         native_socket_type fd = invalid_socket;
++        unsigned interests = 0;
++        bool dirty = false;
+     };
+     std::unordered_map<std::uint64_t, fd_state> descriptors;
+     std::unordered_map<native_socket_type, std::uint64_t> tokens;
+     std::uint64_t next_token = 0;
++    std::vector<std::uint64_t> dirty_descriptors;
+     struct later {
+         bool operator()(const timer_awaiter* a, const timer_awaiter* b) const noexcept {
+             return a->deadline > b->deadline;
+@@ -64,12 +67,33 @@ struct io_context::implementation {
+             finish(state.writer, canceled());
+         }
+         descriptors.clear(); tokens.clear();
++        dirty_descriptors.clear();
+         while (!timers.empty()) {
+             auto* timer = timers.top(); timers.pop();
+             timer->error = canceled(); ready.push_back(timer->continuation);
+         }
+         cancellation_started = true;
+     }
++    void update(fd_state& state, std::uint64_t token) {
++        const unsigned interests = (state.reader ? 1U : 0U) | (state.writer ? 2U : 0U);
++        if constexpr (detail::poller::supports_persistent) {
++            if (interests == state.interests) return;
++        }
++        poller.update(state.fd, state.reader != nullptr, state.writer != nullptr, token);
++        state.interests = interests;
++    }
++    void reconcile_descriptors() {
++        // Resumed I/O usually rearms the same direction before the next poll.
++        // Keep that subscription unchanged; remove only truly idle interests.
++        for (const auto token : dirty_descriptors) {
++            const auto found = descriptors.find(token);
++            if (found == descriptors.end()) continue;
++            auto& state = found->second;
++            update(state, token);
++            state.dirty = false;
++        }
++        dirty_descriptors.clear();
++    }
+ };
+ 
+ io_context::io_context() : impl_(std::make_unique<implementation>()) {}
+@@ -162,7 +186,7 @@ bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle) {
+     if (slot) throw std::logic_error("only one pending operation per socket direction is allowed");
+     operation.continuation = handle;
+     slot = &operation;
+-    try { p.poller.update(state.fd, state.reader != nullptr, state.writer != nullptr, token); }
++    try { p.update(state, token); }
+     catch (...) {
+         slot = nullptr;
+         if (inserted) { p.tokens.erase(operation.fd); p.descriptors.erase(token); }
+@@ -294,6 +318,7 @@ void io_context::run() {
+         // timers are still checked on every bounded dispatch turn above.
+         if (timeout == 0 && p.descriptors.empty()) continue;
+         try {
++            if constexpr (detail::poller::supports_persistent) p.reconcile_descriptors();
+             const auto count = profiling::measure(timeout == 0 ? profiling::stage::poll_nonblocking
+                 : profiling::stage::poll_blocking, [&] { return p.poller.wait(events, timeout); });
+             profiling::scope event_timing(profiling::stage::event_dispatch);
+@@ -304,8 +329,12 @@ void io_context::run() {
+                 auto& state = it->second;
+                 if (event.readable || event.error) p.finish(state.reader);
+                 if (event.writable || event.error) p.finish(state.writer);
+-                if (state.reader || state.writer)
+-                    p.poller.update(state.fd, state.reader != nullptr, state.writer != nullptr, event.token);
++                if constexpr (detail::poller::supports_persistent) {
++                    if (!state.dirty) {
++                        p.dirty_descriptors.push_back(event.token);
++                        state.dirty = true;
++                    }
++                } else if (state.reader || state.writer) p.update(state, event.token);
+             }
+         } catch (...) { record_error(std::current_exception()); }
+     }
+diff --git a/src/net.cpp b/src/net.cpp
+index cc62fb4..96f39ad 100644
+--- a/src/net.cpp
++++ b/src/net.cpp
+@@ -101,10 +101,12 @@ stream::stream(io_context& context) : context_(&context), fd_(create_socket()) {
+ stream::stream(io_context& context, native_socket_type fd) noexcept : context_(&context), fd_(fd) {}
+ stream::~stream() { close(); }
+ stream::stream(stream&& other) noexcept
+-    : context_(other.context_), fd_(std::exchange(other.fd_, invalid_socket)) {}
++    : read_may_be_ready_(other.read_may_be_ready_), context_(other.context_),
++      fd_(std::exchange(other.fd_, invalid_socket)) {}
+ stream& stream::operator=(stream&& other) noexcept {
+     if (this != &other) {
+         close();
++        read_may_be_ready_ = other.read_may_be_ready_;
+         context_ = other.context_;
+         fd_ = std::exchange(other.fd_, invalid_socket);
+     }
+@@ -135,11 +137,17 @@ task<void> stream::connect(endpoint endpoint) {
+ }
+ 
+ task<std::size_t> stream::read_some(std::span<char> buffer) {
++    check_operation(*context_, fd_);
++    if (buffer.empty()) co_return 0;
++    if (!read_may_be_ready_) co_await context_->wait_readable(fd_);
+     for (;;) {
+         check_operation(*context_, fd_);
+         if (buffer.empty()) co_return 0;
+         const auto count = detail::profiling::measure(detail::profiling::stage::recv, [&] { return ::recv(fd_, buffer.data(), static_cast<int>(std::min<std::size_t>(buffer.size(), INT_MAX)), 0); });
+-        if (count >= 0) co_return static_cast<std::size_t>(count);
++        if (count >= 0) {
++            read_may_be_ready_ = static_cast<std::size_t>(count) == std::min<std::size_t>(buffer.size(), INT_MAX);
++            co_return static_cast<std::size_t>(count);
++        }
+         const auto error = last_socket_error();
+         if (interrupted(error)) continue;
+         if (!would_block(error)) socket_error("recv");
+diff --git a/src/poller.cpp b/src/poller.cpp
+index 887ecd4..ae21627 100644
+--- a/src/poller.cpp
++++ b/src/poller.cpp
+@@ -42,6 +42,7 @@ constexpr std::size_t max_batch = 256;
+ struct poller::implementation {
+     int queue = -1;
+     int notification = -1;
++    bool persistent = false;
+ 
+     implementation() {
+         queue = ::epoll_create1(EPOLL_CLOEXEC);
+@@ -70,7 +71,7 @@ void poller::update(native_socket_type fd, bool readable, bool writable, std::ui
+     if (token == wake_token) throw std::invalid_argument("poller token UINT64_MAX is reserved");
+     if (!readable && !writable) { remove(fd); return; }
+     epoll_event event{};
+-    event.events = EPOLLONESHOT | EPOLLRDHUP;
++    event.events = (impl_->persistent ? 0U : EPOLLONESHOT) | EPOLLRDHUP;
+     if (readable) event.events |= EPOLLIN;
+     if (writable) event.events |= EPOLLOUT;
+     event.data.u64 = token;
+@@ -343,7 +344,13 @@ void poller::wake() noexcept {
+ 
+ #endif
+ 
+-poller::poller() : impl_(std::make_unique<implementation>()) {}
++poller::poller(bool persistent) : impl_(std::make_unique<implementation>()) {
++#if defined(__linux__)
++    impl_->persistent = persistent;
++#else
++    if (persistent) throw std::invalid_argument("persistent polling is unavailable on this platform");
++#endif
++}
+ poller::~poller() = default;
+ 
+ } // namespace pace::detail

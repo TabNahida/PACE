@@ -71,8 +71,9 @@ throws `system_error(message_size)`; a network may impose a smaller effective
 limit. Cancellation throws `system_error(operation_canceled)`. Other OS failures
 throw `system_error`. UDP does not guarantee delivery, order, or uniqueness.
 
-This API currently supports numeric IPv4 unicast and broadcast. DNS, IPv6 and
-multicast membership are not exposed.
+This API currently supports numeric IPv4 unicast and broadcast. Resolve hostnames
+explicitly with the separate [DNS extension](dns.md). IPv6 transport and multicast
+membership are not exposed.
 
 ## 中文：先运行，再使用
 
@@ -84,7 +85,7 @@ multicast membership are not exposed.
 
 同一 socket 可同时挂起一次发送和一次接收；同方向重复操作会报错。协程操作在
 socket 所属的 `io_context` 上执行，完成前要保留 socket 和缓冲区，不能移动它。
-`close()` 或停止 context 会取消等待。当前地址支持数字形式的 IPv4；尚无 DNS、
-IPv6 或加入组播组的接口。
+`close()` 或停止 context 会取消等待。当前地址支持数字形式的 IPv4；主机名可先用
+独立的 [DNS 扩展](dns.md)解析。尚无 IPv6 传输或加入组播组的接口。
 
 [Tutorials](../tutorial/README.md) · [Reference index](README.md)

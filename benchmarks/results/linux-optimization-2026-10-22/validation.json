@@ -1,0 +1,42 @@
+{
+  "checks": [
+    {
+      "name": "optimized runtime regressions",
+      "result": "passed",
+      "command": "build/performance-2026-10-22/runtime-tests",
+      "includes": "persistent poller direction/removal; 600 FD batches with delayed rearm"
+    },
+    {
+      "name": "runtime ASan/UBSan/LSan",
+      "result": "passed",
+      "command": "ASAN_OPTIONS=detect_leaks=1 build/performance-2026-10-22/runtime-sanitized"
+    },
+    {
+      "name": "TCP ASan/UBSan/LSan",
+      "result": "passed",
+      "command": "ASAN_OPTIONS=detect_leaks=1 build/performance-2026-10-22/network-sanitized",
+      "groups": 8,
+      "includes": "short read, queued data, both move forms, empty buffer, full-buffer remainder, EOF, cancellation"
+    },
+    {
+      "name": "Python benchmark-runner regressions",
+      "result": "passed",
+      "command": "python3 -m unittest discover -s tests -p 'test_*benchmark*.py' -q",
+      "tests": 37
+    },
+    {
+      "name": "exact snapshot rebuild",
+      "result": "passed",
+      "description": "reproduce_build.py reconstructed source hashes and reproduced both measured uninstrumented binary SHA-256 values byte-for-byte"
+    },
+    {
+      "name": "peak-memory provider probe",
+      "result": "passed",
+      "evidence": "memory-probe.json"
+    }
+  ],
+  "notes": [
+    "Local TCP/sanitizer tests run outside the network/ptrace sandbox; no test timings are performance evidence.",
+    "Full module/protocol tests are reported separately by the architecture integration."
+  ]
+}
