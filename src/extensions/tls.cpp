@@ -170,7 +170,9 @@ struct context::implementation {
         if (SSL_CTX_set_num_tickets(handle.get(), 0) != 1)
             tls_error("disable TLS SNI session tickets");
         SSL_CTX_set_tlsext_servername_arg(handle.get(), this);
-        SSL_CTX_set_tlsext_servername_callback(handle.get(),
+        // OpenSSL casts this callback inside a macro. Keep the lambda outside
+        // that expansion so MSVC parses its parameter list and body correctly.
+        const auto callback =
             +[](SSL* ssl, int* alert, void* argument) noexcept -> int {
                 const auto& config = *static_cast<implementation*>(argument);
                 try {
@@ -196,7 +198,8 @@ struct context::implementation {
                     *alert = SSL_AD_UNRECOGNIZED_NAME;
                     return SSL_TLSEXT_ERR_ALERT_FATAL;
                 }
-            });
+            };
+        SSL_CTX_set_tlsext_servername_callback(handle.get(), callback);
     }
 };
 
