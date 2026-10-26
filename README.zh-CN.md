@@ -38,22 +38,22 @@
 
 ```cpp
 #include <pace/http.hpp>
-
-pace::task<pace::http::response> hello(pace::http::request) {
-    co_return pace::http::response{.body = "Hello, PACE!\n"};
-}
+#include <pace/run.hpp>
 
 int main() {
-    pace::io_context io;
-    pace::tcp::listener listener(io, {"127.0.0.1", 8080});
-    io.spawn(pace::http::serve(listener, hello));
-    io.run();
+    pace::http::router app;
+    app.get("/", [](pace::http::request) {
+        return pace::http::response{.body = "Hello, PACE!\n"};
+    });
+    pace::run([&](pace::io_context& io) {
+        return pace::http::serve(io, {"127.0.0.1", 8080}, app);
+    });
 }
 ```
 
-使用 `add_deps("pace_http1")` 链接。[包含路由与优雅退出的完整示例 →](examples/tutorial_http.cpp)
+使用 `add_deps("pace_http1")` 链接。[一步步写出这个 HTTP 服务 →](docs/tutorial/04-http.zh-CN.md)
 
-更多示例：[TCP](examples/tutorial_tcp.cpp) · [UDP](examples/tutorial_udp.cpp) · [DNS](examples/tutorial_dns.cpp) · [QUIC](examples/tutorial_quic.cpp) · [HTTP/3](examples/tutorial_http3.cpp) · [WebSocket](examples/tutorial_websocket.cpp)
+继续学习：[TCP](docs/tutorial/03-tcp.zh-CN.md) · [UDP](docs/tutorial/07-udp.zh-CN.md) · [DNS](docs/tutorial/08-dns-tls.zh-CN.md) · [QUIC](docs/tutorial/11-quic-http3.zh-CN.md) · [HTTP/3](docs/tutorial/11-quic-http3.zh-CN.md) · [WebSocket](docs/tutorial/09-websocket.zh-CN.md)
 
 ## 快速开始
 

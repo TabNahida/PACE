@@ -31,14 +31,11 @@ pace::task<void> lesson(pace::io_context& io) {
     try { co_await expected_failure(); }
     catch (const std::runtime_error&) { caught = true; }
     if (!caught) throw std::runtime_error("child exception was lost");
-    io.stop();
 }
 
 int main() {
     try {
-        pace::io_context io;
-        io.spawn(lesson(io));
-        io.run(); // This thread executes the coroutine; no runtime is required.
+        pace::run(lesson); // Returns after lesson and background cancellation finish.
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

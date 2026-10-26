@@ -1,5 +1,7 @@
 # API 中文索引与关键约定
 
+常用便利入口：[pace::run](run.md) · [HTTP 路由与普通处理器](http-router.md) · [逐步教程](../tutorial/README.zh-CN.md)
+
 完整签名、默认参数、异常和边界行为以对应的英文参考页为准。
 这些页面覆盖公共头文件中的所有公开类型与成员；`pace::detail` 属于内部实现。
 

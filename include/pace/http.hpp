@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pace/http_types.hpp>
+#include <pace/http_router.hpp>
 #include <pace/tcp.hpp>
 #ifdef PACE_HAS_TLS
 #include <pace/tls.hpp>
@@ -113,6 +114,9 @@ task<void> serve_connection(tcp::stream stream, handler handle, limits bounds = 
 // Listener and its context must outlive this task and its connections. Stop the
 // owning context to cancel accepted connections as well as the accept loop.
 task<void> serve(tcp::listener& listener, handler handle, limits bounds = {});
+// Own the listener in this task. Binding occurs when awaited/spawned; use the
+// listener overload for immediate binding, port inspection or separate close.
+task<void> serve(io_context& context, tcp::endpoint endpoint, handler handle, limits bounds = {});
 
 // Opt-in admission, per-request limits, deadlines and bounded response streaming.
 // The original buffered handler API above remains available without adaptation.

@@ -1,5 +1,47 @@
 # 6. Orderly shutdown
 
+[中文](06-shutdown.zh-CN.md) · [Previous: execution](05-execution.md) · [Next: UDP](07-udp.md)
+
+Before making a long-lived server, build a small cancellation experiment. Replace
+`main.cpp` with this complete program, link `pace_runtime`, then build and run it:
+
+```cpp
+#include <pace/io_context.hpp>
+#include <chrono>
+#include <iostream>
+
+pace::task<void> waiting(pace::io_context& io, bool& canceled) {
+    try { co_await io.sleep_for(std::chrono::hours(1)); }
+    catch (const std::system_error& error) {
+        if (error.code() != std::errc::operation_canceled) throw;
+        canceled = true;
+    }
+}
+
+int main() {
+    try {
+        pace::io_context io;
+        bool canceled = false;
+        auto stop = io.call_after(std::chrono::milliseconds(10), [&io] { io.stop(); });
+        io.spawn(waiting(io, canceled));
+        io.run();
+        if (!canceled) throw std::runtime_error("cancellation was not observed");
+        std::cout << "Canceled and drained\n";
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+Expect `Canceled and drained`, without waiting an hour. The timer callback
+requests stop; the pending coroutine then resumes with cancellation. Only after
+that coroutine has unwound does `io.run()` return. Keep the timer handle in a
+variable: destroying it would disarm the stop callback. Keep `canceled` outside
+the task so it remains alive during cancellation. The entry runner from chapter 2
+requests this same stop automatically when its entry completes; manual services
+choose the moment themselves.
+
 Complete source: [`tutorial_shutdown.cpp`](../../examples/tutorial_shutdown.cpp).
 Run `xmake run tutorial_shutdown`. It starts a long timer, requests stop after a
 short delay, verifies that cancellation was observed, and checks that a local RAII

@@ -1,5 +1,7 @@
 # `pace::http`: HTTP/1.1 and HTTPS
 
+For exact routes, ordinary response callbacks and the owning-listener serve overload, see [handler adapters and routing](http-router.md).
+
 Include `<pace/http.hpp>`. PACE supplies an HTTP/1.0–1.1 server and client,
 with Content-Length, chunked transfer, trailers, persistence and strict framing
 validation. Buffered messages are the default; an opt-in server API adds

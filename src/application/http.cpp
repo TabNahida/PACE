@@ -739,6 +739,11 @@ task<void> serve_connection(tcp::stream stream, handler handle, limits bounds) {
     } catch (const std::system_error&) { /* A transport error belongs to this client. */ }
 }
 
+task<void> serve(io_context& context, tcp::endpoint endpoint, handler handle, limits bounds) {
+    tcp::listener listener(context, std::move(endpoint));
+    co_await serve(listener, std::move(handle), bounds);
+}
+
 task<void> serve(tcp::listener& listener, handler handle, limits bounds) {
     for (;;) {
         try { listener.context().spawn(serve_connection(co_await listener.accept(), handle, bounds)); }

@@ -1,77 +1,124 @@
-# 2. Tasks and timers
+# 2. Write an asynchronous program
 
-Complete source: [`tutorial_tasks.cpp`](../../examples/tutorial_tasks.cpp).
-Run `xmake run tutorial_tasks` from the repository root.
+[中文](02-tasks-timers.zh-CN.md) · [Previous: build](01-build.md) · [Next: TCP](03-tcp.md)
 
-The smallest execution unit is a `pace::io_context`. Submit a root coroutine and
-run the context on your calling thread:
+By the end of this chapter you will write a function that suspends for a timer,
+returns a value to `main`, and propagates failures through ordinary C++ exceptions.
+Use the `my_application` target from chapter 1, with `add_deps("pace_runtime")`.
 
-```cpp
-pace::io_context io;
-io.spawn(lesson(io));
-io.run();
-```
+## Start with a value, then introduce a wait
 
-The context lives longer than `lesson`; the named coroutine borrows it safely.
-`spawn` takes ownership of its `task<void>` but does not execute it inline.
-`run()` begins execution and remains alive until `io.stop()` is requested.
-Completing the last task alone does not stop an idle context.
+A coroutine returning `pace::task<std::string>` eventually produces a string.
+Inside it, use `co_return` instead of `return`. Creating its task does not run the
+body: tasks are lazy. The entry runner will start it on the calling thread.
 
-## Own data across suspension
-
-The example's child task takes a string **by value**:
+Put this complete program in `main.cpp`:
 
 ```cpp
-pace::task<std::string> delayed_message(pace::io_context& io, std::string name) {
-    co_await io.sleep_for(std::chrono::milliseconds(5));
-    co_return "Hello, " + name;
+#include <pace/run.hpp>
+#include <chrono>
+#include <iostream>
+#include <string>
+
+pace::task<std::string> greet(pace::io_context& io) {
+    co_await io.sleep_for(std::chrono::milliseconds(10));
+    co_return "Hello, PACE";
+}
+
+int main() {
+    try {
+        std::cout << pace::run(greet) << '\n';
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
 }
 ```
 
-Its string belongs to the coroutine frame throughout the wait. A reference,
-`std::string_view` or pointer would only borrow storage. Changing a parameter to a
-view does not make a lazy operation keep its source alive. The context is a
-reference because the enclosing `main` deliberately owns it through `run()`.
+Run `xmake -y my_application` and `xmake run my_application`. Expect `Hello, PACE`
+and a normal exit. While `greet` awaits the timer, the reactor can run other ready
+work. It does not dedicate a sleeping thread to the coroutine. The actual delay
+can exceed 10 ms; a timer is not a real-time scheduling guarantee.
+
+`pace::run(greet)` creates a fresh context, invokes `greet(io)` on that context,
+and returns its result. When the entry finishes, it requests stop and drains
+background cancellation. You do not add `io.stop()` to this one-shot program.
+For an entry returning `task<void>`, `run` returns `void`.
+
+## Pass owned inputs
+
+To accept a name, change the signature to
+`greet(pace::io_context& io, std::string name)` and return `"Hello, " + name`.
+The string now belongs to the coroutine frame across its wait. Supply the extra
+argument with an ordinary factory lambda:
 
 ```cpp
-auto pending = delayed_message(io, "PACE"); // Body has not started yet.
-const auto message = co_await std::move(pending);
+const auto message = pace::run([](pace::io_context& io) {
+    return greet(io, "reader");
+});
 ```
 
-The task is move-only and consumed once. A named task is an lvalue, so move it
-into `co_await`; a direct call result such as
-`co_await delayed_message(io, "PACE")` is already an rvalue. Do not await a consumed
-task again. Use named coroutine functions with owned arguments rather than
-immediately invoked temporary capturing coroutine lambdas: destroying the lambda
-closure can invalidate captures used after suspension.
-
-## Timer and yield behavior
+This lambda returns a task; it is not itself a coroutine. `run` also safely owns
+a capturing coroutine lambda for the entire run:
 
 ```cpp
-co_await io.sleep_for(std::chrono::milliseconds(5));
-co_await io.yield();
-co_await io.sleep_for(std::chrono::milliseconds(0));
+const auto answer = pace::run([value = 42](pace::io_context& io) -> pace::task<int> {
+    co_await io.yield();
+    co_return value;
+});
 ```
 
-All three suspend on the same context. The 5 ms delay uses a monotonic clock;
-actual resumption can be later. Both `yield` and a zero/expired timer give the
-scheduler another turn. None move a task to another worker or run it in parallel.
-Long synchronous loops and blocking calls still hold up this worker.
+That lifetime guarantee belongs to `run`. Do not generalize it to
+`io.spawn([capture]() -> task<void> { ... }())`: an immediately invoked temporary
+coroutine lambda can die while its coroutine still refers to the closure.
+Reference captures remain references, even when the closure is owned.
 
-`pace::io_context::current()` identifies the currently executing context. Outside
-its `run()` it returns `nullptr`; in this example it equals `&io`. Operations on
-another context's sockets or awaiters are not an implicit handoff.
+## Await another task
 
-## Exceptions and termination
+Inside a coroutine, call a child directly:
 
-An awaited child exception reaches the parent's ordinary try/catch. The example
-checks that its intentionally failing child is caught and then calls `io.stop()`.
-If an exception instead escapes a root task, the context requests stop, drains
-its queued work and rethrows from `run()`. Catch that final failure in `main`.
+```cpp
+const auto message = co_await greet(io, "reader");
+```
 
-Stop also cancels pending I/O and timers. Expected cancellation is a
-`std::system_error` whose code compares with `std::errc::operation_canceled`.
-Read [orderly shutdown](06-shutdown.md) before adding multiple long-lived roots.
+The parent resumes after the child's result is ready. If you first save the task,
+consume it with `co_await std::move(pending)`; a task is move-only and single-use.
+A child's exception is thrown at the `co_await` expression. Catch it there if the
+parent can recover. Otherwise it reaches `run` and the catch in `main`.
 
-Reference: [`task`](../reference/task.md), [`io_context`](../reference/io-context.md).
-Next: [TCP echo](03-tcp.md).
+`co_await io.yield()` and a zero-duration timer give other ready work a turn.
+Neither moves CPU work to another thread. A blocking file read or long computation
+still blocks this reactor; chapter 5 explains explicit worker placement.
+
+## Understand what completion owns
+
+`run` returns **owned results**, such as strings or numbers. Do not return a socket
+bound to its temporary context, or a view into entry-local/captured storage.
+
+An entry can use `io.spawn` for background work, but completing the entry cancels
+that work; it does not wait for its natural completion. Background tasks must own
+their data, or borrow objects outside `run` that remain alive until it returns.
+Entry-local objects are destroyed as the entry returns, before background tasks
+necessarily observe cancellation. If your application needs several independent
+roots and explicit draining, use the manual model below and chapter 6.
+
+## Take explicit control when needed
+
+```cpp
+pace::io_context io;
+io.spawn(service(io)); // service returns task<void>
+io.run();             // Someone must explicitly request io.stop().
+```
+
+Unlike `pace::run(factory)`, `io.run()` stays alive even when its last task finishes.
+This is useful for a service receiving work from other threads. Do not switch
+between the two forms without deciding who owns shutdown. Neither supports nesting
+another reactor on the same running thread. Entry cancellation is reported by
+`pace::run` as `std::system_error(operation_canceled)` rather than a missing value.
+
+Try changing the entry to throw after its timer. Confirm that `main` reports the
+failure and exits instead of hanging. Then run `xmake run tutorial_tasks` for the
+[extended exercise](../../examples/tutorial_tasks.cpp), which also checks child
+exceptions and task ownership.
+
+[Entry-runner contract](../reference/run.md) · [Task contract](../reference/task.md)

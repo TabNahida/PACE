@@ -38,22 +38,22 @@ Link individual modules, layer aggregates, or `pace` for the enabled stack. HTTP
 
 ```cpp
 #include <pace/http.hpp>
-
-pace::task<pace::http::response> hello(pace::http::request) {
-    co_return pace::http::response{.body = "Hello, PACE!\n"};
-}
+#include <pace/run.hpp>
 
 int main() {
-    pace::io_context io;
-    pace::tcp::listener listener(io, {"127.0.0.1", 8080});
-    io.spawn(pace::http::serve(listener, hello));
-    io.run();
+    pace::http::router app;
+    app.get("/", [](pace::http::request) {
+        return pace::http::response{.body = "Hello, PACE!\n"};
+    });
+    pace::run([&](pace::io_context& io) {
+        return pace::http::serve(io, {"127.0.0.1", 8080}, app);
+    });
 }
 ```
 
-Link with `add_deps("pace_http1")`. [Complete example with routing and graceful shutdown →](examples/tutorial_http.cpp)
+Link with `add_deps("pace_http1")`. [Write this server step by step →](docs/tutorial/04-http.md)
 
-More examples: [TCP](examples/tutorial_tcp.cpp) · [UDP](examples/tutorial_udp.cpp) · [DNS](examples/tutorial_dns.cpp) · [QUIC](examples/tutorial_quic.cpp) · [HTTP/3](examples/tutorial_http3.cpp) · [WebSocket](examples/tutorial_websocket.cpp)
+Continue step by step: [TCP](docs/tutorial/03-tcp.md) · [UDP](docs/tutorial/07-udp.md) · [DNS](docs/tutorial/08-dns-tls.md) · [QUIC](docs/tutorial/11-quic-http3.md) · [HTTP/3](docs/tutorial/11-quic-http3.md) · [WebSocket](docs/tutorial/09-websocket.md)
 
 ## Get started
 
