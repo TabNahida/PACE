@@ -1,66 +1,44 @@
-# Learn PACE by running it
+# Build an application with PACE
 
-[中文学习指南](README.zh-CN.md) · [API reference](../reference/README.md)
+[中文学习路线](README.zh-CN.md) · [API reference](../reference/README.md)
 
-## 1. Say hello
+These chapters teach you to write your own files, build them, inspect the result,
+and then change one behavior at a time. Complete source programs are companion
+exercises, not a substitute for the explanation. The guides track this checkout;
+`pace::run`, the router and the owning HTTP listener entry were added after v0.2.0.
 
-From the repository root:
+## Follow the core path
 
-```sh
-xmake f -m release -y
-xmake -y tutorial_tasks
-xmake run tutorial_tasks
-```
+| Chapter | What you will build and learn |
+|---|---|
+| [1. Your first project](01-build.md) | Create main.cpp and xmake.lua; link only the required module |
+| [2. Tasks and timers](02-tasks-timers.md) | Return an asynchronous result; understand ownership, exceptions and automatic entry shutdown |
+| [3. TCP](03-tcp.md) | Build separate echo server/client programs and handle byte-stream framing |
+| [4. HTTP](04-http.md) | Add routes, POST bodies and async handlers, then a C++ client and HTTPS |
+| [5. Execution](05-execution.md) | Choose two workers or application threads without hiding task placement |
+| [6. Shutdown](06-shutdown.md) | Observe cancellation, stop acceptance, drain and destroy resources in order |
 
-This prints `Hello, PACE` and exits. Start with [build and integration](01-build.md)
-if you need a compiler or an application target. Read [tasks and timers](02-tasks-timers.md)
-for `co_await`, lazy tasks, owned arguments and errors.
+Start with chapter 1 rather than copying a server's setup wholesale. The application
+commands run from your practice project; `tutorial_*` commands run from the PACE
+repository root after configuring `--examples=y`. Persistent `serve` examples need
+an explicit stop or Ctrl-C; the default companion invocations finish by themselves.
 
-## 2. Pick a protocol
+## Extend the application by protocol
 
-Run `xmake -y` to build examples. Every default command below is a complete,
-bounded program, with source you can copy and adapt.
-
-| Goal | Command | Guide / source |
+| Chapter | What changes from the previous code | Companion |
 |---|---|---|
-| TCP echo | `xmake run tutorial_tcp` | [Guide](03-tcp.md) · [source](../../examples/tutorial_tcp.cpp) |
-| DNS resolution | `xmake run tutorial_dns` | [API](../reference/dns.md) · [source](../../examples/tutorial_dns.cpp) |
-| QUIC streams | `xmake run tutorial_quic` | [API](../reference/quic.md) · [source](../../examples/tutorial_quic.cpp) |
-| HTTP/3 | `xmake run tutorial_http3` | [API](../reference/http3.md) · [source](../../examples/tutorial_http3.cpp) |
-| UDP datagrams | `xmake run tutorial_udp` | [Guide](../reference/udp.md) · [source](../../examples/tutorial_udp.cpp) |
-| HTTP server | `xmake run tutorial_http` | [Guide](04-http.md) · [source](../../examples/tutorial_http.cpp) |
-| HTTP client | `xmake run tutorial_http_client` | [Guide](04-http.md) · [source](../../examples/tutorial_http_client.cpp) |
-| TLS connection | `xmake run tutorial_tls` | [Guide](../reference/tls.md) · [source](../../examples/tutorial_tls.cpp) |
-| HTTP/2 exchange | `xmake run tutorial_http2` | [Guide](../reference/http2.md) · [source](../../examples/tutorial_http2.cpp) |
-| WebSocket messages | `xmake run tutorial_websocket` | [Guide](../reference/websocket.md) · [source](../../examples/tutorial_websocket.cpp) |
+| [7. UDP](07-udp.md) | Datagram boundaries, source endpoint and truncation | `tutorial_udp` |
+| [8. DNS and TLS](08-dns-tls.md) | Resolve an address, retain hostname identity, verify handshake and close | `tutorial_dns`, `tutorial_tls` |
+| [9. WebSocket](09-websocket.md) | Upgrade a TCP connection, exchange messages and close | `tutorial_websocket` |
+| [10. HTTP/2](10-http2.md) | Transfer a connection into a multiplexed batch; bound async handlers | `tutorial_http2` |
+| [11. QUIC and HTTP/3](11-quic-http3.md) | End stream directions, configure ALPN, transfer protocol ownership | `tutorial_quic`, `tutorial_http3` |
 
-TLS, DNS, QUIC, HTTP/2 and HTTP/3 are optional. Before those examples, enable the features and rebuild:
+Optional modules need their build flags, explained at the start of each chapter.
+TLS/QUIC companions use public test-only certificates and local peers. DNS defaults
+to numeric loopback and only needs external network when you supply a hostname.
+QUIC/HTTP3 require POSIX. [Build options](01-build.md#select-protocol-modules) and
+[platform coverage](../reference/platform.md) describe the exact configurations.
 
-```sh
-xmake f -m release --tls=y --dns=y --quic=y --http2=y --http3=y -y
-xmake -y
-```
-
-TLS examples load public test fixtures from `tests/certs` using the repository
-root as their working directory. These certificates and keys are for tests only.
-TCP and HTTP examples accept `serve` for a persistent server; stop it with Ctrl-C.
-[HTTP](04-http.md) also explains HTTPS configuration and client connection reuse.
-
-## 3. Choose execution and shutdown
-
-```sh
-xmake run tutorial_workers
-xmake run tutorial_workers background
-xmake run tutorial_shutdown
-```
-
-[Execution](05-execution.md) shows caller-owned loops, explicit worker counts and
-both runtime modes. [Shutdown](06-shutdown.md) explains stopping acceptance,
-draining connections, cancellation and joining. These examples check behavior;
-use the [benchmark tools](../../benchmarks/README.md) to measure performance.
-
-## 4. Look up your API
-
-Use the [reference](../reference/README.md) for signatures, defaults, ownership,
-thread rules and errors. Code fragments explain the complete linked programs;
-read their source for include lists and error handling.
+When a chapter's experiment works, read the linked API contract for defaults,
+limits and lifetime requirements. For the rationale behind the shorter entry and
+routing forms, see [API ergonomics](../ergonomics.md).

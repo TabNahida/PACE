@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add `pace::run(factory)` for an owned, single-threaded coroutine entry with result and error propagation and background cancellation on completion.
+- Add exact HTTP routing and owned adapters for synchronous/asynchronous handlers, plus an HTTP/1 serve overload that owns its listener.
+- Replace the tutorial catalog with eleven progressive Markdown chapters in English and Chinese, including complete programs, expected results and lifetime explanations.
+
 ## 0.2.0 — 2026-10-23
 
 - HTTP/1 clients complete fully framed responses without waiting for the peer's FIN; an explicit graceful close policy retains a configurable drain budget (#15).

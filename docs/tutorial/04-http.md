@@ -1,49 +1,120 @@
-# 4. HTTP and HTTPS in a few calls
+# 4. Build an HTTP service, one route at a time
 
-[中文教程](04-http.zh-CN.md)
+[中文](04-http.zh-CN.md) · [Previous: TCP](03-tcp.md) · [Next: execution](05-execution.md)
 
-Run the self-contained example:
-
-```sh
-xmake f -m release --examples=y --tests=y -y
-xmake -y
-xmake run tutorial_http_client
-```
-
-[`tutorial_http_client.cpp`](../../examples/tutorial_http_client.cpp) starts a
-loopback HTTP server, sends a GET, verifies its chunked body and trailer, then
-stops. It prints `Hello from /PACE`. No external server is needed.
-
-## The client
+Our goal is a health endpoint, an echo endpoint, then a handler that awaits I/O.
+Use chapter 1's application, change its dependency to `pace_http1`, configure
+`xmake f --http1=y -y`, and replace `main.cpp` with this complete server:
 
 ```cpp
-pace::task<void> use_http(pace::io_context& io, pace::tcp::endpoint endpoint) {
-    auto response = co_await pace::http::get(io, endpoint, "/health");
-    std::cout << response.status << " " << response.body << '\n';
-    io.stop();
+#include <pace/http.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+namespace http = pace::http;
+
+int main() {
+    try {
+        pace::run([](pace::io_context& io) {
+            http::router app;
+            app.get("/health", [](http::request) {
+                return http::response{.body = "ok\n"};
+            });
+            return http::serve(io, {"127.0.0.1", 8080}, std::move(app));
+        });
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
 }
 ```
 
-`get` connects, generates Host, handles response framing and closes. Its endpoint
-is numeric IPv4 or IPv6; a DNS lookup is not performed. IPv6 addresses such as
-`::1` remain unbracketed in the endpoint; generated Host authorities are bracketed. A 404 or 500 is a normal response
-whose `status` you inspect. Protocol/transport failures throw.
+Build `xmake -y my_application`, run `xmake run my_application`, then use another
+terminal: `curl -i http://127.0.0.1:8080/health`. Expect status 200 and `ok`.
+This server runs until stopped; Ctrl-C uses default process termination here.
+The companion `tutorial_http serve` adds cooperative signal shutdown (chapter 6).
 
-To POST, use `fetch` with an owned message:
+## 1. Read the small server from the inside out
+
+A route receives an owned request and returns an owned response. This route does
+no asynchronous work, so it is an ordinary function with `return`, not a coroutine.
+The router adapts it to the protocol's handler type. `serve` owns the listener and
+binds it when its task starts. `run` owns the event loop. The outer lambda is an
+ordinary factory: it moves the configured router into the returned service task.
+
+Try `/missing`: the router generates 404. Try `curl -I .../health`: HEAD falls back
+to GET, and the serializer suppresses the body. Try POST to `/health`: expect 405
+with `Allow: GET, HEAD`. `/health?probe=1` still matches `/health`; the handler sees
+the original target including the query. Matching is exact and case-sensitive,
+without percent decoding or wildcard rules.
+
+## 2. Add an echo route
+
+Insert this registration before the `return http::serve(...)` line:
 
 ```cpp
-pace::http::request request;
-request.method = "POST";
-request.target = "/echo";
-request.headers.push_back({"Content-Type", "text/plain"});
-request.body = "hello";
-auto response = co_await pace::http::fetch(io, endpoint, std::move(request));
+app.post("/echo", [](http::request request) {
+    return http::response{.body = std::move(request.body),
+                          .content_type = "application/octet-stream"};
+});
 ```
 
-The helper fills Host when absent. Do not manually set Content-Length,
-Transfer-Encoding or Connection. Set `request.chunked = true` for chunked
-framing, and `request.trailers.push_back({"X-Checksum", "..."})` for safe trailer
-metadata. The message still owns its complete buffered body.
+Rebuild/restart, then run
+`curl -H 'Expect:' --data-binary 'hello' http://127.0.0.1:8080/echo`.
+Expect `hello`. Moving `request.body` transfers the buffered string into the
+response. Do not generate Content-Length or Connection headers yourself: the
+serializer does that. Use `app.add("PUT", "/echo", handler)` for other methods.
+
+## 3. Add a real suspension point
+
+Add `<chrono>` and another route:
+
+```cpp
+app.get("/slow", [&io](http::request) -> pace::task<http::response> {
+    co_await io.sleep_for(std::chrono::milliseconds(5));
+    co_return http::response{.body = "done\n"};
+});
+```
+
+Now the return type is `task<response>` and the return statement is `co_return`.
+The same router accepts both forms. The reactor can run other ready work while
+this handler waits. A synchronous database call would still block it; coroutine
+syntax alone does not offload work. `io` outlives the handler here because `run`
+owns it until shutdown drains.
+
+## 4. Call the server from C++
+
+Save this as `client.cpp`; add a binary target named `client` with
+`add_files("client.cpp")` and `add_deps("pace_http1")`. Keep the server running in
+the first terminal, then build/run `client` in the second:
+
+```cpp
+#include <pace/http.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+int main() {
+    try {
+        const auto reply = pace::run([](pace::io_context& io) {
+            return pace::http::get(io, {"127.0.0.1", 8080}, "/health");
+        });
+        std::cout << reply.status << " " << reply.body;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+Expect `200 ok`. `get` connects, supplies Host, parses framing and closes.
+Endpoints are numeric addresses; DNS and redirects are not implicit. HTTP 404/500
+are normal responses to inspect, while transport/framing failures throw.
+For POST use `fetch(io, endpoint, request)` with an owned method, target and body.
+
+The repository exercise `xmake run tutorial_http` checks both `/health` and `/slow`
+on loopback and exits. Its [source](../../examples/tutorial_http.cpp) also shows
+bounds and signal handling. `tutorial_http_client` checks connection framing and
+trailers. These are companion checks; the steps above build the application itself.
 
 ## Response completion and close
 
@@ -70,37 +141,26 @@ request/read timeout. The default `no_wait` ignores the budget. Server final
 response draining remains unchanged, including early request rejection.
 See [close-policy semantics](../reference/http.md#final-response-close-policy).
 
-## The server
+## Keep an explicit listener when you need control
+
+Use the original listener overload for immediate binding, port-zero inspection,
+or stopping acceptance separately. Declare the listener outside the tasks and
+keep it alive through `io.run()`:
 
 ```cpp
-pace::task<pace::http::response> route(pace::http::request request) {
-    if (request.target == "/health")
-        co_return pace::http::response{.body = "ok\n"};
-    co_return pace::http::response{.status = 404, .body = "Not Found\n"};
-}
+pace::io_context io;
+pace::tcp::listener listener(io, {"127.0.0.1", 0});
+pace::http::router app;
+app.get("/health", [](pace::http::request) { return pace::http::response{.body = "ok\n"}; });
+io.spawn(pace::http::serve(listener, app));
+// Submit a client/control task that eventually calls io.stop().
+io.run();
 ```
 
-In `main`, construct a context/listener, spawn `pace::http::serve(listener, route)`
-and call `io.run()`. Keep the listener alive until run returns; declare it after
-the context so it is destroyed first. The complete
-[`tutorial_http.cpp`](../../examples/tutorial_http.cpp) already does this:
-
-```sh
-xmake run tutorial_http serve
-curl --http1.1 http://127.0.0.1:8080/health
-curl --http1.1 -H "Expect:" --data-binary "hello" http://127.0.0.1:8080/echo
-curl --http1.1 -I http://127.0.0.1:8080/health
-```
-
-Ctrl-C requests cooperative stop. The curl Expect override stays within this
-API's scope: it does not implement the `100-continue` request handshake.
-
-A handler owns its request, so its body and headers survive suspension. Returned
-responses own their strings as well. Set `response.chunked = true` and fill
-`response.trailers` to emit chunked output; leave the default for Content-Length.
-HEAD and bodyless statuses are handled by the serializer. Set `response.close`
-to end persistence. Shared state across handlers on different workers still
-requires application synchronization.
+The router also converts to the shared handler accepted by HTTP/2 and HTTP/3.
+For one synchronous callback without routes, use `http::make_handler(callback)`.
+Keep mutable state synchronized across worker threads. Read the
+[router contract](../reference/http-router.md) before adding shared captures.
 
 ## Add HTTPS
 

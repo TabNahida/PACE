@@ -900,6 +900,82 @@ pace::task<void> context_stop_scenario(pace::io_context& io, std::shared_ptr<pro
     // run() drains the canceled server write after this client task returns.
 }
 
+
+pace::task<void> serve_routes(std::shared_ptr<pace::tcp::listener> listener, pace::http::router routes) {
+    co_await pace::http::serve(*listener, std::move(routes));
+}
+pace::task<void> router_contracts(pace::io_context& io) {
+    using pace::http::router;
+    router routes;
+    routes.get("/hello", [](request incoming) { return response{.body = incoming.target}; });
+    routes.post("/hello", [&io](request incoming) -> pace::task<response> {
+        co_await io.yield(); co_return response{.body = std::move(incoming.body)};
+    });
+    require((co_await routes(message("GET", "/hello?name=PACE"))).body == "/hello?name=PACE", "query path routing");
+    auto denied = co_await routes(message("DELETE", "/hello"));
+    require(denied.status == 405 && denied.header("Allow") == "GET, HEAD, POST", "405 Allow routing");
+    require((co_await routes(message("HEAD", "/hello"))).body == "/hello", "HEAD GET fallback");
+    routes.add("HEAD", "/hello", [](request) { return response{.body = "explicit HEAD"}; });
+    require((co_await routes(message("HEAD", "/hello"))).body == "explicit HEAD", "explicit HEAD priority");
+    require((co_await routes(message("GET", "/missing"))).status == 404, "missing route status");
+    require((co_await routes(message("GET", "/Hello"))).status == 404, "route case sensitivity");
+    require((co_await routes(message("GET", "/%68ello"))).status == 404, "router unexpectedly decoded path");
+    auto copy = routes;
+    copy.get("/copy", [](request) { return response{}; });
+    require((co_await copy(message("GET", "/copy"))).status == 200, "router copy failed to detach");
+    require((co_await routes(message("GET", "/copy"))).status == 404, "router copy changed original table");
+    auto moved = std::move(copy);
+    copy.get("/new", [](request) { return response{}; });
+    require((co_await moved(message("GET", "/copy"))).status == 200 &&
+            (co_await copy(message("GET", "/new"))).status == 200,
+            "moved router lost routes or could not be reused");
+    for (const auto& [method, path] : std::vector<std::pair<std::string, std::string>>{
+             {"GET", "/hello"}, {"", "/"}, {"BAD METHOD", "/"}, {"GET", "relative"},
+             {"GET", "/bad?query"}, {"GET", "/bad#fragment"}, {"GET", "/bad\n"}}) {
+        bool rejected = false;
+        try { routes.add(method, path, [](request) { return response{}; }); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        require(rejected, "invalid or duplicate route accepted");
+    }
+    auto life = std::make_shared<int>(7);
+    std::weak_ptr<int> weak = life;
+    pace::task<response> pending;
+    {
+        router temporary;
+        temporary.get("/owned", [&io, owned = std::make_unique<int>(35), life = std::move(life)](request)
+                                -> pace::task<response> {
+            co_await io.yield(); co_return response{.body = std::to_string(*owned + *life)};
+        });
+        pending = temporary(message("GET", "/owned"));
+    }
+    require(!weak.expired(), "pending route lost its callable before starting");
+    const auto owned_response = co_await std::move(pending);
+    require(owned_response.body == "42" && weak.expired(), "async route callable lifetime");
+    auto throwing = pace::http::make_handler([](request) -> response { throw std::runtime_error("route failure"); });
+    bool threw = false;
+    try { (void)co_await throwing(message()); }
+    catch (const std::runtime_error&) { threw = true; }
+    require(threw, "adapter lost synchronous handler exception");
+    routes.get("/fail", [](request) -> response { throw std::runtime_error("route failure"); });
+    auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
+    io.spawn(serve_routes(listener, routes));
+    auto wire = co_await pace::http::fetch(io, listener->local_endpoint(), message("HEAD", "/hello"));
+    require(wire.body.empty() && wire.header("Content-Length") == "13", "wire HEAD body suppression");
+    wire = co_await pace::http::get(io, listener->local_endpoint(), "/fail");
+    require(wire.status == 500, "synchronous route exception did not become HTTP 500");
+    auto post = message("POST", "/hello"); post.body = "async echo";
+    wire = co_await pace::http::fetch(io, listener->local_endpoint(), std::move(post));
+    require(wire.body == "async echo", "async router wire response");
+    // Binding is lazy; a held listener makes failure deterministic without a
+    // find-free-port race. The successful port-zero accept is canceled on stop.
+    bool bind_failed = false;
+    try { co_await pace::http::serve(io, listener->local_endpoint(), routes); }
+    catch (const std::system_error&) { bind_failed = true; }
+    require(bind_failed, "owned listener binding failure was lost");
+    io.spawn(pace::http::serve(io, {"127.0.0.1", 0}, routes));
+    co_await io.yield();
+}
+
 using test_body = std::function<pace::task<void>(pace::io_context&)>;
 pace::task<void> run_body(pace::io_context& io, test_body body, bool& completed) {
     co_await body(io); completed = true; io.stop();
@@ -924,6 +1000,7 @@ void run_test(const char* name, test_body body) {
 int main(int argc, char** argv) {
     try {
         if (argc > 1) certificate_directory = argv[1];
+        run_test("owned handlers, exact routes and owned listener", router_contracts);
         run_test("HTTP client/server, binary chunks, trailers and HEAD reuse", normal_client);
         run_test("HTTP IPv6 endpoint and bracketed Host authority", ipv6_http_authority);
         run_test("chunk extensions, fragmentation and pipeline preservation", chunk_pipeline);

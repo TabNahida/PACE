@@ -3,5 +3,6 @@
 #include <pace/task.hpp>
 #include <pace/io_context.hpp>
 #include <pace/runtime.hpp>
+#include <pace/run.hpp>
 #include <pace/net.hpp>
 #include <pace/udp.hpp>

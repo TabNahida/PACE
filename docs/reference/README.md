@@ -1,5 +1,7 @@
 # Public API reference
 
+Convenience APIs: [pace::run](run.md) · [HTTP routing and handler adapters](http-router.md) · [Guided tutorials](../tutorial/README.md)
+
 [中文索引与关键约定](README.zh-CN.md)
 
 This reference describes the public headers in `include/pace/`. Signatures use

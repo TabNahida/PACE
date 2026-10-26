@@ -1,5 +1,7 @@
 # `pace::task<T>`
 
+For a synchronous entry that returns a task result, see [`pace::run`](run.md).
+
 Include `<pace/task.hpp>`. `task<T = void>` is a lazy, move-only coroutine result
 with one consumer. Creating a task allocates its coroutine frame as needed and
 copies/moves parameters into it; its body starts only when awaited or spawned.

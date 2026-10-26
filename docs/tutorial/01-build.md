@@ -1,17 +1,85 @@
 # 1. Build and run
 
-PACE requires xmake 2.9.8+ and a compiler with C++20 coroutines. From the
-repository root, build and run the smallest tutorial first:
+This chapter builds **your own program**, not a prewritten example. You need xmake
+2.9.8+ and a C++20 compiler. These guides track this source checkout; the entry
+runner and router were added after v0.2.0.
+
+## Create a small application
+
+Make a working directory with this layout. Place this PACE checkout under
+`third_party/PACE`:
+
+```text
+hello/
+  xmake.lua
+  main.cpp
+  third_party/PACE/
+```
+
+Write the application's `xmake.lua`:
+
+```lua
+set_project("hello")
+set_languages("cxx20")
+add_rules("mode.debug", "mode.release")
+includes("third_party/PACE")
+
+target("my_application")
+    set_kind("binary")
+    add_files("main.cpp")
+    add_deps("pace_runtime")
+```
+
+The dependency supplies headers and platform libraries. Do not copy PACE's
+`.cpp` files into your target or construct a manual static-library link order.
+Start `main.cpp` with this complete program:
+
+```cpp
+#include <pace/run.hpp>
+#include <iostream>
+
+pace::task<void> hello(pace::io_context&) {
+    std::cout << "Hello, PACE\n";
+    co_return;
+}
+
+int main() {
+    try { pace::run(hello); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+From **hello**, configure and run:
 
 ```sh
-xmake f -m release -y
+xmake f -m release --tests=n --examples=n --http1=n --websocket=n -y
+xmake -y my_application
+xmake run my_application
+```
+
+Expect `Hello, PACE` followed by process exit. `pace_runtime` needs no optional
+protocol libraries. Chapter 2 adds a timer and a returned value. Later chapters
+change `add_deps` to the networking/protocol module being used and reconfigure
+its feature option. Commands named `tutorial_*` are companion exercises run from
+the **PACE repository root**, with `--examples=y`; they are not targets in hello.
+
+If a header cannot be found, check the `includes` path and dependency. If a
+protocol target is missing, enable its option before building. If the program
+prints but never exits, check whether you used manual `io.run()` without a stop
+path; the next chapter distinguishes both execution forms.
+
+## Build the repository's companion exercises
+
+From the PACE checkout:
+
+```sh
+xmake f -m release --examples=y --tests=y -y
 xmake -y tutorial_tasks
 xmake run tutorial_tasks
 ```
-
-This prints `Hello, PACE` and returns. Read its [complete source](../../examples/tutorial_tasks.cpp),
-then select a [protocol example](README.md#2-pick-a-protocol) or add an application
-target below. `xmake run TARGET` finds the active platform's binary.
 
 CI uses xmake 3.0.9 with GCC, Clang or MSVC on Linux, macOS, Windows and 64-bit
 FreeBSD. On Windows use a shell with the Visual Studio C++ environment available.
@@ -122,7 +190,7 @@ xmake test -v
 HTTP/3 automatically enables QUIC. QUIC does not need `--tls=y`: it embeds TLS
 1.3 through OpenSSL's QUIC API. All protocol tests use local peers; DNS tests run
 a local nameserver and the default DNS tutorial resolves numeric loopback.
-The QUIC/HTTP3 backend currently requires POSIX and is validated on Linux;
+The QUIC/HTTP3 backend currently requires POSIX;
 enabling it on Windows/MinGW produces an explicit configuration error. The
 existing TCP, UDP, TLS, HTTP/1, HTTP/2 and WebSocket backends remain available.
 

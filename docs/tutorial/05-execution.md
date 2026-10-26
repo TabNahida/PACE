@@ -1,5 +1,45 @@
 # 5. Execution and worker selection
 
+[中文](05-execution.zh-CN.md) · [Previous: HTTP](04-http.md) · [Next: shutdown](06-shutdown.md)
+
+So far a single caller thread ran the reactor. This chapter assigns independent
+work to two reactors, then shows how to use application-owned threads. Change
+`main.cpp` to this complete program and link `pace_runtime`:
+
+```cpp
+#include <pace/runtime.hpp>
+#include <atomic>
+#include <chrono>
+#include <iostream>
+
+pace::task<void> work(pace::runtime& pool, std::size_t index, std::atomic<unsigned>& remaining) {
+    auto& io = pool.context(index);
+    co_await io.sleep_for(std::chrono::milliseconds(5));
+    if (remaining.fetch_sub(1) == 1) pool.stop();
+}
+
+int main() {
+    try {
+        pace::runtime pool(2);
+        std::atomic<unsigned> remaining{2};
+        pool.context(0).spawn(work(pool, 0, remaining));
+        pool.context(1).spawn(work(pool, 1, remaining));
+        pool.run_on_current_thread();
+        std::cout << "Both workers finished\n";
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+Build/run `my_application`. Expect `Both workers finished`. The count is atomic
+because the two tasks can touch it from different OS threads. Each task chooses
+its own context before starting; `co_await` does not move it between workers.
+The last task requests stop for both contexts, and the blocking run call joins
+before `remaining` or `pool` is destroyed. Change `run_on_current_thread()` to
+`run()` and observe the same result with both workers in background threads.
+
 Complete source: [`tutorial_workers.cpp`](../../examples/tutorial_workers.cpp).
 Run both modes to check which thread executes context zero:
 
@@ -39,20 +79,27 @@ context. A root failure stops peer contexts and is rethrown after worker joins.
 
 ## Run without a runtime
 
-The [first tutorial](02-tasks-timers.md) already uses the simplest manual model:
+The [task tutorial](02-tasks-timers.md) distinguishes the entry runner from the manual model:
 one context and `io.run()` on the caller. A context can instead run on a thread
 owned by your application. This replacement for the first tutorial's main body
-reuses its named `lesson` coroutine:
+wraps the named `lesson` coroutine from the task exercise so manual execution has a stop path:
 
 ```cpp
+// Define this at namespace scope.
+pace::task<void> controlled_lesson(pace::io_context& io) {
+    co_await lesson(io);
+    io.stop();
+}
+
+// In main:
 pace::io_context io;
 std::exception_ptr failure;
-io.spawn(lesson(io));
+io.spawn(controlled_lesson(io));
 std::thread run_thread([&io, &failure] {
     try { io.run(); }
     catch (...) { failure = std::current_exception(); }
 });
-run_thread.join(); // lesson() requests stop; join also synchronizes failure access.
+run_thread.join(); // controlled_lesson() requests stop; join also synchronizes failure access.
 if (failure) std::rethrow_exception(failure);
 ```
 

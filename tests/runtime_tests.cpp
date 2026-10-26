@@ -1,4 +1,5 @@
 #include <pace/runtime.hpp>
+#include <pace/run.hpp>
 #include <pace/detail/poller.hpp>
 #include <pace/detail/profiling.hpp>
 #include <array>
@@ -888,7 +889,83 @@ pace::task<void> simultaneous_writer(pace::io_context& io, int fd, bool& rejecte
     require(::write(fd, &value, sizeof(value)) == sizeof(value), "write after write readiness");
 }
 #endif
+
+pace::task<void> entry_background(pace::io_context& io, bool& canceled) {
+    try { co_await io.sleep_for(1h); }
+    catch (const std::system_error& error) {
+        if (error.code() != std::errc::operation_canceled) throw;
+        canceled = true;
+    }
+}
+pace::task<void> entry_background_failure() {
+    throw std::runtime_error("background failure");
+    co_return;
+}
+void entry_runner_contract() {
+    const auto caller = std::this_thread::get_id();
+    auto result = pace::run([owned = std::make_unique<int>(42), caller](pace::io_context& io) mutable
+                           -> pace::task<std::unique_ptr<int>> {
+        require(pace::io_context::current() == &io && std::this_thread::get_id() == caller,
+                "entry factory did not execute on caller's reactor");
+        co_await io.yield();
+        co_return std::move(owned);
+    });
+    require(result && *result == 42, "entry result or move-only closure lifetime lost");
+    bool canceled = false;
+    pace::run([&canceled](pace::io_context& io) -> pace::task<void> {
+        io.spawn(entry_background(io, canceled));
+        co_await io.yield(); // Let the background root enter its timer.
+    });
+    require(canceled, "entry return failed to drain background cancellation");
+    bool nested_called = false;
+    pace::run([&](pace::io_context&) -> pace::task<void> {
+        bool rejected = false;
+        try { pace::run([&](pace::io_context&) -> pace::task<void> { nested_called = true; co_return; }); }
+        catch (const std::logic_error&) { rejected = true; }
+        require(rejected && !nested_called, "nested run invoked the factory");
+        co_return;
+    });
+    bool failure = false;
+    try {
+        pace::run([](pace::io_context& io) -> pace::task<void> {
+            co_await io.yield(); throw std::runtime_error("entry failure");
+        });
+    } catch (const std::runtime_error& error) { failure = std::string_view(error.what()) == "entry failure"; }
+    require(failure, "entry exception was lost");
+    failure = false;
+    try {
+        pace::run([](pace::io_context&) -> pace::task<void> { throw std::runtime_error("factory failure"); });
+    } catch (const std::runtime_error& error) { failure = std::string_view(error.what()) == "factory failure"; }
+    require(failure, "synchronous factory exception was lost");
+    failure = false;
+    try {
+        pace::run([](pace::io_context& io) -> pace::task<int> {
+            io.stop(); co_await io.sleep_for(1ms); co_return 1;
+        });
+    } catch (const std::system_error& error) { failure = error.code() == std::errc::operation_canceled; }
+    require(failure, "entry cancellation silently returned a missing result");
+    failure = false;
+    try {
+        pace::run([](pace::io_context& io) -> pace::task<int> {
+            io.stop(); co_await std::suspend_always{}; co_return 1;
+        });
+    } catch (const std::system_error& error) { failure = error.code() == std::errc::operation_canceled; }
+    require(failure, "incomplete entry accessed an absent result");
+    failure = false;
+    try {
+        pace::run([](pace::io_context& io) -> pace::task<void> {
+            io.spawn(entry_background_failure()); co_await io.sleep_for(1h);
+        });
+    } catch (const std::runtime_error& error) { failure = std::string_view(error.what()) == "background failure"; }
+    require(failure, "background exception was swallowed by entry shutdown");
+    failure = false;
+    try { pace::run([](pace::io_context&) { return pace::task<void>{}; }); }
+    catch (const std::logic_error&) { failure = true; }
+    require(failure && pace::io_context::current() == nullptr, "empty entry or current context cleanup");
+}
+
 void run_tests() {
+    entry_runner_contract();
     profiling_contract();
     poller_output_contract();
     readiness_union_contract();
