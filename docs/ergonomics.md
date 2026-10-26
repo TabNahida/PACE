@@ -29,6 +29,8 @@ The adapter owns each callable via shared storage so pending invocations survive
 router destruction, including move-only captures. This adds a shared allocation
 per registration and one wrapper task per invocation; direct coroutine handlers
 remain available for applications that do not want the convenience layer.
+Router copies share their read-only table and detach it on registration, avoiding
+whole-table copies when a server copies its handler for each accepted connection.
 
 The router deliberately matches exact method/path pairs with 404/405 and HEAD
 fallback. Its search is linear; there is no unmeasured claim that it accelerates

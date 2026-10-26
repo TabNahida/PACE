@@ -7,8 +7,7 @@ runner and router were added after v0.2.0.
 ## Create a small application
 
 Make a working directory with this layout. Place this PACE checkout under
-`third_party/PACE` (or use `git clone https://github.com/TabNahida/PACE.git third_party/PACE`
-once the changes in this guide are on main):
+`third_party/PACE`:
 
 ```text
 hello/

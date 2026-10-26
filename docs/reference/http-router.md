@@ -39,7 +39,10 @@ invocations; ordinary server adapters retain their existing 500-response behavio
 
 Configure routes before serving. Route lookup is linear in the number of routes;
 this is a small dispatch utility, not a performance claim or a large routing
-framework. Copies have independent route tables and share callable instances.
+framework. Copies share the read-only table; registration on a copy first
+detaches its table, so routes added there do not change the original. This avoids
+copying the whole table each time a server copies its handler for a connection.
+Callable instances remain shared even after detaching the table.
 Concurrent mutation/use of the same router is unsupported. Mutable handler state
 shared across worker threads requires application synchronization.
 

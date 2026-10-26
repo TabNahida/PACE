@@ -922,7 +922,13 @@ pace::task<void> router_contracts(pace::io_context& io) {
     require((co_await routes(message("GET", "/%68ello"))).status == 404, "router unexpectedly decoded path");
     auto copy = routes;
     copy.get("/copy", [](request) { return response{}; });
+    require((co_await copy(message("GET", "/copy"))).status == 200, "router copy failed to detach");
     require((co_await routes(message("GET", "/copy"))).status == 404, "router copy changed original table");
+    auto moved = std::move(copy);
+    copy.get("/new", [](request) { return response{}; });
+    require((co_await moved(message("GET", "/copy"))).status == 200 &&
+            (co_await copy(message("GET", "/new"))).status == 200,
+            "moved router lost routes or could not be reused");
     for (const auto& [method, path] : std::vector<std::pair<std::string, std::string>>{
              {"GET", "/hello"}, {"", "/"}, {"BAD METHOD", "/"}, {"GET", "relative"},
              {"GET", "/bad?query"}, {"GET", "/bad#fragment"}, {"GET", "/bad\n"}}) {
