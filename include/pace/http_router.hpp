@@ -58,7 +58,7 @@ public:
             for (const auto& entry : *routes_)
                 if (entry.method == method && entry.path == path) throw std::invalid_argument("duplicate route");
         if (!routes_) routes_ = std::make_shared<std::vector<route>>();
-        else if (!routes_.unique()) routes_ = std::make_shared<std::vector<route>>(*routes_);
+        else if (routes_.use_count() != 1) routes_ = std::make_shared<std::vector<route>>(*routes_);
         routes_->push_back({std::move(method), std::move(path), make_handler(std::forward<Function>(function))});
         return *this;
     }
