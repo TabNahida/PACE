@@ -56,7 +56,7 @@ These client APIs are in the current source checkout and are not yet released.
 
 int main() {
     pace::http::app app;
-    app.get("/", [] { return pace::http::text("Hello, PACE!\n"); });
+    app.get("/health", [] { return pace::http::text("ok\n"); });
     app.run(8080);
 }
 ```

@@ -55,7 +55,7 @@ auto reply = pace::http::get("http://127.0.0.1:8080/health");
 
 int main() {
     pace::http::app app;
-    app.get("/", [] { return pace::http::text("Hello, PACE!\n"); });
+    app.get("/health", [] { return pace::http::text("ok\n"); });
     app.run(8080);
 }
 ```
