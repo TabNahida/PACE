@@ -99,4 +99,4 @@ HTTPS 可以直接复用这些配置，见[第四章](04-http.zh-CN.md#启用-ht
 
 [便捷接口契约](../reference/component-conveniences.zh-CN.md)和
 [配置复用、ALPN 调优](../reference/protocol-tuning.zh-CN.md#dns-与-tls)介绍后续细节。
-本章新增 helper 需要当前 checkout。
+本章新增 helper 需要 PACE v0.3.1 或更新版本。

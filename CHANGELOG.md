@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 — 2026-10-28
 
 - Add current-context TCP/QUIC listeners and UDP open/bind helpers, owned UDP packets, and shared owned write / exact-read helpers for TCP, TLS and QUIC.
 - Add one-shot DNS lookup, verified TLS/QUIC connection helpers, WebSocket connect/upgrade/accept, and single-response HTTP/2 and HTTP/3 GET helpers.

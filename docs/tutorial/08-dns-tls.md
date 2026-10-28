@@ -109,4 +109,4 @@ for verification. For a one-off lookup outside a running context, use
 
 [Helper contracts](../reference/component-conveniences.md) and
 [configuration reuse and ALPN](../reference/protocol-tuning.md#dns-and-tls) cover
-the next steps after this local exercise. These new helpers require the current checkout.
+the next steps after this local exercise. These helpers require PACE v0.3.1 or newer.

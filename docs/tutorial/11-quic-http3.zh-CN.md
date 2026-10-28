@@ -66,7 +66,7 @@ std::cout << reply.status << " " << reply.body << '\n';
 连接转移后，不再自行打开业务或控制流；HTTP/3 适配层持有控制流和 QPACK 状态。
 get 返回一个完整缓冲的响应。多请求时再改用 exchange；
 [批处理、并发和生命周期](../reference/protocol-tuning.zh-CN.md#http2-与-http3)放在参考页。
-helper 使用已有 context，不创建后台线程。这些新增 helper 需要当前 checkout。
+helper 使用已有 context，不创建后台线程。这些新增 helper 需要 PACE v0.3.1 或更新版本。
 
 ## 第四步：运行并验证协议协商
 

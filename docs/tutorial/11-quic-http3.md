@@ -74,7 +74,7 @@ Do not also open your own application/control streams on that transferred
 connection. The adapter owns HTTP/3 control and QPACK streams. `get` returns one buffered response. For several requests, use `exchange` instead;
 [batching, concurrency and lifetime](../reference/protocol-tuning.md#http2-and-http3)
 are covered in the reference. The helper uses your existing context and does not
-start a background thread. These new helpers require the current checkout.
+start a background thread. These helpers require PACE v0.3.1 or newer.
 
 ## 4. Verify the layered version
 

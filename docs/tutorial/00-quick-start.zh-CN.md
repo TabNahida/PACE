@@ -2,7 +2,7 @@
 
 [English](00-quick-start.md) · [学习路线](README.zh-CN.md) · [下一章：构建细节](01-build.zh-CN.md)
 
-本章使用 **PACE 0.3.0**。先让一个服务跑起来，再逐步加入 POST、异步等待和客户端。
+本章使用 **PACE 0.3.1**。先让一个服务跑起来，再逐步加入 POST、异步等待和客户端。
 需要 xmake 2.9.8+ 和 C++20 编译器。以下命令都在你自己的空目录运行。
 
 ## 1. 创建工程
@@ -12,7 +12,7 @@
 ```lua
 add_rules("mode.debug", "mode.release")
 add_repositories("tab-repo https://github.com/TabNahida/repo-xmake.git")
-add_requires("pace 0.3.0")
+add_requires("pace 0.3.1")
 
 target("hello")
     set_kind("binary")
@@ -110,7 +110,7 @@ pace::run([]() -> pace::task<void> {
 ```
 
 访问域名或 HTTPS 时，把依赖改为
-`add_requires("pace 0.3.0", {configs = {dns = true, tls = true}})`，重新配置构建。
+`add_requires("pace 0.3.1", {configs = {dns = true, tls = true}})`，重新配置构建。
 HTTPS 默认使用系统信任根并验证 URL 主机名。URL 中的片段不发送给服务器；
 Host 由 URL 生成，不能额外覆盖。不自动跟随重定向、重试请求或解压响应。
 详细边界和自定义 CA 见[便利接口参考](../reference/convenience.md)。

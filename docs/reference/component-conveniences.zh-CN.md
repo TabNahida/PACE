@@ -1,9 +1,9 @@
-# 组件便捷接口（当前 checkout）
+# 组件便捷接口（0.3.1）
 
 [English / 完整签名](component-conveniences.md) · [教程](../tutorial/README.zh-CN.md) · [调优](protocol-tuning.zh-CN.md)
 
-以下新增接口位于 **v0.3.0 之后的源码**，不在该版本发布包里。
-请用[第一章](../tutorial/01-build.zh-CN.md)的源码依赖方式。原有底层接口仍然可用，
+以下新增接口需要 **PACE v0.3.1 或更新版本**。
+可按[快速入门](../tutorial/00-quick-start.zh-CN.md)安装包，或用[第一章](../tutorial/01-build.zh-CN.md)的源码依赖方式。原有底层接口仍然可用，
 可选协议继续使用各自的构建开关与模块依赖。
 
 ## Context 与生命周期

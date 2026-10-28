@@ -1,9 +1,10 @@
-# Component conveniences (current checkout)
+# Component conveniences (0.3.1)
 
 [中文](component-conveniences.zh-CN.md) · [Tutorials](../tutorial/README.md) · [Tuning](protocol-tuning.md)
 
-These additions are **after v0.3.0**, not in that release's package. Build the
-checkout containing this page using [chapter 1](../tutorial/01-build.md).
+These additions require **PACE v0.3.1 or newer**. Use the
+[package quick start](../tutorial/00-quick-start.md) or build from source using
+[chapter 1](../tutorial/01-build.md).
 Existing low-level methods remain available. Optional modules keep their existing
 build flags and dependency boundaries.
 

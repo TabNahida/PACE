@@ -1,8 +1,8 @@
 # 1. Build and run
 
 This chapter builds **your own program**, not a prewritten example. You need xmake
-2.9.8+ and a C++20 compiler. These guides track this source checkout; the component conveniences used below were added after v0.3.0 and require this
-checkout, not the published v0.3.0 package.
+2.9.8+ and a C++20 compiler. These guides track this source checkout; the component conveniences used below
+require PACE v0.3.1 or newer.
 
 ## Create a small application
 

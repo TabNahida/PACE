@@ -1,6 +1,6 @@
 # Public API reference
 
-[Component conveniences (after v0.3.0)](component-conveniences.md) · [Protocol tuning](protocol-tuning.md) · [HTTP recipes](http-recipes.md) · [Build options](build-configuration.md)
+[Component conveniences (0.3.1)](component-conveniences.md) · [Protocol tuning](protocol-tuning.md) · [HTTP recipes](http-recipes.md) · [Build options](build-configuration.md)
 
 [0.3.0 convenience APIs: app, URL client, TCP, context](convenience.md)
 

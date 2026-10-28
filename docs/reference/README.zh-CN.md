@@ -1,6 +1,6 @@
 # API 中文索引与关键约定
 
-[组件便捷接口（v0.3.0 之后）](component-conveniences.zh-CN.md) · [协议调优](protocol-tuning.zh-CN.md) · [HTTP 进阶](http-recipes.zh-CN.md) · [构建选项](build-configuration.md)
+[组件便捷接口（0.3.1）](component-conveniences.zh-CN.md) · [协议调优](protocol-tuning.zh-CN.md) · [HTTP 进阶](http-recipes.zh-CN.md) · [构建选项](build-configuration.md)
 
 [0.3.0 convenience APIs: app, URL client, TCP, context](convenience.md)
 

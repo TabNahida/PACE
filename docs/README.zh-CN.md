@@ -1,6 +1,6 @@
 # PACE 文档
 
-先从 [0.3.0 快速入门](tutorial/00-quick-start.zh-CN.md)开始：安装包、几行启动 HTTP 服务，再逐步加入异步等待和 URL 客户端。
+先从 [0.3.1 快速入门](tutorial/00-quick-start.zh-CN.md)开始：安装包、几行启动 HTTP 服务，再逐步加入异步等待和 URL 客户端。
 
 从[逐步学习路线](tutorial/README.zh-CN.md)开始：创建自己的 main.cpp，逐步加入网络和协议，
 每章核对输出并解释生命周期。配套 example 用于验证，不代替教程正文。

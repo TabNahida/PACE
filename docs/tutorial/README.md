@@ -1,14 +1,14 @@
 # Build an application with PACE
 
-Start with the [0.3.0 quick start](00-quick-start.md): install the package, run a small HTTP service, then add waits and a URL client.
+Start with the [0.3.1 quick start](00-quick-start.md): install the package, run a small HTTP service, then add waits and a URL client.
 
 [中文学习路线](README.zh-CN.md) · [API reference](../reference/README.md)
 
 These chapters teach you to write your own files, build them, inspect the result,
 and then change one behavior at a time. Complete source programs are companion
 exercises, not a substitute for the explanation. The guides track this checkout;
-new component helpers are after v0.3.0 and require the source setup in chapter 1.
-The package-based quick start remains compatible with v0.3.0.
+component helpers require PACE v0.3.1 or newer. Use the package quick start or
+the source setup in chapter 1.
 
 ## Follow the core path
 
