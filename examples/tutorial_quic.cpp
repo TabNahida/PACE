@@ -36,6 +36,9 @@ pace::task<void> client(pace::quic::context config,
         throw std::runtime_error("QUIC response mismatch or missing FIN");
     std::cout << response;
     done.arrive();
+    // Receiving FIN does not mean the server has received our ACK. Keep this
+    // owned client engine alive until both peers finish; stop cancels this wait.
+    while (!done.io.stopped()) co_await connection.wait_events();
 }
 pace::task<void> deadline(pace::io_context& io) {
     co_await io.sleep_for(std::chrono::seconds(5));

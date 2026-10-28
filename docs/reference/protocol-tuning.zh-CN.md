@@ -91,3 +91,6 @@ pace::write/write_all 完成只表示交给传输，不表示确认收到。销�
 
 HTTP/3 接管 QUIC 连接，包括控制流和 QPACK，不能再在转移后的连接上自行开业务流。
 当前未公开 0-RTT、WebTransport、CONNECT 或 server push。[QUIC 细节](quic.md)。
+
+本地 QUIC 交换中，客户端读到回复 FIN 后仍保持存活，直到服务端观察到确认包。
+配套程序通过等待 connection 事件保留客户端到两端完成；收到 FIN 不等于远端发送任务已经结束。

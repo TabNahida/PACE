@@ -156,3 +156,8 @@ Start `h3_server`, then `h3_client` in another terminal. Expect `200 ok` and bot
 processes to exit. Restart the server for the next request. To accept repeatedly,
 replace `serve_connection(co_await listener.accept(), routes)` with
 `serve(listener, routes)`. Test certificates are only for this local exercise.
+
+In the local QUIC exchange, the client also remains alive after reading the reply
+FIN until the server has observed its acknowledgments. The companion awaits
+connection events until both peers finish; receiving a FIN alone is not a join
+with the remote sender.

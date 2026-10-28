@@ -144,3 +144,6 @@ int main() {
 下一次请求前重新启动服务端。若要持续接收，把
 `serve_connection(co_await listener.accept(), routes)` 换成 `serve(listener, routes)`。
 测试证书只用于这个本地练习。
+
+本地 QUIC 交换中，客户端读到回复 FIN 后仍保持存活，直到服务端观察到确认包。
+配套程序通过等待 connection 事件保留客户端到两端完成；收到 FIN 不等于远端发送任务已经结束。
