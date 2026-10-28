@@ -1,5 +1,5 @@
 set_project("pace")
-set_version("0.2.0")
+set_version("0.3.0")
 set_xmakever("2.9.8")
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_warnings("allextra")
@@ -91,9 +91,10 @@ local tls_dependency = has_config("tls") and {"pace_tls"} or {}
 if has_config("http1") then
     target("pace_http1")
         set_kind("static")
-        add_files("src/application/http.cpp")
+        add_files("src/application/http.cpp", "src/application/http_url.cpp")
         add_deps("pace_net", {public = true})
         for _, dep in ipairs(tls_dependency) do add_deps(dep, {public = true}) end
+        if has_config("dns") then add_deps("pace_dns", {public = true}) end
         add_defines("PACE_HAS_HTTP1", {public = true})
     target_end()
     table.insert(application_targets, "pace_http1")

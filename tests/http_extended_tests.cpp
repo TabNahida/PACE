@@ -302,6 +302,12 @@ pace::task<void> https_exchange(pace::io_context& io) {
     const auto result = co_await pace::http::get(io, trusted, listener->local_endpoint(), "localhost", "/chunks");
     require(result.body == "chunk response" && result.chunked && result.trailers.size() == 1,
             "HTTPS client/server chunked exchange failed");
+    const auto secure_url = "https://127.0.0.1:" + std::to_string(listener->local_endpoint().port) + "/url";
+    require((co_await pace::http::get(io, trusted, secure_url)).body == "/url", "verified URL HTTPS failed");
+    bool untrusted = false;
+    try { (void)co_await pace::http::get(secure_url); }
+    catch (const std::system_error&) { untrusted = true; }
+    require(untrusted, "URL HTTPS trusted a private CA without configuration");
     bool rejected = false;
     try { co_await pace::http::get(io, trusted, listener->local_endpoint(), "wrong.example", "/"); }
     catch (const std::system_error&) { rejected = true; }
@@ -976,6 +982,73 @@ pace::task<void> router_contracts(pace::io_context& io) {
     co_await io.yield();
 }
 
+pace::task<void> retain_listener(std::shared_ptr<pace::tcp::listener> listener, pace::task<void> serving) {
+    co_await std::move(serving);
+    (void)listener;
+}
+pace::task<void> easy_http(pace::io_context& io) {
+    auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
+    const auto authority = "127.0.0.1:" + std::to_string(listener->local_endpoint().port);
+    const auto base = "http://" + authority;
+    {
+        pace::http::app app;
+        app.get("/", [] { return pace::http::text("hello"); })
+           .get("/json", [] { return pace::http::json("{\"ok\":true}", 201); })
+           .get("/html", [] { return pace::http::html("<b>hi</b>"); })
+           .get("/inspect", [](request req) { return pace::http::text(req.target + "|" + std::string(req.header("Host"))); })
+           .get("/async", [value = std::make_unique<int>(42)]() -> pace::task<response> {
+               co_await pace::sleep_for(1ms); co_return pace::http::text(std::to_string(*value));
+           })
+           .post("/echo", [](request req) { return response{.body = std::move(req.body), .content_type = std::string(req.header("Content-Type"))}; });
+        io.spawn(retain_listener(listener, app.serve(*listener)));
+        app.get("/after", [] { return pace::http::text("not in snapshot"); });
+    }
+    require((co_await pace::http::get(base)).body == "hello", "URL empty target or destroyed app");
+    const auto inspected = co_await pace::http::get(io, base + "/inspect?q=%2F#ignored");
+    require(inspected.body == "/inspect?q=%2F|" + authority, "URL query, fragment or Host");
+    require((co_await pace::http::get(base + "/async")).body == "42", "nullary coroutine handler lifetime");
+    require((co_await pace::http::get(base + "/after")).status == 404, "app serve did not snapshot routes");
+    const auto json = co_await pace::http::get(base + "/json");
+    require(json.status == 201 && json.header("Content-Type") == "application/json", "JSON helper metadata");
+    require((co_await pace::http::get(base + "/html")).header("Content-Type") == "text/html; charset=utf-8", "HTML helper metadata");
+    auto echoed = co_await pace::http::post(base + "/echo", std::string("a\0b", 3), "application/custom");
+    require(echoed.body == std::string("a\0b", 3) && echoed.content_type == "application/custom", "URL POST binary body or type");
+    request head; head.method = "HEAD";
+    require((co_await pace::http::fetch(base, std::move(head))).body.empty(), "URL HEAD body suppression");
+    bool host_rejected = false;
+    try { (void)co_await pace::http::fetch(base, message()); }
+    catch (const std::invalid_argument&) { host_rejected = true; }
+    require(host_rejected, "URL Host override accepted");
+    for (const char* url : {"/relative", "ftp://127.0.0.1", "http://", "http://user@localhost/",
+            "http://localhost:0/", "http://localhost:65536/", "http://localhost:/", "http://localhost:-1/",
+            "http://[::1", "http://::1/", "http://[127.0.0.1]/", "http://a..b/", "http://-a/",
+            "http://local%68ost/", "http://127.0.0.999/", "http://host/a b", "http://host/\r\n"}) {
+        bool rejected = false;
+        try { (void)co_await pace::http::get(url); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        require(rejected, "malformed URL was not rejected before I/O");
+    }
+#ifdef PACE_HAS_DNS
+    const auto named = co_await pace::http::get("http://localhost:" + std::to_string(listener->local_endpoint().port) + "/inspect");
+    require(named.body == "/inspect|localhost:" + std::to_string(listener->local_endpoint().port), "DNS URL lost hostname identity");
+#else
+    bool no_dns = false;
+    try { (void)co_await pace::http::get("http://localhost/"); }
+    catch (const std::system_error& error) { no_dns = error.code() == std::errc::not_supported; }
+    require(no_dns, "hostname URL did not explain missing DNS feature");
+#endif
+#ifndef PACE_HAS_TLS
+    bool no_tls = false;
+    try { (void)co_await pace::http::get("https://127.0.0.1/"); }
+    catch (const std::system_error& error) { no_tls = error.code() == std::errc::not_supported; }
+    require(no_tls, "https silently downgraded without TLS");
+#endif
+    auto v6 = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"::1", 0});
+    io.spawn(server(v6));
+    const auto v6_authority = "[::1]:" + std::to_string(v6->local_endpoint().port);
+    require((co_await pace::http::get("http://" + v6_authority + "/host")).body == v6_authority, "IPv6 URL Host brackets");
+}
+
 using test_body = std::function<pace::task<void>(pace::io_context&)>;
 pace::task<void> run_body(pace::io_context& io, test_body body, bool& completed) {
     co_await body(io); completed = true; io.stop();
@@ -1001,6 +1074,7 @@ int main(int argc, char** argv) {
     try {
         if (argc > 1) certificate_directory = argv[1];
         run_test("owned handlers, exact routes and owned listener", router_contracts);
+        run_test("HTTP app, URL client, response helpers and feature bounds", easy_http);
         run_test("HTTP client/server, binary chunks, trailers and HEAD reuse", normal_client);
         run_test("HTTP IPv6 endpoint and bracketed Host authority", ipv6_http_authority);
         run_test("chunk extensions, fragmentation and pipeline preservation", chunk_pipeline);

@@ -2,7 +2,17 @@
 
 The convenience layer removes repeated entry/shutdown and routing code while
 retaining the reactor, task and transport APIs. It adds no framework dependency,
-implicit worker pool, hidden global context, URL/DNS policy or macro DSL.
+implicit worker pool, hidden global context or macro DSL.
+
+## 0.3.0 application entry
+
+`http::app` combines route registration and a caller-thread `run(port)`. URL GET,
+POST and fetch own request data and select optional DNS/TLS explicitly at build
+time. `pace::run(task)` and nullary factories, current-context waits, and TCP
+connect/read_exact remove common setup and short-read loops. See the
+[quick start](tutorial/00-quick-start.md) and [contracts](reference/convenience.md).
+These helpers retain protocol limits; URL clients do not add retries, redirects
+or request deadlines. DNS is linked into HTTP/1 only when enabled.
 
 ## One-shot entry
 

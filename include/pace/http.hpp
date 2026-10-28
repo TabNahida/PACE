@@ -3,6 +3,7 @@
 #include <pace/http_types.hpp>
 #include <pace/http_router.hpp>
 #include <pace/tcp.hpp>
+#include <pace/run.hpp>
 #ifdef PACE_HAS_TLS
 #include <pace/tls.hpp>
 #endif
@@ -154,9 +155,58 @@ task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoi
 task<response> get(io_context& context, tcp::endpoint endpoint, std::string target = "/",
                    limits bounds = {}, client_options options = {});
 
+// Absolute http(s) URLs. Hostname URLs require DNS; https requires TLS. Numeric
+// HTTP works with the default build. URL parsing/DNS/connection happen lazily.
+// No redirects, retries of requests, proxy, cookies or decompression. Fragments
+// are omitted; userinfo, spaces, non-ASCII hosts and IPv6 zone IDs are rejected.
+task<response> fetch(io_context& context, std::string url, request outgoing,
+                     limits bounds = {}, client_options options = {});
+task<response> get(io_context& context, std::string url, limits bounds = {}, client_options options = {});
+task<response> post(io_context& context, std::string url, std::string body,
+                    std::string content_type = "application/octet-stream", limits bounds = {}, client_options options = {});
+task<response> fetch(std::string url, request outgoing, limits bounds = {}, client_options options = {});
+task<response> get(std::string url, limits bounds = {}, client_options options = {});
+task<response> post(std::string url, std::string body,
+                    std::string content_type = "application/octet-stream", limits bounds = {}, client_options options = {});
+
+// Small HTTP/1 application. configure -> serve on an existing loop, or run on
+// this thread. serve() snapshots routes immediately and does not borrow *this.
+// Port-only run binds loopback. No automatic signals or worker threads.
+class app {
+    router routes_;
+public:
+    template<class Function> app& route(std::string method, std::string path, Function&& function) {
+        routes_.add(std::move(method), std::move(path), std::forward<Function>(function));
+        return *this;
+    }
+    template<class Function> app& get(std::string path, Function&& function) {
+        return route("GET", std::move(path), std::forward<Function>(function));
+    }
+    template<class Function> app& post(std::string path, Function&& function) {
+        return route("POST", std::move(path), std::forward<Function>(function));
+    }
+    task<void> serve(io_context& io, tcp::endpoint endpoint, limits bounds = {}) const {
+        return http::serve(io, std::move(endpoint), routes_, bounds);
+    }
+    task<void> serve(tcp::listener& listener, limits bounds = {}) const {
+        return http::serve(listener, routes_, bounds);
+    }
+    void run(tcp::endpoint endpoint, limits bounds = {}) const {
+        pace::run([&](io_context& io) { return serve(io, std::move(endpoint), bounds); });
+    }
+    void run(std::uint16_t port = 8080, limits bounds = {}) const { run({"127.0.0.1", port}, bounds); }
+    [[nodiscard]] router handler() const { return routes_; }
+};
+
 #ifdef PACE_HAS_TLS
 using secure_client = basic_client<tls::stream>;
 extern template class basic_client<tls::stream>;
+// Custom trust/ALPN; configuration must outlive the lazy task. URL still sets
+// the certificate name and Host, even when DNS selects a numeric address.
+task<response> fetch(io_context& context, const tls::context& configuration,
+                     std::string url, request outgoing, limits bounds = {}, client_options options = {});
+task<response> get(io_context& context, const tls::context& configuration,
+                   std::string url, limits bounds = {}, client_options options = {});
 task<void> serve_connection(tls::stream stream, handler handle, limits bounds = {});
 // TLS configuration and listener must outlive the accept task. Each accepted
 // connection performs its handshake independently, before parsing HTTP.

@@ -4,7 +4,9 @@ Header: `<pace/run.hpp>` (also exported by `<pace/pace.hpp>`). Link `pace_runtim
 
 ```cpp
 template<class Factory>
-auto run(Factory&& factory); // factory(io_context&) returns task<T>; result is T
+auto run(Factory&& factory); // factory(io_context&) or factory() returns task<T>; result is T
+template<class T>
+auto run(task<T> entry); // consumes an already-created task
 ```
 
 The factory is copied from an lvalue or moved from an rvalue into owned storage.
@@ -32,3 +34,5 @@ rejected when awaited. Existing `io_context::run`, `spawn`, `post` and runtime
 worker APIs retain their original behavior.
 
 [Guided introduction](../tutorial/02-tasks-timers.md) · [中文教程](../tutorial/02-tasks-timers.zh-CN.md)
+
+Current-context helpers and direct-task lifetime rules: [convenience APIs](convenience.md).

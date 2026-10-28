@@ -1,5 +1,7 @@
 # PACE documentation
 
+Start with the [0.3.0 quick start](tutorial/00-quick-start.md): install the package, run a small HTTP service, then add waits and a URL client.
+
 Write your own asynchronous application, from its first main.cpp to HTTP/3.
 
 Start with the [guided learning path](tutorial/README.md); chapters include complete

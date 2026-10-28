@@ -1,5 +1,7 @@
 # `pace::tcp`
 
+[0.3.0 convenience additions](convenience.md)
+
 Include `<pace/tcp.hpp>`. TCP sockets are nonblocking, move-only and tied to an
 `io_context`. Operations return lazy [tasks](task.md). Keep the context alive
 longer than its sockets and listeners, and keep each socket object and operation

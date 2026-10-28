@@ -8,12 +8,17 @@
 namespace pace::http {
 namespace detail {
 template<class Function>
+auto call_handler(Function& function, request incoming) {
+    if constexpr (std::is_invocable_v<Function&, request>) return std::invoke(function, std::move(incoming));
+    else return std::invoke(function);
+}
+template<class Function>
 task<response> invoke_handler(std::shared_ptr<Function> function, request incoming) {
-    using result = std::invoke_result_t<Function&, request>;
+    using result = decltype(call_handler(*function, std::move(incoming)));
     if constexpr (std::is_same_v<result, response>)
-        co_return std::invoke(*function, std::move(incoming));
+        co_return call_handler(*function, std::move(incoming));
     else
-        co_return co_await std::invoke(*function, std::move(incoming));
+        co_return co_await call_handler(*function, std::move(incoming));
 }
 inline task<response> immediate_response(response outgoing) { co_return outgoing; }
 } // namespace detail
@@ -24,7 +29,7 @@ inline task<response> immediate_response(response outgoing) { co_return outgoing
 template<class Function>
 handler make_handler(Function&& function) {
     using owned_type = std::decay_t<Function>;
-    using result = std::invoke_result_t<owned_type&, request>;
+    using result = decltype(detail::call_handler(std::declval<owned_type&>(), std::declval<request>()));
     static_assert(std::is_same_v<result, response> || std::is_same_v<result, task<response>>,
                   "an HTTP handler must return response or task<response>");
     auto owned = std::make_shared<owned_type>(std::forward<Function>(function));

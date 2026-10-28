@@ -1,5 +1,7 @@
 # API 中文索引与关键约定
 
+[0.3.0 convenience APIs: app, URL client, TCP, context](convenience.md)
+
 常用便利入口：[pace::run](run.md) · [HTTP 路由与普通处理器](http-router.md) · [逐步教程](../tutorial/README.zh-CN.md)
 
 完整签名、默认参数、异常和边界行为以对应的英文参考页为准。
