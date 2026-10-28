@@ -1,4 +1,5 @@
 #include <pace/http2.hpp>
+#include <pace/run.hpp>
 #include <pace/detail/protocol_driver.hpp>
 #include "http2_diagnostics.hpp"
 #include <algorithm>
@@ -204,7 +205,8 @@ void interop() {
         run_scenario(io); require(done.count==2,"raw server incomplete");
     }
 }
-pace::task<void> validation(pace::io_context& io, bool& completed) {
+void validation() {
+    watchdog deadline;
     for(unsigned variant=0;variant<8;++variant) {
         std::vector<pace::http::request> batch(1); batch[0].method="GET"; batch[0].target="/";
         if(variant==0) batch[0].headers.push_back({"content-type","x\r\ny"});
@@ -222,15 +224,22 @@ pace::task<void> validation(pace::io_context& io, bool& completed) {
             if(variant==5) limits.max_header_bytes=280;
         }
         bool rejected=false;
-        // Keep temporary transport/task construction outside the co_await try
-        // expression: MSVC's optimized coroutine lowering ICEs on that form.
-        auto work = pace::http2::async_exchange(pace::tcp::stream(io), "localhost", std::move(batch), limits);
-        try { (void)co_await std::move(work); }
+        // These failures happen before I/O. Run each case from a plain loop;
+        // MSVC's optimized coroutine loop lowering otherwise hits C1001 here.
+        try {
+            (void)pace::run([&](pace::io_context& io) {
+                return pace::http2::async_exchange(pace::tcp::stream(io), "localhost", std::move(batch), limits);
+            });
+        }
         catch(const std::invalid_argument&) { rejected=true; }
         catch(const std::length_error&) { rejected=true; }
         require(rejected,"invalid HTTP2 request reached transport");
     }
-    completed=true; io.stop();
+}
+pace::task<void> unaffected_task(pace::io_context& io, bool& completed) {
+    co_await io.yield();
+    require(!io.stopped(), "closed listener stopped unrelated work");
+    completed = true; io.stop();
 }
 pace::task<void> stalled_server(pace::tcp::listener& listener) {
     auto stream=co_await listener.accept();
@@ -254,7 +263,7 @@ pace::task<void> close_listener(pace::tcp::listener& listener, bool& resumed) {
     resumed=true; io.stop();
 }
 void errors() {
-    { pace::io_context io; bool completed=false; io.spawn(validation(io,completed)); run_scenario(io); require(completed,"validation incomplete"); }
+    validation();
     { pace::io_context io; pace::tcp::listener listener(io,{"127.0.0.1",0}); bool canceled=false;
       io.spawn(stalled_server(listener)); io.spawn(canceled_client(io,listener.local_endpoint(),canceled));
       run_scenario(io); require(canceled,"cancellation incomplete"); }
@@ -262,7 +271,7 @@ void errors() {
       io.spawn(pace::http2::serve(listener,echo)); io.spawn(close_listener(listener,resumed));
       run_scenario(io); require(resumed,"listener cancellation stopped unrelated task"); }
     { pace::io_context io; pace::tcp::listener listener(io,{"127.0.0.1",0}); bool completed=false;
-      listener.close(); io.spawn(pace::http2::serve(listener,echo)); io.spawn(validation(io,completed));
+      listener.close(); io.spawn(pace::http2::serve(listener,echo)); io.spawn(unaffected_task(io,completed));
       run_scenario(io); require(completed,"already-closed listener stopped unrelated task"); }
 }
 // Handler completion order is independent from stream and batch order. A
