@@ -1,6 +1,6 @@
 # PACE documentation
 
-Start with [one-call clients](tutorial/00-quick-start.md): get an HTTP response directly, then try TCP and UDP. These unreleased APIs use the current source checkout.
+Start with [one-call clients](tutorial/00-quick-start.md): get an HTTP response directly, then try TCP and UDP. These APIs require PACE 0.4.0 or newer.
 
 Write your own asynchronous application, from its first main.cpp to HTTP/3.
 

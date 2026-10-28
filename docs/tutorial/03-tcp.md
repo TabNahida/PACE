@@ -2,8 +2,7 @@
 
 [中文](03-tcp.zh-CN.md) · [Learning path](README.md) · [Next: HTTP](04-http.md)
 
-Use the current checkout and chapter 1's source setup; link `pace_net`. Direct
-clients are not in the 0.3.1 package. Our protocol is four request bytes and four
+Use PACE 0.4.0 or newer and chapter 1's source setup; link `pace_net`. Our protocol is four request bytes and four
 reply bytes, using a numeric loopback address.
 
 ## 1. Write the client first

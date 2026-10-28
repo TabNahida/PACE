@@ -2,7 +2,7 @@
 
 [English](http-clients.md) · [取消与并发契约](structured-concurrency.zh-CN.md)
 
-以下 API 属于尚未发布的源码版本。`pace::http1` 是 `pace::http` 的别名；
+以下 API 需要 PACE 0.4.0 或更新版本。`pace::http1` 是 `pace::http` 的别名；
 HTTP/1、2、3 共用 `http::request` 和 `http::response`。
 
 | 操作 | 直接返回响应 | 协程等待 |

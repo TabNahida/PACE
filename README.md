@@ -49,7 +49,7 @@ concurrent work and share one cancellation token and deadline.
 [Write your first client →](docs/tutorial/00-quick-start.md) ·
 [Signatures and migration from 0.3.1 →](docs/reference/direct-clients.md)
 
-These client APIs are in the current source checkout and are not yet released.
+These client APIs require PACE 0.4.0 or newer.
 
 ## A small HTTP server
 

@@ -2,7 +2,7 @@
 
 [English / 完整签名与约定](structured-concurrency.md) · [逐步教程](../tutorial/12-structured-concurrency.zh-CN.md)
 
-包含 `<pace/task_group.hpp>`，链接 `pace_runtime`，无需第三方依赖。这些接口尚未发布。
+包含 `<pace/task_group.hpp>`，链接 `pace_runtime`，无需第三方依赖。这些接口需要 PACE 0.4.0 或更新版本。
 
 ## 作用域与所有权
 

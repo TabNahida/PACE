@@ -3,8 +3,8 @@
 [English](01-build.md) · [完整构建选项](../reference/build-configuration.md) · [下一章：异步任务](02-tasks-timers.zh-CN.md)
 
 这一章要做出你自己的程序，不是只运行仓库里写好的 example。
-需要 xmake 2.9.8+ 和支持 C++20 的编译器。教程对应当前源码；
-后续章节的直接客户端尚未发布，请使用当前源码而非 0.3.1 安装包。
+需要 xmake 2.9.8+ 和支持 C++20 的编译器。教程需要 PACE 0.4.0 或更新版本；
+下文使用 v0.4.0 源码 checkout。
 
 ## 第一步：准备三个文件位置
 

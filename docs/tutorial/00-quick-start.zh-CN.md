@@ -3,8 +3,8 @@
 [English](00-quick-start.md) · [学习路线](README.zh-CN.md) · [构建细节](01-build.zh-CN.md)
 
 先从普通 C++ 开始。单次客户端请求不需要协程、事件循环配置，也不需要 `run`。
-本教程使用**当前源码 checkout**：直接客户端和 HTTP 的 `async_` 命名尚未发布，
-0.3.1 安装包不包含这些接口。
+本教程需要 **PACE 0.4.0 或更新版本**，包含直接客户端和 HTTP 的 `async_` 命名；
+下文使用 v0.4.0 源码 checkout。
 
 ## 1. 先写客户端
 

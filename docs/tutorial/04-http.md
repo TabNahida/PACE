@@ -3,7 +3,7 @@
 [中文](04-http.zh-CN.md) · [Learning path](README.md)
 
 Use chapter 1's current source setup, link `pace_http1` and configure `--http1=y`.
-The direct calls and `async_` names in this chapter are not in the 0.3.1 package.
+The direct calls and `async_` names in this chapter require PACE 0.4.0 or newer.
 
 ## Start with a direct GET
 

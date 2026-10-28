@@ -2,7 +2,7 @@
 
 [English](07-udp.md) · [学习路线](README.zh-CN.md) · [下一章：DNS/TLS](08-dns-tls.zh-CN.md)
 
-使用第一章的当前源码 checkout，链接 `pace_net`。直接客户端尚未发布，0.3.1 包不包含它。
+使用 PACE 0.4.0 或更新版本和第一章的源码构建方式，链接 `pace_net`。
 UDP 保留数据报边界，但不保证送达或顺序。
 
 ## 1. 先写直接客户端

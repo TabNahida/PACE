@@ -3,7 +3,7 @@
 [English](12-structured-concurrency.md) · [学习路线](README.zh-CN.md) · [参考](../reference/structured-concurrency.zh-CN.md)
 
 单次请求仍然直接写 `http::get(url)`。多个异步操作需要共享生命周期时，再使用任务组。
-本章使用当前源码并链接 `pace_runtime`，这些新增接口尚未发布。
+本章需要 PACE 0.4.0 或更新版本，并链接 `pace_runtime`。
 
 ## 1. 启动两个任务并取得结果
 

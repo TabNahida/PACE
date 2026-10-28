@@ -3,8 +3,8 @@
 [中文](00-quick-start.zh-CN.md) · [Learning path](README.md) · [Build details](01-build.md)
 
 Start with ordinary C++. No coroutine, event-loop setup or `run` is needed for a
-single client request. These guides use the **current source checkout**: the direct
-clients and `async_` HTTP names are unreleased and are not in the 0.3.1 package.
+single client request. These guides require **PACE 0.4.0 or newer**, including direct
+clients and the `async_` HTTP names. Use the v0.4.0 source checkout below.
 
 ## 1. Write the client
 

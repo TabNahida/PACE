@@ -2,7 +2,7 @@
 
 [中文](direct-clients.zh-CN.md) · [Quick start](../tutorial/00-quick-start.md)
 
-These APIs describe the current checkout, **not the released 0.3.1 package**.
+These APIs require **PACE 0.4.0 or newer**.
 They intentionally change the HTTP free-function names. Server registrations such
 as `app.get`, `router.get`, and the persistent client's `send` keep their names.
 

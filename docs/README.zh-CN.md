@@ -1,6 +1,6 @@
 # PACE 文档
 
-先从[一次调用的客户端](tutorial/00-quick-start.zh-CN.md)开始：直接获取 HTTP 响应，再尝试 TCP、UDP。这些接口尚未发布，使用当前源码构建。
+先从[一次调用的客户端](tutorial/00-quick-start.zh-CN.md)开始：直接获取 HTTP 响应，再尝试 TCP、UDP。这些接口需要 PACE 0.4.0 或更新版本。
 
 从[逐步学习路线](tutorial/README.zh-CN.md)开始：创建自己的 main.cpp，逐步加入网络和协议，
 每章核对输出并解释生命周期。配套 example 用于验证，不代替教程正文。

@@ -49,7 +49,7 @@ auto reply = pace::http::get("http://127.0.0.1:8080/health");
 [从第一个客户端开始 →](docs/tutorial/00-quick-start.zh-CN.md) ·
 [接口与 0.3.1 迁移说明 →](docs/reference/direct-clients.zh-CN.md)
 
-这些客户端接口属于当前源码，尚未发布。
+这些客户端接口需要 PACE 0.4.0 或更新版本。
 
 ## 一个小型 HTTP 服务
 

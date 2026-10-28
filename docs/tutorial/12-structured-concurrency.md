@@ -4,7 +4,7 @@
 
 A direct `http::get(url)` is still the shortest way to get one response. Use a task
 group when several asynchronous operations must share a lifetime. This chapter
-uses the current checkout and `pace_runtime`; these additions are unreleased.
+requires PACE 0.4.0 or newer and links `pace_runtime`.
 
 ## 1. Start two tasks and collect their results
 

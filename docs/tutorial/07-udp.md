@@ -2,8 +2,7 @@
 
 [中文](07-udp.zh-CN.md) · [Learning path](README.md) · [Next: DNS/TLS](08-dns-tls.md)
 
-Use chapter 1's current checkout and link `pace_net`. Direct clients are unreleased;
-use this source rather than the 0.3.1 package. UDP preserves datagram boundaries,
+Use PACE 0.4.0 or newer with chapter 1's source setup and link `pace_net`. UDP preserves datagram boundaries,
 but does not promise delivery or ordering.
 
 ## 1. Write a direct client

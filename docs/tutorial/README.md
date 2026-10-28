@@ -6,8 +6,8 @@ Start with [one-call clients](00-quick-start.md): write a direct HTTP GET, suppl
 local service, build both and inspect the response. Then try TCP or UDP. Learn
 coroutines when you need to compose async work or write a server.
 
-These guides track the current checkout. Direct clients and the renamed HTTP
-`async_` functions are unreleased; use the source setup, not the 0.3.1 package.
+These guides require PACE 0.4.0 or newer, including direct clients and the renamed
+HTTP `async_` functions. The source setup below works with the v0.4.0 checkout.
 Each chapter includes complete files, build steps, expected output and a small
 change to try. Companion programs provide independent checks.
 

@@ -2,7 +2,7 @@
 
 [中文](http-clients.zh-CN.md) · [Deadlines and concurrency](structured-concurrency.md)
 
-These APIs describe the unreleased source checkout. `pace::http1` is an alias of
+These APIs require PACE 0.4.0 or newer. `pace::http1` is an alias of
 `pace::http`; HTTP/1, HTTP/2 and HTTP/3 share `http::request` and `http::response`.
 
 | Operation | Direct call | Coroutine call |

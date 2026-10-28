@@ -3,7 +3,7 @@
 [English](04-http.md) · [学习路线](README.zh-CN.md)
 
 使用第一章的当前源码构建，链接 `pace_http1` 并配置 `--http1=y`。
-本章的直接调用和 `async_` 命名尚未包含在 0.3.1 包中。
+本章的直接调用和 `async_` 命名需要 PACE 0.4.0 或更新版本。
 
 ## 先从直接 GET 开始
 

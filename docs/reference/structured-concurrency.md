@@ -4,7 +4,7 @@
 
 Include `<pace/task_group.hpp>` for groups, `<pace/operation.hpp>` for operation
 boundaries, or `<pace/cancellation.hpp>` for sources/tokens/deadlines. All link to
-`pace_runtime` and need no third-party dependency. These APIs are unreleased.
+`pace_runtime` and need no third-party dependency. These APIs require PACE 0.4.0 or newer.
 
 ## Scope and ownership
 

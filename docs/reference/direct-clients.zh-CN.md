@@ -2,7 +2,7 @@
 
 [English](direct-clients.md) · [快速入门](../tutorial/00-quick-start.zh-CN.md)
 
-本页描述当前 checkout，**已发布的 0.3.1 包没有这些 API**。HTTP 自由函数的命名有意发生变化；
+本页 API 需要 **PACE 0.4.0 或更新版本**。HTTP 自由函数的命名有意发生变化；
 `app.get`、`router.get` 和持久客户端的 `send` 不变。
 
 ## 选择执行方式

@@ -1,8 +1,8 @@
 # 1. Build and run
 
 This chapter builds **your own program**, not a prewritten example. You need xmake
-2.9.8+ and a C++20 compiler. These guides track this source checkout. The direct client APIs are unreleased;
-use the checkout rather than the 0.3.1 package.
+2.9.8+ and a C++20 compiler. These guides require PACE 0.4.0 or newer.
+Use the v0.4.0 source checkout for the setup below.
 
 ## Create a small application
 
