@@ -20,7 +20,7 @@ without extra options. Groups cannot be copied or moved.
 | `group.spawn(task<T>)` | Owns the task, but references already captured by that task remain borrowed |
 | `co_await handle` | Consumes its result once, rethrows its failure; a handle is move-only and context-affine |
 | `group.own(value)` | Moves a value into group storage and returns `T&`; storage is destroyed after joining children, before the boundary returns/throws |
-| `co_await group.join()` | Seals the group and drains children; rejects overlapping joins; no further spawn/own; child errors are reported by handles and the enclosing boundary |
+| `co_await group.join()` | Seals the group and waits for children; observes local cancellation, rejects overlapping joins; no further spawn/own; the boundary always drains before reporting failure |
 | `group.cancel()` | Requests cooperative cancellation of the body and descendants; still requires join |
 | `group.token()` | Copyable token observing the group's local cancellation |
 
@@ -102,7 +102,8 @@ the callback runs on the owner loop, and the returned move-only handle unregiste
 it. Handles are context-affine (or destroyed after the loop joins), may outlive
 the context, and callbacks must promptly finish/unlink the wait exactly once.
 Register only for a token from an active operation boundary to get its deadline
-timer. Context stop also dispatches registered cancellation. Callback exceptions
+timer. Context stop also dispatches registered cancellation; registration with a live
+token after stop is rejected. An empty callback with a live token is invalid. Callback exceptions
 follow the reactor's error/stop/drain policy.
 
 ## Cleanup shielding
@@ -110,8 +111,11 @@ follow the reactor's error/stop/drain policy.
 `shield(work)` masks inherited local cancellation for that task subtree. Use
 `shield(with_deadline(deadline::after(100ms), cleanup_factory))` for bounded async
 cleanup. The outer boundary still reports its original cancellation afterward.
-Shield does not override `io.stop()`, and does not permit detached cleanup. Group
-joining internally shields its drain so parent cancellation cannot skip children.
+Shield does not override `io.stop()`, and does not permit detached cleanup. The boundary
+shields its final drain so cancellation of an explicit join cannot skip children.
+Do not join a group from its own child; that would wait for itself. If the body
+exits with another join pending, the boundary rejects that misuse and cancels/joins
+the children before throwing.
 Prefer synchronous RAII cleanup when sufficient.
 
 ## Protocol concurrency and server lifetime

@@ -222,7 +222,10 @@ pace::task<void> validation(pace::io_context& io, bool& completed) {
             if(variant==5) limits.max_header_bytes=280;
         }
         bool rejected=false;
-        try { (void)co_await pace::http2::async_exchange(pace::tcp::stream(io),"localhost",std::move(batch),limits); }
+        // Keep temporary transport/task construction outside the co_await try
+        // expression: MSVC's optimized coroutine lowering ICEs on that form.
+        auto work = pace::http2::async_exchange(pace::tcp::stream(io), "localhost", std::move(batch), limits);
+        try { (void)co_await std::move(work); }
         catch(const std::invalid_argument&) { rejected=true; }
         catch(const std::length_error&) { rejected=true; }
         require(rejected,"invalid HTTP2 request reached transport");
@@ -462,7 +465,7 @@ pace::task<void> tls_driver_server(pace::tcp::listener& listener, const pace::tl
     if (withhold_close) {
         require(co_await stream.read_some(buffer) == 0, "TLS driver shutdown omitted close_notify");
         co_await listener.context().sleep_for(20ms); stream.close();
-    } else co_await stream.close_gracefully();
+    } else co_await stream.close_gracefully(2s);
     done.arrive();
 }
 pace::task<void> tls_driver_client(pace::io_context& io, pace::tcp::endpoint endpoint, const pace::tls::context& config, completion& done, bool withhold_close) {
@@ -507,7 +510,9 @@ pace::task<void> tls_driver_client(pace::io_context& io, pace::tcp::endpoint end
         require(response == "ok", "TLS retry response");
     }
     require(stream.is_open(), "TLS driver closed a successfully drained transport");
-    co_await stream.close_gracefully(withhold_close ? 5ms : 100ms);
+    // The regular backpressure case verifies clean TLS shutdown, not a 100 ms
+    // scheduler budget. The separate withheld-close case tests the 5 ms bound.
+    co_await stream.close_gracefully(withhold_close ? 5ms : 2s);
     require(!stream.is_open(), "TLS driver graceful close deadline did not close transport"); done.arrive();
 }
 pace::task<void> tls_abort_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done) {

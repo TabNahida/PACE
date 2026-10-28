@@ -130,6 +130,20 @@ pace::task<void> tests() {
     require(expired && !io.stopped(), "DNS local cancellation");
     require(!(co_await resolver.resolve("127.0.0.1")).addresses.empty(), "DNS resolver not reusable after cancellation");
 #endif
+    // A child incorrectly joining its own group must not let a body exit
+    // destroy that group's borrowed resources before cancellation drains it.
+    int joined_child = 0;
+    bool join_rejected = false;
+    try {
+        co_await pace::with_task_group([&](pace::task_group& group) -> pace::task<void> {
+            (void)group.spawn([&]() -> pace::task<void> {
+                destroyed done{joined_child};
+                co_await group.join();
+            });
+            co_await pace::yield();
+        });
+    } catch (const std::logic_error&) { join_rejected = true; }
+    require(join_rejected && joined_child == 1, "overlapping join escaped without draining child");
     // Reject new children after explicit join, and complete canceled-before-start work without invoking it.
     co_await pace::with_task_group([](pace::task_group& group) -> pace::task<void> {
         co_await group.join(); bool closed = false;
@@ -182,6 +196,17 @@ void cancellation_callback_tests() {
     bool failed = false;
     try { io.run(); } catch (const std::runtime_error& e) { failed = std::string(e.what()) == "cancellation callback failure"; }
     require(failed && callbacks == 2, "callback exception skipped remaining cancellation or draining");
+    pace::io_context stopped;
+    auto after_stop = [&]() -> pace::task<void> {
+        pace::cancellation_source live;
+        stopped.stop();
+        bool rejected = false;
+        try { auto late = stopped.on_cancel(live.token(), [](std::error_code) {}); }
+        catch (const std::system_error& e) { rejected = e.code() == std::errc::operation_canceled; }
+        require(rejected, "custom wait registered after stop could hang");
+        co_return;
+    };
+    stopped.spawn(after_stop()); stopped.run();
 }
 
 #ifndef _WIN32

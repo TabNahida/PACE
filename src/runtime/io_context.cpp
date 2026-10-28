@@ -165,6 +165,8 @@ io_context::cancellation_handle io_context::on_cancel(cancellation_token token,
         std::function<void(std::error_code)> callback) {
     if (!token.stop_possible()) return {};
     check_affinity(this);
+    if (stopped()) throw std::system_error(canceled());
+    if (!callback) throw std::invalid_argument("empty cancellation callback");
     token.throw_if_cancelled();
     if (!impl_->cancellations) impl_->cancellations = std::make_shared<cancellation_records>();
     auto& records = *impl_->cancellations;
