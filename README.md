@@ -42,7 +42,9 @@ auto reply = pace::http::get("http://127.0.0.1:8080/health");
 
 One call returns an owned response; no `run` is needed. It blocks this thread,
 with a default 30-second deadline. In a coroutine use
-`co_await pace::http::async_get(url)`. TCP and UDP offer `exchange` / `async_exchange`.
+`co_await pace::http::async_get(url)`. HTTP/2 and HTTP/3 use the same URL names. TCP and UDP offer `exchange` / `async_exchange`.
+Use [structured task groups](docs/tutorial/12-structured-concurrency.md) to join
+concurrent work and share one cancellation token and deadline.
 
 [Write your first client →](docs/tutorial/00-quick-start.md) ·
 [Signatures and migration from 0.3.1 →](docs/reference/direct-clients.md)

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add structured task groups with owned factories, result handles, scope-owned resources and cancel-then-join error propagation; children cannot outlive the boundary.
+- Add local cancellation sources/tokens, inherited task cancellation, shared monotonic deadlines and bounded cleanup shielding across runtime waits, DNS, QUIC and HTTP.
+- Unify HTTP/1, HTTP/2 and HTTP/3 URL get/post/fetch and async_ forms; add http1 as an alias for http. **Breaking:** HTTP/2 and HTTP/3 transport get/exchange become async_get/async_exchange.
+- **Lifetime change:** HTTP serve joins accepted connections on listener closure; HTTP/2 and HTTP/3 connections cancel and join active handlers before exiting.
+- Add bilingual structured concurrency tutorials, complete concurrency contracts and unified-client migration guidance.
+
 - Make HTTP URL `get`, `post` and `fetch` return responses directly without `pace::run`. **Breaking:** all former HTTP free-function coroutine overloads are now `async_get`, `async_post` and `async_fetch`; arguments stay unchanged.
 - Add direct TCP/UDP `exchange`, async alternatives and send-only `udp::send`. Direct calls own their context on the calling thread, enforce a default cooperative 30-second total deadline and reject use inside a running PACE context.
 - Teach the shortest direct clients first in English and Chinese; document exact contracts, tuning and the 0.3.1 migration in reference.

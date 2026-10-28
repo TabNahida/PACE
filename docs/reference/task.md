@@ -116,3 +116,10 @@ ownership into its frame. Passing `std::string_view`, `std::span`, `T&` or a poi
 does not extend the referenced object's lifetime. A temporary capturing coroutine
 lambda can leave its coroutine referring to a destroyed closure. Prefer the
 named-function pattern in [tasks and timers](../tutorial/02-tasks-timers.md).
+
+## Cancellation inheritance
+
+Awaited tasks inherit the current task token and deadline. New local boundaries
+can shorten the budget; explicit shielding supports cleanup. Use
+[structured task groups](structured-concurrency.md) for concurrent children with
+owned lifetimes, rather than detached `io.spawn` roots.

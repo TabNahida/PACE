@@ -76,6 +76,10 @@ local function protocol_target(name, layer, package_name, feature, dependencies)
     target("pace_" .. name)
         set_kind("static")
         add_files("src/" .. layer .. "/" .. name .. ".cpp")
+        if name == "http2" or name == "http3" then
+            add_files("src/application/" .. name .. "_url.cpp")
+            if has_config("dns") then add_deps("pace_dns", {public = true}) end
+        end
         add_deps("pace_net", {public = true})
         for _, dep in ipairs(dependencies or {}) do add_deps(dep, {public = true}) end
         if package_name then add_packages(package_name, {public = true}) end

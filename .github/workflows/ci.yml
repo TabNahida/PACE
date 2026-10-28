@@ -141,6 +141,11 @@ jobs:
           xmake f -c -m release -o build/ci-core --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y
           xmake -y
           xmake test -v
+      - name: HTTP2 without HTTP1, TLS or DNS
+        run: |
+          xmake f -c -m release -o build/ci-http2 --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=y --http3=n --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y
+          xmake -y
+          xmake test -v
       - name: HTTP3 without HTTP1, HTTP2 or TCP TLS
         run: |
           xmake f -c -m release -o build/ci-http3 --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=y --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y

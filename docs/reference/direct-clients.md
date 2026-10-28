@@ -31,6 +31,8 @@ are not detected; the call still blocks their thread.
 // <pace/blocking.hpp>, also included by tcp.hpp, udp.hpp and http.hpp
 struct pace::blocking_options {
     std::chrono::milliseconds timeout{30000};
+    cancellation_token cancellation{};
+    pace::deadline deadline{};
 };
 
 // <pace/http.hpp>, link pace_http1; signatures inside namespace pace::http
@@ -67,8 +69,9 @@ task<packet> async_exchange(endpoint, std::string request, std::size_t capacity 
 
 A direct call's positive `blocking_options::timeout` covers connection, optional
 DNS/TLS, request/response and cleanup. Zero/negative values throw `invalid_argument`.
-The budget uses a monotonic timer. On expiry the private context stops, pending
-operations are canceled and drained, and the caller receives
+The effective budget is the earlier of the positive timeout and absolute
+`deadline`; `cancellation` can cancel it from another thread. On expiry the local
+operation scope cancels and drains pending work, and the caller receives
 `system_error` comparing equal to `std::errc::timed_out`. No background operation
 outlives the call, and subsequent direct calls use independent contexts.
 
@@ -80,8 +83,8 @@ cannot undo bytes already sent or effects already performed by a peer. No retry
 is automatic.
 
 The `async_` forms preserve the underlying asynchronous contracts and **do not add
-this total deadline**. Their context belongs to the caller; use application-managed
-cancellation there. Socket member methods remain asynchronous regardless of whether
+this total deadline**. They inherit the task token and deadline; use
+[with_options or with_deadline](structured-concurrency.md) for a local boundary. Socket member methods remain asynchronous regardless of whether
 the name includes `async_`.
 
 ## HTTP and verified HTTPS
@@ -151,5 +154,7 @@ no direct overload takes an `io_context&`. When moving an old synchronous
 `pace::run(http::get(url, bounds, options))`, add the new timeout slot:
 `http::get(url, {}, bounds, options)`.
 
-Calls to `http2::get`, `http3::get`, `tcp::connect`, and other existing components
-keep their previous asynchronous behavior. This change does not rename them.
+HTTP/2 and HTTP/3 now follow the same naming: URL `get/post/fetch` are direct,
+`async_get/async_post/async_fetch` are asynchronous; owned-transport `get` and
+`exchange` become `async_get` and `async_exchange`. See [unified clients](http-clients.md).
+TCP/QUIC connect and socket member names are unchanged.

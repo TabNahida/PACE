@@ -1,3 +1,4 @@
+#include <pace/detail/serve_group.hpp>
 #include <pace/http3.hpp>
 #include <pace/detail/http_dispatch.hpp>
 #include <pace/detail/protocol_driver.hpp>
@@ -407,7 +408,7 @@ task<void> isolated(quic::connection connection, http::handler handle, limits bo
 }
 } // namespace
 
-task<std::vector<http::response>> exchange(quic::connection transport, std::string authority,
+task<std::vector<http::response>> async_exchange(quic::connection transport, std::string authority,
                                           std::vector<http::request> requests, limits bounds) {
     session state(false, bounds);
     state.validate_batch(authority, requests);
@@ -432,7 +433,8 @@ task<std::vector<http::response>> exchange(quic::connection transport, std::stri
 task<void> serve_connection(quic::connection transport, http::handler handle, limits bounds) {
     require_h3(transport);
     session state(true, bounds);
-    auto dispatch = std::make_shared<detail::http_dispatch>(transport.context(), std::move(handle));
+    auto dispatch = std::make_shared<detail::http_dispatch>(transport.context(), std::move(handle), co_await this_task::cancellation());
+    std::exception_ptr failure;
     dispatch->wake = [&] { detail::quic_driver::wake(transport); };
     detail::close_http_dispatch close{dispatch};
     try {
@@ -460,21 +462,26 @@ task<void> serve_connection(quic::connection transport, http::handler handle, li
         }
     } catch (const std::system_error& error) {
         transport.close(NGHTTP3_H3_NO_ERROR);
-        if (error.code() != std::errc::connection_aborted) throw;
-    } catch (...) { transport.close(NGHTTP3_H3_INTERNAL_ERROR); throw; }
+        if (error.code() != std::errc::connection_aborted) failure = std::current_exception();
+    } catch (...) { transport.close(NGHTTP3_H3_INTERNAL_ERROR); failure = std::current_exception(); }
+    dispatch->close();
+    co_await dispatch->drain();
+    if (failure) std::rethrow_exception(failure);
 }
 task<void> serve(quic::listener& listener, http::handler handle, limits bounds) {
-    for (;;) {
-        try { listener.context().spawn(isolated(co_await listener.accept(), handle, bounds)); }
-        catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
-            // accept includes the TLS handshake. A failed peer must not stop
-            // the listener, while an actual engine failure must propagate.
-            if (listener.is_open() && (error.code() == std::errc::protocol_error ||
-                error.code() == std::errc::connection_aborted || error.code() == std::errc::timed_out)) continue;
-            throw;
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        for (;;) {
+            try { (void)group.spawn(isolated(co_await listener.accept(), handle, bounds)); }
+            catch (const std::system_error& error) {
+                if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+                // accept includes the TLS handshake. A failed peer must not stop
+                // the listener, while an actual engine failure must propagate.
+                if (listener.is_open() && (error.code() == std::errc::protocol_error ||
+                    error.code() == std::errc::connection_aborted || error.code() == std::errc::timed_out)) continue;
+                throw;
+            }
         }
-    }
+    });
 }
 } // namespace pace::http3
 #endif

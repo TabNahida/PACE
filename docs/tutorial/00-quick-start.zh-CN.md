@@ -141,3 +141,5 @@ pace::run([]() -> pace::task<void> {
 接着按需要阅读 [HTTP](04-http.zh-CN.md)、[TCP](03-tcp.zh-CN.md) 或 [UDP](07-udp.zh-CN.md)，
 需要异步组合时再读[任务与定时器](02-tasks-timers.zh-CN.md)。精确约定、调优和 0.3.1
 迁移表见[直接客户端参考](../reference/direct-clients.zh-CN.md)。
+
+[下一步：并发多个请求，共用一个 deadline](12-structured-concurrency.zh-CN.md)。

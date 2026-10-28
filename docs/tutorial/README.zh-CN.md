@@ -17,6 +17,7 @@
 | [3. TCP](03-tcp.zh-CN.md) | 先用 `tcp::exchange`，再编写回显服务端、理解分帧 |
 | [7. UDP](07-udp.zh-CN.md) | 直接收发、只发送，再编写异步回显服务端 |
 | [2. 任务与定时器](02-tasks-timers.zh-CN.md) | 等待后返回结果，理解惰性、所有权、异常和入口自动停止 |
+| [12. 结构化并发](12-structured-concurrency.zh-CN.md) | 并发子任务、局部取消与共同 deadline |
 | [5. 执行方式](05-execution.zh-CN.md) | 选择 worker 和应用线程，明确任务实际在哪里执行 |
 | [6. 关闭](06-shutdown.zh-CN.md) | 观察取消，理解停止接收、drain、join、销毁的先后顺序 |
 

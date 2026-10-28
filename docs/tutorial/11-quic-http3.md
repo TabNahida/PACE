@@ -7,6 +7,26 @@ framing and QPACK on those streams. Build one layer at a time: raw UDP datagrams
 are not QUIC, and arbitrary QUIC stream bytes are not HTTP/3 messages.
 This backend currently requires POSIX.
 
+
+## Start with one HTTP/3 URL
+
+Enable `http3=y` and link `pace_http3`. With a trusted HTTP/3 service:
+
+```cpp
+#include <pace/http3.hpp>
+#include <iostream>
+int main() {
+    auto reply = pace::http3::get("https://127.0.0.1:9443/health");
+    std::cout << reply.status << " " << reply.body;
+}
+```
+
+For a local test certificate, create `quic::context trust`, load the test CA,
+set ALPN `h3`, and call `http3::get(trust, url)`. In a coroutine use
+`co_await http3::async_get(url)`. See [unified clients](../reference/http-clients.md)
+for trust and URL options. The following steps build the local service and then
+show the underlying QUIC streams; you need no raw stream setup for a URL request.
+
 ## 1. Configure identities and the application protocol
 
 Enable `--quic=y`, link `pace_quic`, and include `<pace/quic.hpp>`. Use server/client
@@ -66,12 +86,12 @@ verified QUIC connection with the `h3` configuration, then request one response:
 
 ```cpp
 auto connection = co_await pace::quic::connect(client_config, endpoint, "localhost");
-const auto reply = co_await pace::http3::get(std::move(connection), "localhost", "/health");
+const auto reply = co_await pace::http3::async_get(std::move(connection), "localhost", "/health");
 std::cout << reply.status << " " << reply.body << '\n';
 ```
 
 Do not also open your own application/control streams on that transferred
-connection. The adapter owns HTTP/3 control and QPACK streams. `get` returns one buffered response. For several requests, use `exchange` instead;
+connection. The adapter owns HTTP/3 control and QPACK streams. `async_get` returns one buffered response. For several requests, use `async_exchange` instead;
 [batching, concurrency and lifetime](../reference/protocol-tuning.md#http2-and-http3)
 are covered in the reference. The helper uses your existing context and does not
 start a background thread. These helpers require PACE v0.3.1 or newer.
@@ -139,7 +159,7 @@ pace::task<pace::http::response> get_health() {
     trust.load_verify_file("tests/certs/ca.pem");
     trust.set_alpn_protocols({"h3"});
     auto connection = co_await pace::quic::connect(trust, {"127.0.0.1", 9094}, "localhost");
-    co_return co_await pace::http3::get(std::move(connection), "localhost:9094", "/health");
+    co_return co_await pace::http3::async_get(std::move(connection), "localhost:9094", "/health");
 }
 int main() {
     try {

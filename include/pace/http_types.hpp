@@ -85,3 +85,6 @@ public:
 using handler = std::function<task<response>(request)>;
 
 } // namespace pace::http
+
+// Explicit version spelling; the original pace::http name remains available.
+namespace pace { namespace http1 = http; }

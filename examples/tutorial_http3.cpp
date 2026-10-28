@@ -6,13 +6,13 @@ pace::task<pace::http::response> hello(pace::http::request request) {
     co_return pace::http::response{.body = "Hello over HTTP/3, " + request.target + "!"};
 }
 pace::task<void> client(pace::io_context& io, pace::udp::endpoint endpoint, const pace::quic::context& config) {
-    auto first = co_await pace::http3::get(co_await pace::quic::connect(config, endpoint, "localhost"), "localhost", "/hello");
+    auto first = co_await pace::http3::async_get(co_await pace::quic::connect(config, endpoint, "localhost"), "localhost", "/hello");
     if (first.status != 200 || first.body != "Hello over HTTP/3, /hello!") throw std::runtime_error("HTTP3 GET mismatch");
     auto connection = co_await pace::quic::connect(config, endpoint, "localhost");
     std::vector<pace::http::request> requests(2);
     requests[0].method = "GET"; requests[0].target = "/one";
     requests[1].method = "GET"; requests[1].target = "/two";
-    auto responses = co_await pace::http3::exchange(std::move(connection), "localhost", std::move(requests));
+    auto responses = co_await pace::http3::async_exchange(std::move(connection), "localhost", std::move(requests));
     for (const auto& response : responses) std::cout << response.body << '\n';
     io.stop();
 }

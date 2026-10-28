@@ -85,15 +85,26 @@ struct engine : std::enable_shared_from_this<engine> {
         std::coroutine_handle<> continuation{};
         std::list<event*>* queue = nullptr;
         std::list<event*>::iterator position{};
+        io_context::cancellation_handle registration{};
+        std::error_code error{};
         ~event() { if (queue) queue->erase(position); }
         bool await_ready() { owner.check(); return false; }
-        void await_suspend(std::coroutine_handle<> handle) {
+        template<class P> void await_suspend(std::coroutine_handle<P> handle) {
+            if constexpr (requires { handle.promise().cancellation; }) {
+                registration = owner.io.on_cancel(handle.promise().cancellation, [this](std::error_code reason) {
+                    if (!queue) return;
+                    queue->erase(position); queue = nullptr;
+                    error = reason;
+                    auto next = continuation;
+                    next.resume(); // Registry extracted this callback before resumption.
+                });
+            }
             continuation = handle;
             position = owner.waiters.insert(owner.waiters.end(), this);
             queue = &owner.waiters;
             owner.refresh();
         }
-        void await_resume() { owner.check(); }
+        void await_resume() { registration.cancel(); if (error) throw std::system_error(error); owner.check(); }
     };
     io_context& io;
     udp::socket socket;

@@ -95,12 +95,12 @@ pace::task<void> server(pace::tcp::listener& listener, completion& done) {
 pace::task<void> client(pace::io_context& io, pace::tcp::endpoint endpoint, completion& done) {
     pace::tcp::stream stream(io);
     co_await stream.connect(endpoint);
-    check_responses(co_await pace::http2::exchange(std::move(stream), "localhost", requests()));
+    check_responses(co_await pace::http2::async_exchange(std::move(stream), "localhost", requests()));
     done.arrive();
 }
 pace::task<void> single_get(pace::tcp::endpoint endpoint, completion& done) {
     auto transport = co_await pace::tcp::connect(std::move(endpoint));
-    const auto reply = co_await pace::http2::get(std::move(transport), "localhost");
+    const auto reply = co_await pace::http2::async_get(std::move(transport), "localhost");
     require(reply.status == 200 && reply.body == "ok" && reply.version == "HTTP/2", "HTTP2 single GET");
     done.arrive();
 }
@@ -188,7 +188,7 @@ pace::task<void> simple_client(pace::io_context& io, pace::tcp::endpoint endpoin
     const bool failure = variant==1 || variant==2 || variant==3 || variant==5 || variant==7 || variant==8;
     bool failed=false;
     try {
-        auto replies=co_await pace::http2::exchange(std::move(stream),"localhost",std::move(batch),limits);
+        auto replies=co_await pace::http2::async_exchange(std::move(stream),"localhost",std::move(batch),limits);
         require(replies.size()==1&&replies[0].status==200&&replies[0].body=="ok","independent server response");
     } catch(const std::exception&) { if(!failure) throw; failed=true; }
     require(failed==failure,"expected HTTP2 failure"); done.arrive();
@@ -222,7 +222,7 @@ pace::task<void> validation(pace::io_context& io, bool& completed) {
             if(variant==5) limits.max_header_bytes=280;
         }
         bool rejected=false;
-        try { (void)co_await pace::http2::exchange(pace::tcp::stream(io),"localhost",std::move(batch),limits); }
+        try { (void)co_await pace::http2::async_exchange(pace::tcp::stream(io),"localhost",std::move(batch),limits); }
         catch(const std::invalid_argument&) { rejected=true; }
         catch(const std::length_error&) { rejected=true; }
         require(rejected,"invalid HTTP2 request reached transport");
@@ -238,7 +238,7 @@ pace::task<void> stalled_server(pace::tcp::listener& listener) {
 pace::task<void> canceled_client(pace::io_context& io, pace::tcp::endpoint endpoint, bool& canceled) {
     pace::tcp::stream stream(io); co_await stream.connect(endpoint);
     std::vector<pace::http::request> batch(1); batch[0].method="GET"; batch[0].target="/";
-    try { (void)co_await pace::http2::exchange(std::move(stream),"localhost",std::move(batch)); }
+    try { (void)co_await pace::http2::async_exchange(std::move(stream),"localhost",std::move(batch)); }
     catch(const std::system_error& e) { canceled=e.code()==std::errc::operation_canceled; }
     require(canceled,"HTTP2 exchange cancellation");
 }
@@ -305,7 +305,7 @@ pace::task<void> concurrent_tcp_client(pace::io_context& io, pace::tcp::endpoint
     pace::tcp::stream stream(io); stream.set_no_delay(); const int small = 4096;
     require(::setsockopt(stream.native_handle(), SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "small TCP client send buffer");
     co_await stream.connect(endpoint);
-    concurrent_results(co_await pace::http2::exchange(std::move(stream), "localhost", concurrent_requests())); done.arrive();
+    concurrent_results(co_await pace::http2::async_exchange(std::move(stream), "localhost", concurrent_requests())); done.arrive();
 }
 void concurrency() {
     for (unsigned cap : {1u, 2u}) {
@@ -357,14 +357,14 @@ pace::task<void> delayed_peer(pace::io_context& io, pace::tcp::endpoint endpoint
     }
     stream.close();
     co_await io.sleep_for(250ms);
-    require(ended && handler.finished, "HTTP2 detached late handler completion/lifetime");
+    require(ended && (handler.finished != handler.canceled), "HTTP2 connection returned before joining its handler");
     io.stop();
 }
 void delayed_streams() {
     for (unsigned mode : {0u, 1u, 2u, 3u}) {
         pace::io_context io; pace::tcp::listener listener(io, {"127.0.0.1", 0}); delayed_handler handler{io}; bool ended = false;
         io.spawn(delayed_server(listener, handler, ended)); io.spawn(delayed_peer(io, listener.local_endpoint(), handler, ended, mode));
-        run_scenario(io); require(ended && (mode == 2 ? handler.canceled && !handler.finished : handler.finished), "delayed stream incomplete");
+        run_scenario(io); require(ended && (mode == 2 ? handler.canceled && !handler.finished : (handler.finished != handler.canceled)), "delayed stream incomplete");
     }
 }
 struct eof_case {
@@ -429,7 +429,7 @@ pace::task<void> secure_server(pace::tcp::listener& listener, const pace::tls::c
 }
 pace::task<void> secure_client(pace::io_context& io, pace::tcp::endpoint endpoint, const pace::tls::context& config, completion& done) {
     pace::tls::stream stream(io,config); co_await stream.connect(endpoint,"localhost");
-    check_responses(co_await pace::http2::exchange(std::move(stream),"localhost",requests())); done.arrive();
+    check_responses(co_await pace::http2::async_exchange(std::move(stream),"localhost",requests())); done.arrive();
 }
 pace::task<void> concurrent_tls_server(pace::tcp::listener& listener, const pace::tls::context& config,
                                         concurrent_handlers& handler, completion& done, bool small_receive) {
@@ -448,7 +448,7 @@ pace::task<void> concurrent_tls_client(pace::io_context& io, pace::tcp::endpoint
     if (small_receive) require(::setsockopt(tcp.native_handle(), SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&small), sizeof(small)) == 0, "small TLS client receive buffer");
     co_await tcp.connect(endpoint); handler.client_fd = tcp.native_handle();
     pace::tls::stream stream(std::move(tcp), config); co_await stream.handshake("localhost");
-    concurrent_results(co_await pace::http2::exchange(std::move(stream), "localhost", concurrent_requests())); done.arrive();
+    concurrent_results(co_await pace::http2::async_exchange(std::move(stream), "localhost", concurrent_requests())); done.arrive();
 }
 pace::task<void> tls_driver_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done, bool withhold_close) {
     pace::tls::stream stream(co_await listener.accept(), config); co_await stream.handshake();

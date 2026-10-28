@@ -1,5 +1,7 @@
 # HTTP/2
 
+URL get/post/fetch and async forms: [unified client contract](http-clients.md).
+
 Short forms and owning helpers: [component conveniences](component-conveniences.md).
 
 Run two requests over one connection:
@@ -19,12 +21,12 @@ co_await stream.connect({"127.0.0.1", 8080});
 std::vector<pace::http::request> requests(2);
 requests[0].method = "GET"; requests[0].target = "/one";
 requests[1].method = "GET"; requests[1].target = "/two";
-auto responses = co_await pace::http2::exchange(
+auto responses = co_await pace::http2::async_exchange(
     std::move(stream), "localhost", std::move(requests));
 ```
 
 All requests are submitted together. `responses[i]` belongs to `requests[i]`,
-even when the peer completes streams in a different order. `exchange` owns and
+even when the peer completes streams in a different order. `async_exchange` owns and
 closes the connection after this batch. It throws if any response is incomplete
 or reset; it does not return a partial batch or retry requests.
 
@@ -61,16 +63,15 @@ requests or WINDOW_UPDATE frames can arrive after EOF. Truncated requests fail
 the connection; a response that needs additional credit also fails instead of
 waiting indefinitely. Handler-completion waits do not poll the EOF socket.
 
-Aborting a connection discards queued requests and late handler results. The
-existing handler signature has no cancellation token: an application coroutine
-already suspended in its own operation is allowed to finish safely, and its
-handler captures must remain valid until then. Stopping the owning context
-cancels PACE I/O/timer waits in those handlers.
+Aborting a connection discards queued requests, requests local cancellation of
+active handlers, and joins them before returning. Handler PACE waits inherit this
+token automatically. Captures must remain valid through serve_connection; custom
+awaiters must participate in cancellation. See [structured scopes](structured-concurrency.md).
 An application exception produces HTTP 500. Direct `serve_connection` and
-`exchange` calls propagate connection cancellation and errors; `serve` isolates
+`async_exchange` calls propagate connection cancellation and errors; `serve` isolates
 accepted-connection failures and returns normally when its listener is closed or
-canceled. Closing the listener leaves accepted connections running; stopping the
-context cancels all its work.
+canceled. Closing the listener cancels and joins its accepted connections before `serve`
+returns; stopping the context also cancels unrelated work on that context.
 
 ## HTTPS with ALPN
 
@@ -82,21 +83,21 @@ xmake
 ```
 
 Configure both TLS contexts with `set_alpn_protocols({"h2"})`. The client first
-connects a `tls::stream` with a verified hostname, then passes it to `exchange`:
+connects a `tls::stream` with a verified hostname, then passes it to `async_exchange`:
 
 ```cpp
 pace::tls::context config;
 config.set_alpn_protocols({"h2"});
 pace::tls::stream stream(io, config);
 co_await stream.connect({"127.0.0.1", 8443}, "localhost");
-auto responses = co_await pace::http2::exchange(
+auto responses = co_await pace::http2::async_exchange(
     std::move(stream), "localhost:8443", std::move(requests));
 ```
 
 For a private CA, call `config.load_verify_file(...)` before creating the stream.
 For the server, load its certificate/key and call
 `serve(listener, server_config, handler)`. This overload performs each handshake.
-The direct TLS `serve_connection` and `exchange` overloads require an already
+The direct TLS `serve_connection` and `async_exchange` overloads require an already
 completed handshake whose selected protocol is `h2`; they reject other protocols.
 See [TLS setup](tls.md).
 
@@ -117,8 +118,8 @@ the xmake `http2` option). Framing, HPACK and flow control use nghttp2.
 
 | API | Result |
 |---|---|
-| `exchange(tcp::stream, authority, vector<http::request>, limits = {})` | `task<vector<http::response>>` |
-| `exchange(tls::stream, authority, vector<http::request>, limits = {})` | Same, with TLS enabled |
+| `async_exchange(tcp::stream, authority, vector<http::request>, limits = {})` | `task<vector<http::response>>` |
+| `async_exchange(tls::stream, authority, vector<http::request>, limits = {})` | Same, with TLS enabled |
 | `serve_connection(tcp::stream, handler, limits = {})` | `task<void>`; owns one connection |
 | `serve_connection(tls::stream, handler, limits = {})` | Same, after a completed TLS handshake |
 | `serve(listener&, handler, limits = {})` | Accept cleartext connections until canceled |
@@ -166,12 +167,12 @@ incremental client API are not provided. Use [HTTP/1.1](http.md) or
 ## 中文：从批量请求开始
 
 先执行本页最前面的三条命令，`tutorial_http2` 会在同一条本地连接上发送两个请求。
-每个请求使用独立 HTTP/2 流；结果按输入顺序返回。`exchange` 接管连接，并在
+每个请求使用独立 HTTP/2 流；结果按输入顺序返回。`async_exchange` 接管连接，并在
 整批结束后关闭。如果任何流失败，整批抛出异常，不会自动重试。
 
 启用 HTTPS 时使用 `--tls=y --http2=y`，客户端和服务端 TLS context 都设置
 `set_alpn_protocols({"h2"})`。客户端完成证书和主机名验证后，将 `tls::stream`
-传给 `exchange`。服务端的 TLS `serve` 重载会完成握手。
+传给 `async_exchange`。服务端的 TLS `serve` 重载会完成握手。
 
 请求、响应和 trailers 使用与 HTTP/1.1 相同的数据结构。消息体完整缓冲后再交给
 应用；同一连接内最多同时运行 `min(max_concurrent_handlers, max_concurrent_streams)`
@@ -179,13 +180,13 @@ incremental client API are not provided. Use [HTTP/1.1](http.md) or
 状态和传输，完成事件会显式唤醒它，没有固定间隔轮询。这是单 context 上的协作式
 并发，不会把 CPU 计算自动放到多个线程。设置 `max_concurrent_handlers = 1` 可串行
 执行应用 handler；等待的请求仍受并发流上限约束。共享的 handler 状态需要允许协程
-交错执行。断连后会丢弃迟到结果，但已进入应用的 handler 没有单独取消令牌，会安全
-运行至结束；其捕获对象必须存活到结束。停止 context 会取消 handler 中的 PACE 等待。
+交错执行。连接退出前会取消并等待已启动的 handler；PACE 等待继承局部取消令牌，
+捕获对象需存活到 serve_connection 完成。自定义 awaiter 需要参与协作式取消。
 通过上表的 limits 限制消息、字段和并发流，避免随并发增加无限占用内存。
 请求头字节数、字段数和每连接请求数上限必须大于零，并发流与 handler 上限均为 1–10,000；
 body 上限为零时只允许空 body。HTTP/1 专用的 keep_alive、chunked、response.close
 等字段在此接口中不控制连接或分块；设置 response.close 不会关闭 HTTP/2 连接。
-关闭 listener 会结束接受新连接，已有连接继续运行；停止 context 才会取消全部工作。
+关闭 listener 会取消并等待其已有连接，再结束 serve；停止 context 还会取消其他工作。
 当前明文方式需要 HTTP/2 prior knowledge，不支持 HTTP/1.1 升级、CONNECT、
 服务器推送或 HTTP/3。
 

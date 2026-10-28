@@ -10,10 +10,12 @@
 #include <utility>
 
 namespace pace {
+namespace detail { struct scheduler_access; }
 
 // One reactor, one running thread. spawn/post/stop are thread-safe; I/O is affine.
 class io_context {
     struct callback_timers;
+    struct cancellation_records;
 public:
     io_context();
     ~io_context();
@@ -55,6 +57,23 @@ public:
         return call_at(sleep_for(duration).deadline, std::move(callback));
     }
 
+    // Context-affine registration; cancellation_source requests are thread-safe.
+    // Callbacks execute on this loop and are unregistered by handle destruction.
+    class cancellation_handle {
+    public:
+        cancellation_handle() noexcept = default;
+        ~cancellation_handle();
+        cancellation_handle(cancellation_handle&&) noexcept;
+        cancellation_handle& operator=(cancellation_handle&&) noexcept;
+        cancellation_handle(const cancellation_handle&) = delete;
+        void cancel() noexcept;
+    private:
+        friend class io_context;
+        std::weak_ptr<cancellation_records> records_;
+        std::uint64_t id_ = 0;
+    };
+    [[nodiscard]] cancellation_handle on_cancel(cancellation_token, std::function<void(std::error_code)>);
+
     struct io_awaiter {
         io_context& context;
         native_socket_type fd;
@@ -62,8 +81,15 @@ public:
         std::error_code error;
         std::coroutine_handle<> continuation;
         bool either = false;
+        cancellation_token token{};
+        cancellation_handle registration{};
         bool await_ready() noexcept;
-        bool await_suspend(std::coroutine_handle<> handle);
+        template<class P> bool await_suspend(std::coroutine_handle<P> handle) {
+            if constexpr (requires { handle.promise().cancellation; }) token = handle.promise().cancellation;
+            if (auto e = token.error()) { error = e; return false; }
+            registration = context.on_cancel(token, [this](std::error_code e) { context.cancel_wait(*this, e); });
+            return context.arm(*this, handle);
+        }
         void await_resume();
     };
     io_awaiter wait_readable(native_socket_type fd) noexcept { return {*this, fd, false, {}, {}}; }
@@ -76,8 +102,15 @@ public:
         std::chrono::steady_clock::time_point deadline;
         std::error_code error;
         std::coroutine_handle<> continuation;
+        cancellation_token token{};
+        cancellation_handle registration{};
         bool await_ready() noexcept;
-        bool await_suspend(std::coroutine_handle<> handle);
+        template<class P> bool await_suspend(std::coroutine_handle<P> handle) {
+            if constexpr (requires { handle.promise().cancellation; }) token = handle.promise().cancellation;
+            if (auto e = token.error()) { error = e; return false; }
+            registration = context.on_cancel(token, [this](std::error_code e) { context.cancel_wait(*this, e); });
+            return context.arm(*this, handle);
+        }
         void await_resume();
     };
     template<class Rep, class Period>
@@ -98,11 +131,18 @@ public:
     struct yield_awaiter {
         io_context& context;
         bool await_ready() const noexcept { return false; }
-        void await_suspend(std::coroutine_handle<> handle);
+        cancellation_token token{};
+        template<class P> void await_suspend(std::coroutine_handle<P> handle) {
+            if constexpr (requires { handle.promise().cancellation; }) token = handle.promise().cancellation;
+            context.schedule(handle);
+        }
         void await_resume();
     };
     yield_awaiter yield() noexcept { return {*this}; }
 private:
+    friend struct detail::scheduler_access;
+    void cancel_wait(io_awaiter&, std::error_code);
+    void cancel_wait(timer_awaiter&, std::error_code);
     struct implementation;
     std::unique_ptr<implementation> impl_;
     bool arm(io_awaiter&, std::coroutine_handle<>);
@@ -111,4 +151,9 @@ private:
     static void completed(void*, std::coroutine_handle<>) noexcept;
 };
 
+namespace detail {
+struct scheduler_access {
+    static void schedule(io_context& io, std::coroutine_handle<> handle) { io.schedule(handle); }
+};
+}
 } // namespace pace

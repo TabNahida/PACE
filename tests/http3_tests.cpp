@@ -70,7 +70,7 @@ std::vector<pace::http::request> one_request() {
 pace::task<void> batch_client(fixture& test, bool& complete) {
     pace::quic::connection connection(test.io, test.client);
     co_await connection.connect(test.listener->local_endpoint(), "localhost");
-    auto replies = co_await pace::http3::exchange(std::move(connection), "localhost", requests());
+    auto replies = co_await pace::http3::async_exchange(std::move(connection), "localhost", requests());
     require(replies.size() == 5, "batch result count");
     for (const auto& reply : replies) require(reply.version == "HTTP/3", "response version");
     require(replies[0].body == payload(), "large response flow control");
@@ -80,7 +80,7 @@ pace::task<void> batch_client(fixture& test, bool& complete) {
     require(replies[3].status == 500, "handler failure isolation");
     require(replies[4].body == "ok", "batch input ordering");
     auto next = co_await pace::quic::connect(test.client, test.listener->local_endpoint(), "localhost");
-    const auto one = co_await pace::http3::get(std::move(next), "localhost");
+    const auto one = co_await pace::http3::async_get(std::move(next), "localhost");
     require(one.status == 200 && one.body == "ok" && one.version == "HTTP/3", "HTTP3 single GET");
     complete = true; test.io.stop();
 }
@@ -95,7 +95,7 @@ pace::task<void> stream_credit_client(fixture& test, bool& complete) {
     std::vector<pace::http::request> batch(130);
     for (auto& request : batch) { request.method = "GET"; request.target = "/"; }
     pace::http3::limits limits; limits.max_concurrent_streams = batch.size();
-    const auto replies = co_await pace::http3::exchange(std::move(connection), "localhost", std::move(batch), limits);
+    const auto replies = co_await pace::http3::async_exchange(std::move(connection), "localhost", std::move(batch), limits);
     require(replies.size() == 130, "stream credit response count");
     for (const auto& reply : replies) require(reply.status == 200 && reply.body == "ok", "stream credit response");
     complete = true; test.io.stop();
@@ -151,7 +151,7 @@ pace::task<void> raw_server_client(fixture& test, bool malformed, bool& complete
     co_await connection.connect(test.listener->local_endpoint(), "localhost");
     bool rejected = false;
     try {
-        auto replies = co_await pace::http3::exchange(std::move(connection), "localhost", one_request());
+        auto replies = co_await pace::http3::async_exchange(std::move(connection), "localhost", one_request());
         require(!malformed && replies.size() == 1 && replies[0].status == 200 && replies[0].body == "wire", "independent server response");
     } catch (const pace::http::protocol_error&) { rejected = true; }
     require(rejected == malformed, "malformed content-length not rejected");
@@ -162,7 +162,7 @@ pace::task<void> bounded_client(fixture& test, bool& complete) {
     co_await connection.connect(test.listener->local_endpoint(), "localhost");
     pace::http3::limits limits; limits.max_body_bytes = 3;
     bool rejected = false;
-    try { (void)co_await pace::http3::exchange(std::move(connection), "localhost", one_request(), limits); }
+    try { (void)co_await pace::http3::async_exchange(std::move(connection), "localhost", one_request(), limits); }
     catch (const std::length_error&) { rejected = true; }
     require(rejected, "incoming response body limit");
     complete = true; test.io.stop();
@@ -224,7 +224,7 @@ pace::task<void> concurrent_client(fixture& test, bool& complete) {
     co_await connection.connect(test.listener->local_endpoint(), "localhost");
     std::vector<pace::http::request> requests(6);
     for (unsigned i = 0; i < requests.size(); ++i) { requests[i].method = "GET"; requests[i].target = "/" + std::to_string(i); }
-    const auto replies = co_await pace::http3::exchange(std::move(connection), "localhost", std::move(requests));
+    const auto replies = co_await pace::http3::async_exchange(std::move(connection), "localhost", std::move(requests));
     require(replies.size() == 6, "concurrent response count");
     for (unsigned i = 0; i < replies.size(); ++i) {
         if (i == 4) require(replies[i].status == 500, "concurrent exception isolation");
@@ -305,11 +305,11 @@ pace::task<void> delayed_peer(fixture& test, delayed_handler& handler, test_sign
         controls.front().finish_write();
     }
     co_await ended.wait();
-    require(!handler.finished && !handler.canceled, "HTTP3 handler ended before its connection driver");
+    require(!handler.finished && handler.canceled, "HTTP3 connection must join its cancelled handler");
     require(critical_closed == (mode == 1), "HTTP3 critical-stream closure was not observed");
     handler.release.set();
-    co_await handler.completed.wait();
-    require(handler.finished, "HTTP3 late handler did not finish after connection teardown");
+    co_await test.io.yield();
+    require(!handler.finished, "HTTP3 cancelled handler resumed after connection teardown");
     connection.close();
     test.io.stop();
 }
@@ -319,7 +319,7 @@ void delayed_streams(const std::filesystem::path& certs) {
         test.io.spawn(delayed_server(test, handler, ended, critical_closed, mode));
         test.io.spawn(delayed_peer(test, handler, ended, critical_closed, mode));
         test.io.run();
-        require(ended.ready && (mode == 2 ? handler.canceled && !handler.finished : handler.finished), "delayed HTTP3 stream incomplete");
+        require(ended.ready && handler.canceled && !handler.finished, "delayed HTTP3 stream incomplete");
     }
 }
 pace::task<void> validation(fixture& test, bool& complete) {
@@ -335,7 +335,7 @@ pace::task<void> validation(fixture& test, bool& complete) {
         case 6: limits.max_concurrent_handlers = 0; break;
         }
         bool rejected = false;
-        try { (void)co_await pace::http3::exchange(pace::quic::connection(test.io, test.client), "localhost", std::move(batch), limits); }
+        try { (void)co_await pace::http3::async_exchange(pace::quic::connection(test.io, test.client), "localhost", std::move(batch), limits); }
         catch (const std::invalid_argument&) { rejected = true; }
         catch (const std::length_error&) { rejected = true; }
         require(rejected, "invalid HTTP3 request reached transport");
@@ -351,7 +351,7 @@ pace::task<void> rejection_client(fixture& test, bool cancellation, bool& comple
     pace::quic::connection connection(test.io, test.client);
     co_await connection.connect(test.listener->local_endpoint(), "localhost");
     bool rejected = false;
-    try { (void)co_await pace::http3::exchange(std::move(connection), "localhost", one_request()); }
+    try { (void)co_await pace::http3::async_exchange(std::move(connection), "localhost", one_request()); }
     catch (const std::invalid_argument&) { rejected = !cancellation; }
     catch (const std::system_error& error) { rejected = cancellation && error.code() == std::errc::operation_canceled; }
     require(rejected, "HTTP3 ALPN/cancellation rejection");
@@ -369,7 +369,7 @@ pace::task<void> rejected_peer_then_valid(fixture& test, const std::filesystem::
     require(rejected, "wrong-ALPN handshake unexpectedly succeeded");
     pace::quic::connection connection(test.io, test.client);
     co_await connection.connect(test.listener->local_endpoint(), "localhost");
-    const auto replies = co_await pace::http3::exchange(std::move(connection), "localhost", one_request());
+    const auto replies = co_await pace::http3::async_exchange(std::move(connection), "localhost", one_request());
     require(replies.size() == 1 && replies[0].body == "ok", "failed handshake stopped listener");
     complete = true; test.io.stop();
 }

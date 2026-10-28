@@ -40,16 +40,11 @@ int main() {
 
 ```cpp
 #include <pace/http2.hpp>
-#include <pace/run.hpp>
 #include <iostream>
 
-pace::task<pace::http::response> get_health() {
-    auto transport = co_await pace::tcp::connect({"127.0.0.1", 9093});
-    co_return co_await pace::http2::get(std::move(transport), "localhost:9093", "/health");
-}
 int main() {
     try {
-        auto reply = pace::run(get_health);
+        auto reply = pace::http2::get("http://127.0.0.1:9093/health");
         std::cout << reply.status << " " << reply.body;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
@@ -58,9 +53,9 @@ int main() {
 }
 ```
 
-`http2::get` 接管已连接的 transport，发出一个 GET 并返回响应。
-检查 status 和 body；authority 与数字连接地址分开。这里传的是路径，不是完整 URL，
-也不隐含 DNS 解析。
+`http2::get(url)` 直接返回响应，默认预算 30 秒。协程内写
+`co_await http2::async_get(url)`。域名需要 dns=y，HTTPS 需要 tls=y。
+详见[统一客户端](../reference/http-clients.zh-CN.md)。
 
 ## 第三步：核对，再增加请求
 
@@ -69,7 +64,7 @@ int main() {
 仓库的 `xmake run tutorial_http2` 会同时检查单次 GET 和批量请求。
 
 要在一条连接上并发多个请求，再使用
-[`exchange` 与 handler 限额](../reference/protocol-tuning.zh-CN.md#http2-与-http3)。
+[`async_exchange` 与 handler 限额](../reference/protocol-tuning.zh-CN.md#http2-与-http3)。
 循环发单次 GET 会建立独立批次，无法获得同连接多路复用的好处。
-增加 TLS 时，按第八章在两端配置 ALPN `h2`，把验证握手后的 TLS stream 交给同一个 get。
+增加 TLS 时，按第八章在两端配置 ALPN `h2`，把验证握手后的 TLS stream 交给 transport 形式的 async_get。
 服务端 TLS 重载与流控见 [HTTP/2 参考](../reference/http2.md)。

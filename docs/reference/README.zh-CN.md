@@ -13,9 +13,11 @@
 
 | 功能 | 公开接口 | 参考 |
 |---|---|---|
+| 结构化并发 | with_task_group、join_handle、局部取消与 deadline | [并发契约](structured-concurrency.zh-CN.md) |
+| 统一 HTTP 客户端 | HTTP/1、2、3 的 get/post/fetch 与 async_ 形式 | [客户端](http-clients.zh-CN.md) |
 | DNS 扩展 | `dns::resolver`、A/AAAA/CNAME、超时、取消 | [DNS](dns.md) |
 | QUIC 扩展 | `quic::context/listener/connection/stream`、TLS 1.3、多路流 | [QUIC](quic.md) |
-| HTTP/3 应用协议 | `http3::exchange/serve_connection/serve`、nghttp3/QPACK | [HTTP/3](http3.md) |
+| HTTP/3 应用协议 | `http3::async_exchange/serve_connection/serve`、nghttp3/QPACK | [HTTP/3](http3.md) |
 | 协程任务 | `task<T>`、`task<void>`、移动、`release`、右值 `co_await`、promise/awaiter 协议 | [task](task.md) |
 | 提交与运行 | `io_context::spawn/post/run/stop/stopped/current` | [io_context](io-context.md) |
 | 等待与取消 | `wait_readable/wait_writable/cancel/sleep_for/yield` 及 awaiter 类型 | [io_context](io-context.md) |
@@ -24,7 +26,7 @@
 | UDP | `udp::endpoint/datagram/socket`、`send_to/receive_from` | [UDP](udp.md) |
 | HTTP/HTTPS | 消息与限额、`handler/serve/serve_connection`、`client/secure_client`、`get/post/fetch`、`async_get/async_post/async_fetch`、协议异常 | [HTTP](http.md) |
 | TLS | `tls::context/stream`、证书验证、握手、ALPN、加密读写与关闭 | [TLS](tls.md) |
-| HTTP/2 | `http2::limits/exchange/serve/serve_connection`，有界批量请求 | [HTTP/2](http2.md) |
+| HTTP/2 | `http2::limits/async_exchange/serve/serve_connection`，有界批量请求 | [HTTP/2](http2.md) |
 | WebSocket | 握手、消息、控制帧与可选加密传输 | [WebSocket](websocket.md) |
 | 平台与兼容 | `native_socket_type/invalid_socket`、旧 TCP 名称、公共头文件 | [平台与兼容](platform.md) |
 

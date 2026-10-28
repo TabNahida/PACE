@@ -64,7 +64,7 @@ get 持有一个连接完成单个 GET 批次。多路复用时，将多个拥�
 std::vector<pace::http::request> requests(2);
 requests[0].method = "GET"; requests[0].target = "/one";
 requests[1].method = "GET"; requests[1].target = "/two";
-auto replies = co_await pace::http2::exchange(
+auto replies = co_await pace::http2::async_exchange(
     std::move(transport), "localhost", std::move(requests));
 ```
 
@@ -74,8 +74,9 @@ HTTP/3 形式相同，使用已验证的 QUIC connection。结果保持输入顺
 一个 driver 操作协议 session 与 transport，handler 可以分别挂起。
 实际并发上限是 max_concurrent_handlers 和 max_concurrent_streams 的较小值，默认均为 100。
 设 handler 上限为 1 可顺序处理；调高可能增加内存与下游负载，并不会增加 CPU 线程。
-CPU 并行使用显式 runtime worker，并同步共享状态。正常断连不会强制销毁已开始的 handler，
-其引用必须活到执行完成；context.stop 才取消 PACE 等待。
+CPU 并行使用显式 runtime worker，并同步共享状态。连接退出会取消并等待已启动的 handler；
+关闭 listener 会取消并等待已接受的连接。引用必须存活到对应边界结束。
+详见[局部取消与清理屏蔽](structured-concurrency.zh-CN.md)。
 
 HTTP/2 TLS 必须验证 ALPN h2，HTTP/3 为 h3，不匹配则失败而不是自动回退。
 调整流控和消息边界前查阅 [HTTP/2](http2.md) 与 [HTTP/3](http3.md)。
