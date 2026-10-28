@@ -2,7 +2,7 @@
 
 [中文](00-quick-start.zh-CN.md) · [Learning path](README.md) · [Next: build details](01-build.md)
 
-This chapter uses **PACE 0.3.0**, xmake 2.9.8+ and a C++20 compiler. Work in an
+This chapter uses **PACE 0.3.1**, xmake 2.9.8+ and a C++20 compiler. Work in an
 empty application directory. First run a service, then add a body, a wait and a client.
 
 ## 1. Create the project
@@ -12,7 +12,7 @@ Save this as `xmake.lua`:
 ```lua
 add_rules("mode.debug", "mode.release")
 add_repositories("tab-repo https://github.com/TabNahida/repo-xmake.git")
-add_requires("pace 0.3.0")
+add_requires("pace 0.3.1")
 
 target("hello")
     set_kind("binary")
@@ -115,7 +115,7 @@ pace::run([]() -> pace::task<void> {
 ```
 
 For hostnames or HTTPS, change the requirement to
-`add_requires("pace 0.3.0", {configs = {dns = true, tls = true}})` and reconfigure.
+`add_requires("pace 0.3.1", {configs = {dns = true, tls = true}})` and reconfigure.
 HTTPS uses system trust roots and verifies the URL hostname. Fragments are omitted
 from the wire. The URL generates Host; callers cannot override it. Redirects,
 request retries and decompression are not automatic. See the

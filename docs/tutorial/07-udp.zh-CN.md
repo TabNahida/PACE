@@ -1,26 +1,23 @@
-# 7. 发送和接收一个 UDP 数据报
+# 7. 直接发送和接收 UDP 消息
 
 [English](07-udp.md) · [上一章：关闭](06-shutdown.zh-CN.md) · [下一章：DNS/TLS](08-dns-tls.zh-CN.md)
 
-TCP 章节要自己累计一条消息的字节。UDP 保留每次发送的数据报边界，
-但不提供 TCP 那样的可靠有序传输。本章在本机发送一个数据报并打印它。
-依赖 `pace_net`，完整程序如下：
+沿用第一章的当前源码，依赖 `pace_net`。UDP 保留每次发送的消息边界，
+但不保证送达或顺序。先把 main.cpp 换成这个完整的本地练习：
 
 ```cpp
 #include <pace/udp.hpp>
 #include <pace/run.hpp>
-#include <array>
 #include <iostream>
 
-pace::task<void> hello(pace::io_context& io) {
-    pace::udp::socket receiver(io, {"127.0.0.1", 0});
-    pace::udp::socket sender(io);
-    co_await sender.send_to("Hello, UDP!", receiver.local_endpoint());
-    std::array<char, 256> buffer{};
-    auto packet = co_await receiver.receive_from(buffer);
-    if (packet.truncated || std::string_view(buffer.data(), packet.size) != "Hello, UDP!")
+pace::task<void> hello() {
+    auto receiver = pace::udp::bind({"127.0.0.1", 0});
+    auto sender = pace::udp::open();
+    co_await sender.send("Hello, UDP!", receiver.local_endpoint());
+    auto packet = co_await receiver.receive();
+    if (packet.truncated || packet.data != "Hello, UDP!")
         throw std::runtime_error("UDP message mismatch or truncation");
-    std::cout << std::string_view(buffer.data(), packet.size) << '\n';
+    std::cout << packet.data << '\n';
 }
 int main() {
     try { pace::run(hello); }
@@ -28,25 +25,34 @@ int main() {
 }
 ```
 
-## 第一步：先让接收端有一个地址
+## 第一步：给接收方一个地址
 
-构造 receiver 时指定回环地址和零端口，让系统分配可用端口，
-再通过 `local_endpoint()` 取得真实地址。sender 可以不先 bind，发送时由系统选择本地端点。
-两个 socket 都在入口协程内，入口返回前已经没有挂起的成员操作。
+`udp::bind` 返回已绑定的 socket。端口 0 让系统选择空闲端口，
+`local_endpoint()` 取得实际地址。`udp::open()` 创建未绑定的发送方，
+第一次发送时选择本地地址。在 `pace::run` 的任务内无需手工传递 context。
 
-## 第二步：按一个数据报来接收
+## 第二步：直接取得消息内容
 
-`send_to` 每次指定目的地址。`receive_from` 返回数据大小和来源端点，
-回复时使用 `packet.sender`。注意 UDP 的零长度消息是有效消息，不是 EOF。
-缓冲区要覆盖协议允许的最大数据报；如果 `packet.truncated` 为 true，说明缓冲区太小，报文剩余部分已被丢弃。
-应拒绝这条不完整消息，不能把收到的前半段当成完整内容。
+`send` 在等待期间持有字符串；`receive` 返回 `packet.data`、`packet.sender`
+和 `packet.truncated`，不必先准备数组再按字节数转换字符串。
+先检查截断再解释正文：过大的数据报会丢弃剩余字节。
+空的 data 仍是有效的零长度数据报，不代表 EOF。
 
-## 第三步：核对结果，再增加交互
+## 第三步：增加一条回复
 
-构建运行 `my_application`，应输出 `Hello, UDP!` 并退出。
-PACE 根目录的 `xmake run tutorial_udp` 是同一思路的配套练习。
-可以先改消息长度，核对返回 size，再让 receiver 回复 `packet.sender`，最后由 sender 接收。
+构建运行 `my_application`，应输出 `Hello, UDP!` 并退出。随后在打印后插入：
 
-发送缓冲区要活到发送完成；同一 socket 不要并行发起两个 send 或两个 receive。
-丢包、乱序、重试和消息身份由应用协议处理；需要可靠的多路流时看后面的 QUIC 章节。
-[UDP 参考](../reference/udp.md)
+```cpp
+co_await receiver.send(packet.data, packet.sender);
+auto reply = co_await sender.receive();
+if (reply.truncated || reply.data != "Hello, UDP!")
+    throw std::runtime_error("UDP reply mismatch");
+```
+
+再次运行，发送方会收到按原消息来源地址返回的回复。
+两个 socket 都活到各自 await 完成。连接远程服务时，丢包处理由应用协议定义；
+这个本地练习没有增加自动重试。
+
+仓库的 `xmake run tutorial_udp` 对应第一个练习。
+[容量、取消与所有权](../reference/component-conveniences.zh-CN.md#udp) ·
+[复用缓冲区与调优](../reference/protocol-tuning.zh-CN.md#tcp-与-udp)

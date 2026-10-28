@@ -1,5 +1,7 @@
 # WebSocket 客户端与服务端
 
+简化写法与拥有数据的 helper：[组件便捷接口](component-conveniences.zh-CN.md)。
+
 [English API reference](websocket.md) · [TLS 中文指南](tls.zh-CN.md) · [完整示例](../../examples/tutorial_websocket.cpp)
 
 包含 `<pace/websocket.hpp>` 即可使用 RFC 6455 WebSocket。普通 `ws` 不依赖

@@ -79,6 +79,9 @@ pace::task<void> batch_client(fixture& test, bool& complete) {
     require(replies[2].status == 205 && replies[2].body.empty(), "205 body suppression");
     require(replies[3].status == 500, "handler failure isolation");
     require(replies[4].body == "ok", "batch input ordering");
+    auto next = co_await pace::quic::connect(test.client, test.listener->local_endpoint(), "localhost");
+    const auto one = co_await pace::http3::get(std::move(next), "localhost");
+    require(one.status == 200 && one.body == "ok" && one.version == "HTTP/3", "HTTP3 single GET");
     complete = true; test.io.stop();
 }
 void roundtrip(const std::filesystem::path& certs, const char* address = "127.0.0.1") {

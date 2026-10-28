@@ -1,5 +1,7 @@
 # QUIC transport
 
+Short forms and owning helpers: [component conveniences](component-conveniences.md).
+
 Enable `--quic=y` and include `<pace/quic.hpp>`. This optional Layer 2 extension
 uses OpenSSL 3.5 or newer for QUIC v1 and its TLS 1.3 handshake, loss recovery,
 congestion control, flow control and packet encryption. The build exports

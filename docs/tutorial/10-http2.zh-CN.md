@@ -1,58 +1,75 @@
-# 10. 用 HTTP/2 同时提交多个请求
+# 10. 发出第一个 HTTP/2 请求
 
 [English](10-http2.md) · [上一章：WebSocket](09-websocket.zh-CN.md) · [下一章：QUIC/HTTP3](11-quic-http3.zh-CN.md)
 
-HTTP/1 章节按顺序复用连接；本章把一批请求放到不同 HTTP/2 stream 上。
-先使用明文 prior knowledge，单独理解多路复用，再加 TLS。
-启用 `--http2=y`、依赖 `pace_http2`，包含 `<pace/http2.hpp>` 和 `<pace/http_router.hpp>`。
+在第一章的当前源码工程启用 `--http2=y`，依赖 `pace_http2`。
+沿用第三章的 target 写法，创建 `h2_server`、`h2_client`。
+先用明文 HTTP/2 prior knowledge，不进行 HTTP/1 Upgrade。
 
-## 第一步：保留路由，只更换协议服务入口
+## 第一步：保留路由，更换协议
 
-沿用第四章的显式 listener 生命周期，注册路由后改用 http2::serve：
-
-```cpp
-pace::http::router app;
-app.get("/one", [](pace::http::request) { return pace::http::response{.body = "one"}; });
-app.get("/two", [](pace::http::request) { return pace::http::response{.body = "two"}; });
-pace::http2::limits limits;
-limits.max_concurrent_handlers = 8;
-io.spawn(pace::http2::serve(listener, app, limits));
-```
-
-request/response 类型不变。实际处理器数量还受 stream 上限约束。
-一个 driver 操作 nghttp2 和传输，多个 handler 可以分别等待；
-同一 reactor 上的 CPU 代码并不因此多线程并行。需要顺序处理时设为 1。
-正常断连之后，已经启动的 handler 可能继续完成，引用捕获必须保持到它们结束。
-
-## 第二步：客户端提交一批请求
-
-在客户端协程中写：
+保存为 h2_server.cpp：
 
 ```cpp
-pace::tcp::stream transport(io);
-co_await transport.connect(endpoint);
-std::vector<pace::http::request> requests(2);
-requests[0].method = "GET"; requests[0].target = "/one";
-requests[1].method = "GET"; requests[1].target = "/two";
-const auto replies = co_await pace::http2::exchange(
-    std::move(transport), "localhost", std::move(requests));
+#include <pace/http2.hpp>
+#include <pace/http_router.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+pace::task<void> serve() {
+    auto listener = pace::tcp::listen({"127.0.0.1", 9093});
+    pace::http::router routes;
+    routes.get("/health", [] { return pace::http::text("ok\n"); });
+    co_await pace::http2::serve_connection(co_await listener.accept(), routes);
+}
+int main() {
+    try { pace::run(serve); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
 ```
 
-exchange 接管这一批请求所用的连接。响应 vector 按输入顺序排列，
-即使第二个处理器先完成也不会换位置。分别检查 status 和 body。
-正文仍然完整缓冲，并非流式响应接口。这个明文入口是 prior knowledge，
-不要先写 HTTP/1 Upgrade 数据再交给它。
+路由和响应 helper 与 HTTP/1 一样。`serve_connection` 接管一个已接受的连接，
+运行 HTTP/2 到对端断开。本练习随后退出；持续接收使用 `http2::serve(listener, routes)`。
 
-## 第三步：观察并发，再接入 TLS
+## 第二步：直接取得响应
 
-在仓库启用 HTTP2 后构建运行 `tutorial_http2`，应打印两个响应。
-[配套程序](../../examples/tutorial_http2.cpp)将上述监听和批处理接起来。
-在你的版本里让 `/one` 等一个定时器、`/two` 立即返回，记录 handler 完成顺序；
-日志可以乱序，exchange 返回的 vector 仍应保留请求顺序。
+保存为 h2_client.cpp：
 
-HTTPS 还要启用 `--tls=y`，两端配置 ALPN `h2`，按第八章完成验证握手。
-服务端重载接收 TLS 配置，客户端 exchange 接收已握手的 TLS stream。
-ALPN 不匹配应当报错，不会悄悄退回 HTTP/1。
+```cpp
+#include <pace/http2.hpp>
+#include <pace/run.hpp>
+#include <iostream>
 
-让 batch/control 任务完成后再 stop，并把 listener 和 TLS 配置保留在任务外。
-流控、半关闭及 handler 生命周期详见 [HTTP/2 参考](../reference/http2.md)。
+pace::task<pace::http::response> get_health() {
+    auto transport = co_await pace::tcp::connect({"127.0.0.1", 9093});
+    co_return co_await pace::http2::get(std::move(transport), "localhost:9093", "/health");
+}
+int main() {
+    try {
+        auto reply = pace::run(get_health);
+        std::cout << reply.status << " " << reply.body;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+`http2::get` 接管已连接的 transport，发出一个 GET 并返回响应。
+检查 status 和 body；authority 与数字连接地址分开。这里传的是路径，不是完整 URL，
+也不隐含 DNS 解析。
+
+## 第三步：核对，再增加请求
+
+构建两个目标，先运行 `xmake run h2_server`，再运行 `xmake run h2_client`，
+应输出 `200 ok`。下一次请求前重启服务端。换一个未注册路径，检查 404。
+仓库的 `xmake run tutorial_http2` 会同时检查单次 GET 和批量请求。
+
+要在一条连接上并发多个请求，再使用
+[`exchange` 与 handler 限额](../reference/protocol-tuning.zh-CN.md#http2-与-http3)。
+循环发单次 GET 会建立独立批次，无法获得同连接多路复用的好处。
+增加 TLS 时，按第八章在两端配置 ALPN `h2`，把验证握手后的 TLS stream 交给同一个 get。
+服务端 TLS 重载与流控见 [HTTP/2 参考](../reference/http2.md)。

@@ -24,5 +24,14 @@ task<void> serve_connection(quic::connection transport, http::handler handle, li
 // The QUIC listener must use a server context configured with certificates and
 // ALPN {"h3"}. Each connection owns its control and QPACK streams.
 task<void> serve(quic::listener& listener, http::handler handle, limits bounds = {});
+// One GET over an owned connection. For multiplexing, use exchange() with a batch.
+inline task<http::response> get(quic::connection transport, std::string authority,
+                         std::string target = "/", limits bounds = {}) {
+    std::vector<http::request> requests(1);
+    requests.front().method = "GET";
+    requests.front().target = std::move(target);
+    auto replies = co_await exchange(std::move(transport), std::move(authority), std::move(requests), bounds);
+    co_return std::move(replies.front());
+}
 } // namespace pace::http3
 #endif

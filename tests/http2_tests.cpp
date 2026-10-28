@@ -98,12 +98,21 @@ pace::task<void> client(pace::io_context& io, pace::tcp::endpoint endpoint, comp
     check_responses(co_await pace::http2::exchange(std::move(stream), "localhost", requests()));
     done.arrive();
 }
+pace::task<void> single_get(pace::tcp::endpoint endpoint, completion& done) {
+    auto transport = co_await pace::tcp::connect(std::move(endpoint));
+    const auto reply = co_await pace::http2::get(std::move(transport), "localhost");
+    require(reply.status == 200 && reply.body == "ok" && reply.version == "HTTP/2", "HTTP2 single GET");
+    done.arrive();
+}
 void roundtrip() {
-    pace::io_context io;
-    pace::tcp::listener listener(io,{"127.0.0.1",0});
-    completion done{io};
-    io.spawn(server(listener,done)); io.spawn(client(io,listener.local_endpoint(),done));
-    run_scenario(io); require(done.count==2,"roundtrip incomplete");
+    for (bool single : {false, true}) {
+        pace::io_context io;
+        pace::tcp::listener listener(io,{"127.0.0.1",0});
+        completion done{io};
+        io.spawn(server(listener,done));
+        io.spawn(single ? single_get(listener.local_endpoint(), done) : client(io,listener.local_endpoint(),done));
+        run_scenario(io); require(done.count==2,"roundtrip incomplete");
+    }
 }
 
 // Independent RFC 9113 frames and RFC 7541 static-table HPACK: no nghttp2

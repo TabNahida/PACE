@@ -43,18 +43,10 @@ pace::task<void> accept_connections(pace::tcp::listener& listener) {
 
 pace::task<void> client(pace::io_context& io, pace::tcp::endpoint endpoint,
                         std::string message) {
-    pace::tcp::stream socket(io);
-    co_await socket.connect(std::move(endpoint));
+    auto socket = co_await pace::tcp::connect(io, std::move(endpoint));
     socket.set_no_delay();
-    co_await socket.write_all(message);
-    std::string response(message.size(), '\0');
-    std::size_t received = 0;
-    while (received < response.size()) {
-        const auto count = co_await socket.read_some(
-            std::span<char>(response.data() + received, response.size() - received));
-        if (!count) throw std::runtime_error("EOF before complete echo");
-        received += count;
-    }
+    co_await pace::write(socket, message);
+    auto response = co_await pace::read_exact(socket, message.size());
     if (response != message) throw std::runtime_error("echo payload mismatch");
     co_await socket.close_gracefully();
     std::cout << "TCP echo verified: " << response << '\n';
@@ -81,7 +73,7 @@ int main(int argc, char** argv) {
             io.spawn(client(io, {"127.0.0.1", port}, "Hello from PACE"));
             io.run();
         } else {
-            pace::tcp::listener listener(io, {"127.0.0.1", mode == "selftest" ? std::uint16_t{0} : port});
+            auto listener = pace::tcp::listen(io, {"127.0.0.1", mode == "selftest" ? std::uint16_t{0} : port});
             io.spawn(accept_connections(listener));
             if (mode == "selftest") {
                 io.spawn(client(io, listener.local_endpoint(), "Hello from PACE"));

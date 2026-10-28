@@ -114,6 +114,14 @@ bool contains(const pace::dns::result& value, pace::dns::family type, std::strin
     return false;
 }
 pace::task<void> checks(pace::io_context& io, pace::dns::options options, unsigned& queries, unsigned& tcp_queries) {
+    auto owned = pace::dns::resolve(std::string("address.pace.test"), pace::dns::family::ipv4, options);
+    co_await io.yield();
+    require(contains(co_await std::move(owned), pace::dns::family::ipv4, "192.0.2.42"), "owned DNS task lifetime");
+    require(contains(co_await pace::dns::resolve(io, "::1"), pace::dns::family::ipv6, "::1"), "one-shot DNS numeric lookup");
+    bool missing = false;
+    try { (void)co_await pace::dns::resolve("missing.pace.test", pace::dns::family::ipv4, options); }
+    catch (const std::system_error& error) { missing = error.code().category() == pace::dns::error_category(); }
+    require(missing, "one-shot DNS error category");
     pace::dns::resolver resolver(io, options);
     auto ipv4 = co_await resolver.resolve("address.pace.test", pace::dns::family::ipv4);
     require(ipv4.addresses.size() == 1 && contains(ipv4, pace::dns::family::ipv4, "192.0.2.42"), "A answer");

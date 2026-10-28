@@ -4,6 +4,8 @@
 #include <pace/ip.hpp>
 #include <pace/platform.hpp>
 #include <pace/task.hpp>
+#include <pace/this_context.hpp>
+#include <stdexcept>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -28,6 +30,13 @@ struct datagram {
     std::size_t size = 0; // Bytes copied; a zero-length datagram is not EOF.
     endpoint sender;
     bool truncated = false; // The remainder of this datagram was discarded.
+};
+
+// Owns the received bytes. An empty data string is a valid datagram, not EOF.
+struct packet {
+    std::string data;
+    endpoint sender;
+    bool truncated = false;
 };
 
 // Numeric IPv4/IPv6, move-only, context-affine. One send and one receive may be
@@ -57,6 +66,22 @@ public:
     task<datagram> receive_from(std::span<std::byte> buffer) {
         return receive_from(std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
     }
+    // Owned datagrams for small applications. receive() allocates up to 64 KiB;
+    // use receive_from(span) to reuse storage or control larger datagrams.
+    task<std::size_t> send(std::string bytes, endpoint destination) {
+        co_return co_await send_to(bytes, std::move(destination));
+    }
+    task<packet> receive(std::size_t capacity = 65536) {
+        if (capacity == 0) throw std::invalid_argument("UDP receive capacity must be positive");
+        if (capacity > 65536) throw std::length_error("UDP receive capacity exceeds 64 KiB");
+        packet result;
+        result.data.resize(capacity);
+        auto received = co_await receive_from(std::span<char>(result.data));
+        result.data.resize(received.size);
+        result.sender = std::move(received.sender);
+        result.truncated = received.truncated;
+        co_return result;
+    }
     void close() noexcept;
     bool is_open() const noexcept { return fd_ != invalid_socket; }
     native_socket_type native_handle() const noexcept { return fd_; }
@@ -70,4 +95,12 @@ private:
     bool automatic_family_ = true, family_selected_ = false, ipv6_only_ = true;
 };
 
+inline socket open(io_context& io) { return socket(io); }
+inline socket open() { return open(this_context()); }
+inline socket bind(io_context& io, endpoint local, bind_options options = {}) {
+    return socket(io, std::move(local), options);
+}
+inline socket bind(endpoint local, bind_options options = {}) {
+    return bind(this_context(), std::move(local), options);
+}
 } // namespace pace::udp

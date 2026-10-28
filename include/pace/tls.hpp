@@ -93,5 +93,29 @@ private:
     task<void> perform_handshake(std::string peer_name);
 };
 
+// Complete a verified handshake before returning the owned stream. Custom
+// configuration is borrowed through task completion; streams retain its state.
+inline task<stream> connect(io_context& io, const context& configuration,
+                             tcp::endpoint peer, std::string expected_name) {
+    stream result(io, configuration);
+    co_await result.connect(std::move(peer), std::move(expected_name));
+    co_return result;
+}
+inline task<stream> connect(const context& configuration, tcp::endpoint peer, std::string expected_name) {
+    co_return co_await connect(this_context(), configuration, std::move(peer), std::move(expected_name));
+}
+// System trust for a client that needs no custom CA or ALPN configuration.
+inline task<stream> connect(io_context& io, tcp::endpoint peer, std::string expected_name) {
+    context configuration;
+    co_return co_await connect(io, configuration, std::move(peer), std::move(expected_name));
+}
+inline task<stream> connect(tcp::endpoint peer, std::string expected_name) {
+    co_return co_await connect(this_context(), std::move(peer), std::move(expected_name));
+}
+inline task<stream> accept(tcp::stream transport, const context& configuration) {
+    stream result(std::move(transport), configuration);
+    co_await result.handshake();
+    co_return result;
+}
 } // namespace pace::tls
 #endif // PACE_HAS_TLS

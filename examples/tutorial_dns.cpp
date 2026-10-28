@@ -3,8 +3,7 @@
 #include <iostream>
 
 pace::task<void> lookup(pace::io_context& io, std::string hostname) {
-    pace::dns::resolver resolver(io);
-    const auto result = co_await resolver.resolve(std::move(hostname));
+    const auto result = co_await pace::dns::resolve(io, std::move(hostname));
     for (const auto& address : result.addresses)
         std::cout << (address.type == pace::dns::family::ipv4 ? "IPv4 " : "IPv6 ") << address.text << '\n';
 }

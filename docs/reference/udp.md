@@ -1,5 +1,7 @@
 # UDP
 
+Short forms and owning helpers: [component conveniences](component-conveniences.md).
+
 Send one datagram and read it back locally:
 
 ```cpp

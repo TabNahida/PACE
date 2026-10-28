@@ -1,13 +1,14 @@
 # Build an application with PACE
 
-Start with the [0.3.0 quick start](00-quick-start.md): install the package, run a small HTTP service, then add waits and a URL client.
+Start with the [0.3.1 quick start](00-quick-start.md): install the package, run a small HTTP service, then add waits and a URL client.
 
 [中文学习路线](README.zh-CN.md) · [API reference](../reference/README.md)
 
 These chapters teach you to write your own files, build them, inspect the result,
 and then change one behavior at a time. Complete source programs are companion
 exercises, not a substitute for the explanation. The guides track this checkout;
-`pace::run`, the router and the owning HTTP listener entry were added after v0.2.0.
+component helpers require PACE v0.3.1 or newer. Use the package quick start or
+the source setup in chapter 1.
 
 ## Follow the core path
 
@@ -32,15 +33,17 @@ an explicit stop or Ctrl-C; the default companion invocations finish by themselv
 | [7. UDP](07-udp.md) | Datagram boundaries, source endpoint and truncation | `tutorial_udp` |
 | [8. DNS and TLS](08-dns-tls.md) | Resolve an address, retain hostname identity, verify handshake and close | `tutorial_dns`, `tutorial_tls` |
 | [9. WebSocket](09-websocket.md) | Upgrade a TCP connection, exchange messages and close | `tutorial_websocket` |
-| [10. HTTP/2](10-http2.md) | Transfer a connection into a multiplexed batch; bound async handlers | `tutorial_http2` |
+| [10. HTTP/2](10-http2.md) | Make one GET, then move to multiplexed batches | `tutorial_http2` |
 | [11. QUIC and HTTP/3](11-quic-http3.md) | End stream directions, configure ALPN, transfer protocol ownership | `tutorial_quic`, `tutorial_http3` |
 
 Optional modules need their build flags, explained at the start of each chapter.
 TLS/QUIC companions use public test-only certificates and local peers. DNS defaults
 to numeric loopback and only needs external network when you supply a hostname.
-QUIC/HTTP3 require POSIX. [Build options](01-build.md#select-protocol-modules) and
+QUIC/HTTP3 require POSIX. [Build options](../reference/build-configuration.md) and
 [platform coverage](../reference/platform.md) describe the exact configurations.
 
 When a chapter's experiment works, read the linked API contract for defaults,
 limits and lifetime requirements. For the rationale behind the shorter entry and
 routing forms, see [API ergonomics](../ergonomics.md).
+
+Use [component conveniences](../reference/component-conveniences.md) for exact contracts and [protocol tuning](../reference/protocol-tuning.md) for buffer reuse, deadlines and concurrency.

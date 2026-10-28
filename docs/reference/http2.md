@@ -1,5 +1,7 @@
 # HTTP/2
 
+Short forms and owning helpers: [component conveniences](component-conveniences.md).
+
 Run two requests over one connection:
 
 ```sh

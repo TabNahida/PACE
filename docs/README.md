@@ -1,6 +1,6 @@
 # PACE documentation
 
-Start with the [0.3.0 quick start](tutorial/00-quick-start.md): install the package, run a small HTTP service, then add waits and a URL client.
+Start with the [0.3.1 quick start](tutorial/00-quick-start.md): install the package, run a small HTTP service, then add waits and a URL client.
 
 Write your own asynchronous application, from its first main.cpp to HTTP/3.
 
@@ -46,3 +46,5 @@ TCP, UDP and QUIC support numeric IPv4 and IPv6 endpoints; DNS resolves A and
 AAAA records. HTTP/1 offers request-head admission, per-request limits and bounded
 streaming responses. HTTP/2 and HTTP/3 bodies remain buffered. Protocol references
 describe deadlines, ownership and individual limits.
+
+The component helpers added in v0.3.1 are documented in [component conveniences](reference/component-conveniences.md). Buffer reuse, concurrency and close budgets are in [protocol tuning](reference/protocol-tuning.md); the package quick start uses v0.3.1.
