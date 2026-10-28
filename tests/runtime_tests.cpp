@@ -901,7 +901,21 @@ pace::task<void> entry_background_failure() {
     throw std::runtime_error("background failure");
     co_return;
 }
+pace::task<int> context_free_entry() {
+    co_await pace::sleep_for(1ms);
+    co_await pace::yield();
+    require(&pace::this_context() == pace::io_context::current(), "current context mismatch");
+    co_return 17;
+}
 void entry_runner_contract() {
+    bool no_context = false;
+    try { (void)pace::sleep_for(1ms); } catch (const std::logic_error&) { no_context = true; }
+    require(no_context, "context-free timer created a hidden event loop");
+    require(pace::run(context_free_entry()) == 17, "direct task runner lost result");
+    require(pace::run(context_free_entry) == 17, "nullary factory runner lost result");
+    require(pace::run([value = std::make_unique<int>(23)]() -> pace::task<int> {
+        co_await pace::yield(); co_return *value;
+    }) == 23, "nullary capturing factory lost lifetime");
     const auto caller = std::this_thread::get_id();
     auto result = pace::run([owned = std::make_unique<int>(42), caller](pace::io_context& io) mutable
                            -> pace::task<std::unique_ptr<int>> {

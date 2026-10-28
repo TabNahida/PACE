@@ -1,5 +1,7 @@
 # Build an application with PACE
 
+Start with the [0.3.0 quick start](00-quick-start.md): install the package, run a small HTTP service, then add waits and a URL client.
+
 [中文学习路线](README.zh-CN.md) · [API reference](../reference/README.md)
 
 These chapters teach you to write your own files, build them, inspect the result,

@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-28
 
+- Add no-argument and direct-task entry forms, current-context timers/yield, connected TCP streams and bounded exact reads.
+- Add a small HTTP app, no-argument handlers, text/HTML/JSON response helpers, and URL GET/POST/fetch with optional asynchronous DNS and verified TLS.
+- Add a package-based quick-start chapter in English and Chinese.
 - Add `pace::run(factory)` for an owned, single-threaded coroutine entry with result and error propagation and background cancellation on completion.
 - Add exact HTTP routing and owned adapters for synchronous/asynchronous handlers, plus an HTTP/1 serve overload that owns its listener.
 - Replace the tutorial catalog with eleven progressive Markdown chapters in English and Chinese, including complete programs, expected results and lifetime explanations.

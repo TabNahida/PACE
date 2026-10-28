@@ -1,4 +1,5 @@
 #include <pace/tcp.hpp>
+#include <pace/this_context.hpp>
 #include <pace/detail/profiling.hpp>
 #include <pace/detail/socket_address.hpp>
 
@@ -372,4 +373,28 @@ void listener::close() noexcept {
     }
 }
 
+task<stream> connect(io_context& context, endpoint destination) {
+    stream socket(context);
+    co_await socket.connect(std::move(destination));
+    co_return socket;
+}
+
+task<stream> connect(endpoint destination) {
+    co_return co_await connect(this_context(), std::move(destination));
+}
+
+task<void> stream::read_exact(std::span<char> buffer) {
+    while (!buffer.empty()) {
+        const auto size = co_await read_some(buffer);
+        if (!size) throw std::system_error(std::make_error_code(std::errc::connection_reset), "EOF before read_exact completed");
+        buffer = buffer.subspan(size);
+    }
+}
+
+task<std::string> stream::read_exact(std::size_t size, std::size_t maximum) {
+    if (size > maximum) throw std::length_error("read_exact exceeds maximum");
+    std::string buffer(size, '\0');
+    co_await read_exact(std::span<char>(buffer));
+    co_return buffer;
+}
 } // namespace pace::tcp

@@ -46,6 +46,14 @@ public:
 
     task<void> connect(endpoint endpoint);
     task<std::size_t> read_some(std::span<char> buffer);
+    // Fill the buffer or throw on premature EOF. A failed read may have filled
+    // a prefix; no bytes beyond buffer.size() are consumed.
+    task<void> read_exact(std::span<char> buffer);
+    task<void> read_exact(std::span<std::byte> buffer) {
+        return read_exact(std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
+    }
+    // Owned convenience result with a pre-allocation bound (1 MiB by default).
+    task<std::string> read_exact(std::size_t size, std::size_t maximum = 1024 * 1024);
     task<void> write_all(std::string_view bytes);
     task<std::size_t> read_some(std::span<std::byte> buffer) {
         return read_some(std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
@@ -79,6 +87,10 @@ private:
     bool connect_started_ = false;
     bool no_delay_ = false;
 };
+
+// Numeric endpoint; the returned stream belongs to the supplied/current loop.
+task<stream> connect(io_context& context, endpoint destination);
+task<stream> connect(endpoint destination);
 
 class listener {
 public:

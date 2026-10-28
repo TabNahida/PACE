@@ -38,20 +38,15 @@ Link individual modules, layer aggregates, or `pace` for the enabled stack. HTTP
 
 ```cpp
 #include <pace/http.hpp>
-#include <pace/run.hpp>
 
 int main() {
-    pace::http::router app;
-    app.get("/", [](pace::http::request) {
-        return pace::http::response{.body = "Hello, PACE!\n"};
-    });
-    pace::run([&](pace::io_context& io) {
-        return pace::http::serve(io, {"127.0.0.1", 8080}, app);
-    });
+    pace::http::app app;
+    app.get("/", [] { return pace::http::text("Hello, PACE!\n"); });
+    app.run(8080);
 }
 ```
 
-Link with `add_deps("pace_http1")`. [Write this server step by step →](docs/tutorial/04-http.md)
+Link with `add_deps("pace_http1")`. [Write this server step by step →](docs/tutorial/00-quick-start.md)
 
 Continue step by step: [TCP](docs/tutorial/03-tcp.md) · [UDP](docs/tutorial/07-udp.md) · [DNS](docs/tutorial/08-dns-tls.md) · [QUIC](docs/tutorial/11-quic-http3.md) · [HTTP/3](docs/tutorial/11-quic-http3.md) · [WebSocket](docs/tutorial/09-websocket.md)
 

@@ -1,5 +1,7 @@
 # Public API reference
 
+[0.3.0 convenience APIs: app, URL client, TCP, context](convenience.md)
+
 Convenience APIs: [pace::run](run.md) · [HTTP routing and handler adapters](http-router.md) · [Guided tutorials](../tutorial/README.md)
 
 [中文索引与关键约定](README.zh-CN.md)

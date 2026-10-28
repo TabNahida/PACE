@@ -1,5 +1,7 @@
 # 跟着写出一个 PACE 应用
 
+先从 [0.3.0 快速入门](00-quick-start.zh-CN.md)开始：安装包、几行启动 HTTP 服务，再逐步加入异步等待和 URL 客户端。
+
 [English](README.md) · [API 中文索引](../reference/README.zh-CN.md)
 
 这里按“创建自己的文件 → 构建运行 → 核对结果 → 增加一个功能”的顺序学习。

@@ -1,5 +1,7 @@
 # HTTP handler adapters and exact routing
 
+[0.3.0 convenience additions](convenience.md)
+
 Header: `<pace/http_router.hpp>`; included by `<pace/http.hpp>`. The header uses
 shared HTTP messages and works with HTTP/1, HTTP/2 and HTTP/3 handlers. It adds no
 third-party dependency and does not change their wire parsers.

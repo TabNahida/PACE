@@ -1,5 +1,7 @@
 # `pace::http`: HTTP/1.1 and HTTPS
 
+[0.3.0 convenience additions](convenience.md)
+
 For exact routes, ordinary response callbacks and the owning-listener serve overload, see [handler adapters and routing](http-router.md).
 
 Include `<pace/http.hpp>`. PACE supplies an HTTP/1.0–1.1 server and client,

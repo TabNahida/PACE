@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // Transport-independent messages shared by HTTP/1.1, HTTP/2 and HTTP/3.
@@ -63,6 +64,17 @@ struct response {
         return {};
     }
 };
+
+// Own already-serialized content. json() does not serialize or validate JSON.
+inline response text(std::string body, unsigned status = 200) {
+    return {.status = status, .body = std::move(body)};
+}
+inline response html(std::string body, unsigned status = 200) {
+    return {.status = status, .body = std::move(body), .content_type = "text/html; charset=utf-8"};
+}
+inline response json(std::string body, unsigned status = 200) {
+    return {.status = status, .body = std::move(body), .content_type = "application/json"};
+}
 
 // Peer protocol/framing failure reported by the client. The connection closes.
 class protocol_error : public std::runtime_error {

@@ -526,6 +526,35 @@ pace::task<void> graceful_close_cancellation(pace::io_context& context) {
     require(canceled && !client.is_open(), "canceled graceful close must release its socket");
 }
 
+pace::task<void> exact_reads(pace::io_context& io) {
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    auto client = co_await pace::tcp::connect(listener.local_endpoint());
+    auto peer = co_await listener.accept();
+    co_await peer.write_all(std::string_view("ab\0cdef", 7));
+    require((co_await client.read_exact(3)) == std::string("ab\0", 3), "owned exact binary read");
+    std::array<std::byte, 2> pair{};
+    co_await client.read_exact(pair);
+    require(pair[0] == std::byte{'c'} && pair[1] == std::byte{'d'}, "exact byte span overconsumed");
+    bool bounded = false;
+    try { (void)co_await client.read_exact(1025, 1024); }
+    catch (const std::length_error&) { bounded = true; }
+    require(bounded && (co_await client.read_exact(2)) == "ef", "bounded read consumed bytes");
+    require((co_await client.read_exact(0)).empty(), "empty exact read blocked");
+    co_await peer.write_all("x");
+    peer.close();
+    bool eof = false;
+    try { (void)co_await client.read_exact(2); }
+    catch (const std::system_error& error) { eof = error.code() == std::errc::connection_reset; }
+    require(eof, "exact read silently returned a truncated message");
+    auto pending = co_await pace::tcp::connect(io, listener.local_endpoint());
+    auto waiting_peer = co_await listener.accept();
+    io.spawn(stop_soon(io));
+    bool canceled = false;
+    try { (void)co_await pending.read_exact(1); }
+    catch (const std::system_error& error) { canceled = error.code() == std::errc::operation_canceled; }
+    require(canceled, "exact read lost cancellation");
+}
+
 using test_body = pace::task<void> (*)(pace::io_context&);
 pace::task<void> run_body(pace::io_context& context, test_body body, bool& completed) {
     co_await body(context);
@@ -568,6 +597,7 @@ int main() {
         verify_response_framing();
 #endif
         run_test("TCP binary roundtrip and ownership", tcp_roundtrip);
+        run_test("easy connect, bounded exact reads, EOF and cancellation", exact_reads);
         run_test("connect and endpoint errors", connect_errors);
         run_test("IPv6 loopback, endpoint inspection and family selection", ipv6_loopback);
         run_test("IPv6 wildcard, IPv6-only and dual-stack listeners", ipv6_wildcards);
