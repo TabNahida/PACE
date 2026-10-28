@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add current-context TCP/QUIC listeners and UDP open/bind helpers, owned UDP packets, and shared owned write / exact-read helpers for TCP, TLS and QUIC.
+- Add one-shot DNS lookup, verified TLS/QUIC connection helpers, WebSocket connect/upgrade/accept, and single-response HTTP/2 and HTTP/3 GET helpers.
+- Teach the component helpers in English and Chinese with complete TCP, UDP, WebSocket, HTTP/2 and HTTP/3 programs; move HTTP recipes, build configuration and protocol tuning to reference.
+
 ## 0.3.0 — 2026-10-28
 
 - Add no-argument and direct-task entry forms, current-context timers/yield, connected TCP streams and bounded exact reads.

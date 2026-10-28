@@ -527,30 +527,33 @@ pace::task<void> graceful_close_cancellation(pace::io_context& context) {
 }
 
 pace::task<void> exact_reads(pace::io_context& io) {
-    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    auto listener = pace::tcp::listen({"127.0.0.1", 0});
     auto client = co_await pace::tcp::connect(listener.local_endpoint());
     auto peer = co_await listener.accept();
-    co_await peer.write_all(std::string_view("ab\0cdef", 7));
-    require((co_await client.read_exact(3)) == std::string("ab\0", 3), "owned exact binary read");
+    auto owned_write = pace::write(peer, std::string("ab\0cdef", 7));
+    co_await io.yield();
+    co_await std::move(owned_write);
+    require((co_await pace::read_exact(client, 3)) == std::string("ab\0", 3), "owned exact binary read");
     std::array<std::byte, 2> pair{};
-    co_await client.read_exact(pair);
+    co_await pace::read_exact(client, std::span<std::byte>(pair));
     require(pair[0] == std::byte{'c'} && pair[1] == std::byte{'d'}, "exact byte span overconsumed");
     bool bounded = false;
-    try { (void)co_await client.read_exact(1025, 1024); }
+    try { (void)co_await pace::read_exact(client, 1025, 1024); }
     catch (const std::length_error&) { bounded = true; }
     require(bounded && (co_await client.read_exact(2)) == "ef", "bounded read consumed bytes");
-    require((co_await client.read_exact(0)).empty(), "empty exact read blocked");
+    require((co_await client.read_exact(0)).empty(), "empty member exact read blocked");
+    require((co_await pace::read_exact(client, 0)).empty(), "empty shared exact read blocked");
     co_await peer.write_all("x");
     peer.close();
     bool eof = false;
-    try { (void)co_await client.read_exact(2); }
+    try { (void)co_await pace::read_exact(client, 2); }
     catch (const std::system_error& error) { eof = error.code() == std::errc::connection_reset; }
     require(eof, "exact read silently returned a truncated message");
     auto pending = co_await pace::tcp::connect(io, listener.local_endpoint());
     auto waiting_peer = co_await listener.accept();
     io.spawn(stop_soon(io));
     bool canceled = false;
-    try { (void)co_await pending.read_exact(1); }
+    try { (void)co_await pace::read_exact(pending, 1); }
     catch (const std::system_error& error) { canceled = error.code() == std::errc::operation_canceled; }
     require(canceled, "exact read lost cancellation");
 }

@@ -1,26 +1,24 @@
-# 7. Send and receive a UDP datagram
+# 7. Send and receive a UDP message
 
-[中文](07-udp.zh-CN.md) · [Previous: shutdown](06-shutdown.md) · [Next: DNS and TLS](08-dns-tls.md)
+[中文](07-udp.zh-CN.md) · [Previous: shutdown](06-shutdown.md) · [Next: DNS/TLS](08-dns-tls.md)
 
-TCP required accumulating bytes until a message was complete. UDP gives each send
-its own datagram boundary, without TCP's reliability or ordering. This chapter
-sends one loopback datagram and prints it. Link `pace_net` and write:
+Use chapter 1's current checkout and `pace_net`. Unlike TCP, UDP preserves a
+send's message boundary, but does not promise delivery or ordering. Replace
+`main.cpp` with this complete local exercise:
 
 ```cpp
 #include <pace/udp.hpp>
 #include <pace/run.hpp>
-#include <array>
 #include <iostream>
 
-pace::task<void> hello(pace::io_context& io) {
-    pace::udp::socket receiver(io, {"127.0.0.1", 0});
-    pace::udp::socket sender(io);
-    co_await sender.send_to("Hello, UDP!", receiver.local_endpoint());
-    std::array<char, 256> buffer{};
-    auto packet = co_await receiver.receive_from(buffer);
-    if (packet.truncated || std::string_view(buffer.data(), packet.size) != "Hello, UDP!")
+pace::task<void> hello() {
+    auto receiver = pace::udp::bind({"127.0.0.1", 0});
+    auto sender = pace::udp::open();
+    co_await sender.send("Hello, UDP!", receiver.local_endpoint());
+    auto packet = co_await receiver.receive();
+    if (packet.truncated || packet.data != "Hello, UDP!")
         throw std::runtime_error("UDP message mismatch or truncation");
-    std::cout << std::string_view(buffer.data(), packet.size) << '\n';
+    std::cout << packet.data << '\n';
 }
 int main() {
     try { pace::run(hello); }
@@ -28,27 +26,36 @@ int main() {
 }
 ```
 
-## 1. Bind the receiving socket
+## 1. Give the receiver an address
 
-`receiver(io, {"127.0.0.1", 0})` asks the OS for an available port. Read the assigned
-endpoint with `local_endpoint()`. The sender can start unbound; its send path
-selects a local address/port. Both sockets are local to the entry and have no
-outstanding member calls when that entry returns.
+`udp::bind` returns a bound socket. Port zero asks the OS to choose a free port;
+`local_endpoint()` reports it. `udp::open()` creates an unbound sender whose first
+send selects its local address. Neither helper needs an explicit context inside
+`pace::run`.
 
-## 2. Send one message and retain its boundary
+## 2. Read the message itself
 
-`send_to` takes the destination for this datagram. `receive_from` fills your buffer
-and returns its size and source endpoint, so a reply can use `packet.sender`.
-Unlike the TCP loop, a zero-length UDP message is valid; do not treat it as EOF.
-Choose a buffer that fits your protocol's maximum message. If `packet.truncated` is true, the buffer was too small: the remaining bytes
-of that datagram were discarded. Reject the incomplete message instead of
-treating the copied prefix as a complete payload.
+`send` owns the string across suspension. `receive` returns `packet.data`,
+`packet.sender` and `packet.truncated`; no buffer or byte-count bookkeeping is
+needed. Check truncation before interpreting the data: an oversized datagram loses
+its remaining bytes. An empty `data` is a valid zero-length datagram, not EOF.
 
-## 3. Verify before adding a second peer
+## 3. Turn it into an echo
 
-Build/run `my_application`; expect `Hello, UDP!` and process exit. The repository
-companion is `xmake run tutorial_udp`. Next, change the message and verify the exact
-returned size, or reply to `packet.sender` before awaiting a receive on the sender.
-Keep the send buffer alive until `send_to` completes and do not overlap two sends
-or two receives on one socket. UDP delivery, order, retries and message identity
-are responsibilities of the application protocol. See [UDP reference](../reference/udp.md).
+Build/run `my_application`; expect `Hello, UDP!` and process exit. Then insert this
+after printing the message:
+
+```cpp
+co_await receiver.send(packet.data, packet.sender);
+auto reply = co_await sender.receive();
+if (reply.truncated || reply.data != "Hello, UDP!")
+    throw std::runtime_error("UDP reply mismatch");
+```
+
+Run again. The sender now receives a reply addressed using the original packet's
+source. Both sockets remain alive until their awaits finish. A remote service
+needs an application policy for lost messages; this local exercise adds no retries.
+
+The repository's `xmake run tutorial_udp` runs the first exercise.
+[Capacity, cancellation and ownership](../reference/component-conveniences.md#udp) ·
+[Reusable buffers and tuning](../reference/protocol-tuning.md#tcp-and-udp)

@@ -1,5 +1,7 @@
 # TLS 使用指南
 
+简化写法与拥有数据的 helper：[组件便捷接口](component-conveniences.zh-CN.md)。
+
 [English API reference](tls.md) · [WebSocket](websocket.zh-CN.md) · [完整示例](../../examples/tutorial_tls.cpp)
 
 启用 `--tls=y` 后包含 `<pace/tls.hpp>`，使用 OpenSSL 1.1.1 以上版本；部署时

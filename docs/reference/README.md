@@ -1,5 +1,7 @@
 # Public API reference
 
+[Component conveniences (after v0.3.0)](component-conveniences.md) · [Protocol tuning](protocol-tuning.md) · [HTTP recipes](http-recipes.md) · [Build options](build-configuration.md)
+
 [0.3.0 convenience APIs: app, URL client, TCP, context](convenience.md)
 
 Convenience APIs: [pace::run](run.md) · [HTTP routing and handler adapters](http-router.md) · [Guided tutorials](../tutorial/README.md)
@@ -16,6 +18,7 @@ a public header; it has no compatibility guarantee.
 | [`io_context.hpp`](io-context.md) | `io_context`, construction/destruction, `spawn`, `post`, `run`, `stop`, `stopped`, `current`, `cancel`, `wait_readable`, `wait_writable`, `sleep_for`, `call_at`, `call_after`, `timer_handle`, `yield`, `io_awaiter`, `timer_awaiter`, `yield_awaiter` |
 | [`runtime.hpp`](runtime.md) | `runtime`, construction/destruction, `size`, `context`, `run`, `run_on_current_thread`, `stop` |
 | [`ip.hpp`](tcp.md) | Shared `address_family` for TCP and UDP endpoints |
+| [`stream_io.hpp`](component-conveniences.md#byte-streams-and-tcp) | Owning `write`, bounded string/span `read_exact` for TCP/TLS/QUIC |
 | [`tcp.hpp`](tcp.md) | `tcp::endpoint`, `tcp::listen_options`, `tcp::stream`, `tcp::listener` and all their members |
 | [`udp.hpp`](udp.md) | `udp::endpoint`, `udp::datagram`, `udp::socket`, `send_to`, `receive_from` |
 | [`dns.hpp`](dns.md) | Optional `dns::resolver`, A/AAAA results, deadlines and cancellation |

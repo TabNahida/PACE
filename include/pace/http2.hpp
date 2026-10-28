@@ -34,5 +34,15 @@ task<void> serve_connection(tls::stream transport, http::handler handle, limits 
 task<void> serve(tcp::listener& listener, const tls::context& configuration,
                  http::handler handle, limits bounds = {});
 #endif
+// One GET over an owned connection. For multiplexing, use exchange() with a batch.
+template<class Transport>
+task<http::response> get(Transport transport, std::string authority,
+                         std::string target = "/", limits bounds = {}) {
+    std::vector<http::request> requests(1);
+    requests.front().method = "GET";
+    requests.front().target = std::move(target);
+    auto replies = co_await exchange(std::move(transport), std::move(authority), std::move(requests), bounds);
+    co_return std::move(replies.front());
+}
 } // namespace pace::http2
 #endif

@@ -1,5 +1,7 @@
 # TLS with OpenSSL
 
+Short forms and owning helpers: [component conveniences](component-conveniences.md).
+
 [简体中文](tls.zh-CN.md) · [WebSocket](websocket.md)
 
 Enable `--tls=y` and include `<pace/tls.hpp>`. The build exports `PACE_HAS_TLS`

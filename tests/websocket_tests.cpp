@@ -106,8 +106,8 @@ pace::task<void> echo_peer(Transport transport, completion& done) {
 }
 template<class Transport>
 pace::task<void> client_peer(Transport transport, completion& done) {
-    ws::basic_stream<Transport> socket(std::move(transport), ws::role::client);
-    co_await socket.handshake("localhost", "/chat", {"chat", "other"});
+    std::vector<std::string> protocols{"chat", "other"};
+    auto socket = co_await ws::upgrade(std::move(transport), "localhost", "/chat", std::move(protocols));
     require(socket.selected_protocol() == "chat", "client subprotocol mismatch");
     co_await socket.ping(std::string("p\0ng", 4));
     const std::string unicode = "hello \xE2\x82\xAC \xF0\x9F\x8C\x8D";
@@ -139,11 +139,11 @@ void roundtrip() {
 }
 #ifdef PACE_HAS_TLS
 pace::task<void> secure_server(pace::tcp::listener& listener, const pace::tls::context& config, completion& done) {
-    pace::tls::stream transport(co_await listener.accept(), config); co_await transport.handshake();
+    auto transport = co_await pace::tls::accept(co_await listener.accept(), config);
     co_await echo_peer(std::move(transport), done);
 }
 pace::task<void> secure_client(pace::io_context& io, pace::tcp::endpoint endpoint, const pace::tls::context& config, completion& done) {
-    pace::tls::stream transport(io, config); co_await transport.connect(std::move(endpoint), "localhost");
+    auto transport = co_await pace::tls::connect(io, config, std::move(endpoint), "localhost");
     co_await client_peer(std::move(transport), done);
 }
 void secure_roundtrip(const std::filesystem::path& fixtures) {

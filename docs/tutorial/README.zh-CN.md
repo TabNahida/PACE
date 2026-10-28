@@ -7,7 +7,7 @@
 这里按“创建自己的文件 → 构建运行 → 核对结果 → 增加一个功能”的顺序学习。
 每章解释代码为什么这样组织、等待期间谁持有数据、哪里处理错误。
 完整源码作为配套练习，不再代替正文讲解。教程对应当前 checkout；
-`pace::run`、router 和持有 listener 的 HTTP 入口是 v0.2.0 之后新增的接口。
+新增组件 helper 在 v0.3.0 之后加入，需按第一章使用源码。快速入门的包示例仍兼容 v0.3.0。
 
 ## 先完成主线
 
@@ -31,7 +31,7 @@
 | [7. UDP](07-udp.zh-CN.md) | 数据报边界、来源地址、截断检查 | `tutorial_udp` |
 | [8. DNS 与 TLS](08-dns-tls.zh-CN.md) | 地址解析、保留域名身份、验证握手与关闭 | `tutorial_dns`、`tutorial_tls` |
 | [9. WebSocket](09-websocket.zh-CN.md) | 从 TCP 升级到完整消息与关闭握手 | `tutorial_websocket` |
-| [10. HTTP/2](10-http2.zh-CN.md) | 批量请求、多路复用、有界异步 handler | `tutorial_http2` |
+| [10. HTTP/2](10-http2.zh-CN.md) | 先完成单次 GET，再进入批量多路复用 | `tutorial_http2` |
 | [11. QUIC 与 HTTP/3](11-quic-http3.zh-CN.md) | 流方向、ALPN，以及协议连接的所有权转移 | `tutorial_quic`、`tutorial_http3` |
 
 每章开头给出要启用的选项。TLS/QUIC 配套练习使用公开测试证书和本地连接，
@@ -40,3 +40,5 @@ QUIC/HTTP3 当前要求 POSIX；详见[构建配置](01-build.zh-CN.md)和[平�
 
 写通一个实验后，再查链接中的 API 契约，确认默认值、边界与生命周期。
 简化接口的设计取舍见[易用性说明](../ergonomics.md)。
+
+完整接口约定见[组件便捷接口](../reference/component-conveniences.zh-CN.md)；缓冲区复用、期限和并发等细节见[协议调优](../reference/protocol-tuning.zh-CN.md)。

@@ -4,6 +4,8 @@
 #include <pace/ip.hpp>
 #include <pace/platform.hpp>
 #include <pace/task.hpp>
+#include <pace/this_context.hpp>
+#include <pace/stream_io.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -114,4 +116,11 @@ private:
     address_family family_ = address_family::ipv4;
 };
 
+// Bind immediately. Current-context form is for a running task/callback.
+inline listener listen(io_context& io, endpoint local, listen_options options = {}) {
+    return listener(io, std::move(local), options);
+}
+inline listener listen(endpoint local, listen_options options = {}) {
+    return listen(this_context(), std::move(local), options);
+}
 } // namespace pace::tcp

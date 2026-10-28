@@ -1,62 +1,78 @@
-# 10. Multiplex requests with HTTP/2
+# 10. Make your first HTTP/2 request
 
 [中文](10-http2.zh-CN.md) · [Previous: WebSocket](09-websocket.md) · [Next: QUIC/HTTP3](11-quic-http3.md)
 
-HTTP/1 reused one connection sequentially. Here a batch submits independent
-requests on different HTTP/2 streams. Start with cleartext prior knowledge so the
-multiplexing step is visible before adding TLS. Enable `--http2=y`, link
-`pace_http2`, and include `<pace/http2.hpp>` and `<pace/http_router.hpp>`.
+Enable `--http2=y` and link `pace_http2` in chapter 1's current-source project.
+Create `h2_server` and `h2_client` targets as in chapter 3. Start with cleartext
+HTTP/2 prior knowledge: no HTTP/1 Upgrade is involved.
 
-## 1. Reuse the application handler
+## 1. Keep the route, change the protocol
 
-Use the explicit listener lifetime from chapter 4. Register routes, then change
-the serve call; the shared request/response types stay the same:
+Save as h2_server.cpp:
 
 ```cpp
-pace::http::router app;
-app.get("/one", [](pace::http::request) { return pace::http::response{.body = "one"}; });
-app.get("/two", [](pace::http::request) { return pace::http::response{.body = "two"}; });
-pace::http2::limits limits;
-limits.max_concurrent_handlers = 8;
-io.spawn(pace::http2::serve(listener, app, limits));
+#include <pace/http2.hpp>
+#include <pace/http_router.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+pace::task<void> serve() {
+    auto listener = pace::tcp::listen({"127.0.0.1", 9093});
+    pace::http::router routes;
+    routes.get("/health", [] { return pace::http::text("ok\n"); });
+    co_await pace::http2::serve_connection(co_await listener.accept(), routes);
+}
+int main() {
+    try { pace::run(serve); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
 ```
 
-The actual handler cap is also bounded by `max_concurrent_streams`. One protocol
-driver owns nghttp2 and the transport; handlers may await independently. They do
-not run CPU code in parallel on one reactor. Set the cap to one when sequential
-application dispatch is required. Shared captures must outlive all active handlers,
-including handlers finishing after a normal peer disconnect.
+The router and response helpers are the same as HTTP/1. `serve_connection` owns
+one accepted transport and runs HTTP/2 until the peer disconnects. This exercise
+exits after that connection; `http2::serve(listener, routes)` accepts repeatedly.
 
-## 2. Submit a batch from the client coroutine
+## 2. Request a response directly
+
+Save as h2_client.cpp:
 
 ```cpp
-pace::tcp::stream transport(io);
-co_await transport.connect(endpoint);
-std::vector<pace::http::request> requests(2);
-requests[0].method = "GET"; requests[0].target = "/one";
-requests[1].method = "GET"; requests[1].target = "/two";
-const auto replies = co_await pace::http2::exchange(
-    std::move(transport), "localhost", std::move(requests));
+#include <pace/http2.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+pace::task<pace::http::response> get_health() {
+    auto transport = co_await pace::tcp::connect({"127.0.0.1", 9093});
+    co_return co_await pace::http2::get(std::move(transport), "localhost:9093", "/health");
+}
+int main() {
+    try {
+        auto reply = pace::run(get_health);
+        std::cout << reply.status << " " << reply.body;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
 ```
 
-`exchange` takes ownership of the transport for this batch. Results preserve input
-order even if the second handler finishes first. Inspect both status and body.
-Bodies remain buffered; this is not a streaming response API. Do not mix HTTP/1
-bytes or an Upgrade handshake into this prior-knowledge connection.
+`http2::get` owns the connected transport, submits one GET and returns its response.
+Inspect both status and body. Its authority is independent of the numeric address;
+the helper takes a path, not a complete URL, and does not resolve DNS.
 
-## 3. Observe overlap, then add TLS
+## 3. Verify, then add more requests
 
-Build/run `tutorial_http2` from the repository after enabling HTTP2. Its
-[complete program](../../examples/tutorial_http2.cpp) combines the same listener
-and batch lifecycle and prints the two responses. In your version, make `/one`
-await a timer and `/two` return immediately. Log when each handler completes; the
-handler log can be out of order while the returned vector remains ordered.
+Build both targets. Start `xmake run h2_server`, then `xmake run h2_client`; expect
+`200 ok`. Restart the server before the next client. Try another route and inspect
+its 404 response. The repository's `xmake run tutorial_http2` checks GET and a
+multi-request batch locally.
 
-For HTTPS enable `--tls=y`, configure both TLS peers with ALPN `h2`, and use the
-verified handshake from chapter 8. The server overload accepts the TLS
-configuration; the client `exchange` receives an already handshaken TLS stream.
-A wrong ALPN is an error, not a silent fallback to HTTP/1.
-
-Stop only after your batch/control task finishes, keeping the listener and TLS
-configuration outside those tasks. [HTTP/2 reference](../reference/http2.md)
-describes flow-control bounds, half-close behavior and handler lifetime.
+For several concurrent requests on one connection, move to
+[`exchange` and handler limits](../reference/protocol-tuning.md#http2-and-http3).
+A loop of single GETs creates separate batches and misses that multiplexing benefit.
+For verified TLS, use chapter 8's helpers with ALPN `h2` on both sides; pass the
+handshaken TLS stream to the same `get` helper. See the
+[HTTP/2 reference](../reference/http2.md) for TLS server overloads and flow control.

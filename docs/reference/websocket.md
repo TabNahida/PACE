@@ -1,5 +1,7 @@
 # WebSocket clients and servers
 
+Short forms and owning helpers: [component conveniences](component-conveniences.md).
+
 [简体中文](websocket.zh-CN.md) · [TLS](tls.md) · [Runnable example](../../examples/tutorial_websocket.cpp)
 
 `<pace/websocket.hpp>` provides RFC 6455 WebSocket streams over TCP and, with

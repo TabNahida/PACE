@@ -23,17 +23,17 @@ pace::task<void> server(pace::quic::listener& listener, completion& done) {
     while (stream.pending_write_bytes()) co_await stream.wait_events();
     done.arrive();
 }
-pace::task<void> client(pace::quic::connection& connection,
+pace::task<void> client(pace::quic::context config,
                        pace::udp::endpoint endpoint, completion& done) {
-    co_await connection.connect(endpoint, "localhost");
+    auto connection = co_await pace::quic::connect(std::move(config), endpoint, "localhost");
     if (connection.selected_protocol() != "pace-demo") throw std::runtime_error("unexpected QUIC ALPN");
     auto stream = co_await connection.open_stream();
-    co_await stream.write_all("hello");
+    co_await pace::write(stream, "hello");
     stream.finish_write(); // Half-close this stream; the response still arrives.
-    std::array<char, 64> bytes{};
-    std::string response;
-    while (auto count = co_await stream.read_some(bytes)) response.append(bytes.data(), count);
-    if (response != "Hello over verified QUIC!\n") throw std::runtime_error("QUIC response mismatch");
+    auto response = co_await pace::read_exact(stream, std::string_view("Hello over verified QUIC!\n").size());
+    std::array<char, 1> trailing{};
+    if (response != "Hello over verified QUIC!\n" || co_await stream.read_some(trailing))
+        throw std::runtime_error("QUIC response mismatch or missing FIN");
     std::cout << response;
     done.arrive();
 }
@@ -54,11 +54,10 @@ int main(int argc, char** argv) {
         server_config.set_alpn_protocols({"pace-demo"});
         client_config.set_alpn_protocols({"pace-demo"});
         pace::io_context io;
-        pace::quic::listener listener(io, {"127.0.0.1", 0}, server_config);
-        pace::quic::connection connection(io, client_config);
+        auto listener = pace::quic::listen(io, {"127.0.0.1", 0}, server_config);
         completion done{io};
         io.spawn(server(listener, done));
-        io.spawn(client(connection, listener.local_endpoint(), done));
+        io.spawn(client(client_config, listener.local_endpoint(), done));
         io.spawn(deadline(io));
         io.run();
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

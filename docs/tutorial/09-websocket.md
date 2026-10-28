@@ -1,69 +1,89 @@
-# 9. Upgrade a connection and exchange WebSocket messages
+# 9. Connect and exchange WebSocket messages
 
 [中文](09-websocket.zh-CN.md) · [Previous: DNS/TLS](08-dns-tls.md) · [Next: HTTP/2](10-http2.md)
 
-We will reuse chapter 3's accept loop, but replace the per-connection byte echo
-with a WebSocket upgrade and message echo. Enable `--websocket=y`, link
-`pace_websocket`, and include `<pace/websocket.hpp>`.
+With the current checkout, enable `--websocket=y` and link `pace_websocket`.
+Follow chapter 3's two-target layout, naming the files/targets `ws_server` and
+`ws_client`. This exercise accepts **one connection**, then both processes exit.
 
-## 1. Accept the upgrade before receiving messages
+## 1. Accept an upgrade
 
-Inside the server's connection task, take ownership of the accepted TCP stream:
-
-```cpp
-pace::websocket::stream socket(std::move(transport), pace::websocket::role::server);
-co_await socket.accept({"echo"}, [](const auto& request) {
-    return request.target == "/echo";
-});
-while (auto message = co_await socket.receive())
-    co_await socket.send(std::move(*message));
-```
-
-The role selects server handshake/framing behavior. The callback checks the
-upgrade target before admitting the connection; a real application can also
-check Origin and authentication. `receive` returns a whole reassembled message,
-not an individual TCP read or continuation frame. An empty optional signals close;
-an empty message body is still a message.
-
-Use the TCP chapter's per-connection error boundary, additionally catching
-`websocket::protocol_error` for rejected/malformed upgrades and frames. Keep the
-accept loop available to other clients.
-
-## 2. Connect, negotiate and verify one message
-
-In the client task, after awaiting TCP connect, write:
+Write `ws_server.cpp`:
 
 ```cpp
-pace::websocket::stream socket(std::move(transport), pace::websocket::role::client);
-co_await socket.handshake("localhost", "/echo", {"echo"});
-co_await socket.send_text("Hello from PACE", 4);
-const auto reply = co_await socket.receive();
-if (!reply || reply->data != "Hello from PACE")
-    throw std::runtime_error("WebSocket echo mismatch");
-const bool closed = co_await socket.close_gracefully(1000, "finished");
+#include <pace/websocket.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+pace::task<void> serve() {
+    auto listener = pace::tcp::listen({"127.0.0.1", 9092});
+    std::vector<std::string> protocols{"echo"};
+    auto socket = co_await pace::websocket::accept(
+        co_await listener.accept(), std::move(protocols), [](const auto& request) {
+            return request.target == "/echo";
+        });
+    while (auto message = co_await socket.receive())
+        co_await socket.send(std::move(*message));
+}
+int main() {
+    try { pace::run(serve); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
 ```
 
-The optional size 4 fragments the outgoing message; receive reconstructs it.
-`closed` reports whether the closing handshake completed within its bounds.
-Close before stopping the context. TCP EOF and the WebSocket close handshake are
-not interchangeable. This API permits **one active asynchronous operation per
-WebSocket stream**, including send/receive/control/close; do not start independent
-reader and writer tasks on it as if it had TCP's one-read-plus-one-write contract.
+`websocket::accept` takes ownership of the TCP stream and completes the server
+handshake. The callback admits `/echo`; add your application's Origin or identity
+checks there. `receive` returns a whole message after assembling its frames.
+An empty optional means the closing handshake was received; an empty message is
+still a message. The loop echoes until the client closes.
 
-## 3. Build and observe the complete connection lifecycle
+## 2. Connect and send
 
-The [companion](../../examples/tutorial_websocket.cpp) assembles these functions
-with the chapter 3 listener/control structure. In the repository:
+Write `ws_client.cpp`:
 
-```sh
-xmake f --websocket=y --examples=y -y
-xmake -y tutorial_websocket
-xmake run tutorial_websocket
+```cpp
+#include <pace/websocket.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+pace::task<void> exchange() {
+    std::vector<std::string> protocols{"echo"};
+    auto socket = co_await pace::websocket::connect(
+        {"127.0.0.1", 9092}, "localhost:9092", "/echo", std::move(protocols));
+    co_await socket.send_text("Hello from PACE");
+    const auto reply = co_await socket.receive();
+    if (!reply || reply->data != "Hello from PACE")
+        throw std::runtime_error("WebSocket echo mismatch");
+    std::cout << reply->data << '\n';
+    if (!co_await socket.close_gracefully())
+        throw std::runtime_error("WebSocket close timed out");
+}
+int main() {
+    try { pace::run(exchange); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
 ```
 
-Expect `WebSocket echo verified: Hello from PACE`. To try separate processes, run
-`xmake run tutorial_websocket serve` and then `xmake run tutorial_websocket client`
-in another terminal. Change the admitted path in your copy and confirm an
-incorrect upgrade is rejected. Then restore it and try a larger fragmented text.
-TLS-backed WebSocket uses the secure stream types with the verified TLS setup from
-chapter 8; see [the reference](../reference/websocket.md) for limits and exact types.
+`connect` performs TCP connection and the WebSocket handshake together. The
+numeric endpoint says where to connect; `localhost:9092` is the HTTP Host authority.
+Both peers offer the `echo` subprotocol. Await send, then receive, then close:
+this WebSocket API allows only **one asynchronous operation at a time** per stream.
+
+## 3. Run and change one behavior
+
+Build both targets. Run `xmake run ws_server` first, then `xmake run ws_client` in
+another terminal. Expect `Hello from PACE`; both exit after the close handshake.
+Restart the server for another client. Change the client's path to `/wrong` and
+verify the server rejects its upgrade. For repeated clients and cooperative signal
+shutdown, see `xmake run tutorial_websocket serve` and its [source](../../examples/tutorial_websocket.cpp).
+
+To add encryption, replace TCP connect with verified `tls::connect` from chapter 8
+and pass the result to `websocket::upgrade`; server-side `accept` also accepts TLS.
+[Exact signatures](../reference/component-conveniences.md#websocket) ·
+[Fragments, limits and close budgets](../reference/protocol-tuning.md#websocket)

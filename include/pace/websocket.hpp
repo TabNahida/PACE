@@ -91,4 +91,30 @@ extern template class basic_stream<tcp::stream>;
 using secure_stream = basic_stream<tls::stream>;
 extern template class basic_stream<tls::stream>;
 #endif
+// Upgrade an already connected TCP or handshaken TLS stream. All upgrade
+// arguments and the transport are owned. Server authorization remains explicit.
+template<class Transport>
+task<basic_stream<Transport>> upgrade(Transport transport, std::string authority,
+        std::string target = "/", std::vector<std::string> protocols = {}, limits bounds = {}) {
+    basic_stream<Transport> result(std::move(transport), role::client, bounds);
+    co_await result.handshake(std::move(authority), std::move(target), std::move(protocols));
+    co_return result;
+}
+template<class Transport>
+task<basic_stream<Transport>> accept(Transport transport,
+        std::vector<std::string> protocols = {},
+        std::function<bool(const upgrade_request&)> authorize = {}, limits bounds = {}) {
+    basic_stream<Transport> result(std::move(transport), role::server, bounds);
+    co_await result.accept(std::move(protocols), std::move(authorize));
+    co_return result;
+}
+inline task<stream> connect(io_context& io, tcp::endpoint peer, std::string authority,
+        std::string target = "/", std::vector<std::string> protocols = {}, limits bounds = {}) {
+    auto transport = co_await tcp::connect(io, std::move(peer));
+    co_return co_await upgrade(std::move(transport), std::move(authority), std::move(target), std::move(protocols), bounds);
+}
+inline task<stream> connect(tcp::endpoint peer, std::string authority,
+        std::string target = "/", std::vector<std::string> protocols = {}, limits bounds = {}) {
+    co_return co_await connect(this_context(), std::move(peer), std::move(authority), std::move(target), std::move(protocols), bounds);
+}
 } // namespace pace::websocket

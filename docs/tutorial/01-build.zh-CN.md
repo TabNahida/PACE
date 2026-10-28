@@ -1,10 +1,10 @@
 # 1. 从自己的 main.cpp 开始
 
-[English / 完整构建选项](01-build.md) · [下一章：异步任务](02-tasks-timers.zh-CN.md)
+[English](01-build.md) · [完整构建选项](../reference/build-configuration.md) · [下一章：异步任务](02-tasks-timers.zh-CN.md)
 
 这一章要做出你自己的程序，不是只运行仓库里写好的 example。
 需要 xmake 2.9.8+ 和支持 C++20 的编译器。教程对应当前源码；
-`pace::run` 和路由器是 v0.2.0 之后加入的接口。
+后续章节的组件便捷接口在 v0.3.0 之后加入，需要本 checkout，不能直接使用 v0.3.0 包。
 
 ## 第一步：准备三个文件位置
 
@@ -103,4 +103,4 @@ xmake run tutorial_tasks
 配置会被 xmake 保留。切换协议选项后重新运行配置和构建；独立构建可使用
 `XMAKE_CONFIGDIR`，仅改变输出目录 `-o` 并不能隔离配置。
 Windows 需要可用的 Visual Studio C++ 工具链；FreeBSD 应安装 xmake-io 的工具，
-不要误用系统中同名的另一种 xmake。详见[完整构建说明](01-build.md)。
+不要误用系统中同名的另一种 xmake。详见[完整构建说明](../reference/build-configuration.md)。

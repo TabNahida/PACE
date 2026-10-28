@@ -19,7 +19,7 @@ server_config.use_certificate_chain("tests/certs/localhost.pem", "tests/certs/lo
 client_config.load_verify_file("tests/certs/ca.pem");
 server_config.set_alpn_protocols({"pace-demo"});
 client_config.set_alpn_protocols({"pace-demo"});
-pace::quic::listener listener(io, {"127.0.0.1", 0}, server_config);
+auto listener = pace::quic::listen(io, {"127.0.0.1", 0}, server_config);
 ```
 
 Keep these objects outside the peer tasks, through `io.run()`. Paths above assume
@@ -31,20 +31,19 @@ its own TLS 1.3 handshake; enabling the separate TCP TLS module is unnecessary.
 In the client coroutine:
 
 ```cpp
-pace::quic::connection connection(io, client_config);
-co_await connection.connect(endpoint, "localhost");
+auto connection = co_await pace::quic::connect(client_config, endpoint, "localhost");
 auto stream = co_await connection.open_stream();
-co_await stream.write_all("hello");
+co_await pace::write(stream, "hello");
 stream.finish_write();
 ```
 
 On the server, await `listener.accept()` and then `connection.accept_stream()`.
 Read until that stream's EOF, write the reply, and call `finish_write()` for the
 reply direction. FIN applies to the stream, not to every stream on the connection.
-Keep the connection alive while its streams operate. `write_all` accepts data for
-transmission; if you need to retain the connection until queued data is
-acknowledged, await events while `pending_write_bytes()` is nonzero. Immediate
-`connection.close()` is best-effort and is not a delivery confirmation.
+Keep the connection alive while its streams operate. Awaiting `pace::write`
+is not proof of peer receipt. Before closing a sender, follow the
+[delivery and FIN contract](../reference/protocol-tuning.md#quic), also used by
+the companion below.
 
 The [QUIC companion](../../examples/tutorial_quic.cpp) tracks both peers before
 stopping and imposes a local deadline. Build/run `tutorial_quic`; expect
@@ -59,25 +58,23 @@ lists to `h3`. The HTTP request/response and router types from chapter 4 still w
 ```cpp
 pace::http::router app;
 app.get("/health", [](pace::http::request) { return pace::http::response{.body = "ok"}; });
-pace::http3::limits limits;
-limits.max_concurrent_handlers = 8;
-io.spawn(pace::http3::serve(listener, app, limits));
+io.spawn(pace::http3::serve(listener, app));
 ```
 
 Include `<pace/http3.hpp>` and `<pace/http_router.hpp>`. In the client, establish a
-verified QUIC connection with the `h3` configuration, build a request vector as in
-chapter 10, then transfer the connection:
+verified QUIC connection with the `h3` configuration, then request one response:
 
 ```cpp
-const auto replies = co_await pace::http3::exchange(
-    std::move(connection), "localhost", std::move(requests));
+auto connection = co_await pace::quic::connect(client_config, endpoint, "localhost");
+const auto reply = co_await pace::http3::get(std::move(connection), "localhost", "/health");
+std::cout << reply.status << " " << reply.body << '\n';
 ```
 
 Do not also open your own application/control streams on that transferred
-connection. The adapter owns HTTP/3 control and QPACK streams. Results preserve
-batch order; bodies are buffered and handler overlap has the same cooperative
-semantics as HTTP/2. Normal disconnect does not forcibly destroy active handlers;
-keep their captures valid until completion, and stop the context for cancellation.
+connection. The adapter owns HTTP/3 control and QPACK streams. `get` returns one buffered response. For several requests, use `exchange` instead;
+[batching, concurrency and lifetime](../reference/protocol-tuning.md#http2-and-http3)
+are covered in the reference. The helper uses your existing context and does not
+start a background thread. These new helpers require the current checkout.
 
 ## 4. Verify the layered version
 
@@ -96,3 +93,66 @@ a UDP socket being reachable does not establish an authenticated HTTP/3 session.
 This API does not expose server push, CONNECT, WebTransport or 0-RTT. Continue with
 the [QUIC](../reference/quic.md) and [HTTP/3](../reference/http3.md) references for
 limits and ownership rather than inferring support from the transport name.
+
+## 5. Write a complete single-request service
+
+Create `h3_server.cpp` and `h3_client.cpp` targets as in chapter 3, both depending
+on `pace_http3`. Enable `--http3=y`. Run these programs from the PACE checkout
+root so the public test certificate paths resolve (or copy `tests/certs` into
+your practice working directory). First write the server:
+
+```cpp
+#include <pace/http3.hpp>
+#include <pace/http_router.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+pace::task<void> serve() {
+    pace::quic::context security(pace::quic::role::server);
+    security.use_certificate_chain("tests/certs/localhost.pem", "tests/certs/localhost-key.pem");
+    security.set_alpn_protocols({"h3"});
+    auto listener = pace::quic::listen({"127.0.0.1", 9094}, security);
+    pace::http::router routes;
+    routes.get("/health", [] { return pace::http::text("ok\n"); });
+    co_await pace::http3::serve_connection(co_await listener.accept(), routes);
+}
+int main() {
+    try { pace::run(serve); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+The listener binds on the current context and remains alive through the connection.
+Now write the client; keep `localhost` as the certificate identity even though the
+network address is numeric:
+
+```cpp
+#include <pace/http3.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+pace::task<pace::http::response> get_health() {
+    pace::quic::context trust;
+    trust.load_verify_file("tests/certs/ca.pem");
+    trust.set_alpn_protocols({"h3"});
+    auto connection = co_await pace::quic::connect(trust, {"127.0.0.1", 9094}, "localhost");
+    co_return co_await pace::http3::get(std::move(connection), "localhost:9094", "/health");
+}
+int main() {
+    try {
+        auto reply = pace::run(get_health);
+        std::cout << reply.status << " " << reply.body;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+Start `h3_server`, then `h3_client` in another terminal. Expect `200 ok` and both
+processes to exit. Restart the server for the next request. To accept repeatedly,
+replace `serve_connection(co_await listener.accept(), routes)` with
+`serve(listener, routes)`. Test certificates are only for this local exercise.
