@@ -34,6 +34,21 @@ Link individual modules, layer aggregates, or `pace` for the enabled stack. HTTP
 
 [Architecture →](docs/architecture.md) · [Build options & integration →](docs/tutorial/01-build.md)
 
+## A direct HTTP client
+
+```cpp
+auto reply = pace::http::get("http://127.0.0.1:8080/health");
+```
+
+One call returns an owned response; no `run` is needed. It blocks this thread,
+with a default 30-second deadline. In a coroutine use
+`co_await pace::http::async_get(url)`. TCP and UDP offer `exchange` / `async_exchange`.
+
+[Write your first client →](docs/tutorial/00-quick-start.md) ·
+[Signatures and migration from 0.3.1 →](docs/reference/direct-clients.md)
+
+These client APIs are in the current source checkout and are not yet released.
+
 ## A small HTTP server
 
 ```cpp
@@ -41,12 +56,12 @@ Link individual modules, layer aggregates, or `pace` for the enabled stack. HTTP
 
 int main() {
     pace::http::app app;
-    app.get("/", [] { return pace::http::text("Hello, PACE!\n"); });
+    app.get("/health", [] { return pace::http::text("ok\n"); });
     app.run(8080);
 }
 ```
 
-Link with `add_deps("pace_http1")`. [Write this server step by step →](docs/tutorial/00-quick-start.md)
+Link with `add_deps("pace_http1")`. [Write the client and server step by step →](docs/tutorial/00-quick-start.md)
 
 Continue step by step: [TCP](docs/tutorial/03-tcp.md) · [UDP](docs/tutorial/07-udp.md) · [DNS](docs/tutorial/08-dns-tls.md) · [QUIC](docs/tutorial/11-quic-http3.md) · [HTTP/3](docs/tutorial/11-quic-http3.md) · [WebSocket](docs/tutorial/09-websocket.md)
 

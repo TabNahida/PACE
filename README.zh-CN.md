@@ -34,6 +34,20 @@
 
 [架构设计 →](docs/architecture.md) · [构建选项与项目集成 →](docs/tutorial/01-build.md)
 
+## 直接获取 HTTP 响应
+
+```cpp
+auto reply = pace::http::get("http://127.0.0.1:8080/health");
+```
+
+一次调用直接返回响应，不需要 `run`，阻塞当前线程，默认总超时 30 秒。
+协程里使用 `co_await pace::http::async_get(url)`。TCP、UDP 也提供 `exchange` / `async_exchange`。
+
+[从第一个客户端开始 →](docs/tutorial/00-quick-start.zh-CN.md) ·
+[接口与 0.3.1 迁移说明 →](docs/reference/direct-clients.zh-CN.md)
+
+这些客户端接口属于当前源码，尚未发布。
+
 ## 一个小型 HTTP 服务
 
 ```cpp
@@ -41,7 +55,7 @@
 
 int main() {
     pace::http::app app;
-    app.get("/", [] { return pace::http::text("Hello, PACE!\n"); });
+    app.get("/health", [] { return pace::http::text("ok\n"); });
     app.run(8080);
 }
 ```

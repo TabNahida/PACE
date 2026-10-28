@@ -1,9 +1,10 @@
-# Application conveniences (0.3.0)
+# Application conveniences
 
 [Quick start](../tutorial/00-quick-start.md) · [中文入门](../tutorial/00-quick-start.zh-CN.md)
 
-All existing explicit-context, listener, transport and protocol APIs remain
-available. These helpers use the existing reactor, without extra worker threads.
+These helpers use the existing reactor, without extra worker threads. HTTP free
+functions now use `async_` names; [direct clients and migration](direct-clients.md)
+describe their blocking counterparts and the source change from 0.3.1.
 
 ## Entry and the current context
 
@@ -82,9 +83,12 @@ lookup remains linear; snapshots share the table until registration detaches it.
 
 ## URL client
 
-`get(io, url, limits={}, client_options={})`, `post(io, url, body,
+This section describes asynchronous calls. For direct `get/post/fetch` results and
+a total deadline, see [direct clients](direct-clients.md).
+
+`async_get(io, url, limits={}, client_options={})`, `async_post(io, url, body,
 content_type="application/octet-stream", limits={}, client_options={})`, and
-`fetch(io, url, request, limits={}, client_options={})` perform one HTTP/1 exchange.
+`async_fetch(io, url, request, limits={}, client_options={})` perform one HTTP/1 exchange.
 Each also has an overload without `io`, selecting the running context lazily.
 All strings and requests are owned by the returned task.
 
@@ -113,7 +117,7 @@ cookie jar, caching or decompression. Use lower-level APIs for those policies.
 
 Default HTTPS creates a verified system-trust configuration with HTTP/1.1 ALPN.
 The URL host determines certificate identity and SNI independently of the resolved
-address. Custom trust uses `get(io, tls_configuration, url, ...)` or
-`fetch(io, tls_configuration, url, request, ...)`; the configuration must outlive
+address. Custom trust uses `async_get(io, tls_configuration, url, ...)` or
+`async_fetch(io, tls_configuration, url, request, ...)`; the configuration must outlive
 the lazy task and the URL must use https. These preserve the existing TLS peer
 verification and ALPN checks. No insecure option is provided.

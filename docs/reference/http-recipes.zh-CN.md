@@ -4,7 +4,7 @@
 
 ## 完整响应与连接关闭
 
-默认的 `get`、`fetch` 和 `client.send` 在完整解析 Content-Length、chunked 或无 body
+默认的 `async_get`、`async_fetch` 和 `client.send` 在完整解析 Content-Length、chunked 或无 body
 响应后返回，不因 `Connection: close` 继续等待对端 FIN。库会尝试发送本端 TCP FIN / TLS
 `close_notify` 并释放连接，没有后台清理任务。完整响应后的清理错误不会覆盖结果；上下文
 取消仍会传播。没有长度或分块 framing 的响应仍须等到 EOF，HTTPS 还须验证 TLS 关闭通知。
@@ -16,7 +16,7 @@ pace::http::client_options closing{
     .close_policy = pace::http::client_close_policy::graceful,
     .close_timeout = std::chrono::milliseconds(25),
 };
-auto response = co_await pace::http::get(io, endpoint, "/health", {}, closing);
+auto response = co_await pace::http::async_get(io, endpoint, "/health", {}, closing);
 // 对持久客户端：http::client client(std::move(socket), {}, closing);
 ```
 
@@ -52,7 +52,7 @@ router 也能作为 HTTP/2、HTTP/3 的共享 handler 使用。
 ```cpp
 pace::tls::context trust;
 trust.load_verify_file("my-ca.pem"); // 按需添加 CA；默认使用 OpenSSL 信任路径。
-auto response = co_await pace::http::get(io, trust, {"127.0.0.1", 8443},
+auto response = co_await pace::http::async_get(io, trust, {"127.0.0.1", 8443},
                                        "localhost", "/health");
 ```
 
@@ -83,7 +83,7 @@ io.run();
 须自行提供 Host。一次只能有一个 send 未完成，不能把 HTTP/1.1 当作并发多路复用。
 收到关闭响应、非法响应或遇到取消后，客户端不能再复用。需要新请求时重新连接。
 
-给 `serve`、`get`、`fetch` 或 client 构造传入 `http::limits` 可调整请求头、body、
+给 `serve`、`async_get`、`async_fetch` 或 client 构造传入 `http::limits` 可调整请求头、body、
 trailer、字段数量、chunk 行长、chunk 数量等上限。默认 body 上限为 1 MiB；
 歧义 Content-Length/Transfer-Encoding、非法 chunk 或危险 trailer 都会被拒绝并关闭连接。
 这些限额不是全局连接数或全局内存策略。下方可选服务端 API 另提供超时和流式响应。

@@ -22,7 +22,7 @@ TARGETS = {
     "riscv64": ("riscv", 64, "little"), "ppc64le": ("powerpc64", 64, "little"),
     "s390x": ("s390", 64, "big"),
 }
-TESTS = ("pace_runtime_tests", "pace_network_tests", "pace_udp_tests",
+TESTS = ("pace_direct_client_tests", "pace_runtime_tests", "pace_network_tests", "pace_udp_tests",
          "pace_http_extended_tests", "pace_websocket_tests")
 TUTORIALS = ("tutorial_tasks", "tutorial_tcp", "tutorial_udp", "tutorial_workers",
              "tutorial_shutdown", "tutorial_http", "tutorial_http_client", "tutorial_websocket")

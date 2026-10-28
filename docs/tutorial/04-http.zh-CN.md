@@ -1,10 +1,52 @@
-# 4. 一步步写出 HTTP 服务
+# 4. 先获取 HTTP 响应，再编写服务
 
-[English](04-http.md) · [上一章：TCP](03-tcp.zh-CN.md) · [下一章：执行方式](05-execution.zh-CN.md)
+[English](04-http.md) · [学习路线](README.zh-CN.md)
 
-这一章先写健康检查，再增加 POST 回显和异步处理器。沿用第一章的应用，
-把依赖改为 `pace_http1`，执行 `xmake f --http1=y -y`。
-先把 `main.cpp` 替换成这个完整服务器：
+使用第一章的当前源码构建，链接 `pace_http1` 并配置 `--http1=y`。
+本章的直接调用和 `async_` 命名尚未包含在 0.3.1 包中。
+
+## 先从直接 GET 开始
+
+保存为 `client.cpp`，添加同名 binary target、`add_files("client.cpp")` 和
+`add_deps("pace_http1")`：
+
+```cpp
+#include <pace/http.hpp>
+#include <iostream>
+
+int main() {
+    try {
+        const auto reply = pace::http::get("http://127.0.0.1:8080/health");
+        std::cout << reply.status << " " << reply.body;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+下方的服务端运行后，构建并执行 `client` 应输出 `200 ok`。`get` 阻塞当前线程并直接返回
+响应，默认总超时 30 秒；没有 `run` 或 `co_await`。状态码保留在结果中，网络或协议错误抛异常。
+向后面添加的 `/echo` 路由发送 body，只需把请求行替换成：
+
+```cpp
+auto reply = pace::http::post("http://127.0.0.1:8080/echo", "hello", "text/plain");
+```
+
+其他方法用 `fetch`，例如 HEAD：
+
+```cpp
+pace::http::request request;
+request.method = "HEAD";
+auto reply = pace::http::fetch("http://127.0.0.1:8080/health", std::move(request));
+```
+
+数字 HTTP 地址只需默认 HTTP/1 模块；域名需要 `--dns=y`，HTTPS 需要 `--tls=y`。
+总超时、自定义 CA 和旧代码迁移见[直接客户端参考](../reference/direct-clients.zh-CN.md)。
+
+## 准备本地服务
+
+将下面的完整程序保存为 `server.cpp`，同样创建链接 `pace_http1` 的 `server` target。
 
 ```cpp
 #include <pace/http.hpp>
@@ -25,7 +67,7 @@ int main() {
 }
 ```
 
-构建并运行 `my_application`，在另一个终端执行
+执行 `xmake -y server client` 后运行 `xmake run server`，在另一个终端执行
 `curl -i http://127.0.0.1:8080/health`。预期状态 200、正文 `ok`。
 服务器会持续监听；这里 Ctrl-C 是系统默认终止行为。
 配套 `tutorial_http serve` 则加入第六章解释的协作式信号关闭。
@@ -74,34 +116,19 @@ app.get("/slow", []() -> pace::task<http::response> {
 但同步数据库调用或耗时计算仍会阻塞当前线程，协程语法不会自动把它们送到线程池。
 `pace::sleep_for` 使用当前任务所在的 context。
 
-## 第四步：用 C++ 客户端访问它
+## 第四步：需要等待其他网络请求时
 
-保存以下程序为 `client.cpp`，新增名为 `client` 的 binary target，
-使用 `add_files("client.cpp")` 和 `add_deps("pace_http1")`。
-保持服务器运行，在第二个终端构建并运行 `client`：
+处理函数里不能调用阻塞客户端；用异步名字让等待期间的线程继续处理其他工作：
 
 ```cpp
-#include <pace/http.hpp>
-#include <pace/run.hpp>
-#include <iostream>
-
-int main() {
-    try {
-        const auto reply = pace::run(pace::http::get("http://127.0.0.1:8080/health"));
-        std::cout << reply.status << " " << reply.body;
-    } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
-}
+app.get("/proxy", []() -> pace::task<http::response> {
+    co_return co_await http::async_get("http://127.0.0.1:8080/health");
+});
 ```
 
-预期输出 `200 ok`。URL 接口负责连接、生成 Host、读取响应和关闭连接。
-检查响应的 status；传输或分帧错误抛异常。POST 可用 `http::post(url, body, content_type)`。
-数字回环地址不需要 DNS；域名需要 `--dns=y`，HTTPS 还需要 `--tls=y` 和有效信任根。
-
-仓库里的 `xmake run tutorial_http` 检查健康路由和异步路由；
-[配套程序](../../examples/tutorial_http.cpp)另有有界的信号关闭。
+`async_get`、`async_post`、`async_fetch` 返回任务，在已有 context 上执行。
+它们没有直接调用的默认 30 秒总超时。复用连接和主动管理 deadline 见 reference。
+仓库的 `xmake run tutorial_http` 验证路由与异步客户端；配套程序还提供有界信号关闭。
 
 ## 启用 HTTPS
 

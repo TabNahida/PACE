@@ -13,7 +13,7 @@ pace::task<pace::http::response> hello(pace::http::request request) {
 
 pace::task<void> use_http(pace::io_context& io, pace::tcp::endpoint endpoint) {
     // One expression handles connect, Host, response framing and bounded close.
-    const auto response = co_await pace::http::get(io, endpoint, "/PACE");
+    const auto response = co_await pace::http::async_get(io, endpoint, "/PACE");
     if (response.status != 200 || response.body != "Hello from /PACE\n" || response.trailers.size() != 1)
         throw std::runtime_error("HTTP client response mismatch");
     std::cout << response.body;

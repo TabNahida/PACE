@@ -194,4 +194,20 @@ task<datagram> socket::receive_from(std::span<char> buffer) {
 void socket::close() noexcept {
     if (fd_ != invalid_socket) { context_->cancel(fd_); release(std::exchange(fd_, invalid_socket)); }
 }
+task<packet> async_exchange(io_context& io, endpoint peer, std::string request, std::size_t capacity) {
+    if (capacity == 0) throw std::invalid_argument("UDP receive capacity must be positive");
+    if (capacity > 65536) throw std::length_error("UDP receive capacity exceeds 64 KiB");
+    if (peer.port == 0) throw std::invalid_argument("UDP peer port must be nonzero");
+    const auto native = detail::parse_socket_address(peer.address, peer.port, peer.family, peer.scope_id);
+    const auto expected = detail::socket_endpoint<endpoint>(native.data(), native.length);
+    auto socket = open(io);
+    co_await socket.send(std::move(request), std::move(peer));
+    for (;;) {
+        auto reply = co_await socket.receive(capacity);
+        if (reply.sender.address == expected.address && reply.sender.port == expected.port &&
+            reply.sender.family == expected.family && reply.sender.scope_id == expected.scope_id)
+            co_return reply;
+        co_await io.yield(); // A ready stream of unrelated datagrams must not starve cancellation.
+    }
+}
 } // namespace pace::udp

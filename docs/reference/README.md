@@ -1,8 +1,10 @@
 # Public API reference
 
+[Direct clients and HTTP name migration](direct-clients.md)
+
 [Component conveniences (0.3.1)](component-conveniences.md) · [Protocol tuning](protocol-tuning.md) · [HTTP recipes](http-recipes.md) · [Build options](build-configuration.md)
 
-[0.3.0 convenience APIs: app, URL client, TCP, context](convenience.md)
+[Application conveniences: app, async URL client, TCP, context](convenience.md)
 
 Convenience APIs: [pace::run](run.md) · [HTTP routing and handler adapters](http-router.md) · [Guided tutorials](../tutorial/README.md)
 
@@ -17,6 +19,7 @@ a public header; it has no compatibility guarantee.
 | [`task.hpp`](task.md) | `task<T = void>`, `task<void>`, their `promise_type`, `handle_type`, constructors, move assignment, destructor, `release`, `operator co_await`, nested `awaiter` and its protocol members |
 | [`io_context.hpp`](io-context.md) | `io_context`, construction/destruction, `spawn`, `post`, `run`, `stop`, `stopped`, `current`, `cancel`, `wait_readable`, `wait_writable`, `sleep_for`, `call_at`, `call_after`, `timer_handle`, `yield`, `io_awaiter`, `timer_awaiter`, `yield_awaiter` |
 | [`runtime.hpp`](runtime.md) | `runtime`, construction/destruction, `size`, `context`, `run`, `run_on_current_thread`, `stop` |
+| [`blocking.hpp`](direct-clients.md) | `blocking_options`, shared direct-client deadline options |
 | [`ip.hpp`](tcp.md) | Shared `address_family` for TCP and UDP endpoints |
 | [`stream_io.hpp`](component-conveniences.md#byte-streams-and-tcp) | Owning `write`, bounded string/span `read_exact` for TCP/TLS/QUIC |
 | [`tcp.hpp`](tcp.md) | `tcp::endpoint`, `tcp::listen_options`, `tcp::stream`, `tcp::listener` and all their members |
@@ -25,7 +28,7 @@ a public header; it has no compatibility guarantee.
 | [`quic.hpp`](quic.md) | Optional authenticated QUIC contexts, listeners, connections and multiplexed streams |
 | [`http3.hpp`](http3.md) | Optional HTTP/3 batch `exchange`, `serve_connection`, `serve`, limits |
 | `http_types.hpp` | Transport-independent `http::request`, `response`, `header_field`, `handler`, `protocol_error` |
-| [`http.hpp`](http.md) | HTTP/1.1 types/limits, `request_head`, `admission`, `body_source`, `streaming_response`, `server_handler`, `server_options`, `serve_connection`, `serve`, `client`/`secure_client`, `basic_client`, `fetch`, `get`, and HTTPS overloads |
+| [`http.hpp`](http.md) | HTTP/1.1 types/limits, `request_head`, `admission`, `body_source`, `streaming_response`, `server_handler`, `server_options`, `serve_connection`, `serve`, `client`/`secure_client`, `basic_client`, direct `fetch`/`get`/`post`, asynchronous `async_fetch`/`async_get`/`async_post`, and HTTPS overloads |
 | [`tls.hpp`](tls.md) | Optional verified TLS: `tls::context`, `tls::stream`, `trust_source`, `sni_policy`, SNI routing, PEM trust bundles, handshake, ALPN, record I/O and shutdown |
 | [`http2.hpp`](http2.md) | Optional HTTP/2: `http2::limits`, batch `exchange`, `serve_connection`, `serve` |
 | [`websocket.hpp`](websocket.md) | WebSocket handshake, messages, control frames and optional secure transport |

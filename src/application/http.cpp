@@ -773,7 +773,7 @@ task<void> serve(tcp::listener& listener, server_handler handle, server_options 
     }
 }
 
-task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoing, limits bounds, client_options options) {
+task<response> async_fetch(io_context& context, tcp::endpoint endpoint, request outgoing, limits bounds, client_options options) {
     validate_client_options(options);
     default_host(outgoing, endpoint.address, endpoint.port, 80);
     outgoing.keep_alive = false;
@@ -783,9 +783,9 @@ task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoi
     co_return co_await connection.send(std::move(outgoing));
 }
 
-task<response> get(io_context& context, tcp::endpoint endpoint, std::string target, limits bounds, client_options options) {
+task<response> async_get(io_context& context, tcp::endpoint endpoint, std::string target, limits bounds, client_options options) {
     request outgoing{.method = "GET", .target = std::move(target), .version = "HTTP/1.1", .body = {}};
-    co_return co_await fetch(context, std::move(endpoint), std::move(outgoing), bounds, options);
+    co_return co_await async_fetch(context, std::move(endpoint), std::move(outgoing), bounds, options);
 }
 
 #ifdef PACE_HAS_TLS
@@ -850,7 +850,7 @@ task<void> serve(tcp::listener& listener, const tls::context& configuration,
     }
 }
 
-task<response> fetch(io_context& context, const tls::context& configuration,
+task<response> async_fetch(io_context& context, const tls::context& configuration,
                      tcp::endpoint endpoint, std::string peer_name, request outgoing, limits bounds, client_options options) {
     validate_client_options(options);
     default_host(outgoing, peer_name, endpoint.port, 443);
@@ -861,10 +861,10 @@ task<response> fetch(io_context& context, const tls::context& configuration,
     co_return co_await connection.send(std::move(outgoing));
 }
 
-task<response> get(io_context& context, const tls::context& configuration,
+task<response> async_get(io_context& context, const tls::context& configuration,
                    tcp::endpoint endpoint, std::string peer_name, std::string target, limits bounds, client_options options) {
     request outgoing{.method = "GET", .target = std::move(target), .version = "HTTP/1.1", .body = {}};
-    co_return co_await fetch(context, configuration, std::move(endpoint), std::move(peer_name), std::move(outgoing), bounds, options);
+    co_return co_await async_fetch(context, configuration, std::move(endpoint), std::move(peer_name), std::move(outgoing), bounds, options);
 }
 #endif
 } // namespace pace::http

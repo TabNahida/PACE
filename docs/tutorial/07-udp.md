@@ -1,61 +1,108 @@
-# 7. Send and receive a UDP message
+# 7. Exchange a UDP packet with one call
 
-[中文](07-udp.zh-CN.md) · [Previous: shutdown](06-shutdown.md) · [Next: DNS/TLS](08-dns-tls.md)
+[中文](07-udp.zh-CN.md) · [Learning path](README.md) · [Next: DNS/TLS](08-dns-tls.md)
 
-Use chapter 1's current checkout and `pace_net`. Unlike TCP, UDP preserves a
-send's message boundary, but does not promise delivery or ordering. Replace
-`main.cpp` with this complete local exercise:
+Use chapter 1's current checkout and link `pace_net`. Direct clients are unreleased;
+use this source rather than the 0.3.1 package. UDP preserves datagram boundaries,
+but does not promise delivery or ordering.
+
+## 1. Write a direct client
+
+Save this as `udp_client.cpp`:
 
 ```cpp
 #include <pace/udp.hpp>
-#include <pace/run.hpp>
 #include <iostream>
 
-pace::task<void> hello() {
-    auto receiver = pace::udp::bind({"127.0.0.1", 0});
-    auto sender = pace::udp::open();
-    co_await sender.send("Hello, UDP!", receiver.local_endpoint());
-    auto packet = co_await receiver.receive();
-    if (packet.truncated || packet.data != "Hello, UDP!")
-        throw std::runtime_error("UDP message mismatch or truncation");
-    std::cout << packet.data << '\n';
-}
 int main() {
-    try { pace::run(hello); }
-    catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
+    try {
+        auto packet = pace::udp::exchange({"127.0.0.1", 9091}, "Hello, UDP!");
+        if (packet.truncated) throw std::runtime_error("UDP reply truncated");
+        std::cout << packet.data << '\n';
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
 }
 ```
 
-## 1. Give the receiver an address
+`exchange` sends one request and returns the first reply from that numeric endpoint.
+It blocks this thread and defaults to a 30-second total timeout. No event-loop setup
+is needed. For two seconds, include `<chrono>` and pass
+`{.timeout = std::chrono::seconds(2)}` as the third argument.
 
-`udp::bind` returns a bound socket. Port zero asks the OS to choose a free port;
-`local_endpoint()` reports it. `udp::open()` creates an unbound sender whose first
-send selects its local address. Neither helper needs an explicit context inside
-`pace::run`.
+The result owns `data` and reports `sender` and `truncated`. Check truncation before
+interpreting the message: bytes beyond the receive capacity are lost. An empty
+`data` is a valid zero-length datagram, not EOF. There are no automatic retries.
 
-## 2. Read the message itself
+## 2. Supply a UDP echo service
 
-`send` owns the string across suspension. `receive` returns `packet.data`,
-`packet.sender` and `packet.truncated`; no buffer or byte-count bookkeeping is
-needed. Check truncation before interpreting the data: an oversized datagram loses
-its remaining bytes. An empty `data` is a valid zero-length datagram, not EOF.
-
-## 3. Turn it into an echo
-
-Build/run `my_application`; expect `Hello, UDP!` and process exit. Then insert this
-after printing the message:
+Save this as `udp_server.cpp`:
 
 ```cpp
-co_await receiver.send(packet.data, packet.sender);
-auto reply = co_await sender.receive();
-if (reply.truncated || reply.data != "Hello, UDP!")
-    throw std::runtime_error("UDP reply mismatch");
+#include <pace/udp.hpp>
+#include <iostream>
+
+pace::task<void> serve() {
+    auto socket = pace::udp::bind({"127.0.0.1", 9091});
+    for (;;) {
+        auto packet = co_await socket.receive();
+        if (!packet.truncated)
+            co_await socket.send(std::move(packet.data), packet.sender);
+    }
+}
+int main() {
+    try { pace::run(serve); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
 ```
 
-Run again. The sender now receives a reply addressed using the original packet's
-source. Both sockets remain alive until their awaits finish. A remote service
-needs an application policy for lost messages; this local exercise adds no retries.
+`bind` creates a socket on the current context. `receive` waits for one packet;
+`send` replies to its source. This server discards incomplete packets. The socket
+stays alive while its operations run. `run` drives the long-running server.
 
-The repository's `xmake run tutorial_udp` runs the first exercise.
-[Capacity, cancellation and ownership](../reference/component-conveniences.md#udp) ·
+## 3. Build and try it
+
+Add these targets to chapter 1's xmake.lua:
+
+```lua
+for _, name in ipairs({"udp_client", "udp_server"}) do
+    target(name)
+        set_kind("binary")
+        add_files(name .. ".cpp")
+        add_deps("pace_net")
+end
+```
+
+Run `xmake -y udp_client udp_server`, then `xmake run udp_server`. In another
+terminal run `xmake run udp_client`; expect `Hello, UDP!`. Try another string.
+Stop the server with Ctrl-C. Stop it before running the client to observe an error
+or timeout instead of a reply, depending on how the OS reports an unreachable peer.
+
+## 4. Send only, or compose async work
+
+For a service that expects no reply:
+
+```cpp
+auto sent = pace::udp::send({"127.0.0.1", 9091}, "notification");
+```
+
+This returns the byte count accepted by the local socket, not a delivery receipt.
+Each direct call owns a fresh socket. For an async request inside a coroutine:
+
+```cpp
+auto packet = co_await pace::udp::async_exchange({"127.0.0.1", 9091}, "hello");
+```
+
+The async form has no added total deadline. To reuse a socket or accept replies
+from other addresses, use `udp::open()` / `udp::bind()`, `socket.send` and
+`socket.receive` inside your coroutine, as the server does.
+
+[Filtering, deadlines and errors](../reference/direct-clients.md) ·
+[Capacity and ownership](../reference/component-conveniences.md#udp) ·
 [Reusable buffers and tuning](../reference/protocol-tuning.md#tcp-and-udp)
+
+The repository's `xmake run tutorial_udp` runs an independent local async exercise.

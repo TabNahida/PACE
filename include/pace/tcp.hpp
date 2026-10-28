@@ -6,6 +6,7 @@
 #include <pace/task.hpp>
 #include <pace/this_context.hpp>
 #include <pace/stream_io.hpp>
+#include <pace/blocking.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -122,5 +123,25 @@ inline listener listen(io_context& io, endpoint local, listen_options options = 
 }
 inline listener listen(endpoint local, listen_options options = {}) {
     return listen(this_context(), std::move(local), options);
+}
+// One connection, one owned request, and an exactly framed reply. No pooling.
+inline task<std::string> async_exchange(io_context& io, endpoint peer, std::string request,
+        std::size_t reply_size, std::size_t maximum = 1024 * 1024) {
+    if (reply_size > maximum) throw std::length_error("TCP reply exceeds maximum");
+    auto socket = co_await connect(io, std::move(peer));
+    co_await pace::write(socket, std::move(request));
+    auto reply = co_await pace::read_exact(socket, reply_size, maximum);
+    co_await socket.close_gracefully();
+    co_return reply;
+}
+inline task<std::string> async_exchange(endpoint peer, std::string request,
+        std::size_t reply_size, std::size_t maximum = 1024 * 1024) {
+    co_return co_await async_exchange(this_context(), std::move(peer), std::move(request), reply_size, maximum);
+}
+inline std::string exchange(endpoint peer, std::string request, std::size_t reply_size,
+        blocking_options options = {}, std::size_t maximum = 1024 * 1024) {
+    return detail::blocking_call([&](io_context& io) {
+        return async_exchange(io, std::move(peer), std::move(request), reply_size, maximum);
+    }, options);
 }
 } // namespace pace::tcp
