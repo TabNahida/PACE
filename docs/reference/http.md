@@ -271,7 +271,7 @@ task<response> async_get(io_context& context, const tls::context& configuration,
 These helpers connect, request one closing exchange, and release the connection.
 Their trailing `client_options` selects the same completion policy as `client`;
 the default returns a fully framed response without awaiting peer closure.
-`get` creates a GET; `fetch` uses the owned request you supply. Both override
+`async_get` creates a GET; `async_fetch` uses the owned request you supply. Both override
 `keep_alive=false`. If no Host exists, plain HTTP uses the endpoint address and
 HTTPS uses `peer_name`; a nondefault port is appended (80 for HTTP, 443 for HTTPS).
 Numeric IPv6 authorities are bracketed (for example `[::1]:8080`). A supplied

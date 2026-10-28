@@ -22,7 +22,7 @@
 | 工作线程 | `runtime(workers)`、`size/context/run/run_on_current_thread/stop` | [runtime](runtime.md) |
 | TCP | `tcp::endpoint/listen_options/stream/listener` | [TCP](tcp.md) |
 | UDP | `udp::endpoint/datagram/socket`、`send_to/receive_from` | [UDP](udp.md) |
-| HTTP/HTTPS | 消息与限额、`handler/serve/serve_connection`、`client/secure_client`、`get/fetch`、协议异常 | [HTTP](http.md) |
+| HTTP/HTTPS | 消息与限额、`handler/serve/serve_connection`、`client/secure_client`、`get/post/fetch`、`async_get/async_post/async_fetch`、协议异常 | [HTTP](http.md) |
 | TLS | `tls::context/stream`、证书验证、握手、ALPN、加密读写与关闭 | [TLS](tls.md) |
 | HTTP/2 | `http2::limits/exchange/serve/serve_connection`，有界批量请求 | [HTTP/2](http2.md) |
 | WebSocket | 握手、消息、控制帧与可选加密传输 | [WebSocket](websocket.md) |
