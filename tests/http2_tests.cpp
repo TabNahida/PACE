@@ -344,6 +344,7 @@ struct delayed_handler {
 pace::task<void> delayed_server(pace::tcp::listener& listener, delayed_handler& handler, bool& ended) {
     try { co_await pace::http2::serve_connection(co_await listener.accept(), std::ref(handler)); }
     catch (const std::system_error&) {}
+    require(handler.finished != handler.canceled, "HTTP2 connection returned before joining its handler");
     ended = true;
 }
 pace::task<void> delayed_peer(pace::io_context& io, pace::tcp::endpoint endpoint, delayed_handler& handler, bool& ended, unsigned mode) {
@@ -368,8 +369,12 @@ pace::task<void> delayed_peer(pace::io_context& io, pace::tcp::endpoint endpoint
         require(!handler.finished, "HTTP2 driver stopped reading during a handler");
     }
     stream.close();
-    co_await io.sleep_for(250ms);
-    require(ended && (handler.finished != handler.canceled), "HTTP2 connection returned before joining its handler");
+    // Wait for the actual boundary, not a guessed 250 ms wall-clock window:
+    // a 200 ms handler plus bounded TCP drain can legitimately take longer.
+    co_await pace::with_deadline(pace::deadline::after(2s), [&]() -> pace::task<void> {
+        while (!ended) co_await io.sleep_for(1ms);
+    });
+    require(handler.finished != handler.canceled, "HTTP2 handler was not joined");
     io.stop();
 }
 void delayed_streams() {
