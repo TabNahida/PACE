@@ -4,6 +4,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <array>
 #ifndef _WIN32
 #include <sys/socket.h>
 #include <fcntl.h>
@@ -187,14 +188,14 @@ void cancellation_callback_tests() {
 void directional_cancel_tests() {
     pace::io_context io;
     int sockets[2];
-    require(::socketpair(AF_UNIX, SOCK_DGRAM, 0, sockets) == 0, "socketpair");
+    require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0, "socketpair");
     struct cleanup {
         pace::io_context& io; int* sockets;
         ~cleanup() { for (int i=0; i<2; ++i) { io.cancel(sockets[i]); ::close(sockets[i]); } }
     } owner{io, sockets};
     for (int fd : sockets) require(::fcntl(fd, F_SETFL, ::fcntl(fd, F_GETFL, 0) | O_NONBLOCK) == 0, "nonblocking pair");
-    char byte = 1;
-    while (::send(sockets[0], &byte, 1, 0) == 1) {}
+    std::array<char, 4096> bytes{};
+    while (::send(sockets[0], bytes.data(), bytes.size(), 0) > 0) {}
     require(errno == EAGAIN || errno == EWOULDBLOCK, "saturate writer");
     bool read_canceled = false, write_finished = false;
     pace::cancellation_source source;
@@ -212,7 +213,7 @@ void directional_cancel_tests() {
             source.request_cancellation();
             co_await pace::sleep_for(2ms);
             require(read_canceled && !write_finished, "read cancellation affected opposite direction");
-            while (::recv(sockets[1], &byte, 1, 0) == 1) {}
+            while (::recv(sockets[1], bytes.data(), bytes.size(), 0) > 0) {}
             co_await group.join();
             require(write_finished, "opposite direction lost readiness after local cancellation");
         }, {.deadline = pace::deadline::after(2s)});
