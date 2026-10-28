@@ -20,6 +20,7 @@ change to try. Companion programs provide independent checks.
 | [3. TCP](03-tcp.md) | Start with `tcp::exchange`, then build the echo server and learn framing |
 | [7. UDP](07-udp.md) | Direct request/reply, send-only, then an async echo server |
 | [2. Tasks and timers](02-tasks-timers.md) | Return an asynchronous result; understand ownership, exceptions and automatic entry shutdown |
+| [12. Structured concurrency](12-structured-concurrency.md) | Concurrent children, local cancellation and a shared deadline |
 | [5. Execution](05-execution.md) | Choose two workers or application threads without hiding task placement |
 | [6. Shutdown](06-shutdown.md) | Observe cancellation, stop acceptance, drain and destroy resources in order |
 

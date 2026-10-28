@@ -150,3 +150,5 @@ Continue with [HTTP](04-http.md), [TCP](03-tcp.md) or [UDP](07-udp.md) first; re
 [tasks and timers](02-tasks-timers.md) when you need async composition. Exact
 contracts, tuning and the 0.3.1 migration table live in
 [direct clients](../reference/direct-clients.md).
+
+[Next: compose concurrent requests with a shared deadline](12-structured-concurrency.md).

@@ -1,3 +1,4 @@
+#include <pace/detail/serve_group.hpp>
 #include <pace/http.hpp>
 
 #include <algorithm>
@@ -745,13 +746,15 @@ task<void> serve(io_context& context, tcp::endpoint endpoint, handler handle, li
 }
 
 task<void> serve(tcp::listener& listener, handler handle, limits bounds) {
-    for (;;) {
-        try { listener.context().spawn(serve_connection(co_await listener.accept(), handle, bounds)); }
-        catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
-            throw;
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        for (;;) {
+            try { (void)group.spawn(serve_connection(co_await listener.accept(), handle, bounds)); }
+            catch (const std::system_error& error) {
+                if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+                throw;
+            }
         }
-    }
+    });
 }
 
 task<void> serve_connection(tcp::stream stream, server_handler handle, server_options options) {
@@ -763,14 +766,16 @@ task<void> serve_connection(tcp::stream stream, server_handler handle, server_op
 }
 
 task<void> serve(tcp::listener& listener, server_handler handle, server_options options) {
-    validate_options(options);
-    for (;;) {
-        try { listener.context().spawn(serve_connection(co_await listener.accept(), handle, options)); }
-        catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
-            throw;
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        validate_options(options);
+        for (;;) {
+            try { (void)group.spawn(serve_connection(co_await listener.accept(), handle, options)); }
+            catch (const std::system_error& error) {
+                if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+                throw;
+            }
         }
-    }
+    });
 }
 
 task<response> async_fetch(io_context& context, tcp::endpoint endpoint, request outgoing, limits bounds, client_options options) {
@@ -825,29 +830,33 @@ task<void> handshake_and_serve(tls::stream stream, server_handler handle, server
 }
 
 task<void> serve(tcp::listener& listener, const tls::context& configuration, handler handle, limits bounds) {
-    for (;;) {
-        try {
-            tls::stream stream(co_await listener.accept(), configuration);
-            listener.context().spawn(handshake_and_serve(std::move(stream), handle, bounds));
-        } catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
-            throw;
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        for (;;) {
+            try {
+                tls::stream stream(co_await listener.accept(), configuration);
+                (void)group.spawn(handshake_and_serve(std::move(stream), handle, bounds));
+            } catch (const std::system_error& error) {
+                if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+                throw;
+            }
         }
-    }
+    });
 }
 
 task<void> serve(tcp::listener& listener, const tls::context& configuration,
                  server_handler handle, server_options options) {
-    validate_options(options);
-    for (;;) {
-        try {
-            tls::stream stream(co_await listener.accept(), configuration);
-            listener.context().spawn(handshake_and_serve(std::move(stream), handle, options));
-        } catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
-            throw;
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        validate_options(options);
+        for (;;) {
+            try {
+                tls::stream stream(co_await listener.accept(), configuration);
+                (void)group.spawn(handshake_and_serve(std::move(stream), handle, options));
+            } catch (const std::system_error& error) {
+                if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+                throw;
+            }
         }
-    }
+    });
 }
 
 task<response> async_fetch(io_context& context, const tls::context& configuration,

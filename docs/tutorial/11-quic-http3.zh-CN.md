@@ -6,6 +6,25 @@ QUIC 在 UDP 上提供经过认证的可靠多路流；HTTP/3 再增加 HTTP 分
 先完成 QUIC 流，再交给 HTTP/3 适配层，不要把裸 UDP 数据报当成 QUIC，
 也不要把任意 QUIC stream 字节当成 HTTP/3。当前后端需要 POSIX 平台。
 
+
+## 先用一行 HTTP/3 URL 请求
+
+开启 http3=y，链接 pace_http3。面对可信证书的 HTTP/3 服务：
+
+```cpp
+#include <pace/http3.hpp>
+#include <iostream>
+int main() {
+    auto reply = pace::http3::get("https://127.0.0.1:9443/health");
+    std::cout << reply.status << " " << reply.body;
+}
+```
+
+本地测试证书需创建 quic::context trust，加载测试 CA，设置 h3 ALPN，调用
+`http3::get(trust, url)`。协程中使用 `co_await http3::async_get(url)`。
+选项见[统一客户端](../reference/http-clients.zh-CN.md)。下面建立本地服务，再解释底层 QUIC 流；
+只发 URL 请求不需要手动创建流。
+
 ## 第一步：先配置身份和应用协议
 
 启用 `--quic=y`，依赖 `pace_quic`，包含 `<pace/quic.hpp>`。
@@ -59,7 +78,7 @@ io.spawn(pace::http3::serve(listener, app));
 
 ```cpp
 auto connection = co_await pace::quic::connect(client_config, endpoint, "localhost");
-const auto reply = co_await pace::http3::get(std::move(connection), "localhost", "/health");
+const auto reply = co_await pace::http3::async_get(std::move(connection), "localhost", "/health");
 std::cout << reply.status << " " << reply.body << '\n';
 ```
 
@@ -127,7 +146,7 @@ pace::task<pace::http::response> get_health() {
     trust.load_verify_file("tests/certs/ca.pem");
     trust.set_alpn_protocols({"h3"});
     auto connection = co_await pace::quic::connect(trust, {"127.0.0.1", 9094}, "localhost");
-    co_return co_await pace::http3::get(std::move(connection), "localhost:9094", "/health");
+    co_return co_await pace::http3::async_get(std::move(connection), "localhost:9094", "/health");
 }
 int main() {
     try {

@@ -127,7 +127,8 @@ A context is single-use: `run()` cannot be called concurrently, nested inside an
 
 `tcp::stream::close()` cancels its registered read/write operations before releasing the native socket. Destroying the socket object itself while a suspended member operation still refers to it is invalid: close it on its loop, allow the operation to resume and complete, then destroy the object. A listener passed to `http::serve()` must outlive that serving task and its accepted connections. Stopping the owning context cancels both accept and accepted-connection waits.
 
-Stop is cooperative, not a forced thread interruption. An application coroutine that never suspends or returns, or application code blocked in a synchronous call, can prevent shutdown from completing. Per-operation stop tokens are not implemented. Scoped callback timers support cancellation on completion; HTTP/1 servers can set receive and write deadlines.
+Stop is cooperative, not a forced thread interruption. An application coroutine that never suspends or returns, or application code blocked in a synchronous call, can prevent shutdown from completing. Local cancellation tokens propagate through awaited tasks and structured children;
+[operation boundaries](reference/structured-concurrency.md) compose the earliest deadline without stopping unrelated work. Scoped callback timers support cancellation on completion; HTTP/1 servers can set receive and write deadlines.
 
 ## TCP and HTTP
 

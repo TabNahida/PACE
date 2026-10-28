@@ -41,16 +41,11 @@ Save as h2_client.cpp:
 
 ```cpp
 #include <pace/http2.hpp>
-#include <pace/run.hpp>
 #include <iostream>
 
-pace::task<pace::http::response> get_health() {
-    auto transport = co_await pace::tcp::connect({"127.0.0.1", 9093});
-    co_return co_await pace::http2::get(std::move(transport), "localhost:9093", "/health");
-}
 int main() {
     try {
-        auto reply = pace::run(get_health);
+        auto reply = pace::http2::get("http://127.0.0.1:9093/health");
         std::cout << reply.status << " " << reply.body;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
@@ -59,9 +54,9 @@ int main() {
 }
 ```
 
-`http2::get` owns the connected transport, submits one GET and returns its response.
-Inspect both status and body. Its authority is independent of the numeric address;
-the helper takes a path, not a complete URL, and does not resolve DNS.
+`http2::get(url)` returns the response directly, with a default 30-second budget.
+In a coroutine write `co_await http2::async_get(url)`. Hostnames need `dns=y`;
+HTTPS needs `tls=y`. See [unified clients](../reference/http-clients.md).
 
 ## 3. Verify, then add more requests
 
@@ -71,8 +66,8 @@ its 404 response. The repository's `xmake run tutorial_http2` checks GET and a
 multi-request batch locally.
 
 For several concurrent requests on one connection, move to
-[`exchange` and handler limits](../reference/protocol-tuning.md#http2-and-http3).
+[`async_exchange` and handler limits](../reference/protocol-tuning.md#http2-and-http3).
 A loop of single GETs creates separate batches and misses that multiplexing benefit.
 For verified TLS, use chapter 8's helpers with ALPN `h2` on both sides; pass the
-handshaken TLS stream to the same `get` helper. See the
+handshaken TLS stream to the transport `async_get` helper. See the
 [HTTP/2 reference](../reference/http2.md) for TLS server overloads and flow control.

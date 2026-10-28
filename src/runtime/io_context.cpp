@@ -2,6 +2,7 @@
 #include <pace/detail/poller.hpp>
 #include <pace/detail/profiling.hpp>
 #include <array>
+#include <algorithm>
 #include <atomic>
 #include <climits>
 #include <deque>
@@ -32,12 +33,37 @@ struct io_context::callback_timers {
     }
 };
 
+struct io_context::cancellation_records {
+    struct record {
+        cancellation_token token;
+        std::function<void(std::error_code)> callback;
+        std::unique_ptr<detail::cancellation_registration> wake;
+    };
+    std::map<std::uint64_t, record> entries;
+    std::uint64_t next_id = 0;
+    std::exception_ptr dispatch(bool all = false) {
+        std::exception_ptr failure;
+        // Extract before callbacks: resumption may unregister other records.
+        for (auto it = entries.begin(); it != entries.end();) {
+            auto error = all ? canceled() : it->second.token.error();
+            if (!error) { ++it; continue; }
+            auto node = entries.extract(it);
+            node.mapped().wake.reset();
+            try { node.mapped().callback(error); } catch (...) { if (!failure) failure = std::current_exception(); }
+            it = entries.upper_bound(node.key());
+        }
+        return failure;
+    }
+};
+
 struct io_context::implementation {
     detail::poller poller{detail::poller::supports_persistent};
     std::atomic<bool> stopping{false};
     std::atomic<bool> running{false};
     bool has_run = false;
     bool cancellation_started = false;
+    std::atomic<bool> local_cancellation{false};
+    std::shared_ptr<cancellation_records> cancellations;
     std::mutex inbox_mutex;
     std::atomic<bool> inbox_pending{false};
     std::deque<task<void>> incoming_tasks;
@@ -63,7 +89,13 @@ struct io_context::implementation {
             return a->deadline > b->deadline;
         }
     };
-    std::priority_queue<timer_awaiter*, std::vector<timer_awaiter*>, later> timers;
+    struct timer_queue : std::priority_queue<timer_awaiter*, std::vector<timer_awaiter*>, later> {
+        bool erase(timer_awaiter* timer) {
+            const auto it = std::find(c.begin(), c.end(), timer);
+            if (it == c.end()) return false;
+            c.erase(it); std::make_heap(c.begin(), c.end(), comp); return true;
+        }
+    } timers;
     std::shared_ptr<callback_timers> callbacks;
 
     void finish(fd_state& state, io_awaiter* operation, std::error_code error = {}) {
@@ -89,6 +121,10 @@ struct io_context::implementation {
         }
         if (callbacks) callbacks->clear();
         cancellation_started = true;
+        if (cancellations && io_context::current()) {
+            auto failure = cancellations->dispatch(true);
+            if (!first_error) first_error = failure;
+        }
     }
     void update(fd_state& state, std::uint64_t token) {
         const unsigned interests = (state.reader ? 1U : 0U) | (state.writer ? 2U : 0U);
@@ -111,6 +147,54 @@ struct io_context::implementation {
         dirty_descriptors.clear();
     }
 };
+
+io_context::cancellation_handle::~cancellation_handle() { cancel(); }
+io_context::cancellation_handle::cancellation_handle(cancellation_handle&& other) noexcept
+    : records_(std::move(other.records_)), id_(std::exchange(other.id_, 0)) {}
+io_context::cancellation_handle& io_context::cancellation_handle::operator=(cancellation_handle&& other) noexcept {
+    if (this != &other) { cancel(); records_ = std::move(other.records_); id_ = std::exchange(other.id_, 0); }
+    return *this;
+}
+void io_context::cancellation_handle::cancel() noexcept {
+    if (auto id = std::exchange(id_, 0)) {
+        if (auto records = records_.lock()) { auto node = records->entries.extract(id); }
+    }
+    records_.reset();
+}
+io_context::cancellation_handle io_context::on_cancel(cancellation_token token,
+        std::function<void(std::error_code)> callback) {
+    if (!token.stop_possible()) return {};
+    check_affinity(this);
+    if (stopped()) throw std::system_error(canceled());
+    if (!callback) throw std::invalid_argument("empty cancellation callback");
+    token.throw_if_cancelled();
+    if (!impl_->cancellations) impl_->cancellations = std::make_shared<cancellation_records>();
+    auto& records = *impl_->cancellations;
+    if (records.next_id == UINT64_MAX) throw std::overflow_error("cancellation identity exhausted");
+    cancellation_handle result;
+    result.id_ = ++records.next_id; result.records_ = impl_->cancellations;
+    auto [it, inserted] = records.entries.try_emplace(result.id_);
+    it->second.token = token;
+    it->second.callback = std::move(callback);
+    it->second.wake = std::make_unique<detail::cancellation_registration>(token, [this] {
+        impl_->local_cancellation.store(true, std::memory_order_release);
+        impl_->poller.wake();
+    });
+    return result;
+}
+void io_context::cancel_wait(io_awaiter& operation, std::error_code error) {
+    const auto token = impl_->tokens.find(operation.fd);
+    if (token == impl_->tokens.end()) return;
+    auto& state = impl_->descriptors.at(token->second);
+    if (state.reader != &operation && state.writer != &operation) return;
+    impl_->finish(state, &operation, error);
+    impl_->update(state, token->second);
+}
+void io_context::cancel_wait(timer_awaiter& operation, std::error_code error) {
+    if (!impl_->timers.erase(&operation)) return;
+    operation.error = error;
+    impl_->ready.push_back(operation.continuation);
+}
 
 io_context::timer_handle::~timer_handle() { cancel(); }
 io_context::timer_handle::timer_handle(timer_handle&& other) noexcept
@@ -224,8 +308,9 @@ bool io_context::io_awaiter::await_ready() noexcept {
     if (context.stopped()) { error = canceled(); return true; }
     return false;
 }
-bool io_context::io_awaiter::await_suspend(std::coroutine_handle<> handle) { return context.arm(*this, handle); }
 void io_context::io_awaiter::await_resume() {
+    registration.cancel();
+    token.throw_if_cancelled();
     if (error) throw std::system_error(error);
     if (context.stopped()) throw std::system_error(canceled());
 }
@@ -269,8 +354,9 @@ bool io_context::timer_awaiter::await_ready() noexcept {
     if (context.stopped()) { error = canceled(); return true; }
     return false; // Even zero-duration sleeps yield, so they cannot starve shutdown.
 }
-bool io_context::timer_awaiter::await_suspend(std::coroutine_handle<> handle) { return context.arm(*this, handle); }
 void io_context::timer_awaiter::await_resume() {
+    registration.cancel();
+    token.throw_if_cancelled();
     if (error) throw std::system_error(error);
     if (context.stopped()) throw std::system_error(canceled());
 }
@@ -281,8 +367,8 @@ bool io_context::arm(timer_awaiter& operation, std::coroutine_handle<> handle) {
     impl_->timers.push(&operation);
     return true;
 }
-void io_context::yield_awaiter::await_suspend(std::coroutine_handle<> handle) { context.schedule(handle); }
 void io_context::yield_awaiter::await_resume() {
+    token.throw_if_cancelled();
     if (context.stopped()) throw std::system_error(canceled());
 }
 
@@ -333,6 +419,8 @@ void io_context::run() {
             for (auto& work : new_posts) p.posts.push_back(std::move(work));
         }
         inbox_timing.close();
+        if (p.local_cancellation.exchange(false, std::memory_order_acq_rel) && p.cancellations)
+            record_error(p.cancellations->dispatch());
         if (stopped() && !p.cancellation_started) p.cancel_all();
         profiling::scope post_timing(profiling::stage::post_dispatch);
         for (std::size_t i = 0, count = std::min<std::size_t>(p.posts.size(), 256); i < count; ++i) {

@@ -76,14 +76,14 @@ closing only when its tradeoff is needed. [Recipes and configuration](http-recip
 
 ## HTTP2 and HTTP3
 
-`get` owns a connection for one GET batch. To multiplex, submit multiple owned
-requests to `http2::exchange` or `http3::exchange` on one connection:
+`async_get` owns a connection for one GET batch. To multiplex, submit multiple owned
+requests to `http2::async_exchange` or `http3::async_exchange` on one connection:
 
 ```cpp
 std::vector<pace::http::request> requests(2);
 requests[0].method = "GET"; requests[0].target = "/one";
 requests[1].method = "GET"; requests[1].target = "/two";
-auto replies = co_await pace::http2::exchange(
+auto replies = co_await pace::http2::async_exchange(
     std::move(transport), "localhost", std::move(requests));
 ```
 
@@ -97,8 +97,9 @@ may suspend independently, with effective concurrency bounded by the minimum of
 Set the handler cap to one for sequential dispatch. Increasing it can increase
 memory and simultaneous downstream work; it does not add CPU threads. Use
 explicit runtime workers for CPU parallelism, and synchronize shared handler state.
-Normal disconnect does not forcibly destroy active handlers, so referenced state
-must remain valid until they complete; stopping the context cancels PACE waits.
+Connection exit cancels and joins active handlers before returning; closing a
+listener cancels and joins accepted connections. Reference lifetimes end at that
+boundary. See [local cancellation and shielding](structured-concurrency.md).
 
 HTTP/2 over TLS requires verified ALPN `h2`; HTTP/3 requires `h3`. A mismatch fails
 rather than falling back. Review [HTTP/2 flow control](http2.md) and

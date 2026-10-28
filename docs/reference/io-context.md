@@ -96,7 +96,8 @@ other ready work or blocking application code; they provide no real-time guarant
 
 `yield()` always schedules the current coroutine for a later ready-queue turn.
 Both waits belong to the owning context, and both throw cancellation when the
-context stops. These awaiters have no individual cancellation handle. They are
+context stops or their inherited token is canceled. Local timer cancellation removes
+only that wait; local yield cancellation is observed when resumed. They are
 cooperative scheduling tools, not CPU preemption or a task join.
 
 ### Cancellable callback timers

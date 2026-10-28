@@ -12,7 +12,7 @@ if has_config("examples") then
             add_deps("pace")
         target_end()
     end
-    local tutorials = {"tutorial_tasks", "tutorial_tcp", "tutorial_udp", "tutorial_workers", "tutorial_shutdown"}
+    local tutorials = {"tutorial_tasks", "tutorial_structured", "tutorial_tcp", "tutorial_udp", "tutorial_workers", "tutorial_shutdown"}
     if has_config("http1") then
         table.insert(tutorials, "tutorial_http")
         table.insert(tutorials, "tutorial_http_client")

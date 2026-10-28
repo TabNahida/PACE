@@ -34,6 +34,9 @@
 
 [架构设计 →](docs/architecture.md) · [构建选项与项目集成 →](docs/tutorial/01-build.md)
 
+[结构化任务组](docs/tutorial/12-structured-concurrency.zh-CN.md)让并发子任务自动汇合，
+共享局部取消与 deadline；HTTP/1、2、3 使用[统一 URL 接口](docs/reference/http-clients.zh-CN.md)。
+
 ## 直接获取 HTTP 响应
 
 ```cpp

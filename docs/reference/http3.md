@@ -1,5 +1,7 @@
 # HTTP/3
 
+URL get/post/fetch and async forms: [unified client contract](http-clients.md).
+
 Short forms and owning helpers: [component conveniences](component-conveniences.md).
 
 `<pace/http3.hpp>` is an optional application protocol module. It implements
@@ -24,11 +26,11 @@ co_await transport.connect({"127.0.0.1", 443}, "example.test");
 std::vector<pace::http::request> requests(1);
 requests[0].method = "GET";
 requests[0].target = "/";
-auto responses = co_await pace::http3::exchange(
+auto responses = co_await pace::http3::async_exchange(
     std::move(transport), "example.test", std::move(requests));
 ```
 
-`exchange(connection, authority, requests, limits)` takes ownership of an
+`async_exchange(connection, authority, requests, limits)` takes ownership of an
 authenticated QUIC connection and sends a batch of requests on separate
 bidirectional streams. Results preserve input order. The driver services reads,
 writes, and stream credits together, including when the peer permits fewer
@@ -52,10 +54,10 @@ Queued requests and buffered responses remain bounded by the concurrent stream
 limit. Set `max_concurrent_handlers = 1` to serialize application handlers while
 continuing to drive the connection. Shared handler state must allow coroutine
 interleaving. Responses may finish out of order; batch results preserve request
-order. Closing the connection discards queued requests and late results. The
-existing handler signature has no per-request cancellation token, so an already
-suspended application handler finishes independently and its captures must remain
-valid until it finishes. Stopping the context cancels its PACE I/O/timer waits.
+order. Connection exit discards queued requests, cancels active handlers locally,
+and joins them before returning. Their PACE waits inherit the token; custom
+awaiters must participate. Closing a listener cancels and joins accepted
+connections before `serve` returns. See [structured scopes](structured-concurrency.md).
 
 Each connection binds its own control stream and QPACK encoder/decoder streams.
 SETTINGS, request and response HEADERS/DATA, trailers, and stream FIN travel over

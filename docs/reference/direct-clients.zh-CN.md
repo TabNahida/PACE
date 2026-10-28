@@ -27,6 +27,8 @@
 // <pace/blocking.hpp>, also included by tcp.hpp, udp.hpp and http.hpp
 struct pace::blocking_options {
     std::chrono::milliseconds timeout{30000};
+    cancellation_token cancellation{};
+    pace::deadline deadline{};
 };
 
 // <pace/http.hpp>, link pace_http1; signatures inside namespace pace::http
@@ -62,7 +64,8 @@ task<packet> async_exchange(endpoint, std::string request, std::size_t capacity 
 ## 超时与错误
 
 `blocking_options::timeout` 必须为正，覆盖连接、可选 DNS/TLS、请求、回复及关闭。
-零和负数抛 `invalid_argument`。预算使用单调时钟；到期后停止私有 context，取消并清理挂起操作，
+零和负数抛 `invalid_argument`。预算使用单调时钟，取 timeout 与绝对 deadline 的较早值；cancellation 可从其他线程取消。
+到期后局部操作作用域取消并清理挂起操作，
 向调用方抛出可与 `std::errc::timed_out` 比较的 `system_error`。返回后没有遗留后台操作，
 下一次调用使用新的独立 context。
 
@@ -70,8 +73,8 @@ task<packet> async_exchange(endpoint, std::string request, std::size_t capacity 
 超过预算；完成时已超出预算也会报告超时。其他异常照常传播；HTTP 4xx/5xx 仍是正常传输完成的响应。
 超时无法撤回已发送的数据或对端已执行的操作。库不会自动重试请求。
 
-`async_` 版本沿用原有异步约定，**不会附加此总超时**。它们使用调用方的 context，由应用决定
-取消策略。socket 成员函数仍然是异步的，不要求名字带 `async_`。
+`async_` 版本沿用原有异步约定，**不会附加此总超时**。它们继承当前任务的取消与 deadline；
+用 [with_options / with_deadline](structured-concurrency.zh-CN.md) 设置局部边界。socket 成员函数仍然是异步的，不要求名字带 `async_`。
 
 ## HTTP 与验证过的 HTTPS
 
@@ -125,4 +128,6 @@ auto reply = pace::http::get(trust, "https://localhost:8443/health");
 从 `pace::run(http::get(url, bounds, options))` 迁移为 `http::get(url, {}, bounds, options)`，
 注意新增的超时参数位置。
 
-`http2::get`、`http3::get`、`tcp::connect` 等其他已有接口保持异步行为，不在此次重命名范围内。
+HTTP/2、3 现在采用同样的命名：URL get/post/fetch 同步返回，async_ 前缀为异步；原 transport
+形式的 get/exchange 改成 async_get/async_exchange。见[统一客户端](http-clients.zh-CN.md)。
+TCP/QUIC connect 和 socket 成员方法名字不变。

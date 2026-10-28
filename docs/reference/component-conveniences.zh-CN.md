@@ -107,8 +107,8 @@ timeout 只覆盖建立连接，不是 stream 或请求期限；非正值允许�
 ## HTTP/2 与 HTTP/3
 
 启用对应选项，链接 pace_http2 或 pace_http3：
-`http2::get(transport, authority, target = "/", limits = {})` 与
-`http3::get(connection, authority, target = "/", limits = {})`
+`http2::async_get(transport, authority, target = "/", limits = {})` 与
+`http3::async_get(connection, authority, target = "/", limits = {})`
 接管连接，委托 exchange 发出单个 GET 并返回首个响应。
 HTTP/2 接受 prior-knowledge TCP 或 ALPN 为 h2 的已验证 TLS；HTTP/3 接受 ALPN 为 h3
 的已验证 QUIC。这里是 authority/路径接口，没有 URL 解析、DNS 或协议回退。

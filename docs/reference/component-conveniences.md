@@ -182,16 +182,16 @@ its accepted connections operate. [QUIC contracts](quic.md).
 Enable the matching module and link `pace_http2` or `pace_http3`:
 
 ```cpp
-template<class Transport> task<http::response> http2::get(
+template<class Transport> task<http::response> http2::async_get(
     Transport, std::string authority, std::string target = "/", http2::limits = {});
-task<http::response> http3::get(
+task<http::response> http3::async_get(
     quic::connection, std::string authority, std::string target = "/", http3::limits = {});
 ```
 
 Each helper owns the connected transport for a single GET batch, delegates to
-`exchange`, and returns the first response. HTTP/2 takes prior-knowledge TCP or
+`async_exchange`, and returns the first response. HTTP/2 takes prior-knowledge TCP or
 verified TLS with ALPN `h2`. HTTP/3 takes verified QUIC with ALPN `h3`. These are
 path/authority APIs, not URL clients; there is no fallback or implicit DNS. Bodies
 are buffered and existing limits apply. For custom headers, other methods or
-multiple multiplexed requests use `exchange`. The transferred connection is not
+multiple multiplexed requests use `async_exchange`. The transferred connection is not
 available for reuse by the caller after GET. [HTTP/2](http2.md) · [HTTP/3](http3.md).

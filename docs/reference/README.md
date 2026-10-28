@@ -19,6 +19,8 @@ a public header; it has no compatibility guarantee.
 | [`task.hpp`](task.md) | `task<T = void>`, `task<void>`, their `promise_type`, `handle_type`, constructors, move assignment, destructor, `release`, `operator co_await`, nested `awaiter` and its protocol members |
 | [`io_context.hpp`](io-context.md) | `io_context`, construction/destruction, `spawn`, `post`, `run`, `stop`, `stopped`, `current`, `cancel`, `wait_readable`, `wait_writable`, `sleep_for`, `call_at`, `call_after`, `timer_handle`, `yield`, `io_awaiter`, `timer_awaiter`, `yield_awaiter` |
 | [`runtime.hpp`](runtime.md) | `runtime`, construction/destruction, `size`, `context`, `run`, `run_on_current_thread`, `stop` |
+| [`task_group.hpp`, `operation.hpp`, `cancellation.hpp`](structured-concurrency.md) | Structured child ownership, result handles, cancellation sources, shared deadlines and concurrency contracts |
+| [Unified HTTP clients](http-clients.md) | HTTP/1, 2, 3 direct/async URL calls and naming migration |
 | [`blocking.hpp`](direct-clients.md) | `blocking_options`, shared direct-client deadline options |
 | [`ip.hpp`](tcp.md) | Shared `address_family` for TCP and UDP endpoints |
 | [`stream_io.hpp`](component-conveniences.md#byte-streams-and-tcp) | Owning `write`, bounded string/span `read_exact` for TCP/TLS/QUIC |
@@ -26,11 +28,11 @@ a public header; it has no compatibility guarantee.
 | [`udp.hpp`](udp.md) | `udp::endpoint`, `udp::datagram`, `udp::socket`, `send_to`, `receive_from` |
 | [`dns.hpp`](dns.md) | Optional `dns::resolver`, A/AAAA results, deadlines and cancellation |
 | [`quic.hpp`](quic.md) | Optional authenticated QUIC contexts, listeners, connections and multiplexed streams |
-| [`http3.hpp`](http3.md) | Optional HTTP/3 batch `exchange`, `serve_connection`, `serve`, limits |
+| [`http3.hpp`](http3.md) | Optional HTTP/3 batch `async_exchange`, `serve_connection`, `serve`, limits |
 | `http_types.hpp` | Transport-independent `http::request`, `response`, `header_field`, `handler`, `protocol_error` |
 | [`http.hpp`](http.md) | HTTP/1.1 types/limits, `request_head`, `admission`, `body_source`, `streaming_response`, `server_handler`, `server_options`, `serve_connection`, `serve`, `client`/`secure_client`, `basic_client`, direct `fetch`/`get`/`post`, asynchronous `async_fetch`/`async_get`/`async_post`, and HTTPS overloads |
 | [`tls.hpp`](tls.md) | Optional verified TLS: `tls::context`, `tls::stream`, `trust_source`, `sni_policy`, SNI routing, PEM trust bundles, handshake, ALPN, record I/O and shutdown |
-| [`http2.hpp`](http2.md) | Optional HTTP/2: `http2::limits`, batch `exchange`, `serve_connection`, `serve` |
+| [`http2.hpp`](http2.md) | Optional HTTP/2: `http2::limits`, batch `async_exchange`, `serve_connection`, `serve` |
 | [`websocket.hpp`](websocket.md) | WebSocket handshake, messages, control frames and optional secure transport |
 | [`platform.hpp`](platform.md) | `native_socket_type`, `invalid_socket` |
 | [`net.hpp`](platform.md) | Compatibility aliases `tcp_stream`, `tcp_listener`, `ipv4_endpoint`, `listen_options` |
@@ -71,7 +73,8 @@ join or a forced interruption. Registered readiness waits and timers resume with
 `std::system_error` whose code compares equal to
 `std::errc::operation_canceled`. Catch that code where cancellation is expected.
 An already-stopping context suppresses uncaught root cancellation while draining;
-other errors remain failures. No per-task cancellation token exists.
+other errors remain failures. [Structured scopes](structured-concurrency.md) inherit
+local cancellation tokens and deadlines without stopping the context.
 
 **Progress.** A coroutine runs until it suspends or finishes. Blocking work and
 unbounded CPU loops prevent that reactor from serving other work or finishing

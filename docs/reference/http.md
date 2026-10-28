@@ -317,7 +317,8 @@ conversion can still escape. There is no built-in error logging hook.
 the TLS overload handshakes each accepted stream in its own task, so one pending
 handshake does not serialize accepting other peers. Configuration/listener must
 outlive the serving task. Closing the listener on its context cancels accepting;
-accepted streams continue. Stop the context to cancel all its work. There is no
+its owned accepted connections are canceled and joined before `serve` returns.
+Stop the context to cancel unrelated work as well. There is no
 connection registry/join handle or automatic maximum-connections policy.
 
 Expected accept cancellation/closed-listener conditions return normally; other

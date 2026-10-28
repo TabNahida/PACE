@@ -47,6 +47,12 @@ Run `xmake run tutorial_shutdown`. It starts a long timer, requests stop after a
 short delay, verifies that cancellation was observed, and checks that a local RAII
 cleanup ran before `run()` returned.
 
+
+For one operation or a related set of tasks, prefer [local cancellation and
+structured groups](12-structured-concurrency.md). `io.stop()` is whole-context
+shutdown. Closing a raw listener only cancels accept; the HTTP `serve` helpers
+add a structured scope and cancel/join their accepted connections before returning.
+
 ## Cancellation is an ordinary error path
 
 ```cpp

@@ -195,8 +195,17 @@ struct lookup : std::enable_shared_from_this<lookup> {
     }
     struct completion {
         lookup& state;
+        io_context::cancellation_handle registration{};
         bool await_ready() const noexcept { return state.done; }
-        void await_suspend(std::coroutine_handle<> continuation) noexcept { state.continuation = continuation; }
+        template<class P> void await_suspend(std::coroutine_handle<P> continuation) {
+            if constexpr (requires { continuation.promise().cancellation; }) {
+                registration = state.io.on_cancel(continuation.promise().cancellation,
+                    [owner = state.shared_from_this()](std::error_code error) {
+                        owner->cancel(error == std::errc::timed_out ? std::errc::timed_out : std::errc::operation_canceled);
+                    });
+            }
+            state.continuation = continuation;
+        }
         void await_resume() const noexcept {}
     };
 };
