@@ -69,7 +69,7 @@ pace::task<void> normal_client(pace::io_context& io) {
     auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
     io.spawn(server(listener));
     const auto address = listener->local_endpoint();
-    auto simple = co_await pace::http::get(io, address, "/simple");
+    auto simple = co_await pace::http::async_get(io, address, "/simple");
     require(simple.status == 200 && simple.body == "/simple" && simple.close, "one-shot get failed");
     pace::tcp::stream socket(io);
     co_await socket.connect(address);
@@ -99,11 +99,11 @@ pace::task<void> ipv6_http_authority(pace::io_context& io) {
     auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"::1", 0});
     io.spawn(server(listener));
     const auto endpoint = listener->local_endpoint();
-    const auto result = co_await pace::http::get(io, endpoint, "/host");
+    const auto result = co_await pace::http::async_get(io, endpoint, "/host");
     require(result.body == "[::1]:" + std::to_string(endpoint.port), "IPv6 default Host must bracket the literal");
     auto outgoing = message("GET", "/host");
     outgoing.headers.front().value = "[::1]";
-    const auto supplied = co_await pace::http::fetch(io, endpoint, outgoing);
+    const auto supplied = co_await pace::http::async_fetch(io, endpoint, outgoing);
     require(supplied.body == "[::1]", "supplied IPv6 Host was not preserved");
 }
 
@@ -192,7 +192,7 @@ pace::task<response> exchange_raw_response(pace::io_context& io, std::string res
     auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
     io.spawn(raw_server(listener, std::move(response_bytes), true));
     auto outgoing = message(std::move(method));
-    co_return co_await pace::http::fetch(io, listener->local_endpoint(), std::move(outgoing), bounds);
+    co_return co_await pace::http::async_fetch(io, listener->local_endpoint(), std::move(outgoing), bounds);
 }
 
 pace::task<void> response_framing(pace::io_context& io) {
@@ -299,21 +299,21 @@ pace::task<void> https_exchange(pace::io_context& io) {
     io.spawn(secure_server(listener, configuration));
     pace::tls::context trusted;
     trusted.load_verify_file(cert("ca.pem")); trusted.set_alpn_protocols({"http/1.1"});
-    const auto result = co_await pace::http::get(io, trusted, listener->local_endpoint(), "localhost", "/chunks");
+    const auto result = co_await pace::http::async_get(io, trusted, listener->local_endpoint(), "localhost", "/chunks");
     require(result.body == "chunk response" && result.chunked && result.trailers.size() == 1,
             "HTTPS client/server chunked exchange failed");
     const auto secure_url = "https://127.0.0.1:" + std::to_string(listener->local_endpoint().port) + "/url";
-    require((co_await pace::http::get(io, trusted, secure_url)).body == "/url", "verified URL HTTPS failed");
+    require((co_await pace::http::async_get(io, trusted, secure_url)).body == "/url", "verified URL HTTPS failed");
     bool untrusted = false;
-    try { (void)co_await pace::http::get(secure_url); }
+    try { (void)co_await pace::http::async_get(secure_url); }
     catch (const std::system_error&) { untrusted = true; }
     require(untrusted, "URL HTTPS trusted a private CA without configuration");
     bool rejected = false;
-    try { co_await pace::http::get(io, trusted, listener->local_endpoint(), "wrong.example", "/"); }
+    try { co_await pace::http::async_get(io, trusted, listener->local_endpoint(), "wrong.example", "/"); }
     catch (const std::system_error&) { rejected = true; }
     require(rejected, "HTTPS accepted a wrong hostname");
     // A failed TLS peer must not end the server's accept task.
-    const auto again = co_await pace::http::get(io, trusted, listener->local_endpoint(), "localhost", "/again");
+    const auto again = co_await pace::http::async_get(io, trusted, listener->local_endpoint(), "localhost", "/again");
     require(again.body == "/again", "HTTPS handshake failure killed serving");
 
     auto h2_configuration = std::make_shared<pace::tls::context>(pace::tls::role::server);
@@ -324,7 +324,7 @@ pace::task<void> https_exchange(pace::io_context& io) {
     pace::tls::context wrong_protocol;
     wrong_protocol.load_verify_file(cert("ca.pem")); wrong_protocol.set_alpn_protocols({"h2"});
     rejected = false;
-    try { co_await pace::http::get(io, wrong_protocol, h2_listener->local_endpoint(), "localhost"); }
+    try { co_await pace::http::async_get(io, wrong_protocol, h2_listener->local_endpoint(), "localhost"); }
     catch (const std::system_error& error) { rejected = error.code() == std::errc::protocol_error; }
     require(rejected, "HTTP/1.1 exchanged bytes on an h2-negotiated transport");
 }
@@ -649,14 +649,14 @@ pace::task<void> client_close_policies(pace::io_context& io) {
             };
             response result;
             if constexpr (std::is_same_v<Transport, pace::tcp::stream>) {
-                if (use_get) result = co_await pace::http::get(io, fixture.listener->local_endpoint(), "/", {}, options);
-                else result = co_await pace::http::fetch(io, fixture.listener->local_endpoint(), message(), {}, options);
+                if (use_get) result = co_await pace::http::async_get(io, fixture.listener->local_endpoint(), "/", {}, options);
+                else result = co_await pace::http::async_fetch(io, fixture.listener->local_endpoint(), message(), {}, options);
             }
 #ifdef PACE_HAS_TLS
             else {
-                if (use_get) result = co_await pace::http::get(io, *fixture.trust, fixture.listener->local_endpoint(),
+                if (use_get) result = co_await pace::http::async_get(io, *fixture.trust, fixture.listener->local_endpoint(),
                                                             "localhost", "/", {}, options);
-                else result = co_await pace::http::fetch(io, *fixture.trust, fixture.listener->local_endpoint(),
+                else result = co_await pace::http::async_fetch(io, *fixture.trust, fixture.listener->local_endpoint(),
                                                        "localhost", message(), {}, options);
             }
 #endif
@@ -965,12 +965,12 @@ pace::task<void> router_contracts(pace::io_context& io) {
     routes.get("/fail", [](request) -> response { throw std::runtime_error("route failure"); });
     auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
     io.spawn(serve_routes(listener, routes));
-    auto wire = co_await pace::http::fetch(io, listener->local_endpoint(), message("HEAD", "/hello"));
+    auto wire = co_await pace::http::async_fetch(io, listener->local_endpoint(), message("HEAD", "/hello"));
     require(wire.body.empty() && wire.header("Content-Length") == "13", "wire HEAD body suppression");
-    wire = co_await pace::http::get(io, listener->local_endpoint(), "/fail");
+    wire = co_await pace::http::async_get(io, listener->local_endpoint(), "/fail");
     require(wire.status == 500, "synchronous route exception did not become HTTP 500");
     auto post = message("POST", "/hello"); post.body = "async echo";
-    wire = co_await pace::http::fetch(io, listener->local_endpoint(), std::move(post));
+    wire = co_await pace::http::async_fetch(io, listener->local_endpoint(), std::move(post));
     require(wire.body == "async echo", "async router wire response");
     // Binding is lazy; a held listener makes failure deterministic without a
     // find-free-port race. The successful port-zero accept is canceled on stop.
@@ -1003,20 +1003,20 @@ pace::task<void> easy_http(pace::io_context& io) {
         io.spawn(retain_listener(listener, app.serve(*listener)));
         app.get("/after", [] { return pace::http::text("not in snapshot"); });
     }
-    require((co_await pace::http::get(base)).body == "hello", "URL empty target or destroyed app");
-    const auto inspected = co_await pace::http::get(io, base + "/inspect?q=%2F#ignored");
+    require((co_await pace::http::async_get(base)).body == "hello", "URL empty target or destroyed app");
+    const auto inspected = co_await pace::http::async_get(io, base + "/inspect?q=%2F#ignored");
     require(inspected.body == "/inspect?q=%2F|" + authority, "URL query, fragment or Host");
-    require((co_await pace::http::get(base + "/async")).body == "42", "nullary coroutine handler lifetime");
-    require((co_await pace::http::get(base + "/after")).status == 404, "app serve did not snapshot routes");
-    const auto json = co_await pace::http::get(base + "/json");
+    require((co_await pace::http::async_get(base + "/async")).body == "42", "nullary coroutine handler lifetime");
+    require((co_await pace::http::async_get(base + "/after")).status == 404, "app serve did not snapshot routes");
+    const auto json = co_await pace::http::async_get(base + "/json");
     require(json.status == 201 && json.header("Content-Type") == "application/json", "JSON helper metadata");
-    require((co_await pace::http::get(base + "/html")).header("Content-Type") == "text/html; charset=utf-8", "HTML helper metadata");
-    auto echoed = co_await pace::http::post(base + "/echo", std::string("a\0b", 3), "application/custom");
+    require((co_await pace::http::async_get(base + "/html")).header("Content-Type") == "text/html; charset=utf-8", "HTML helper metadata");
+    auto echoed = co_await pace::http::async_post(base + "/echo", std::string("a\0b", 3), "application/custom");
     require(echoed.body == std::string("a\0b", 3) && echoed.content_type == "application/custom", "URL POST binary body or type");
     request head; head.method = "HEAD";
-    require((co_await pace::http::fetch(base, std::move(head))).body.empty(), "URL HEAD body suppression");
+    require((co_await pace::http::async_fetch(base, std::move(head))).body.empty(), "URL HEAD body suppression");
     bool host_rejected = false;
-    try { (void)co_await pace::http::fetch(base, message()); }
+    try { (void)co_await pace::http::async_fetch(base, message()); }
     catch (const std::invalid_argument&) { host_rejected = true; }
     require(host_rejected, "URL Host override accepted");
     for (const char* url : {"/relative", "ftp://127.0.0.1", "http://", "http://user@localhost/",
@@ -1024,29 +1024,29 @@ pace::task<void> easy_http(pace::io_context& io) {
             "http://[::1", "http://::1/", "http://[127.0.0.1]/", "http://a..b/", "http://-a/",
             "http://local%68ost/", "http://127.0.0.999/", "http://host/a b", "http://host/\r\n"}) {
         bool rejected = false;
-        try { (void)co_await pace::http::get(url); }
+        try { (void)co_await pace::http::async_get(url); }
         catch (const std::invalid_argument&) { rejected = true; }
         require(rejected, "malformed URL was not rejected before I/O");
     }
 #ifdef PACE_HAS_DNS
-    const auto named = co_await pace::http::get("http://localhost:" + std::to_string(listener->local_endpoint().port) + "/inspect");
+    const auto named = co_await pace::http::async_get("http://localhost:" + std::to_string(listener->local_endpoint().port) + "/inspect");
     require(named.body == "/inspect|localhost:" + std::to_string(listener->local_endpoint().port), "DNS URL lost hostname identity");
 #else
     bool no_dns = false;
-    try { (void)co_await pace::http::get("http://localhost/"); }
+    try { (void)co_await pace::http::async_get("http://localhost/"); }
     catch (const std::system_error& error) { no_dns = error.code() == std::errc::not_supported; }
     require(no_dns, "hostname URL did not explain missing DNS feature");
 #endif
 #ifndef PACE_HAS_TLS
     bool no_tls = false;
-    try { (void)co_await pace::http::get("https://127.0.0.1/"); }
+    try { (void)co_await pace::http::async_get("https://127.0.0.1/"); }
     catch (const std::system_error& error) { no_tls = error.code() == std::errc::not_supported; }
     require(no_tls, "https silently downgraded without TLS");
 #endif
     auto v6 = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"::1", 0});
     io.spawn(server(v6));
     const auto v6_authority = "[::1]:" + std::to_string(v6->local_endpoint().port);
-    require((co_await pace::http::get("http://" + v6_authority + "/host")).body == v6_authority, "IPv6 URL Host brackets");
+    require((co_await pace::http::async_get("http://" + v6_authority + "/host")).body == v6_authority, "IPv6 URL Host brackets");
 }
 
 using test_body = std::function<pace::task<void>(pace::io_context&)>;

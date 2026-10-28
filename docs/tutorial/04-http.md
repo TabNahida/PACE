@@ -1,10 +1,56 @@
-# 4. Build an HTTP service, one route at a time
+# 4. Get an HTTP response, then build a service
 
-[中文](04-http.zh-CN.md) · [Previous: TCP](03-tcp.md) · [Next: execution](05-execution.md)
+[中文](04-http.zh-CN.md) · [Learning path](README.md)
 
-Our goal is a health endpoint, an echo endpoint, then a handler that awaits I/O.
-Use chapter 1's application, change its dependency to `pace_http1`, configure
-`xmake f --http1=y -y`, and replace `main.cpp` with this complete server:
+Use chapter 1's current source setup, link `pace_http1` and configure `--http1=y`.
+The direct calls and `async_` names in this chapter are not in the 0.3.1 package.
+
+## Start with a direct GET
+
+Save this as `client.cpp`; add a binary target named `client` with
+`add_files("client.cpp")` and `add_deps("pace_http1")`:
+
+```cpp
+#include <pace/http.hpp>
+#include <iostream>
+
+int main() {
+    try {
+        const auto reply = pace::http::get("http://127.0.0.1:8080/health");
+        std::cout << reply.status << " " << reply.body;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+Once the server below is running, build/run `client`; expect `200 ok`. `get` blocks
+this thread and returns the response, with a default 30-second total timeout.
+No `run` or `co_await` is required. Status codes remain in the result; network or
+protocol failures throw. To send a body to the echo route added below, replace the
+request line with:
+
+```cpp
+auto reply = pace::http::post("http://127.0.0.1:8080/echo", "hello", "text/plain");
+```
+
+For another method, use `fetch`, for example HEAD:
+
+```cpp
+pace::http::request request;
+request.method = "HEAD";
+auto reply = pace::http::fetch("http://127.0.0.1:8080/health", std::move(request));
+```
+
+Numeric HTTP needs only HTTP/1; hostnames need `--dns=y`, HTTPS needs `--tls=y`.
+See [direct clients](../reference/direct-clients.md) for total deadlines, custom CA
+trust and migration from older names.
+
+## Supply a local service
+
+Save the complete server below as `server.cpp`; create a `server` target linked to
+`pace_http1`, just as for the client.
 
 ```cpp
 #include <pace/http.hpp>
@@ -25,7 +71,7 @@ int main() {
 }
 ```
 
-Build `xmake -y my_application`, run `xmake run my_application`, then use another
+Build `xmake -y server client`, run `xmake run server`, then use another
 terminal: `curl -i http://127.0.0.1:8080/health`. Expect status 200 and `ok`.
 This server runs until stopped; Ctrl-C uses default process termination here.
 The companion `tutorial_http serve` adds cooperative signal shutdown (chapter 6).
@@ -76,35 +122,23 @@ The app accepts both forms. The reactor can run other ready work while
 this handler waits. A synchronous database call would still block it; coroutine
 syntax alone does not offload work. `pace::sleep_for` uses the current context.
 
-## 4. Call the server from C++
+## 4. Await another network request in a handler
 
-Save this as `client.cpp`; add a binary target named `client` with
-`add_files("client.cpp")` and `add_deps("pace_http1")`. Keep the server running in
-the first terminal, then build/run `client` in the second:
+A handler uses the async client so other work can proceed during its wait:
 
 ```cpp
-#include <pace/http.hpp>
-#include <pace/run.hpp>
-#include <iostream>
-
-int main() {
-    try {
-        const auto reply = pace::run(pace::http::get("http://127.0.0.1:8080/health"));
-        std::cout << reply.status << " " << reply.body;
-    } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
-}
+app.get("/proxy", []() -> pace::task<http::response> {
+    co_return co_await http::async_get("http://127.0.0.1:8080/health");
+});
 ```
 
-Expect `200 ok`. The URL helper connects, builds Host, reads the response and
-closes the connection. Inspect status codes; transport or framing failures throw.
-For POST, use `http::post(url, body, content_type)`. Numeric loopback needs no DNS;
-hostnames require `--dns=y`, and `https://` requires `--tls=y` and valid trust roots.
+`async_get`, `async_post` and `async_fetch` return tasks on the existing context.
+They do not add the direct client's default 30-second deadline. Use the reference
+for connection reuse and application-managed deadlines. Blocking clients reject
+calls from inside the running context.
 
-The repository's `xmake run tutorial_http` exercises health and asynchronous routes.
-The [companion](../../examples/tutorial_http.cpp) adds bounded signal shutdown.
+The repository's `xmake run tutorial_http` checks routes and async clients; its
+companion also demonstrates bounded signal shutdown.
 
 ## Add HTTPS
 

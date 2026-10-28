@@ -17,7 +17,7 @@ pace::http::client_options closing{
     .close_policy = pace::http::client_close_policy::graceful,
     .close_timeout = std::chrono::milliseconds(25),
 };
-auto response = co_await pace::http::get(io, endpoint, "/health", {}, closing);
+auto response = co_await pace::http::async_get(io, endpoint, "/health", {}, closing);
 // For a persistent client: http::client client(std::move(socket), {}, closing);
 ```
 
@@ -56,7 +56,7 @@ same; add a TLS configuration and verified peer name:
 ```cpp
 pace::tls::context trust; // OpenSSL default trust paths; verification is required.
 trust.load_verify_file("my-ca.pem"); // Optional private CA or explicit CA bundle.
-auto response = co_await pace::http::get(io, trust, {"127.0.0.1", 8443},
+auto response = co_await pace::http::async_get(io, trust, {"127.0.0.1", 8443},
                                        "localhost", "/health");
 ```
 

@@ -1,6 +1,6 @@
 # PACE 文档
 
-先从 [0.3.1 快速入门](tutorial/00-quick-start.zh-CN.md)开始：安装包、几行启动 HTTP 服务，再逐步加入异步等待和 URL 客户端。
+先从[一次调用的客户端](tutorial/00-quick-start.zh-CN.md)开始：直接获取 HTTP 响应，再尝试 TCP、UDP。这些接口尚未发布，使用当前源码构建。
 
 从[逐步学习路线](tutorial/README.zh-CN.md)开始：创建自己的 main.cpp，逐步加入网络和协议，
 每章核对输出并解释生命周期。配套 example 用于验证，不代替教程正文。
@@ -12,9 +12,9 @@
 ## 从这里开始
 
 按[第一章](tutorial/01-build.zh-CN.md)创建自己的 main.cpp 和 xmake.lua，
-再沿主线加入异步任务、TCP 和 HTTP。每章有构建步骤、预期结果和可修改的练习。
+先使用 HTTP、TCP、UDP 的直接客户端，需要时再加入异步任务。每章有构建步骤、预期结果和可修改的练习。
 
-[构建](tutorial/01-build.zh-CN.md) → [任务](tutorial/02-tasks-timers.zh-CN.md) → [TCP](tutorial/03-tcp.zh-CN.md) → [HTTP](tutorial/04-http.zh-CN.md) → [线程](tutorial/05-execution.zh-CN.md) → [关闭](tutorial/06-shutdown.zh-CN.md)
+[入门](tutorial/00-quick-start.zh-CN.md) → [HTTP](tutorial/04-http.zh-CN.md) / [TCP](tutorial/03-tcp.zh-CN.md) / [UDP](tutorial/07-udp.zh-CN.md) → [任务](tutorial/02-tasks-timers.zh-CN.md) → [线程](tutorial/05-execution.zh-CN.md) → [关闭](tutorial/06-shutdown.zh-CN.md)
 
 ## 按层选择模块
 
@@ -41,3 +41,5 @@ HTTP/1.1 和 WebSocket 默认启用；TLS、DNS、QUIC、HTTP/2、HTTP/3 按需�
 TCP、UDP 与 QUIC 支持数字 IPv4/IPv6 地址，DNS 可解析 A 和 AAAA。
 HTTP/1 支持请求头准入、逐请求 body 限额和有界流式响应；HTTP/2、HTTP/3 的 body 仍采用缓冲方式。
 各协议的具体边界见对应参考页。
+
+[直接客户端、超时与 HTTP 命名迁移](reference/direct-clients.zh-CN.md)

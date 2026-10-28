@@ -1,8 +1,10 @@
 # API 中文索引与关键约定
 
+[直接客户端与 HTTP 命名迁移](direct-clients.zh-CN.md)
+
 [组件便捷接口（0.3.1）](component-conveniences.zh-CN.md) · [协议调优](protocol-tuning.zh-CN.md) · [HTTP 进阶](http-recipes.zh-CN.md) · [构建选项](build-configuration.md)
 
-[0.3.0 convenience APIs: app, URL client, TCP, context](convenience.md)
+[应用便捷接口：app、异步 URL 客户端、TCP、context](convenience.md)
 
 常用便利入口：[pace::run](run.md) · [HTTP 路由与普通处理器](http-router.md) · [逐步教程](../tutorial/README.zh-CN.md)
 
@@ -75,8 +77,8 @@ TLS 的关闭会交换 `close_notify`，WebSocket 的关闭会交换关闭帧；
 HTTP 提供 HTTP/1.0、HTTP/1.1 客户端与服务端，支持 Content-Length、chunked、trailer 和持久连接。
 默认请求头上限 16 KiB、请求体上限 1 MiB、每连接最多 1000 个请求。
 响应的 Content-Length、Connection、Content-Type 等由库管理。
-启用 `--tls=y` 后，同样的 `get/fetch/serve` 接口有 HTTPS 重载，默认校验证书链和主机名。
-`http::get(io, endpoint, "/health")` 可以完成一次请求；`http::client` 支持顺序复用连接。
+启用 `--tls=y` 后，同样的 `get/fetch` 直接接口和 `async_get/async_fetch/serve` 异步接口有 HTTPS 重载，默认校验证书链和主机名。
+`http::async_get(io, endpoint, "/health")` 可以完成一次请求；`http::client` 支持顺序复用连接。
 HTTP/1.1 服务端收到任何 `Expect`（包括 `100-continue`）都会返回 417。客户端
 拒绝自行设置 `Expect`，直接发送完整请求，然后可跳过数量受限的 100/103 等中间
 响应，继续读取最终响应；这不包含“先发请求头，等 100 许可后再发送 body”的握手。

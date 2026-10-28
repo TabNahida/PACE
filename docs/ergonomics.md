@@ -1,5 +1,9 @@
 # Shorter application code, explicit ownership
 
+Current client entry points: direct `http::get/post/fetch` return responses; their
+coroutine forms are `async_get/async_post/async_fetch`. TCP/UDP offer `exchange` and
+`async_exchange`. See [direct clients and migration](reference/direct-clients.md).
+
 The convenience layer removes repeated entry/shutdown and routing code while
 retaining the reactor, task and transport APIs. It adds no framework dependency,
 implicit worker pool, hidden global context or macro DSL.
@@ -11,8 +15,8 @@ POST and fetch own request data and select optional DNS/TLS explicitly at build
 time. `pace::run(task)` and nullary factories, current-context waits, and TCP
 connect/read_exact remove common setup and short-read loops. See the
 [quick start](tutorial/00-quick-start.md) and [contracts](reference/convenience.md).
-These helpers retain protocol limits; URL clients do not add retries, redirects
-or request deadlines. DNS is linked into HTTP/1 only when enabled.
+These helpers retain protocol limits. URL clients do not add retries or redirects;
+only direct calls add a default total deadline. DNS is linked into HTTP/1 only when enabled.
 
 ## One-shot entry
 
@@ -21,7 +25,7 @@ run it. `pace::run(factory)` now creates that scope and returns `task<T>`'s valu
 
 ```cpp
 const auto response = pace::run([](pace::io_context& io) {
-    return pace::http::get(io, {"127.0.0.1", 8080}, "/health");
+    return pace::http::async_get(io, pace::tcp::endpoint{"127.0.0.1", 8080}, "/health");
 });
 ```
 

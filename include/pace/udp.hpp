@@ -5,6 +5,7 @@
 #include <pace/platform.hpp>
 #include <pace/task.hpp>
 #include <pace/this_context.hpp>
+#include <pace/blocking.hpp>
 #include <stdexcept>
 #include <cstddef>
 #include <cstdint>
@@ -102,5 +103,22 @@ inline socket bind(io_context& io, endpoint local, bind_options options = {}) {
 }
 inline socket bind(endpoint local, bind_options options = {}) {
     return bind(this_context(), std::move(local), options);
+}
+// One datagram request, then the first reply from the same numeric endpoint.
+// Unrelated senders are ignored; this is filtering, not authentication/reliability.
+task<packet> async_exchange(io_context&, endpoint peer, std::string request, std::size_t capacity = 65536);
+inline task<packet> async_exchange(endpoint peer, std::string request, std::size_t capacity = 65536) {
+    co_return co_await async_exchange(this_context(), std::move(peer), std::move(request), capacity);
+}
+inline packet exchange(endpoint peer, std::string request, blocking_options options = {}, std::size_t capacity = 65536) {
+    return detail::blocking_call([&](io_context& io) {
+        return async_exchange(io, std::move(peer), std::move(request), capacity);
+    }, options);
+}
+inline std::size_t send(endpoint peer, std::string message, blocking_options options = {}) {
+    return detail::blocking_call([&](io_context& io) -> task<std::size_t> {
+        auto socket = open(io);
+        co_return co_await socket.send(std::move(message), std::move(peer));
+    }, options);
 }
 } // namespace pace::udp

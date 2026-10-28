@@ -1,5 +1,7 @@
 # UDP
 
+For one-call `exchange` / `async_exchange` clients, see [direct clients](direct-clients.md).
+
 Short forms and owning helpers: [component conveniences](component-conveniences.md).
 
 Send one datagram and read it back locally:

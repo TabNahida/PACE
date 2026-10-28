@@ -1,8 +1,8 @@
 # 1. Build and run
 
 This chapter builds **your own program**, not a prewritten example. You need xmake
-2.9.8+ and a C++20 compiler. These guides track this source checkout; the component conveniences used below
-require PACE v0.3.1 or newer.
+2.9.8+ and a C++20 compiler. These guides track this source checkout. The direct client APIs are unreleased;
+use the checkout rather than the 0.3.1 package.
 
 ## Create a small application
 
@@ -27,7 +27,7 @@ includes("third_party/PACE")
 target("my_application")
     set_kind("binary")
     add_files("main.cpp")
-    add_deps("pace_runtime")
+    add_deps("pace_http1")
 ```
 
 The dependency supplies headers and platform libraries. Do not copy PACE's
@@ -35,17 +35,14 @@ The dependency supplies headers and platform libraries. Do not copy PACE's
 Start `main.cpp` with this complete program:
 
 ```cpp
-#include <pace/run.hpp>
+#include <pace/http.hpp>
 #include <iostream>
 
-pace::task<void> hello(pace::io_context&) {
-    std::cout << "Hello, PACE\n";
-    co_return;
-}
-
 int main() {
-    try { pace::run(hello); }
-    catch (const std::exception& error) {
+    try {
+        auto reply = pace::http::get("http://127.0.0.1:8080/health");
+        std::cout << reply.status << " " << reply.body;
+    } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
     }
@@ -55,21 +52,19 @@ int main() {
 From **hello**, configure and run:
 
 ```sh
-xmake f -m release --tests=n --examples=n --http1=n --websocket=n -y
+xmake f -m release --tests=n --examples=n --http1=y --websocket=n -y
 xmake -y my_application
 xmake run my_application
 ```
 
-Expect `Hello, PACE` followed by process exit. `pace_runtime` needs no optional
-protocol libraries. Chapter 2 adds a timer and a returned value. Later chapters
-change `add_deps` to the networking/protocol module being used and reconfigure
-its feature option. Commands named `tutorial_*` are companion exercises run from
-the **PACE repository root**, with `--examples=y`; they are not targets in hello.
+Keep the [quick start's server](00-quick-start.md) running in another terminal.
+Expect `200 ok` and client exit. `get` directly returns a response; no coroutine
+setup is needed. Continue with [HTTP](04-http.md), [TCP](03-tcp.md) or [UDP](07-udp.md).
+[Chapter 2](02-tasks-timers.md) introduces tasks when you need async composition.
 
 If a header cannot be found, check the `includes` path and dependency. If a
-protocol target is missing, enable its option before building. If the program
-prints but never exits, check whether you used manual `io.run()` without a stop
-path; the next chapter distinguishes both execution forms.
+protocol target is missing, enable its option before building. A connection error
+usually means the local server is not running or the URL has the wrong port.
 
 ## Build the repository's companion exercises
 

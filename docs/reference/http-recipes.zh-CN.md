@@ -16,7 +16,7 @@ pace::http::client_options closing{
     .close_policy = pace::http::client_close_policy::graceful,
     .close_timeout = std::chrono::milliseconds(25),
 };
-auto response = co_await pace::http::get(io, endpoint, "/health", {}, closing);
+auto response = co_await pace::http::async_get(io, endpoint, "/health", {}, closing);
 // 对持久客户端：http::client client(std::move(socket), {}, closing);
 ```
 
@@ -52,7 +52,7 @@ router 也能作为 HTTP/2、HTTP/3 的共享 handler 使用。
 ```cpp
 pace::tls::context trust;
 trust.load_verify_file("my-ca.pem"); // 按需添加 CA；默认使用 OpenSSL 信任路径。
-auto response = co_await pace::http::get(io, trust, {"127.0.0.1", 8443},
+auto response = co_await pace::http::async_get(io, trust, {"127.0.0.1", 8443},
                                        "localhost", "/health");
 ```
 

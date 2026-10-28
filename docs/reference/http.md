@@ -1,6 +1,6 @@
 # `pace::http`: HTTP/1.1 and HTTPS
 
-[0.3.0 convenience additions](convenience.md)
+[Direct clients and migration](direct-clients.md) · [Async conveniences](convenience.md)
 
 For exact routes, ordinary response callbacks and the owning-listener serve overload, see [handler adapters and routing](http-router.md).
 
@@ -13,13 +13,18 @@ negotiates protocol upgrades nor implements CONNECT or HTTP/3.
 
 ## Start with the short API
 
+From ordinary code, `auto reply = pace::http::get(url);` returns a response.
+It blocks this thread and defaults to a 30-second total deadline. For a running
+coroutine, use the async APIs below. See [direct clients](direct-clients.md) for
+POST, fetch, options and migration.
+
 ```cpp
 // Inside a coroutine running on io; endpoints accept numeric IPv4 or IPv6.
-auto response = co_await pace::http::get(io, {"127.0.0.1", 8080}, "/health");
+auto response = co_await pace::http::async_get(io, pace::tcp::endpoint{"127.0.0.1", 8080}, "/health");
 
 // HTTPS: configuration uses certificate verification by default.
 pace::tls::context trust;
-auto secure = co_await pace::http::get(io, trust, {"127.0.0.1", 8443},
+auto secure = co_await pace::http::async_get(io, trust, {"127.0.0.1", 8443},
                                      "localhost", "/health");
 ```
 
@@ -81,7 +86,7 @@ the server emits an HTTP/1.1 status line, including when handling HTTP/1.0 reque
 A request's `keep_alive` controls its generated Connection field. Set `chunked`
 for chunked transfer and optionally fill `trailers`. Otherwise PACE generates a
 Content-Length for the owned body. A persistent `client` requires one valid Host
-for HTTP/1.1; the `get`/`fetch` helpers fill a missing Host automatically.
+for HTTP/1.1; the `async_get`/`async_fetch` helpers fill a missing Host automatically.
 
 A server response's `close` can end persistence. `content_type` selects the
 Content-Type field; an empty string omits it. `chunked=true` emits a single data
@@ -249,15 +254,15 @@ early rejection of an unread request body.
 ## One-shot clients
 
 ```cpp
-task<response> fetch(io_context& context, tcp::endpoint endpoint,
+task<response> async_fetch(io_context& context, tcp::endpoint endpoint,
                      request outgoing, limits bounds = {}, client_options options = {});
-task<response> get(io_context& context, tcp::endpoint endpoint,
+task<response> async_get(io_context& context, tcp::endpoint endpoint,
                    std::string target = "/", limits bounds = {}, client_options options = {});
 #ifdef PACE_HAS_TLS
-task<response> fetch(io_context& context, const tls::context& configuration,
+task<response> async_fetch(io_context& context, const tls::context& configuration,
                      tcp::endpoint endpoint, std::string peer_name,
                      request outgoing, limits bounds = {}, client_options options = {});
-task<response> get(io_context& context, const tls::context& configuration,
+task<response> async_get(io_context& context, const tls::context& configuration,
                    tcp::endpoint endpoint, std::string peer_name,
                    std::string target = "/", limits bounds = {}, client_options options = {});
 #endif

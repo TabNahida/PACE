@@ -4,7 +4,7 @@
 
 这一章要做出你自己的程序，不是只运行仓库里写好的 example。
 需要 xmake 2.9.8+ 和支持 C++20 的编译器。教程对应当前源码；
-后续章节的组件便捷接口需要 PACE v0.3.1 或更新版本。
+后续章节的直接客户端尚未发布，请使用当前源码而非 0.3.1 安装包。
 
 ## 第一步：准备三个文件位置
 
@@ -28,51 +28,48 @@ includes("third_party/PACE")
 target("my_application")
     set_kind("binary")
     add_files("main.cpp")
-    add_deps("pace_runtime")
+    add_deps("pace_http1")
 ```
 
 `includes` 加载库的构建定义，`add_deps` 让应用得到头文件路径、编译定义和
 系统链接依赖。无需复制库的 `.cpp` 文件，也不用手写静态库链接顺序。
-我们先只使用 runtime，所以没有额外协议依赖。
+这里链接 `pace_http1`，它自动带上 TCP 和 runtime 依赖；数字 HTTP 地址不需要第三方协议库。
 
 ## 第二步：写 main.cpp
 
 ```cpp
-#include <pace/run.hpp>
+#include <pace/http.hpp>
 #include <iostream>
 
-pace::task<void> hello(pace::io_context&) {
-    std::cout << "Hello, PACE\n";
-    co_return;
-}
-
 int main() {
-    try { pace::run(hello); }
-    catch (const std::exception& error) {
+    try {
+        auto reply = pace::http::get("http://127.0.0.1:8080/health");
+        std::cout << reply.status << " " << reply.body;
+    } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-暂时把 `task<void>` 理解为“稍后执行、不返回结果的任务”。
-`run` 负责启动它，并在入口结束后退出。下一章再加真正的异步等待。
+`get` 直接返回响应，不需要协程或 `run`。保持[快速入门的服务端](00-quick-start.zh-CN.md)
+在另一个终端运行，再构建和运行本章客户端。
 
 ## 第三步：构建并核对结果
 
 在 **hello 目录**执行：
 
 ```sh
-xmake f -m release --tests=n --examples=n --http1=n --websocket=n -y
+xmake f -m release --tests=n --examples=n --http1=y --websocket=n -y
 xmake -y my_application
 xmake run my_application
 ```
 
-应输出 `Hello, PACE`，然后正常结束。如果找不到头文件，检查 `includes`
-路径和 `add_deps`；如果打印后不退出，检查是否改成了需要手动停止的 `io.run()`。
+应输出 `200 ok` 后退出。找不到头文件时检查 `includes` 路径和 `add_deps`；
+连接失败时先确认本地服务端仍在运行，并检查 URL 端口。
 
-接下来的 TCP 章节把依赖换成 `pace_net`；HTTP 章节换成 `pace_http1`，
-并重新配置 `--http1=y`。TLS、DNS、HTTP/2、QUIC、HTTP/3 要分别启用：
+接着按需阅读 HTTP、TCP 或 UDP 章节，需要异步组合时再读第二章。
+TCP/UDP 只需把依赖换成 `pace_net`。TLS、DNS、HTTP/2、QUIC、HTTP/3 要分别启用：
 
 | 功能 | 选项 | 应用依赖 |
 |---|---|---|

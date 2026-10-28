@@ -142,31 +142,31 @@ task<response> send_url(io_context& io, std::string url, request outgoing, limit
 }
 } // namespace
 
-task<response> fetch(io_context& io, std::string url, request outgoing, limits bounds, client_options options) {
+task<response> async_fetch(io_context& io, std::string url, request outgoing, limits bounds, client_options options) {
     return send_url(io, std::move(url), std::move(outgoing), bounds, options);
 }
-task<response> get(io_context& io, std::string url, limits bounds, client_options options) {
-    return fetch(io, std::move(url), request{.method = "GET", .target = {}, .version = "HTTP/1.1", .body = {}}, bounds, options);
+task<response> async_get(io_context& io, std::string url, limits bounds, client_options options) {
+    return async_fetch(io, std::move(url), request{.method = "GET", .target = {}, .version = "HTTP/1.1", .body = {}}, bounds, options);
 }
-task<response> post(io_context& io, std::string url, std::string body, std::string type, limits bounds, client_options options) {
-    return fetch(io, std::move(url), request{.method = "POST", .target = {}, .version = "HTTP/1.1", .headers = {{"Content-Type", std::move(type)}}, .body = std::move(body)}, bounds, options);
+task<response> async_post(io_context& io, std::string url, std::string body, std::string type, limits bounds, client_options options) {
+    return async_fetch(io, std::move(url), request{.method = "POST", .target = {}, .version = "HTTP/1.1", .headers = {{"Content-Type", std::move(type)}}, .body = std::move(body)}, bounds, options);
 }
-task<response> fetch(std::string url, request outgoing, limits bounds, client_options options) {
-    co_return co_await fetch(this_context(), std::move(url), std::move(outgoing), bounds, options);
+task<response> async_fetch(std::string url, request outgoing, limits bounds, client_options options) {
+    co_return co_await async_fetch(this_context(), std::move(url), std::move(outgoing), bounds, options);
 }
-task<response> get(std::string url, limits bounds, client_options options) {
-    co_return co_await get(this_context(), std::move(url), bounds, options);
+task<response> async_get(std::string url, limits bounds, client_options options) {
+    co_return co_await async_get(this_context(), std::move(url), bounds, options);
 }
-task<response> post(std::string url, std::string body, std::string type, limits bounds, client_options options) {
-    co_return co_await post(this_context(), std::move(url), std::move(body), std::move(type), bounds, options);
+task<response> async_post(std::string url, std::string body, std::string type, limits bounds, client_options options) {
+    co_return co_await async_post(this_context(), std::move(url), std::move(body), std::move(type), bounds, options);
 }
 #ifdef PACE_HAS_TLS
-task<response> fetch(io_context& io, const tls::context& configuration, std::string url, request outgoing,
+task<response> async_fetch(io_context& io, const tls::context& configuration, std::string url, request outgoing,
                      limits bounds, client_options options) {
     return send_url(io, std::move(url), std::move(outgoing), bounds, options, &configuration);
 }
-task<response> get(io_context& io, const tls::context& configuration, std::string url, limits bounds, client_options options) {
-    return fetch(io, configuration, std::move(url), request{.method = "GET", .target = {}, .version = "HTTP/1.1", .body = {}}, bounds, options);
+task<response> async_get(io_context& io, const tls::context& configuration, std::string url, limits bounds, client_options options) {
+    return async_fetch(io, configuration, std::move(url), request{.method = "GET", .target = {}, .version = "HTTP/1.1", .body = {}}, bounds, options);
 }
 #endif
 } // namespace pace::http

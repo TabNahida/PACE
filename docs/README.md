@@ -1,6 +1,6 @@
 # PACE documentation
 
-Start with the [0.3.1 quick start](tutorial/00-quick-start.md): install the package, run a small HTTP service, then add waits and a URL client.
+Start with [one-call clients](tutorial/00-quick-start.md): get an HTTP response directly, then try TCP and UDP. These unreleased APIs use the current source checkout.
 
 Write your own asynchronous application, from its first main.cpp to HTTP/3.
 
@@ -12,10 +12,10 @@ programs, incremental changes, expected output and ownership explanations.
 ## Start here
 
 Create your own main.cpp and xmake.lua in [chapter 1](tutorial/01-build.md),
-then add asynchronous tasks, TCP and HTTP. Each chapter gives build steps,
+then use direct HTTP, TCP and UDP clients. Add async tasks when needed. Each chapter gives build steps,
 expected results and a small change to try yourself.
 
-[Build](tutorial/01-build.md) → [Tasks](tutorial/02-tasks-timers.md) → [TCP](tutorial/03-tcp.md) → [HTTP](tutorial/04-http.md) → [Workers](tutorial/05-execution.md) → [Shutdown](tutorial/06-shutdown.md)
+[Quick start](tutorial/00-quick-start.md) → [HTTP](tutorial/04-http.md) / [TCP](tutorial/03-tcp.md) / [UDP](tutorial/07-udp.md) → [Tasks](tutorial/02-tasks-timers.md) → [Workers](tutorial/05-execution.md) → [Shutdown](tutorial/06-shutdown.md)
 
 ## Explore the layers
 
@@ -47,4 +47,4 @@ AAAA records. HTTP/1 offers request-head admission, per-request limits and bound
 streaming responses. HTTP/2 and HTTP/3 bodies remain buffered. Protocol references
 describe deadlines, ownership and individual limits.
 
-The component helpers added in v0.3.1 are documented in [component conveniences](reference/component-conveniences.md). Buffer reuse, concurrency and close budgets are in [protocol tuning](reference/protocol-tuning.md); the package quick start uses v0.3.1.
+The component helpers added in v0.3.1 are documented in [component conveniences](reference/component-conveniences.md). Buffer reuse, concurrency and close budgets are in [protocol tuning](reference/protocol-tuning.md). Direct calls, timeout contracts and HTTP name migration are in [direct clients](reference/direct-clients.md).
