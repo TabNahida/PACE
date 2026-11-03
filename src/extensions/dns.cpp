@@ -55,7 +55,7 @@ struct lookup : std::enable_shared_from_this<lookup> {
         cleaning = true;
         for (auto& [fd, state] : sockets) {
             state->alive = false;
-            io.cancel(static_cast<native_socket_type>(fd));
+            io.release_socket(static_cast<native_socket_type>(fd));
         }
         if (channel) { auto* old = std::exchange(channel, nullptr); ares_destroy(old); }
         sockets.clear();
@@ -81,7 +81,8 @@ struct lookup : std::enable_shared_from_this<lookup> {
             if (!read && !write) {
                 if (found != self.sockets.end()) {
                     found->second->alive = false;
-                    self.io.cancel(static_cast<native_socket_type>(fd));
+                    // c-ares emits NONE immediately before closing this socket.
+                    self.io.release_socket(static_cast<native_socket_type>(fd));
                     self.sockets.erase(found);
                 }
                 return;

@@ -44,3 +44,5 @@ QUIC/HTTP3 当前要求 POSIX；详见[构建配置](01-build.zh-CN.md)和[平�
 完整接口约定见[组件便捷接口](../reference/component-conveniences.zh-CN.md)；缓冲区复用、期限和并发等细节见[协议调优](../reference/protocol-tuning.zh-CN.md)。
 
 [直接客户端与 API 迁移](../reference/direct-clients.zh-CN.md)
+
+[13. 静态文件、缓存与反向代理](13-gateway.zh-CN.md) — 从一行挂载开始搭建网关（开发分支）。

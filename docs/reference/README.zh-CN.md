@@ -96,3 +96,6 @@ HTTP/2 与 WebSocket 使用独立接口；本 HTTP/1.1 接口不提供 CONNECT�
 要让已有响应尽量完成，应先停止接收新连接、等待应用跟踪的连接退出，
 再到达宽限期后停止 context。最后等 run 返回或 join 运行线程，
 销毁 socket/listener，再销毁 context。参见[关闭教程](../tutorial/06-shutdown.md)。
+
+- [HTTP 网关服务](http-gateway.zh-CN.md)：目录挂载、反向代理、缓存、负载均衡。
+- [I/O 后端](io-backends.md)：选择方式、默认值与能力边界。

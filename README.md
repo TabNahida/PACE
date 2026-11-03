@@ -16,7 +16,7 @@
 - **Build only what you use.** A core without third-party runtime dependencies, with optional protocol modules above it.
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="Local Linux TCP echo: PACE leads throughput and p50; Asio leads p95 and p99. Zero-based charts include all three libraries and trial ranges." width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
 </p>
 
 <p align="center"><a href="docs/performance.md">Full benchmark results, methodology &amp; raw data →</a></p>
@@ -66,6 +66,19 @@ int main() {
 Link with `add_deps("pace_http1")`. [Write the client and server step by step →](docs/tutorial/00-quick-start.md)
 
 Continue step by step: [TCP](docs/tutorial/03-tcp.md) · [UDP](docs/tutorial/07-udp.md) · [DNS](docs/tutorial/08-dns-tls.md) · [QUIC](docs/tutorial/11-quic-http3.md) · [HTTP/3](docs/tutorial/11-quic-http3.md) · [WebSocket](docs/tutorial/09-websocket.md)
+
+## Files and reverse proxies
+
+```cpp
+app.mount("/assets", "./public")
+   .proxy("/api", {"http://127.0.0.1:9000", "http://127.0.0.1:9001"});
+app.run_workers(4, {"0.0.0.0", 8080});
+```
+
+Optional bounded caches, per-worker connection pools and round-robin or
+least-connections balancing. Available since PACE 0.5.0.
+[Walk through a gateway →](docs/tutorial/13-gateway.md) ·
+[nginx comparison →](docs/performance.md#http-gateways--pace-and-nginx) · [I/O backends →](docs/reference/io-backends.md)
 
 ## Get started
 

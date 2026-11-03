@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 — 2026-11-03
+
+- Reduce HTTP/1 header allocation and bypass body-reader coroutines for complete buffered messages; preserve framing, body limits, pipelining and cancellation.
+- Speed up static content validators (portable XXH64), file traversal, date formatting and HTTP/1 encoding; remove redundant body copies, buffer clearing and a proxy coroutine wrapper.
+- Add reactor-local single-snapshot cache reads with mutation/TTL invalidation, isolated reader counters and borrowed context-service lookup to reduce hot-key contention and reference-count traffic.
+
+- Add HTTP directory mounts, bounded static responses, validators and byte ranges.
+- Add reverse proxies with per-reactor keep-alive pools, round-robin/least-connections balancing, deadlines and bounded shared response caching.
+- Add sharded CLOCK caches and dense generation-checked reactor descriptor slots.
+- Add selectable Linux io_uring and Windows IOCP socket-notification backends; retain native fallbacks.
+- Add bilingual gateway tutorials, backend reference and reproducible local Linux nginx comparisons. Restore the README PACE/Asio/libuv comparison and publish a full report linking both library and nginx gateway measurements, including regressions.
+
 ## 0.4.0 — 2026-10-28
 
 - Add structured task groups with owned factories, result handles, scope-owned resources and cancel-then-join error propagation; children cannot outlive the boundary.

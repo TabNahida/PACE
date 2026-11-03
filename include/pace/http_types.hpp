@@ -3,6 +3,8 @@
 #include <pace/task.hpp>
 #include <cstddef>
 #include <functional>
+#include <optional>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -50,6 +52,8 @@ struct response {
     std::string version = "HTTP/1.1";
     std::vector<header_field> trailers{};
     bool chunked = false;
+    // HEAD metadata for proxies; ignored for responses carrying a body.
+    std::optional<std::uint64_t> representation_length{};
 
     [[nodiscard]] std::string_view header(std::string_view name) const noexcept {
         const auto equal = [](std::string_view a, std::string_view b) {

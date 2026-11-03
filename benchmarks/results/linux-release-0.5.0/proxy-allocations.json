@@ -1,0 +1,32 @@
+{
+  "scope": "malloc/calloc/realloc calls on one frontend reactor thread; startup + 32 * (1000 warmup + 10000 measured) requests",
+  "measurement_kind": "intrusive_allocation_diagnostic",
+  "binary_sha256": {
+    "pace": "c673966f37fbf6413b3276f2a14d7055ca240cb368e8d839cda962ece97d0cbd",
+    "baseline": "44e1c28ec7ec97d5958f0780742bd01b330048cb0e3bdd9ee76e486a14560204",
+    "load": "f3ce8f3cfab9c94b569e9410d26ab588f0668e78c4cab61c7e2b95cc0ec64ff6",
+    "preload": "8100d9615e785e218607c0e97abdf83ca9bd503bcafb4de4209af73f8d3258ea"
+  },
+  "trials": [
+    {
+      "backend": "baseline",
+      "completed_including_warmup": 352000,
+      "allocation_calls": {
+        "malloc": 21836230,
+        "calloc": 0,
+        "realloc": 0
+      },
+      "calls_per_exchange_including_startup": 62.034744318181815
+    },
+    {
+      "backend": "pace",
+      "completed_including_warmup": 352000,
+      "allocation_calls": {
+        "malloc": 18316405,
+        "calloc": 0,
+        "realloc": 0
+      },
+      "calls_per_exchange_including_startup": 52.03524147727273
+    }
+  ]
+}

@@ -16,7 +16,7 @@
 - **只构建需要的模块。** 核心没有第三方运行时依赖，协议模块按需启用。
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="本地 Linux TCP echo：PACE 的吞吐和 p50 领先，Asio 的 p95 与 p99 领先。三库柱状图均从零开始，展示各轮范围。" width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
 </p>
 
 <p align="center"><a href="docs/performance.md">完整性能数据、测试方法与原始记录 →</a></p>
@@ -92,6 +92,18 @@ xmake -y
 只需要 Socket 时，通过 `--http1=n --websocket=n` 关闭默认应用协议。依赖与各模块目标见[构建指南](docs/tutorial/01-build.md)。
 
 </details>
+
+## 静态文件与反向代理
+
+```cpp
+app.mount("/assets", "./public")
+   .proxy("/api", {"http://127.0.0.1:9000", "http://127.0.0.1:9001"});
+app.run_workers(4, {"0.0.0.0", 8080});
+```
+
+按需配置有界缓存、每 worker 连接池、轮询或最少连接数分配。适用于 PACE 0.5.0 或更新版本。
+[一步步搭建网关 →](docs/tutorial/13-gateway.zh-CN.md) ·
+[nginx 性能对照 →](docs/performance.md#http-gateways--pace-and-nginx) · [I/O 后端 →](docs/reference/io-backends.md)
 
 ## 继续探索
 

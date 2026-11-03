@@ -163,3 +163,7 @@ Use a different configuration directory for another feature set. When returning
 to the repository's default configuration, unset `XMAKE_CONFIGDIR`.
 
 Next: [tasks and timers](../tutorial/02-tasks-timers.md).
+
+## Optional Linux io_uring
+
+`--uring=y` links liburing into `pace_runtime`. Select it with `PACE_IO_BACKEND=io_uring` or an explicit constructor; enabling the build option alone preserves the epoll default. See [backend selection](io-backends.md).

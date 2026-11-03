@@ -74,7 +74,9 @@ Optional [stage profiling](../benchmarks/profiling.md) and [component microbench
 |---|---|---|
 | Linux | `epoll`, persistent level-triggered interests | Nonblocking `eventfd` |
 | macOS / FreeBSD, 64-bit | `kqueue`, `EV_ONESHOT` read/write filters | `EVFILT_USER` |
-| Windows | `WSAPoll` readiness array | Nonblocking UDP loopback sockets |
+| Windows 64-bit, build 20348+ | IOCP socket state notifications | `PostQueuedCompletionStatus` |
+| Windows compatibility / x86 | `WSAPoll` readiness array | Nonblocking UDP loopback sockets |
+| Linux optional `--uring=y` | io_uring one-shot polls | Nonblocking `eventfd` |
 
 The internal poller emits a token with readable, writable, and error flags. On
 Linux the reactor retains matching interests across successive coroutine waits,
@@ -87,7 +89,7 @@ are merged and any undelivered counterpart is disarmed. Wakeups are internal.
 
 Socket registrations have tokens independent of the native socket handle, allowing the reactor to discard stale deliveries after cancellation and handle reuse. `UINT64_MAX` is reserved for the internal wakeup token. Windows handles retain their native pointer width.
 
-Windows currently uses a correctness-first readiness baseline. WSAPoll scans its array and is not an IOCP completion backend; platform support alone does not imply equivalent scaling or performance. Linux and kqueue performance also require workload-specific measurement.
+[Selectable backends](reference/io-backends.md) include IOCP socket notifications and optional io_uring polling. Reads/writes still use nonblocking socket calls; these paths do not yet submit overlapped or direct io_uring data transfers. WSAPoll remains the Windows compatibility path. Performance remains workload-dependent.
 
 ## Tasks and object ownership
 
@@ -171,3 +173,7 @@ The first benchmark measures one server reactor under a closed-loop localhost TC
 This workload does not establish HTTP performance, multiworker scalability, open-loop tail latency, or general superiority over another library. CI runs functional builds on Linux, macOS, and Windows, plus a FreeBSD VM, and preserves correctness-check artifacts. Published performance measurements come from local Linux. Current [workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml), tests, and evidence files determine what has actually been validated.
 
 The separate [worker/execution scaling study](../benchmarks/scaling.md) keeps total clients fixed, balances them across one listening port per context, and compares runtime-managed threads, caller participation and application-owned threads. Startup, warmup, steady state and shutdown have separate timing windows. [Complete performance results](performance.md) include the README chart's unselected comparisons and negative findings.
+
+## Embedded HTTP gateway
+
+Layer 3 includes [directory mounts and reverse proxies](reference/http-gateway.md). Connection pools and load-balancing counters are owned by each reactor, while bounded response caches use sharded CLOCK slots and immutable snapshots. Runtime descriptors also use generation-checked contiguous slots for event dispatch. These structures require no machine-specific cache tuning.

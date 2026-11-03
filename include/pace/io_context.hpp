@@ -2,6 +2,7 @@
 
 #include <pace/task.hpp>
 #include <pace/platform.hpp>
+#include <pace/io_backend.hpp>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -17,17 +18,27 @@ class io_context {
     struct callback_timers;
     struct cancellation_records;
 public:
-    io_context();
+    explicit io_context(io_backend selected = io_backend::automatic);
+    [[nodiscard]] io_backend backend() const noexcept;
     ~io_context();
     io_context(const io_context&) = delete;
     io_context& operator=(const io_context&) = delete;
 
+    // Context-owned services (e.g. connection pools). Called only on this loop.
+    // Keys and values live until the context is destroyed; values may own sockets.
+    std::shared_ptr<void> local_state(std::shared_ptr<const void> key,
+        const std::function<std::shared_ptr<void>()>& create);
+    // Borrow a previously created service without shared_ptr reference traffic.
+    // The pointer remains valid until context destruction; owning-loop use only.
+    void* find_local_state(const void* key);
     void spawn(task<void> work);
     void post(std::function<void()> work);
     void run(); // Runs until stop(); unhandled task errors are rethrown after draining.
     void stop() noexcept;
     bool stopped() const noexcept;
     static io_context* current() noexcept;
+    // Cancel and detach before the owner immediately closes a raw socket.
+    void release_socket(native_socket_type fd) noexcept;
     void cancel(native_socket_type fd) noexcept; // Must run on the owning loop, or before run().
 
     // One-shot callbacks run on this reactor. Keep the handle to keep the timer

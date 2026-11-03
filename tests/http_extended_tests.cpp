@@ -130,6 +130,32 @@ pace::task<void> chunk_pipeline(pace::io_context& io) {
     require(result.ends_with("\r\n\r\nhello"), "fragmented chunk/trailer parse failed");
 }
 
+pace::task<void> fixed_body_pipeline(pace::io_context& io) {
+    auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
+    pace::http::limits bounds; bounds.max_body_bytes = 5;
+    io.spawn(server(listener, bounds));
+    const auto prefix = std::string("POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n");
+    const auto next = std::string("GET /second HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    for (bool fragmented : {false, true}) {
+        pace::tcp::stream socket(io);
+        co_await socket.connect(listener->local_endpoint());
+        if (fragmented) {
+            co_await socket.write_all(prefix + "he");
+            co_await io.sleep_for(1ms);
+            co_await socket.write_all("llo" + next);
+        } else co_await socket.write_all(prefix + "hello" + next);
+        std::string result; std::array<char, 1024> buffer{};
+        while (const auto count = co_await socket.read_some(buffer)) result.append(buffer.data(), count);
+        const auto second = result.find("HTTP/1.1 200", 1);
+        require(second != result.npos && result.find("\r\n\r\nhello") < second &&
+                result.ends_with("\r\n\r\n/second"), "fixed-length body consumed pipelined bytes");
+    }
+    const auto rejected = co_await raw_exchange(io, listener->local_endpoint(),
+        "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 6\r\n\r\nabcdef" + next);
+    require(rejected.starts_with("HTTP/1.1 413") && rejected.find("HTTP/1.1 200") == rejected.npos,
+            "fully buffered body bypassed size limit");
+}
+
 pace::task<void> rejected_requests(pace::io_context& io) {
     auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
     pace::http::limits bounds;
@@ -1078,6 +1104,7 @@ int main(int argc, char** argv) {
         run_test("HTTP client/server, binary chunks, trailers and HEAD reuse", normal_client);
         run_test("HTTP IPv6 endpoint and bracketed Host authority", ipv6_http_authority);
         run_test("chunk extensions, fragmentation and pipeline preservation", chunk_pipeline);
+        run_test("fixed-length buffered/fragmented bodies preserve pipeline and limits", fixed_body_pipeline);
         run_test("request smuggling and resource-limit rejection", rejected_requests);
         run_test("client informational, EOF framing and malformed responses", response_framing);
         run_test("client validation and overlapping exchange protection", client_state);
