@@ -69,8 +69,7 @@ public:
         } else id = it->second;
         live_.at(id).token = token;
         registration_info info{fd, reinterpret_cast<void*>(id), static_cast<UINT16>((read ? input : 0) | (write ? output : 0) | hangup), enable, oneshot_level, 0};
-        UINT32 received = 0;
-        const auto result = process_(port_, 1, &info, 0, 0, nullptr, &received);
+        const auto result = process_(port_, 1, &info, 0, 0, nullptr, nullptr);
         if (result || info.registrationResult) {
             if (inserted) { current_.erase(fd); live_.erase(id); }
             const auto message = "ProcessSocketNotifications register (call=" + std::to_string(result)

@@ -54,3 +54,12 @@ if has_config("tests") then
         target_end()
     end
 end
+
+if has_config("tests") and is_plat("windows") then
+    target("pace_iocp_diagnostic")
+        set_kind("binary")
+        add_files(path.join(pace_root, "tests", "iocp_diagnostic.cpp"))
+        add_syslinks("ws2_32")
+        add_tests("default")
+    target_end()
+end
