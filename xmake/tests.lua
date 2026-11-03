@@ -3,7 +3,7 @@ option("tests", {default = true, showmenu = true, description = "Build correctne
 -- Paths stay anchored to PACE when included by another project.
 local pace_root = path.directory(os.scriptdir())
 if has_config("tests") then
-    local test_names = {"runtime", "network", "udp", "direct_client", "structured"}
+    local test_names = {"runtime", "backend", "network", "udp", "direct_client", "structured"}
     if has_config("http1") or has_config("http2") or has_config("http3") then table.insert(test_names, "unified_client") end
     if has_config("http1") then
         table.insert(test_names, "http_extended")

@@ -31,7 +31,7 @@ constexpr UINT16 input = 1, output = 2, hangup = 4, error_event = 0x40, removed 
 class iocp_poller final : public poller_backend {
     HANDLE port_ = nullptr;
     process_notifications process_ = nullptr;
-    struct subscription { SOCKET fd; std::uint64_t token; };
+    struct subscription { SOCKET fd; std::uint64_t token; UINT16 interests = 0; bool removing = false; };
     std::uintptr_t next_ = 0;
     std::unordered_map<SOCKET, std::uintptr_t> current_;
     std::unordered_map<std::uintptr_t, subscription> live_;
@@ -40,6 +40,11 @@ class iocp_poller final : public poller_backend {
     }
 public:
     iocp_poller() {
+#ifndef _WIN64
+        // The SDK-only probe fails with WSAEINVAL for every registration under
+        // WoW64 on Server 2025. Keep the verified WSAPoll path for 32-bit builds.
+        throw std::system_error(std::make_error_code(std::errc::not_supported), "IOCP socket notifications require a 64-bit PACE build");
+#endif
         initialize_sockets();
         const auto module = GetModuleHandleW(L"ws2_32.dll");
         process_ = reinterpret_cast<process_notifications>(GetProcAddress(module, "ProcessSocketNotifications"));
@@ -67,8 +72,13 @@ public:
             try { current_.emplace(fd, id); } catch (...) { live_.erase(id); throw; }
             inserted = true;
         } else id = it->second;
-        live_.at(id).token = token;
-        registration_info info{fd, reinterpret_cast<void*>(id), static_cast<UINT16>((read ? input : 0) | (write ? output : 0) | hangup), enable, oneshot_level, 0};
+        auto& state = live_.at(id);
+        state.token = token;
+        state.interests = static_cast<UINT16>((read ? input : 0) | (write ? output : 0) | hangup);
+        // A completion key may change only after REMOVE has been dequeued.
+        // Cancellation followed immediately by another wait must defer rearm.
+        if (state.removing) return;
+        registration_info info{fd, reinterpret_cast<void*>(id), state.interests, enable, oneshot_level, 0};
         const auto result = process_(port_, 1, &info, 0, 0, nullptr, nullptr);
         if (result || info.registrationResult) {
             if (inserted) { current_.erase(fd); live_.erase(id); }
@@ -81,11 +91,17 @@ public:
     void remove(native_socket_type fd) noexcept override {
         const auto it = current_.find(fd);
         if (it == current_.end()) return;
-        const auto id = it->second; current_.erase(it); live_.erase(id);
+        const auto id = it->second;
+        auto& state = live_.at(id);
+        state.interests = 0; state.token = 0;
+        if (state.removing) return;
+        state.removing = true;
         registration_info info{fd, reinterpret_cast<void*>(id), 0, remove_registration, 0, 0};
-        process_(port_, 1, &info, 0, 0, nullptr, nullptr);
-        // Keys are never dereferenced or reused. Late packets (including REMOVE)
-        // can be ignored without retaining per-connection heap state.
+        const auto result = process_(port_, 1, &info, 0, 0, nullptr, nullptr);
+        if (result || info.registrationResult) {
+            // Already-closed sockets auto-deregister and do not send REMOVE.
+            current_.erase(it); live_.erase(id);
+        }
     }
     std::size_t wait(std::span<poll_event> events, int timeout) override {
         if (events.empty()) return 0;
@@ -103,7 +119,13 @@ public:
             const auto it = live_.find(entry.lpCompletionKey);
             if (it == live_.end()) continue;
             const auto flags = entry.dwNumberOfBytesTransferred;
-            if (flags & removed) continue;
+            if (flags & removed) {
+                const auto state = it->second;
+                current_.erase(state.fd); live_.erase(it);
+                if (state.interests) update(state.fd, state.interests & input, state.interests & output, state.token);
+                continue;
+            }
+            if (it->second.removing) continue;
             events[count++] = {it->second.token, bool(flags & (input | hangup)), bool(flags & output), bool(flags & (error_event | hangup))};
         }
         return count;

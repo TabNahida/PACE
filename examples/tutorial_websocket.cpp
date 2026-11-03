@@ -48,7 +48,7 @@ pace::task<void> client(pace::io_context& io, pace::tcp::endpoint endpoint) {
     const auto response = co_await socket.receive();
     if (!response || response->type != pace::websocket::message_type::text || response->data != "Hello from PACE")
         throw std::runtime_error("WebSocket echo mismatch");
-    if (!(co_await socket.close_gracefully(1000, "finished")))
+    if (!(co_await socket.close_gracefully(1000, "finished", std::chrono::seconds(2))))
         throw std::runtime_error("WebSocket peer did not complete closing handshake");
     std::cout << "WebSocket echo verified: " << response->data << '\n';
     io.stop();

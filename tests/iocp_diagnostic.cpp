@@ -29,5 +29,10 @@ int main() {
         FreeLibrary(module);
     }
     WSACleanup();
+#ifdef _WIN64
     return success ? 0 : 1;
+#else
+    std::cout << "32-bit SDK probe: " << success << " supported variants; PACE uses WSAPoll on x86\n";
+    return 0;
+#endif
 }

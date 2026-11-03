@@ -584,6 +584,8 @@ struct reverse_proxy::implementation {
         if (!matches(path, self->prefix)) co_return text("Not Found\n", 404);
         if (req.method == "CONNECT" || !req.header("Upgrade").empty()) co_return text("Upgrade/tunnel unsupported\n", 501);
         if (req.target.find('#') != req.target.npos) co_return text("Invalid target\n", 400);
+        const auto parent = co_await this_task::cancellation();
+        parent.throw_if_cancelled();
         const bool eligible = self->options.cache.max_bytes && cache_request(req);
         const std::string key = eligible ? std::string(req.header("Host")) + "\n" + req.target : std::string{};
         if (eligible) {
@@ -630,13 +632,14 @@ struct reverse_proxy::implementation {
                 co_return co_await self->exchange(*worker, chosen, std::move(req));
             });
         } catch (const std::system_error& error) {
+            parent.throw_if_cancelled();
             if (error.code() == std::errc::operation_canceled) throw;
-            state.failed_until = clock_type::now() + self->options.fail_timeout;
+            state.failed_until = deadline::after(self->options.fail_timeout).time();
             state.idle.clear();
             co_return text(error.code() == std::errc::timed_out ? "Upstream timeout\n" : "Upstream unavailable\n",
                            error.code() == std::errc::timed_out ? 504 : 502);
         } catch (const protocol_error&) {
-            state.failed_until = clock_type::now() + self->options.fail_timeout;
+            state.failed_until = deadline::after(self->options.fail_timeout).time();
             state.idle.clear(); co_return text("Invalid upstream response\n", 502);
         }
         if (head) {

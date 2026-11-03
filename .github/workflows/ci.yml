@@ -29,7 +29,7 @@ jobs:
           - {id: macos-x86_64, os: macos-15-intel, arch: x86_64, toolchain: xcode, standard: cxx20, quic: 'y', smoke: 'y'}
           - {id: macos-arm64, os: macos-15, arch: arm64, toolchain: xcode, standard: cxx20, quic: 'y', smoke: 'n'}
           - {id: windows-x64, os: windows-2025, arch: x64, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'y', backend: iocp}
-          - {id: windows-x86, os: windows-2025, arch: x86, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'n', backend: iocp}
+          - {id: windows-x86, os: windows-2025, arch: x86, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'n', backend: wsapoll}
           - {id: windows-arm64, os: windows-11-arm, arch: arm64, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'n', backend: iocp}
     env:
       PACE_IO_BACKEND: ${{ matrix.backend || 'automatic' }}
