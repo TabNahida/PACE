@@ -96,7 +96,7 @@ void socket::select_family(address_family family) {
     if (!automatic_family_ || family_selected_ || sending_ || receiving_)
         throw std::system_error(std::make_error_code(std::errc::address_family_not_supported), "UDP socket family");
     const auto replacement = create_socket(family);
-    context_->cancel(fd_);
+    context_->release_socket(fd_);
     release(std::exchange(fd_, replacement));
     family_ = family;
 }
@@ -192,7 +192,7 @@ task<datagram> socket::receive_from(std::span<char> buffer) {
     }
 }
 void socket::close() noexcept {
-    if (fd_ != invalid_socket) { context_->cancel(fd_); release(std::exchange(fd_, invalid_socket)); }
+    if (fd_ != invalid_socket) { context_->release_socket(fd_); release(std::exchange(fd_, invalid_socket)); }
 }
 task<packet> async_exchange(io_context& io, endpoint peer, std::string request, std::size_t capacity) {
     if (capacity == 0) throw std::invalid_argument("UDP receive capacity must be positive");

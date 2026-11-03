@@ -34,6 +34,8 @@ public:
     void stop() noexcept;
     bool stopped() const noexcept;
     static io_context* current() noexcept;
+    // Cancel and detach before the owner immediately closes a raw socket.
+    void release_socket(native_socket_type fd) noexcept;
     void cancel(native_socket_type fd) noexcept; // Must run on the owning loop, or before run().
 
     // One-shot callbacks run on this reactor. Keep the handle to keep the timer

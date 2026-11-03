@@ -38,6 +38,7 @@ public:
 
     void update(native_socket_type fd, bool readable, bool writable, std::uint64_t token);
     void remove(native_socket_type fd) noexcept;
+    void forget(native_socket_type fd) noexcept; // Owner is about to close the native socket.
     std::size_t wait(std::span<poll_event> events, int timeout_ms);
     void wake() noexcept;
 

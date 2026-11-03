@@ -5,6 +5,7 @@ struct poller_backend {
     virtual ~poller_backend() = default;
     virtual void update(native_socket_type, bool, bool, std::uint64_t) = 0;
     virtual void remove(native_socket_type) noexcept = 0;
+    virtual void forget(native_socket_type fd) noexcept { remove(fd); }
     virtual std::size_t wait(std::span<poll_event>, int) = 0;
     virtual void wake() noexcept = 0;
     virtual bool persistent() const noexcept = 0;

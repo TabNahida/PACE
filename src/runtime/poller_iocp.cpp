@@ -103,6 +103,12 @@ public:
             current_.erase(it); live_.erase(id);
         }
     }
+    void forget(native_socket_type fd) noexcept override {
+        // closesocket auto-deregisters without promising a REMOVE packet. Drop
+        // local ownership before handle reuse; monotonic keys reject late packets.
+        const auto it = current_.find(fd);
+        if (it != current_.end()) { live_.erase(it->second); current_.erase(it); }
+    }
     std::size_t wait(std::span<poll_event> events, int timeout) override {
         if (events.empty()) return 0;
         std::array<OVERLAPPED_ENTRY, 256> entries{};
@@ -121,7 +127,9 @@ public:
             const auto flags = entry.dwNumberOfBytesTransferred;
             if (flags & removed) {
                 const auto state = it->second;
-                current_.erase(state.fd); live_.erase(it);
+                const auto current = current_.find(state.fd);
+                if (current != current_.end() && current->second == entry.lpCompletionKey) current_.erase(current);
+                live_.erase(it);
                 if (state.interests) update(state.fd, state.interests & input, state.interests & output, state.token);
                 continue;
             }

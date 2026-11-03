@@ -49,7 +49,7 @@ int main() {
             }
         }
         require(seen.size() == sockets.size(), "queue pressure lost a readiness notification");
-        for (auto& socket : sockets) poller.remove(socket.native_handle());
+        for (auto& socket : sockets) poller.forget(socket.native_handle());
         sockets.clear();
         // Native handles may be recycled; late packets must not target a new wait.
         for (unsigned n = 0; n < 128; ++n) {
@@ -65,7 +65,7 @@ int main() {
                 }
             }
             require(ready, "recycled socket lost notification");
-            drain(socket.native_handle()); poller.remove(socket.native_handle());
+            drain(socket.native_handle()); poller.forget(socket.native_handle());
         }
         std::cout << "queue pressure, cancellation and descriptor reuse passed\n";
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

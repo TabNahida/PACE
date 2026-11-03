@@ -406,6 +406,10 @@ void io_context::cancel(native_socket_type fd) noexcept {
     p.erase_descriptor(it->second);
     p.tokens.erase(it);
 }
+void io_context::release_socket(native_socket_type fd) noexcept {
+    cancel(fd);
+    impl_->poller.forget(fd);
+}
 bool io_context::timer_awaiter::await_ready() noexcept {
     if (context.stopped()) { error = canceled(); return true; }
     return false; // Even zero-duration sleeps yield, so they cannot starve shutdown.

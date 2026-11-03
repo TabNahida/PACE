@@ -38,6 +38,7 @@ poller::poller(bool persistent, io_backend selected) : impl_(std::make_unique<im
 poller::~poller() = default;
 void poller::update(native_socket_type fd, bool read, bool write, std::uint64_t token) { impl_->backend->update(fd, read, write, token); }
 void poller::remove(native_socket_type fd) noexcept { impl_->backend->remove(fd); }
+void poller::forget(native_socket_type fd) noexcept { impl_->backend->forget(fd); }
 std::size_t poller::wait(std::span<poll_event> output, int timeout) { return impl_->backend->wait(output, timeout); }
 void poller::wake() noexcept { impl_->backend->wake(); }
 bool poller::persistent() const noexcept { return impl_->backend->persistent(); }

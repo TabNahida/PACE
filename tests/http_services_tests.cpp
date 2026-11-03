@@ -97,6 +97,8 @@ struct upstream {
         if (req.target == "/slow") co_await pace::sleep_for(200ms);
         auto res = h::text(id + " " + req.target + " " + req.body);
         res.headers = {{"Cache-Control", "public, max-age=30"}};
+        if (req.target == "/aged") res.headers.push_back({"Age", "10"});
+        if (req.target == "/stale") res.headers.push_back({"Age", "60"});
         if (req.target == "/private") res.headers = {{"Cache-Control", "private"}};
         if (req.target == "/cookie") res.headers.push_back({"Set-Cookie", "session=1"});
         if (req.target == "/vary") res.headers.push_back({"Vary", "Accept-Language"});
@@ -137,9 +139,17 @@ pace::task<void> proxy_test(pace::io_context& io, pace::tcp::listener& a, pace::
     const auto before = first.calls;
     auto r = co_await cached(request("/cached"));
     require((co_await cached(request("/cached"))).body == r.body && first.calls == before + 1, "public proxy cache hit");
+    auto other_host = request("/cached"); other_host.headers.front().value = "another.test";
+    (void)co_await cached(other_host); require(first.calls == before + 2, "cache separates downstream hosts");
+    cached.clear_cache(); (void)co_await cached(request("/cached"));
+    require(first.calls == before + 3, "explicit proxy invalidation");
+    (void)co_await cached(request("/aged"));
+    auto aged = co_await cached(request("/aged"));
+    require(!aged.header("Age").empty() && std::stoul(std::string(aged.header("Age"))) >= 10, "cache preserves upstream Age");
+    const auto authenticated_before = first.calls;
     auto auth = request("/cached"); auth.headers.push_back({"Authorization", "Bearer private"});
-    (void)co_await cached(auth); require(first.calls == before + 2, "authorization cache bypass");
-    for (const auto& path : {"/private", "/cookie", "/vary"}) {
+    (void)co_await cached(auth); require(first.calls == authenticated_before + 1, "authorization cache bypass");
+    for (const auto& path : {"/private", "/cookie", "/vary", "/stale"}) {
         const auto n = first.calls;
         (void)co_await cached(request(path)); (void)co_await cached(request(path));
         require(first.calls == n + 2, "private/cookie/vary response must not enter shared cache");
@@ -167,6 +177,25 @@ pace::task<void> proxy_test(pace::io_context& io, pace::tcp::listener& a, pace::
         require((co_await bound(request("/fast"))).status == 503, "per-upstream admission limit");
         (void)co_await long_request;
     });
+    // HEAD must preserve the upstream representation size without leaking body
+    // bytes into the next response on the downstream persistent connection.
+    pace::tcp::listener gateway(io, {"127.0.0.1", 0});
+    co_await pace::with_task_group([&](pace::task_group& group) -> pace::task<void> {
+        (void)group.spawn(h::serve(gateway, proxy));
+        auto socket = co_await pace::tcp::connect(gateway.local_endpoint());
+        h::client client(std::move(socket));
+        auto head = co_await client.send(request("/api/wire", "HEAD"));
+        require(head.body.empty() && head.header("Content-Length") == "8", "proxied HEAD wire length");
+        auto get = co_await client.send(request("/api/wire"));
+        require(get.status == 200 && get.body.size() == 8, "HEAD must not corrupt next response");
+        client.close(); gateway.close();
+    });
+    h::reverse_proxy scoped("/", {url(a)});
+    bool expired = false;
+    try { (void)co_await pace::with_deadline(pace::deadline::after(10ms), scoped(request("/slow"))); }
+    catch (const std::system_error& e) { expired = e.code() == std::errc::timed_out; }
+    require(expired && (co_await scoped(request("/fast"))).status == 200,
+            "parent deadline must propagate without marking upstream unhealthy");
     io.stop();
 }
 }
