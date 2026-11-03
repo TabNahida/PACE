@@ -57,7 +57,8 @@ struct io_context::cancellation_records {
 };
 
 struct io_context::implementation {
-    detail::poller poller{detail::poller::supports_persistent};
+    detail::poller poller;
+    explicit implementation(io_backend backend) : poller(detail::poller::supports_persistent, backend) {}
     std::atomic<bool> stopping{false};
     std::atomic<bool> running{false};
     bool has_run = false;
@@ -73,14 +74,20 @@ struct io_context::implementation {
     std::unordered_set<void*> roots;
     std::coroutine_handle<> completed_head{};
     std::exception_ptr first_error;
+    std::unordered_map<std::shared_ptr<const void>, std::shared_ptr<void>> services;
     struct fd_state {
         io_awaiter* reader = nullptr;
         io_awaiter* writer = nullptr;
         native_socket_type fd = invalid_socket;
         unsigned interests = 0;
         bool dirty = false;
+        std::uint64_t token = 0;
     };
-    std::unordered_map<std::uint64_t, fd_state> descriptors;
+    // Dense reusable slots: event dispatch is a checked array lookup instead
+    // of a second node-based hash lookup. Generations reject stale OS events.
+    std::vector<fd_state> descriptors;
+    std::vector<std::uint32_t> free_descriptors;
+    std::size_t descriptor_count = 0;
     std::unordered_map<native_socket_type, std::uint64_t> tokens;
     std::uint64_t next_token = 0;
     std::vector<std::uint64_t> dirty_descriptors;
@@ -98,6 +105,35 @@ struct io_context::implementation {
     } timers;
     std::shared_ptr<callback_timers> callbacks;
 
+    fd_state* find_descriptor(std::uint64_t token) noexcept {
+        const auto index = static_cast<std::uint32_t>(token);
+        if (index >= descriptors.size()) return nullptr;
+        auto& state = descriptors[index];
+        return state.fd != invalid_socket && state.token == token ? &state : nullptr;
+    }
+    std::uint64_t add_descriptor(native_socket_type fd) {
+        if (next_token == UINT32_MAX || descriptors.size() == UINT32_MAX)
+            throw std::overflow_error("descriptor identity exhausted");
+        std::uint32_t index;
+        if (!free_descriptors.empty()) { index = free_descriptors.back(); free_descriptors.pop_back(); }
+        else {
+            if (descriptors.size() == descriptors.capacity()) {
+                const auto capacity = std::max<std::size_t>(16, descriptors.size() * 2);
+                free_descriptors.reserve(capacity);
+                descriptors.reserve(capacity);
+            }
+            index = static_cast<std::uint32_t>(descriptors.size()); descriptors.emplace_back();
+        }
+        auto& state = descriptors[index];
+        state.fd = fd; state.token = (++next_token << 32) | index; ++descriptor_count;
+        return state.token;
+    }
+    void erase_descriptor(std::uint64_t token) noexcept {
+        if (auto* state = find_descriptor(token)) {
+            *state = {}; free_descriptors.push_back(static_cast<std::uint32_t>(token)); --descriptor_count;
+        }
+    }
+
     void finish(fd_state& state, io_awaiter* operation, std::error_code error = {}) {
         if (!operation) return;
         operation->error = error;
@@ -108,12 +144,13 @@ struct io_context::implementation {
         if (state.writer == operation) state.writer = nullptr;
     }
     void cancel_all() {
-        for (auto& [token, state] : descriptors) {
+        for (auto& state : descriptors) {
+            if (state.fd == invalid_socket) continue;
             poller.remove(state.fd);
             finish(state, state.reader, canceled());
             finish(state, state.writer, canceled());
         }
-        descriptors.clear(); tokens.clear();
+        descriptors.clear(); free_descriptors.clear(); descriptor_count = 0; tokens.clear();
         dirty_descriptors.clear();
         while (!timers.empty()) {
             auto* timer = timers.top(); timers.pop();
@@ -128,7 +165,7 @@ struct io_context::implementation {
     }
     void update(fd_state& state, std::uint64_t token) {
         const unsigned interests = (state.reader ? 1U : 0U) | (state.writer ? 2U : 0U);
-        if constexpr (detail::poller::supports_persistent) {
+        if (poller.persistent()) {
             if (interests == state.interests) return;
         }
         poller.update(state.fd, state.reader != nullptr, state.writer != nullptr, token);
@@ -138,9 +175,9 @@ struct io_context::implementation {
         // Resumed I/O usually rearms the same direction before the next poll.
         // Keep that subscription unchanged; remove only truly idle interests.
         for (const auto token : dirty_descriptors) {
-            const auto found = descriptors.find(token);
-            if (found == descriptors.end()) continue;
-            auto& state = found->second;
+            auto* found = find_descriptor(token);
+            if (!found) continue;
+            auto& state = *found;
             update(state, token);
             state.dirty = false;
         }
@@ -185,7 +222,7 @@ io_context::cancellation_handle io_context::on_cancel(cancellation_token token,
 void io_context::cancel_wait(io_awaiter& operation, std::error_code error) {
     const auto token = impl_->tokens.find(operation.fd);
     if (token == impl_->tokens.end()) return;
-    auto& state = impl_->descriptors.at(token->second);
+    auto& state = *impl_->find_descriptor(token->second);
     if (state.reader != &operation && state.writer != &operation) return;
     impl_->finish(state, &operation, error);
     impl_->update(state, token->second);
@@ -236,7 +273,8 @@ io_context::timer_handle io_context::call_at(std::chrono::steady_clock::time_poi
     return handle;
 }
 
-io_context::io_context() : impl_(std::make_unique<implementation>()) {}
+io_context::io_context(io_backend selected) : impl_(std::make_unique<implementation>(selected)) {}
+io_backend io_context::backend() const noexcept { return impl_->poller.backend(); }
 io_context::~io_context() {
     // Caller must join run() before destruction. Destruct user objects while the
     // entire implementation is alive, and reject reentrant submissions.
@@ -248,11 +286,24 @@ io_context::~io_context() {
     for (auto address : impl_->roots) task<void>::handle_type::from_address(address).destroy();
     impl_->roots.clear();
     impl_->ready.clear();
+    impl_->services.clear();
 }
 io_context* io_context::current() noexcept { return active_context; }
 bool io_context::stopped() const noexcept { return impl_->stopping.load(std::memory_order_acquire); }
 void io_context::stop() noexcept {
     if (!impl_->stopping.exchange(true, std::memory_order_acq_rel)) impl_->poller.wake();
+}
+std::shared_ptr<void> io_context::local_state(std::shared_ptr<const void> key,
+        const std::function<std::shared_ptr<void>()>& create) {
+    check_affinity(this);
+    if (!key || !create) throw std::invalid_argument("invalid context service");
+    if (stopped()) throw std::system_error(canceled());
+    auto it = impl_->services.find(key);
+    if (it != impl_->services.end()) return it->second;
+    auto value = create();
+    if (!value) throw std::invalid_argument("empty context service");
+    impl_->services.emplace(std::move(key), value);
+    return value;
 }
 void io_context::spawn(task<void> work) {
     auto& p = *impl_;
@@ -319,10 +370,15 @@ bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle) {
     check_affinity(this);
     if (stopped()) { operation.error = canceled(); return false; }
     auto& p = *impl_;
-    auto [token_it, inserted] = p.tokens.try_emplace(operation.fd, ++p.next_token);
-    const auto token = token_it->second;
-    auto& state = p.descriptors[token];
-    state.fd = operation.fd;
+    auto token_it = p.tokens.find(operation.fd);
+    const bool inserted = token_it == p.tokens.end();
+    std::uint64_t token;
+    if (inserted) {
+        token = p.add_descriptor(operation.fd);
+        try { p.tokens.emplace(operation.fd, token); }
+        catch (...) { p.erase_descriptor(token); throw; }
+    } else token = token_it->second;
+    auto& state = *p.find_descriptor(token);
     const bool read = !operation.writable || operation.either;
     const bool write = operation.writable || operation.either;
     if ((read && state.reader) || (write && state.writer))
@@ -334,7 +390,7 @@ bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle) {
     catch (...) {
         if (read) state.reader = nullptr;
         if (write) state.writer = nullptr;
-        if (inserted) { p.tokens.erase(operation.fd); p.descriptors.erase(token); }
+        if (inserted) { p.tokens.erase(operation.fd); p.erase_descriptor(token); }
         throw;
     }
     return true;
@@ -343,11 +399,11 @@ void io_context::cancel(native_socket_type fd) noexcept {
     auto& p = *impl_;
     const auto it = p.tokens.find(fd);
     if (it == p.tokens.end()) return;
-    auto state_it = p.descriptors.find(it->second);
+    auto& state = *p.find_descriptor(it->second);
     p.poller.remove(fd);
-    p.finish(state_it->second, state_it->second.reader, canceled());
-    p.finish(state_it->second, state_it->second.writer, canceled());
-    p.descriptors.erase(state_it);
+    p.finish(state, state.reader, canceled());
+    p.finish(state, state.writer, canceled());
+    p.erase_descriptor(it->second);
     p.tokens.erase(it);
 }
 bool io_context::timer_awaiter::await_ready() noexcept {
@@ -477,20 +533,20 @@ void io_context::run() {
         timer_timing.close();
         // Task-only loops have no descriptor readiness to collect. Inbox and
         // timers are still checked on every bounded dispatch turn above.
-        if (timeout == 0 && p.descriptors.empty()) continue;
+        if (timeout == 0 && !p.descriptor_count) continue;
         try {
-            if constexpr (detail::poller::supports_persistent) p.reconcile_descriptors();
+            if (p.poller.persistent()) p.reconcile_descriptors();
             const auto count = profiling::measure(timeout == 0 ? profiling::stage::poll_nonblocking
                 : profiling::stage::poll_blocking, [&] { return p.poller.wait(events, timeout); });
             profiling::scope event_timing(profiling::stage::event_dispatch);
             for (std::size_t i = 0; i < count; ++i) {
                 const auto& event = events[i];
-                auto it = p.descriptors.find(event.token);
-                if (it == p.descriptors.end()) continue;
-                auto& state = it->second;
+                auto* found = p.find_descriptor(event.token);
+                if (!found) continue;
+                auto& state = *found;
                 if (event.readable || event.error) p.finish(state, state.reader);
                 if (event.writable || event.error) p.finish(state, state.writer);
-                if constexpr (detail::poller::supports_persistent) {
+                if (p.poller.persistent()) {
                     if (!state.dirty) {
                         p.dirty_descriptors.push_back(event.token);
                         state.dirty = true;

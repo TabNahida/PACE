@@ -2,6 +2,8 @@
 
 #include <pace/http_types.hpp>
 #include <pace/http_router.hpp>
+#include <pace/http_services.hpp>
+#include <pace/runtime.hpp>
 #include <pace/tcp.hpp>
 #include <pace/run.hpp>
 #ifdef PACE_HAS_TLS
@@ -205,6 +207,24 @@ public:
     template<class Function> app& post(std::string path, Function&& function) {
         return route("POST", std::move(path), std::forward<Function>(function));
     }
+    app& mount(std::string prefix, std::filesystem::path directory, static_options options = {}) {
+        auto service = static_files(prefix, std::move(directory), std::move(options));
+        routes_.mount(std::move(prefix), std::move(service));
+        return *this;
+    }
+    app& proxy(std::string prefix, std::vector<std::string> upstreams, proxy_options options = {}) {
+        auto service = reverse_proxy(prefix, std::move(upstreams), std::move(options));
+        routes_.mount(std::move(prefix), std::move(service));
+        return *this;
+    }
+    app& proxy(std::string prefix, std::initializer_list<std::string> upstreams, proxy_options options = {}) {
+        return proxy(std::move(prefix), std::vector<std::string>(upstreams), std::move(options));
+    }
+    app& proxy(std::string prefix, std::string upstream, proxy_options options = {}) {
+        return proxy(std::move(prefix), std::vector<std::string>{std::move(upstream)}, std::move(options));
+    }
+    // Bind one listener per worker (SO_REUSEPORT); run/join on caller + workers.
+    void run_workers(std::size_t workers, tcp::endpoint endpoint, limits bounds = {}) const;
     task<void> serve(io_context& io, tcp::endpoint endpoint, limits bounds = {}) const {
         return http::serve(io, std::move(endpoint), routes_, bounds);
     }

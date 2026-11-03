@@ -55,6 +55,10 @@ std::string_view reason(unsigned status) noexcept {
     case 205: return "Reset Content";
     case 301: return "Moved Permanently";
     case 302: return "Found";
+    case 206: return "Partial Content";
+    case 416: return "Range Not Satisfiable";
+    case 502: return "Bad Gateway";
+    case 504: return "Gateway Timeout";
     case 304: return "Not Modified";
     case 400: return "Bad Request";
     case 401: return "Unauthorized";
@@ -404,7 +408,7 @@ std::string encode_response(const response& result, bool keep_alive, bool head_r
     const auto declared = trailer_declaration(result.trailers);
     std::string output = "HTTP/1.1 " + std::to_string(result.status) + " " + std::string(reason(result.status)) + "\r\n";
     if (chunked) output += "Transfer-Encoding: chunked\r\n" + (head_request ? std::string{} : declared);
-    else if (!omit_length) output += "Content-Length: " + std::to_string(result.status == 205 ? 0 : streamed_length.value_or(result.body.size())) + "\r\n";
+    else if (!omit_length) output += "Content-Length: " + std::to_string(result.status == 205 ? 0 : streamed_length.value_or(head_request ? result.representation_length.value_or(result.body.size()) : result.body.size())) + "\r\n";
     if (!result.content_type.empty()) output += "Content-Type: " + result.content_type + "\r\n";
     output += keep_alive ? "Connection: keep-alive\r\n" : "Connection: close\r\n";
     for (const auto& field : result.headers) {

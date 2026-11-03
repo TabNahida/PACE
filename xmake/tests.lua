@@ -5,7 +5,10 @@ local pace_root = path.directory(os.scriptdir())
 if has_config("tests") then
     local test_names = {"runtime", "network", "udp", "direct_client", "structured"}
     if has_config("http1") or has_config("http2") or has_config("http3") then table.insert(test_names, "unified_client") end
-    if has_config("http1") then table.insert(test_names, "http_extended") end
+    if has_config("http1") then
+        table.insert(test_names, "http_extended")
+        table.insert(test_names, "http_services")
+    end
     if has_config("websocket") then table.insert(test_names, "websocket") end
     if has_config("tls") then table.insert(test_names, "tls") end
     if has_config("http2") then table.insert(test_names, "http2") end

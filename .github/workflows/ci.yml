@@ -21,15 +21,18 @@ jobs:
       matrix:
         include:
           - {id: linux-x86_64-gcc, os: ubuntu-24.04, arch: x86_64, toolchain: gcc, standard: cxx20, quic: 'y', smoke: 'y'}
+          - {id: linux-io-uring, os: ubuntu-24.04, arch: x86_64, toolchain: gcc, standard: cxx20, quic: 'y', smoke: 'n', uring: 'y', backend: io_uring}
           - {id: linux-x86_64-cxx23, os: ubuntu-24.04, arch: x86_64, toolchain: gcc, standard: cxx23, quic: 'y', smoke: 'n'}
           - {id: linux-x86_64-clang, os: ubuntu-24.04, arch: x86_64, toolchain: clang, standard: cxx20, quic: 'y', smoke: 'n'}
           - {id: linux-aarch64, os: ubuntu-24.04-arm, arch: arm64, toolchain: gcc, standard: cxx20, quic: 'y', smoke: 'n'}
           - {id: linux-i386, os: ubuntu-24.04, arch: i386, toolchain: gcc, standard: cxx20, quic: 'y', smoke: 'n'}
           - {id: macos-x86_64, os: macos-15-intel, arch: x86_64, toolchain: xcode, standard: cxx20, quic: 'y', smoke: 'y'}
           - {id: macos-arm64, os: macos-15, arch: arm64, toolchain: xcode, standard: cxx20, quic: 'y', smoke: 'n'}
-          - {id: windows-x64, os: windows-2025, arch: x64, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'y'}
-          - {id: windows-x86, os: windows-2025, arch: x86, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'n'}
-          - {id: windows-arm64, os: windows-11-arm, arch: arm64, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'n'}
+          - {id: windows-x64, os: windows-2025, arch: x64, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'y', backend: iocp}
+          - {id: windows-x86, os: windows-2025, arch: x86, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'n', backend: iocp}
+          - {id: windows-arm64, os: windows-11-arm, arch: arm64, toolchain: msvc, standard: cxx20, quic: 'n', smoke: 'n', backend: iocp}
+    env:
+      PACE_IO_BACKEND: ${{ matrix.backend || 'automatic' }}
     steps:
       - uses: actions/checkout@v4
       - name: Install 32-bit Linux compiler and runtime
@@ -47,7 +50,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Configure supported protocols and tutorials for the explicit target architecture
-        run: xmake f -c -m release -a ${{ matrix.arch }} --toolchain=${{ matrix.toolchain }} -o build/ci --cxxstandard=${{ matrix.standard }} --http1=y --websocket=y --tls=y --dns=y --http2=y --quic=${{ matrix.quic }} --http3=${{ matrix.quic }} --benchmarks=${{ matrix.smoke }} --components=${{ matrix.smoke }} --scaling=${{ matrix.smoke }} --profiling=n --sanitizers=n --examples=y --tests=y -y
+        run: xmake f -c -m release --uring=${{ matrix.uring || 'n' }} -a ${{ matrix.arch }} --toolchain=${{ matrix.toolchain }} -o build/ci --cxxstandard=${{ matrix.standard }} --http1=y --websocket=y --tls=y --dns=y --http2=y --quic=${{ matrix.quic }} --http3=${{ matrix.quic }} --benchmarks=${{ matrix.smoke }} --components=${{ matrix.smoke }} --scaling=${{ matrix.smoke }} --profiling=n --sanitizers=n --examples=y --tests=y -y
       - name: Build
         run: xmake -y
       - name: Verify executable architecture (including 32-bit and ARM Windows)

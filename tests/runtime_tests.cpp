@@ -798,7 +798,7 @@ void ready_single_flag_contract() {
 void persistent_poller_contract() {
     pace::io_context owner;
     owned_eventfd descriptor(owner);
-    pace::detail::poller poller(true);
+    pace::detail::poller poller(true, pace::io_backend::epoll);
     std::array<pace::detail::poll_event, 1> events{};
     const std::uint64_t value = 1;
     require(::write(descriptor.fd, &value, sizeof(value)) == sizeof(value), "persistent eventfd write");

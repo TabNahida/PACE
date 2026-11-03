@@ -2,10 +2,10 @@
 #include <mutex>
 
 namespace pace {
-runtime::runtime(std::size_t workers) {
+runtime::runtime(std::size_t workers, io_backend backend) {
     if (workers == 0) throw std::invalid_argument("runtime needs at least one worker");
     contexts_.reserve(workers);
-    for (std::size_t i = 0; i < workers; ++i) contexts_.push_back(std::make_unique<io_context>());
+    for (std::size_t i = 0; i < workers; ++i) contexts_.push_back(std::make_unique<io_context>(backend));
 }
 runtime::~runtime() = default;
 void runtime::stop() noexcept { for (auto& context : contexts_) context->stop(); }

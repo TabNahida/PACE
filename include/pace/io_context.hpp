@@ -2,6 +2,7 @@
 
 #include <pace/task.hpp>
 #include <pace/platform.hpp>
+#include <pace/io_backend.hpp>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -17,11 +18,16 @@ class io_context {
     struct callback_timers;
     struct cancellation_records;
 public:
-    io_context();
+    explicit io_context(io_backend selected = io_backend::automatic);
+    [[nodiscard]] io_backend backend() const noexcept;
     ~io_context();
     io_context(const io_context&) = delete;
     io_context& operator=(const io_context&) = delete;
 
+    // Context-owned services (e.g. connection pools). Called only on this loop.
+    // Keys and values live until the context is destroyed; values may own sockets.
+    std::shared_ptr<void> local_state(std::shared_ptr<const void> key,
+        const std::function<std::shared_ptr<void>()>& create);
     void spawn(task<void> work);
     void post(std::function<void()> work);
     void run(); // Runs until stop(); unhandled task errors are rethrown after draining.
