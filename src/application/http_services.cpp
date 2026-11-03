@@ -592,9 +592,9 @@ struct reverse_proxy::implementation {
         }
         task<response> send(request req) {
 #ifdef PACE_HAS_TLS
-            if (secure) co_return co_await secure->send(std::move(req));
+            if (secure) return secure->send(std::move(req));
 #endif
-            co_return co_await plain->send(std::move(req));
+            return plain->send(std::move(req));
         }
     };
     struct upstream_state {

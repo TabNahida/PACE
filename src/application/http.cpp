@@ -93,17 +93,18 @@ bool forbidden_trailer(std::string_view name) {
                        [&](auto value) { return equal_ci(name, value); });
 }
 
-std::vector<std::string> token_list(std::string_view value) {
-    std::vector<std::string> result;
+template<class Visit>
+void visit_tokens(std::string_view value, Visit&& visit) {
     for (;;) {
         const auto comma = value.find(',');
         auto token = trim(value.substr(0, comma));
         if (!valid_token(token)) throw parse_failure{400};
-        result.emplace_back(token);
-        if (comma == std::string_view::npos) return result;
+        visit(token);
+        if (comma == std::string_view::npos) return;
         value.remove_prefix(comma + 1);
     }
 }
+
 
 header_field parse_field(std::string_view line) {
     const auto colon = line.find(':');
@@ -116,6 +117,8 @@ header_field parse_field(std::string_view line) {
 
 std::vector<header_field> parse_fields(std::string_view text, std::size_t maximum) {
     std::vector<header_field> fields;
+    // Count delimiters once instead of repeatedly growing and moving owned fields.
+    fields.reserve(std::min(maximum, static_cast<std::size_t>(std::count(text.begin(), text.end(), '\n'))));
     while (!text.empty()) {
         const auto end = text.find("\r\n");
         if (end == std::string_view::npos || end == 0) throw parse_failure{400};
@@ -143,8 +146,10 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
         } else if (equal_ci(name, "transfer-encoding")) {
             if (has_transfer) throw parse_failure{400};
             has_transfer = true;
-            const auto codings = token_list(value);
-            if (codings.size() != 1 || !equal_ci(codings.front(), "chunked")) {
+            std::size_t codings = 0;
+            bool chunked = false;
+            visit_tokens(value, [&](std::string_view token) { ++codings; chunked = equal_ci(token, "chunked"); });
+            if (codings != 1 || !chunked) {
                 // Ambiguous framing still takes precedence over unsupported coding.
                 for (const auto& candidate : fields)
                     if (equal_ci(candidate.name, "content-length")) throw parse_failure{400};
@@ -156,16 +161,16 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
                 throw parse_failure{400};
             host = true;
         } else if (equal_ci(name, "connection")) {
-            for (auto& token : token_list(value)) {
+            visit_tokens(value, [&](std::string_view token) {
                 if (equal_ci(token, "content-length") || equal_ci(token, "transfer-encoding") ||
                     equal_ci(token, "host") || equal_ci(token, "trailer")) throw parse_failure{400};
                 close |= equal_ci(token, "close");
                 persistent |= equal_ci(token, "keep-alive");
                 if (request_message && equal_ci(token, "upgrade")) throw parse_failure{501};
-                result.connection_fields.push_back(std::move(token));
-            }
+                result.connection_fields.emplace_back(token);
+            });
         } else if (equal_ci(name, "trailer")) {
-            for (auto& token : token_list(value)) declared_trailers.push_back(std::move(token));
+            visit_tokens(value, [&](std::string_view token) { declared_trailers.emplace_back(token); });
         } else if (request_message && equal_ci(name, "expect")) {
             throw parse_failure{417};
         } else if (request_message && equal_ci(name, "upgrade")) {
@@ -289,13 +294,28 @@ std::size_t chunk_size(std::string_view line) {
     return size;
 }
 
+// Consume an already buffered fixed-length body without constructing a lazy
+// reader task. Keep surplus bytes for the next pipelined message.
+bool consume_buffered_body(std::string& pending, const framing& frame,
+                           limits bounds, std::string& body) {
+    if (frame.chunked) return false;
+    const auto length = frame.length.value_or(0);
+    if (length > bounds.max_body_bytes) throw parse_failure{413};
+    if (pending.size() < length) return false;
+    body.assign(pending.data(), length);
+    pending.erase(0, length);
+    return true;
+}
+
 template<class Transport>
 task<void> read_body(Transport& stream, std::string& pending, const framing& frame,
                      limits bounds, std::string& body, std::vector<header_field>& trailers) {
     if (!frame.chunked) {
         const auto length = frame.length.value_or(0);
         if (length > bounds.max_body_bytes) throw parse_failure{413};
-        co_await ensure_bytes(stream, pending, length);
+        // A complete body commonly arrived together with its headers. Avoid
+        // allocating the 8 KiB read coroutine when no socket read is needed.
+        if (pending.size() < length) co_await ensure_bytes(stream, pending, length);
         body.assign(pending.data(), length);
         pending.erase(0, length);
         co_return;
@@ -490,7 +510,8 @@ task<response> read_response(Transport& stream, std::string& pending, limits bou
         if (result.status == 204 && (frame.length || frame.chunked)) throw parse_failure{400};
         if (method == "HEAD" || result.status == 204 || result.status == 304) co_return result;
         if (frame.chunked || frame.length) {
-            co_await read_body(stream, pending, frame, bounds, result.body, result.trailers);
+            if (!consume_buffered_body(pending, frame, bounds, result.body))
+                co_await read_body(stream, pending, frame, bounds, result.body, result.trailers);
         } else {
             // An unframed response is delimited by EOF and can never be reused.
             result.close = true;
@@ -642,7 +663,8 @@ task<void> process_connection(Transport& stream, const Handler& handle, const se
                 }
             }
             if (!rejected && !error_status) {
-                co_await read_body(stream, pending, incoming->frame, selected_bounds, message.body, message.trailers);
+                if (!consume_buffered_body(pending, incoming->frame, selected_bounds, message.body))
+                    co_await read_body(stream, pending, incoming->frame, selected_bounds, message.body, message.trailers);
                 deadline.check();
             }
         } catch (const parse_failure& error) { error_status = error.status; }
