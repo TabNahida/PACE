@@ -64,7 +64,7 @@ GET and HEAD support MIME inference, `ETag`, `Last-Modified`, `If-None-Match`,
 exact canonical `If-Modified-Since`, and one byte range (including suffix ranges).
 Weak ETags work for conditional GET; `If-Range` requires an exact validator.
 Multiple ranges are ignored; unsatisfiable valid ranges return 416.
-HEAD suppresses response bytes while retaining representation length. Other
+HEAD ignores Range and suppresses response bytes while retaining the complete representation length. Other
 methods return 405 with `Allow: GET, HEAD`. No directory listing is generated.
 Directory indexes also resolve without a trailing slash; there is no redirect.
 Use slash-terminated directory links for relative browser asset URLs.

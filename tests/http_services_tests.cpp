@@ -60,6 +60,9 @@ pace::task<void> static_test(directory& dir) {
     conditional.headers.back() = {"If-Modified-Since", std::string(first.header("Last-Modified"))};
     require((co_await files(conditional)).status == 304, "modification validator");
     auto range = request("/assets/hello.txt"); range.headers.push_back({"Range", "bytes=1-4"});
+    auto head_range = range; head_range.method = "HEAD";
+    auto whole_head = co_await files(head_range);
+    require(whole_head.status == 200 && whole_head.body.size() == 11, "HEAD ignores Range");
     auto slice = co_await files(range); require(slice.status == 206 && slice.body == "ello" && slice.header("Content-Range") == "bytes 1-4/11", "single range");
     range.headers.back().value = "bytes=-5"; require((co_await files(range)).body == "world", "suffix range");
     range.headers.back().value = "bytes=50-"; require((co_await files(range)).status == 416, "unsatisfiable range");

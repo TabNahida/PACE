@@ -261,6 +261,8 @@ response condition_file(response result, const request& req) {
     } else if (!req.header("If-Modified-Since").empty())
         unchanged = req.header("If-Modified-Since") == result.header("Last-Modified");
     if (unchanged) { result.status = 304; result.body.clear(); return result; }
+    // Range applies only to GET; HEAD describes the complete representation.
+    if (req.method != "GET") return result;
     auto range = req.header("Range");
     const auto if_range = req.header("If-Range");
     if (!if_range.empty() && if_range != etag && if_range != result.header("Last-Modified")) return result;

@@ -58,8 +58,8 @@ public:
         if (token == wake_id) throw std::invalid_argument("reserved poll token");
         remove(fd);
         if (!read && !write) return;
-        if (++next_ == wake_id) throw std::overflow_error("io_uring subscription identity exhausted");
-        const auto id = next_;
+        if (next_ >= wake_id - 1) throw std::overflow_error("io_uring subscription identity exhausted");
+        const auto id = ++next_;
         pending_.emplace(id, subscription{fd, token});
         try { current_.emplace(fd, id); }
         catch (...) { pending_.erase(id); throw; }
