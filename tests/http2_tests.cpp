@@ -281,12 +281,18 @@ struct concurrent_handlers {
     unsigned active = 0, peak = 0;
     pace::native_socket_type server_fd = pace::invalid_socket, client_fd = pace::invalid_socket;
     std::vector<unsigned> completed;
-    explicit concurrent_handlers(pace::io_context& context) : io(context) {}
+    bool parallel, second_completed = false;
+    explicit concurrent_handlers(pace::io_context& context, unsigned cap = 2) : io(context), parallel(cap > 1) {}
     pace::task<pace::http::response> operator()(pace::http::request request) {
         const auto id = static_cast<unsigned>(std::stoul(request.target.substr(1)));
         require(request.body == std::string(64 * 1024, 'q'), "duplex concurrent request body");
         peak = std::max(peak, ++active);
-        co_await io.sleep_for(id == 0 ? 80ms : 2ms);
+        // Establish causal order instead of assuming the second request body
+        // arrives within 80ms on a slow/contended runner with tiny TCP buffers.
+        if (id == 0 && parallel) {
+            while (!second_completed) co_await io.sleep_for(1ms);
+        } else co_await io.sleep_for(2ms);
+        if (id == 1) second_completed = true;
         --active; completed.push_back(id);
         if (id == 4) throw std::runtime_error("isolated concurrent handler");
         co_return pace::http::response{.body = std::string(150 * 1024, static_cast<char>('a' + id))};
@@ -322,7 +328,7 @@ pace::task<void> concurrent_tcp_client(pace::io_context& io, pace::tcp::endpoint
 void concurrency() {
     for (unsigned cap : {1u, 2u}) {
         pace::io_context io; pace::tcp::listener listener(io, {"127.0.0.1", 0}); completion done{io};
-        concurrent_handlers handler{io};
+        concurrent_handlers handler{io, cap};
         io.spawn(concurrent_tcp_server(listener, handler, cap, done));
         io.spawn(concurrent_tcp_client(io, listener.local_endpoint(), done)); run_scenario(io);
         require(done.count == 2 && handler.active == 0 && handler.peak == cap, "HTTP2 handler concurrency bound");

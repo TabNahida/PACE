@@ -209,11 +209,17 @@ struct concurrent_handlers {
     pace::io_context& io;
     unsigned active = 0, peak = 0;
     std::vector<unsigned> completed;
-    explicit concurrent_handlers(pace::io_context& context) : io(context) {}
+    bool parallel, second_completed = false;
+    explicit concurrent_handlers(pace::io_context& context, unsigned cap = 2) : io(context), parallel(cap > 1) {}
     pace::task<pace::http::response> operator()(pace::http::request request) {
         const auto id = static_cast<unsigned>(std::stoul(request.target.substr(1)));
         peak = std::max(peak, ++active);
-        co_await io.sleep_for(id == 0 ? 80ms : 2ms);
+        // Establish causal order instead of assuming the second request body
+        // arrives within 80ms on a slow/contended runner with tiny TCP buffers.
+        if (id == 0 && parallel) {
+            while (!second_completed) co_await io.sleep_for(1ms);
+        } else co_await io.sleep_for(2ms);
+        if (id == 1) second_completed = true;
         --active; completed.push_back(id);
         if (id == 4) throw std::runtime_error("isolated concurrent handler");
         co_return pace::http::response{.body = std::string(150 * 1024, static_cast<char>('a' + id))};
@@ -234,7 +240,7 @@ pace::task<void> concurrent_client(fixture& test, bool& complete) {
 }
 void concurrency(const std::filesystem::path& certs) {
     for (unsigned cap : {1u, 2u}) {
-        fixture test(certs); concurrent_handlers handler{test.io}; bool complete = false;
+        fixture test(certs); concurrent_handlers handler{test.io, cap}; bool complete = false;
         pace::http3::limits limits; limits.max_concurrent_handlers = cap;
         test.io.spawn(pace::http3::serve(*test.listener, std::ref(handler), limits)); test.io.spawn(concurrent_client(test, complete));
         test.io.run();
