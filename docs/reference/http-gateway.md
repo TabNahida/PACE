@@ -173,7 +173,9 @@ check the shard's invalidation generation and the original steady-clock expiry,
 then return an independent response copy. They avoid the shard mutex, hash lookup,
 CLOCK writes and snapshot reference-count increments. On a key change, expiry,
 replacement, eviction or clear, the next lookup takes the shared path again.
-Outside a reactor, `get_copy()` copies a regular `get()` snapshot.
+Outside a reactor, `get_copy()` copies a regular `get()` snapshot. The context
+retains the cache internals until context destruction; construct one long-lived
+cache/service per mount rather than constructing a new cached service per request.
 
 Generation and mutex/statistics storage are separated by 128-byte alignment;
 reader hit counters are separately aligned and written only by their owning

@@ -118,7 +118,8 @@ are retained to make that decision reviewable.
 Each reactor can pin one evicted snapshot per cache until its next cache lookup or
 context destruction: at most `max_object_bytes` of body plus headers/key/reader
 metadata. This is additional retained memory, not extra stored cache entries.
-The cache's configured budget is not an RSS cap. Bodies are still copied, and
+Contexts retain cache internals until destruction, so services should be created
+once per mount, not once per request. The cache's configured budget is not an RSS cap. Bodies are still copied, and
 uncached file reads still run synchronously on the reactor. These tradeoffs are
 spelled out in the [reference](reference/http-gateway.md#reactor-local-cache-hits).
 
