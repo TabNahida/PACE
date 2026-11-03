@@ -16,10 +16,10 @@
 - **Build only what you use.** A core without third-party runtime dependencies, with optional protocol modules above it.
 
 <p align="center">
-  <a href="docs/gateway-optimization.md"><img src="docs/assets/gateway-latest.svg" alt="Local Linux HTTP gateways: PACE before and after optimization versus nginx; all four scenarios with one and four frontend workers." width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
 </p>
 
-<p align="center"><a href="docs/gateway-optimization.md">Full benchmark results, methodology &amp; raw data →</a></p>
+<p align="center"><a href="docs/performance.md">Full benchmark results, methodology &amp; raw data →</a></p>
 
 ## Four layers. Your stack.
 
@@ -76,9 +76,9 @@ app.run_workers(4, {"0.0.0.0", 8080});
 ```
 
 Optional bounded caches, per-worker connection pools and round-robin or
-least-connections balancing. Available on the development branch after 0.4.0.
+least-connections balancing. Available since PACE 0.5.0.
 [Walk through a gateway →](docs/tutorial/13-gateway.md) ·
-[nginx comparison →](docs/gateway-performance.md) · [I/O backends →](docs/reference/io-backends.md)
+[nginx comparison →](docs/performance.md#http-gateways--pace-and-nginx) · [I/O backends →](docs/reference/io-backends.md)
 
 ## Get started
 

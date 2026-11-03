@@ -3,9 +3,10 @@
 [Documentation](README.md) · [Gateway API and limits](reference/http-gateway.md) · [Earlier nginx comparison](gateway-performance.md) · [TCP/Asio/libuv results](performance.md)
 
 This is a same-session, rotating **before/after** comparison on local Linux / WSL2,
-not a comparison against numbers from another run. The homepage uses epoll for
-both PACE versions, with nginx beside them; it does not choose whichever PACE
-backend wins each case. All four scenarios and both worker counts are shown.
+not a comparison against numbers from another run. This earlier optimization
+report retains its frozen before/after evidence. The [0.5.0 full results](performance.md)
+contain the newer proxy work and the homepage PACE/Asio/libuv comparison.
+All four gateway scenarios and both worker counts are shown here.
 
 ![Gateway optimization, all backends](assets/gateway-latest-all.svg)
 

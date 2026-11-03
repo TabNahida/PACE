@@ -16,10 +16,10 @@
 - **只构建需要的模块。** 核心没有第三方运行时依赖，协议模块按需启用。
 
 <p align="center">
-  <a href="docs/gateway-optimization.md"><img src="docs/assets/gateway-latest.svg" alt="本地 Linux HTTP 网关：PACE 优化前后与 nginx 对照，完整展示单 worker 和四 worker 的四种场景。" width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
 </p>
 
-<p align="center"><a href="docs/gateway-optimization.md">完整性能数据、测试方法与原始记录 →</a></p>
+<p align="center"><a href="docs/performance.md">完整性能数据、测试方法与原始记录 →</a></p>
 
 ## 四层架构，按需组合
 
@@ -101,9 +101,9 @@ app.mount("/assets", "./public")
 app.run_workers(4, {"0.0.0.0", 8080});
 ```
 
-按需配置有界缓存、每 worker 连接池、轮询或最少连接数分配。适用于 0.4.0 之后的开发分支。
+按需配置有界缓存、每 worker 连接池、轮询或最少连接数分配。适用于 PACE 0.5.0 或更新版本。
 [一步步搭建网关 →](docs/tutorial/13-gateway.zh-CN.md) ·
-[nginx 性能对照 →](docs/gateway-performance.md) · [I/O 后端 →](docs/reference/io-backends.md)
+[nginx 性能对照 →](docs/performance.md#http-gateways--pace-and-nginx) · [I/O 后端 →](docs/reference/io-backends.md)
 
 ## 继续探索
 

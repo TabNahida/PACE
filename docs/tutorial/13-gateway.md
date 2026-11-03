@@ -2,7 +2,7 @@
 
 [中文](13-gateway.zh-CN.md) · [Learning path](README.md)
 
-This chapter uses the gateway APIs on the development branch after 0.4.0.
+This chapter uses the gateway APIs available since PACE 0.5.0.
 Build from this checkout with HTTP/1 enabled (the default).
 
 ## Mount a directory

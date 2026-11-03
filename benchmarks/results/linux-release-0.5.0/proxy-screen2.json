@@ -1,0 +1,823 @@
+{
+  "schema": 1,
+  "environment": {
+    "platform": "Linux-6.18.40.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "cpu": "x86_64",
+    "cpuinfo": "processor\t: 0\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 0\ncpu cores\t: 24\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 1\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 1\ncpu cores\t: 24\napicid\t\t: 1\ninitial apicid\t: 1\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 2\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 2\ncpu cores\t: 24\napicid\t\t: 2\ninitial apicid\t: 2\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 3\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 3\ncpu cores\t: 24\napicid\t\t: 3\ninitial apicid\t: 3\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 4\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 4\ncpu cores\t: 24\napicid\t\t: 4\ninitial apicid\t: 4\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 5\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 5\ncpu cores\t: 24\napicid\t\t: 5\ninitial apicid\t: 5\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 6\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 6\ncpu cores\t: 24\napicid\t\t: 6\ninitial apicid\t: 6\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 7\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 7\ncpu cores\t: 24\napicid\t\t: 7\ninitial apicid\t: 7\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 8\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 8\ncpu cores\t: 24\napicid\t\t: 8\ninitial apicid\t: 8\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 9\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 9\ncpu cores\t: 24\napicid\t\t: 9\ninitial apicid\t: 9\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 10\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 10\ncpu cores\t: 24\napicid\t\t: 10\ninitial apicid\t: 10\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 11\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 11\ncpu cores\t: 24\napicid\t\t: 11\ninitial apicid\t: 11\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 12\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 12\ncpu cores\t: 24\napicid\t\t: 12\ninitial apicid\t: 12\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 13\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 13\ncpu cores\t: 24\napicid\t\t: 13\ninitial apicid\t: 13\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 14\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 14\ncpu cores\t: 24\napicid\t\t: 14\ninitial apicid\t: 14\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 15\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 15\ncpu cores\t: 24\napicid\t\t: 15\ninitial apicid\t: 15\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 16\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 16\ncpu cores\t: 24\napicid\t\t: 16\ninitial apicid\t: 16\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 17\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 17\ncpu cores\t: 24\napicid\t\t: 17\ninitial apicid\t: 17\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 18\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 18\ncpu cores\t: 24\napicid\t\t: 18\ninitial apicid\t: 18\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 19\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 19\ncpu cores\t: 24\napicid\t\t: 19\ninitial apicid\t: 19\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 20\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 20\ncpu cores\t: 24\napicid\t\t: 20\ninitial apicid\t: 20\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 21\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 21\ncpu cores\t: 24\napicid\t\t: 21\ninitial apicid\t: 21\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 22\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 22\ncpu cores\t: 24\napicid\t\t: 22\ninitial apicid\t: 22\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 23\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 23\ncpu cores\t: 24\napicid\t\t: 23\ninitial apicid\t: 23\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\n",
+    "nginx": "nginx version: nginx/1.30.6\nbuilt by gcc 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1) \nconfigure arguments: --prefix=/tmp/pace-nginx --without-http_rewrite_module --without-http_gzip_module --with-threads\n",
+    "source_commit": "a343fa6f14bc77845f4687f54ed1538e841fe363",
+    "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+    "source_sha256": {
+      "src/application/http.cpp": "ab5f136852727bc00ec171f1038158e570826497321def818a8e8fe0b27e71ef",
+      "src/application/http2.cpp": "316a5a67218ccc759a48e7173f8d2ba45a0a80b27e574ee1c89471152d10d7e8",
+      "src/application/http2_url.cpp": "02e4a69fc4da17dcfde9a93c4c42169043b9e147c177a6393f7a2940bea1f983",
+      "src/application/http3.cpp": "36b8c3283d749aebb0e15a6aba6d8f97c57c524e753cdf8adb8b92becb4d568b",
+      "src/application/http3_url.cpp": "b098a03f7a45454c41246a072e2722b6d580674ca5ed2f0273d3defd81cf671c",
+      "src/application/http_services.cpp": "562801ad9c355ae5c8d8e0f7322a34ea07bec0c77fd4c4907961c5eb79bb2168",
+      "src/application/http_url.cpp": "ff5c51f203912011b19bb8c1b11e89be98b4a3dc0584ba8659a92c1434a9e343",
+      "src/application/websocket.cpp": "0fe5ed3bcff3082f78e9abf4888004f90b1605f6df014198cf469a4abbb85a9c",
+      "src/extensions/dns.cpp": "c4345142b488177e6e7b6ca440efb63100005ce685736444f209e8c37df7213b",
+      "src/extensions/quic.cpp": "39c6c416123d4df6ab1a9d1524c159c7fe7289cfb8e655599ff13360214e2f40",
+      "src/extensions/tls.cpp": "e5ea467da2114138d9fc1bb9aa9d4f92385df22c8fb363be052c73a084f324ab",
+      "src/networking/net.cpp": "d65d7f25be38787eda10f67ef391b81eb1e278a53cab4efd81ea16e65d111c6c",
+      "src/networking/udp.cpp": "45083337c287b92e2eeb0bf22d4b76f32e4e962a76fabd98097632cf6836ea5e",
+      "src/runtime/cancellation.cpp": "7b7bf74fc4b09c7b821eda9a97c4c490554db26e80416bca520d0b2d07d11bf2",
+      "src/runtime/io_context.cpp": "8e469ce6907af08903997827a0b80da161ebbbeb2b1046cd3896d350f46f1513",
+      "src/runtime/poller.cpp": "d06c74999bdeffefc1b27778e48955e4b13436911c11605720d0d2fe2fc2a456",
+      "src/runtime/poller_backend.hpp": "75680d416f8512f883b268604512debdbde066f88d8dfe2851c8429043bc673a",
+      "src/runtime/poller_iocp.cpp": "6374b9e4b4d6259b53e76aa5baadfad474dd96253224cae0d12f6e8666281d8b",
+      "src/runtime/poller_native.cpp": "bd7ea4a9b3161b9ea18b7110c49e3441743880ee19413543f561ce6efd2c0c3a",
+      "src/runtime/poller_uring.cpp": "25fa3111ec73ef9b4e2547fd62538b7dd1f3de90444331ffa8640a1e9b8628f8",
+      "src/runtime/runtime.cpp": "583c6f271b3f4cc9bfde3a5a57ff79f06762ca6dd6262d60c4d17a93b0860f52",
+      "include/pace/application.hpp": "46036920d65abbfa14b3001f59ea0953e0230491458e82c9982d1385f0a84601",
+      "include/pace/blocking.hpp": "ea13542aa3565449dc0da3700a641c13fee2f41aee1900f1c355659285a94022",
+      "include/pace/cancellation.hpp": "24fba3ba4e707332e93e8c9468332e7a1941f71bc38a05bee447205c0e89dda9",
+      "include/pace/detail/content_hash.hpp": "f81dc7eb9bf147bc5cce30f2972cab3ec6110e043d82bb819ade89fdc74a97d9",
+      "include/pace/detail/http_dispatch.hpp": "98f1b61428e4c306f1b9714bc1ed2ec4b0a8e31e20ae1050949ca7ed7dccf76b",
+      "include/pace/detail/http_url.hpp": "d5dc3ffb601d155c9b6a5a3b3117682ba84920fbf3aba4a8eb590e7479e3bfdd",
+      "include/pace/detail/poller.hpp": "16aecf74d13e36f8f0f3e923b96579c89c61d22e52e1ae6712ed2fb2ba34cc14",
+      "include/pace/detail/profiling.hpp": "8296366efdaf1c39f5fc61372836880dc6cb4271dafd53b4de5206c528b85fc0",
+      "include/pace/detail/protocol_driver.hpp": "39cc6a74cde65e14d75c664f7a2f60c5fd34a2bd102cd3d04d20965d342e0f44",
+      "include/pace/detail/serve_group.hpp": "ee797730f47201b13f076794af4efe0df1385f591af934c04730c529d9b0def8",
+      "include/pace/detail/socket_address.hpp": "aac9f8f59cbb31b64760656247304cfc64e13321b460cef8879ba2a49d756c74",
+      "include/pace/dns.hpp": "e0714cffcd2df5b28c9a82d78dae09893073712e3ea467fce256f9c43b4be4d9",
+      "include/pace/extensions.hpp": "e7b6c803b077232380fdfa10b1a10656a27f68e736f17f08d408df19df0ec2c1",
+      "include/pace/http.hpp": "60f023c968d279ac26e9d9a606feef19365dd883942c757af638316d9622de00",
+      "include/pace/http2.hpp": "80201908a928edb55e3c86310a33f9f58669f125dde5fa415d8ad32d0ac73ffc",
+      "include/pace/http3.hpp": "edb74f4ee83a73eef554ea9364c65515f172dd135c57f085b5d3234f750e89bc",
+      "include/pace/http_router.hpp": "16fc9e65f3fdafa294d88c912ddf465756617f9467ff9a50f47544031b70fe00",
+      "include/pace/http_services.hpp": "e2032d7c8a54c291bb187102b89a3a601e93e3738f1b11b0808214b5115c2a9c",
+      "include/pace/http_types.hpp": "5cf86ab6898708b7f4f369396b7095d6b151729195cdad357963bdc083b76850",
+      "include/pace/io_backend.hpp": "7c7d95687ef22a1468a56e990a4d18973fec78bb464ffdfae84a1b1885f4009e",
+      "include/pace/io_context.hpp": "556859a681de9ff1c27f6b4ecb9a44189bbe19ccebe66574bfc6e1d48ef37330",
+      "include/pace/ip.hpp": "cd562fc37d9edab5e4582ebdcc90690b58c4f8dcc1a5b63800cdfc9b21048cd8",
+      "include/pace/net.hpp": "bcf33f0b76222f8b98eaa83416c0686194558bd7909754b9ea9e113a8352ea67",
+      "include/pace/networking.hpp": "fcf8f4d1dd046d5bcde05c17e36b62ec63409bb81b892899b442c936f1568c4c",
+      "include/pace/operation.hpp": "e9801127256cc34240c3856976d100f567e193e5b6905754886bc62cce4a0308",
+      "include/pace/pace.hpp": "9ed639af9acc892ea85086a877fdf5067a1cdb3819100dd293dcbae4d5cdeb0e",
+      "include/pace/platform.hpp": "7aa182d1635d51ea0706d2828ff8375ee41afe5480c1aa59ad0f317a6e1a906f",
+      "include/pace/quic.hpp": "9ea1ec0d02164cf9f4c2dacf202a676f0e830e87c9c91655b30096eec508473a",
+      "include/pace/run.hpp": "c8b07463c73a4620beb03a4126f36c338500fe96de3c40eeff26a0aada5eb47e",
+      "include/pace/runtime.hpp": "88dfea3afd2095381020031aad9e2a34ca1a953e181fc20afa7590af49ad2742",
+      "include/pace/stream_io.hpp": "0e6c4b66b2ccd0d6c3e05891f2e8c8a7f54ed371506d21d6cdf9e74b1472d386",
+      "include/pace/task.hpp": "6ac86fd5c8ab4d6f2dbb2f3de0e809848499466195daf30119bd962bca12ad4f",
+      "include/pace/task_group.hpp": "dbbc9f40f77e3a4548098d79ba12a4aa8455c1f508ed09a0c6d6bb5f44e31ba1",
+      "include/pace/tcp.hpp": "4d836b210c28eb3542bb1657bd975dd707a28068ad16884df6e1c87c279432ec",
+      "include/pace/this_context.hpp": "685a3e2d9f9f01623e701188e2b776314408cc22963df3645542a1bb93a34c26",
+      "include/pace/tls.hpp": "880e8296bc322a6af1afe32fc4244bf46faff47b47a457a2645205352c516b24",
+      "include/pace/udp.hpp": "332dada04359cf4f17c01d86c71e638f3c5af2f533e312cb543d0d68a1b6c0aa",
+      "include/pace/websocket.hpp": "b11b3082d5a2d24c0cd342d2dcdc6370194d9a486625e9614208f9968e2847db",
+      "benchmarks/components_bench.cpp": "0945c28eebd6c89dfd1cde8e66d6d7a2b0e6c0c85efe7bf7a5b8a93d7f6ddb2d",
+      "benchmarks/echo_bench.cpp": "46afba1b413048192541d0ce87ffe11b1cef16cb192caecf9ea906ca6ec16228",
+      "benchmarks/gateway_components.cpp": "bbba824f7e37157b4d23bcd7a46a8159bcd1fb72eb1fd13e272ee666dd679dc9",
+      "benchmarks/http_close.cpp": "c6cd155d2d78d180358c7cfb4b5031c16ec515f4344bb548a3e73dbb5ffb5f53",
+      "benchmarks/http_gateway.cpp": "eca8996e919cf2a8ea1ebdcd98d8cda6ae3ada55a17fd5516de14c8bacd7c707",
+      "benchmarks/http_load.cpp": "688813f9553500940edbeb5c5379451623fe402712b364b6269a59d37d3727d0",
+      "benchmarks/protocol_multiplex.cpp": "ae1e39d86a76dc3059face3869ef8c8a6a0a3368f99abbdf2ba4b62b02ce0845",
+      "benchmarks/results/http-close-linux-2026-10-23/before-nagle-default-probe.cpp": "2e3565bf0dbe15b9b3170116b9b506215e58363bed66bc2bc8bc749285dea17f",
+      "benchmarks/scaling_bench.cpp": "2590ea58957758e8743c95cb434bc58d2eb88028cb8398916779e6a206ffd18d",
+      "benchmarks/websocket_bench.cpp": "b373568d767cd64c6d0cf849a0920b41545cedd4505290f2ebfea7be734bf16d",
+      "xmake/benchmarks.lua": "8487a699b2d637ac2a5a94f6995125e428f4d56fa52020200ed7f92357719fe3",
+      "xmake/examples.lua": "cbf6cea31c8ea25ef850884cd3237f66dc6bcc1d09ae6204172cd9819c041d1f",
+      "xmake/openssl_arm64.lua": "dddc967fc720479cc29caac9ab944311cb2784616d74950e3fe1ac443798bbd8",
+      "xmake/tests.lua": "6c655ebaf466302d8e8b53dc90e3f3042729841993bbe2fe266523c27fc378d4"
+    },
+    "runner_sha256": "58965f6097ec6864717094aeee56366e81e1bf64679f4cd86fbff61b46691145",
+    "binary_sha256": {
+      "pace": "9f6c22f85e3728af4360fd51fad694393374cfe52ef3231f2f5e0981f9d3c079",
+      "nginx": "5220bb58d2d75b69342f7f3722264a67b7abad7da46c9d30e22acff6774f081e",
+      "load": "f3ce8f3cfab9c94b569e9410d26ab588f0668e78c4cab61c7e2b95cc0ec64ff6",
+      "baseline": "44e1c28ec7ec97d5958f0780742bd01b330048cb0e3bdd9ee76e486a14560204"
+    }
+  },
+  "workload": {
+    "pace": "/tmp/pace-gateway-release/linux/x86_64/release/pace_http_gateway",
+    "nginx": "/tmp/nginx-1.30.6/objs/nginx",
+    "load": "/tmp/pace-gateway-release/linux/x86_64/release/pace_http_load",
+    "baseline": "/tmp/pace-gateway-first-optimized",
+    "output": "/tmp/pace-proxy-screen2.json",
+    "connections": 32,
+    "iterations": 15000,
+    "warmup": 200,
+    "bytes": 4096,
+    "repeats": 5,
+    "workers": "1",
+    "backends": "baseline,epoll,nginx",
+    "scenarios": "proxy",
+    "timeout": 120
+  },
+  "trials": [
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.91174,
+      "requests_per_second": 97725,
+      "p50_us": 315.752,
+      "p95_us": 442.59,
+      "p99_us": 557.311,
+      "client_cpu_seconds": 2.11458,
+      "host_before": {
+        "load_average": [
+          3.0029296875,
+          3.35693359375,
+          2.38232421875
+        ],
+        "total_ticks": 512243170,
+        "idle_ticks": 487474718
+      },
+      "host_after": {
+        "load_average": [
+          3.00244140625,
+          3.3505859375,
+          2.3857421875
+        ],
+        "total_ticks": 512254969,
+        "idle_ticks": 487484844
+      },
+      "backend": "baseline",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.890000000000001,
+      "server_process_high_water_rss_bytes": 5447680,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.79952,
+      "requests_per_second": 100010,
+      "p50_us": 306.101,
+      "p95_us": 439.659,
+      "p99_us": 588.963,
+      "client_cpu_seconds": 2.1735,
+      "host_before": {
+        "load_average": [
+          3.001953125,
+          3.3447265625,
+          2.38916015625
+        ],
+        "total_ticks": 512255277,
+        "idle_ticks": 487485123
+      },
+      "host_after": {
+        "load_average": [
+          3.001953125,
+          3.3447265625,
+          2.38916015625
+        ],
+        "total_ticks": 512266905,
+        "idle_ticks": 487494800
+      },
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.78,
+      "server_process_high_water_rss_bytes": 5373952,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.48798,
+      "requests_per_second": 137615,
+      "p50_us": 223.067,
+      "p95_us": 286.057,
+      "p99_us": 407.082,
+      "client_cpu_seconds": 2.12691,
+      "host_before": {
+        "load_average": [
+          3.001953125,
+          3.3447265625,
+          2.38916015625
+        ],
+        "total_ticks": 512267185,
+        "idle_ticks": 487495041
+      },
+      "host_after": {
+        "load_average": [
+          3.00146484375,
+          3.3388671875,
+          2.392578125
+        ],
+        "total_ticks": 512275605,
+        "idle_ticks": 487501983
+      },
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-fkg4og27/nginx.pid;\nerror_log /tmp/pace-gateway-bench-fkg4og27/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-fkg4og27/body;\n    proxy_temp_path /tmp/pace-gateway-bench-fkg4og27/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:58659 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:59257 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:35707 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.46,
+      "server_process_high_water_rss_bytes": 8421376,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.8078,
+      "requests_per_second": 99837.8,
+      "p50_us": 306.188,
+      "p95_us": 440.175,
+      "p99_us": 573.554,
+      "client_cpu_seconds": 2.1013,
+      "host_before": {
+        "load_average": [
+          3.00146484375,
+          3.3388671875,
+          2.392578125
+        ],
+        "total_ticks": 512275929,
+        "idle_ticks": 487502268
+      },
+      "host_after": {
+        "load_average": [
+          3.16162109375,
+          3.36669921875,
+          2.40673828125
+        ],
+        "total_ticks": 512287522,
+        "idle_ticks": 487512185
+      },
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.79,
+      "server_process_high_water_rss_bytes": 5279744,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.49004,
+      "requests_per_second": 137534,
+      "p50_us": 223.78,
+      "p95_us": 286.641,
+      "p99_us": 372.499,
+      "client_cpu_seconds": 2.05885,
+      "host_before": {
+        "load_average": [
+          3.16162109375,
+          3.36669921875,
+          2.40673828125
+        ],
+        "total_ticks": 512287790,
+        "idle_ticks": 487512428
+      },
+      "host_after": {
+        "load_average": [
+          3.22900390625,
+          3.37744140625,
+          2.41552734375
+        ],
+        "total_ticks": 512296163,
+        "idle_ticks": 487519490
+      },
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-2tju12iw/nginx.pid;\nerror_log /tmp/pace-gateway-bench-2tju12iw/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-2tju12iw/body;\n    proxy_temp_path /tmp/pace-gateway-bench-2tju12iw/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:45393 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:58043 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:35419 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.48,
+      "server_process_high_water_rss_bytes": 8380416,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.93539,
+      "requests_per_second": 97256.8,
+      "p50_us": 317.024,
+      "p95_us": 446.673,
+      "p99_us": 586.215,
+      "client_cpu_seconds": 2.10365,
+      "host_before": {
+        "load_average": [
+          3.22900390625,
+          3.37744140625,
+          2.41552734375
+        ],
+        "total_ticks": 512296490,
+        "idle_ticks": 487519779
+      },
+      "host_after": {
+        "load_average": [
+          3.451171875,
+          3.42138671875,
+          2.43505859375
+        ],
+        "total_ticks": 512308439,
+        "idle_ticks": 487530000
+      },
+      "backend": "baseline",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.92,
+      "server_process_high_water_rss_bytes": 5398528,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.50256,
+      "requests_per_second": 137042,
+      "p50_us": 224.358,
+      "p95_us": 297.596,
+      "p99_us": 383.987,
+      "client_cpu_seconds": 2.15753,
+      "host_before": {
+        "load_average": [
+          3.451171875,
+          3.42138671875,
+          2.43505859375
+        ],
+        "total_ticks": 512308726,
+        "idle_ticks": 487530257
+      },
+      "host_after": {
+        "load_average": [
+          3.49560546875,
+          3.43115234375,
+          2.44384765625
+        ],
+        "total_ticks": 512317155,
+        "idle_ticks": 487537291
+      },
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-er1hcjus/nginx.pid;\nerror_log /tmp/pace-gateway-bench-er1hcjus/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-er1hcjus/body;\n    proxy_temp_path /tmp/pace-gateway-bench-er1hcjus/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:44093 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:56149 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:53969 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.4899999999999998,
+      "server_process_high_water_rss_bytes": 8404992,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.9732,
+      "requests_per_second": 96517.3,
+      "p50_us": 321.353,
+      "p95_us": 447.028,
+      "p99_us": 523.146,
+      "client_cpu_seconds": 2.07927,
+      "host_before": {
+        "load_average": [
+          3.49560546875,
+          3.43115234375,
+          2.44384765625
+        ],
+        "total_ticks": 512317477,
+        "idle_ticks": 487537583
+      },
+      "host_after": {
+        "load_average": [
+          3.6962890625,
+          3.47412109375,
+          2.46337890625
+        ],
+        "total_ticks": 512329422,
+        "idle_ticks": 487547891
+      },
+      "backend": "baseline",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.96,
+      "server_process_high_water_rss_bytes": 5349376,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.76839,
+      "requests_per_second": 100663,
+      "p50_us": 306.656,
+      "p95_us": 431.845,
+      "p99_us": 531.469,
+      "client_cpu_seconds": 2.09565,
+      "host_before": {
+        "load_average": [
+          3.6962890625,
+          3.47412109375,
+          2.46337890625
+        ],
+        "total_ticks": 512329738,
+        "idle_ticks": 487548179
+      },
+      "host_after": {
+        "load_average": [
+          3.720703125,
+          3.48291015625,
+          2.4716796875
+        ],
+        "total_ticks": 512341249,
+        "idle_ticks": 487557920
+      },
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.75,
+      "server_process_high_water_rss_bytes": 5414912,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.96978,
+      "requests_per_second": 96583.7,
+      "p50_us": 319.646,
+      "p95_us": 451.729,
+      "p99_us": 538.888,
+      "client_cpu_seconds": 2.14622,
+      "host_before": {
+        "load_average": [
+          3.720703125,
+          3.48291015625,
+          2.4716796875
+        ],
+        "total_ticks": 512341577,
+        "idle_ticks": 487558202
+      },
+      "host_after": {
+        "load_average": [
+          3.66259765625,
+          3.474609375,
+          2.474609375
+        ],
+        "total_ticks": 512353598,
+        "idle_ticks": 487568363
+      },
+      "backend": "baseline",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.97,
+      "server_process_high_water_rss_bytes": 5332992,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.77912,
+      "requests_per_second": 100437,
+      "p50_us": 304.669,
+      "p95_us": 436.672,
+      "p99_us": 560.602,
+      "client_cpu_seconds": 2.09532,
+      "host_before": {
+        "load_average": [
+          3.66259765625,
+          3.474609375,
+          2.474609375
+        ],
+        "total_ticks": 512353917,
+        "idle_ticks": 487568651
+      },
+      "host_after": {
+        "load_average": [
+          3.77001953125,
+          3.5,
+          2.48828125
+        ],
+        "total_ticks": 512365468,
+        "idle_ticks": 487578409
+      },
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.75,
+      "server_process_high_water_rss_bytes": 5263360,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.46315,
+      "requests_per_second": 138602,
+      "p50_us": 222.479,
+      "p95_us": 285.64,
+      "p99_us": 391.622,
+      "client_cpu_seconds": 2.0496,
+      "host_before": {
+        "load_average": [
+          3.77001953125,
+          3.5,
+          2.48828125
+        ],
+        "total_ticks": 512365739,
+        "idle_ticks": 487578654
+      },
+      "host_after": {
+        "load_average": [
+          3.77001953125,
+          3.5,
+          2.48828125
+        ],
+        "total_ticks": 512374061,
+        "idle_ticks": 487585581
+      },
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-h5xxjig3/nginx.pid;\nerror_log /tmp/pace-gateway-bench-h5xxjig3/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-h5xxjig3/body;\n    proxy_temp_path /tmp/pace-gateway-bench-h5xxjig3/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:52595 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:43713 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:42107 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.44,
+      "server_process_high_water_rss_bytes": 8462336,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.80663,
+      "requests_per_second": 99862,
+      "p50_us": 306.338,
+      "p95_us": 440.555,
+      "p99_us": 567.293,
+      "client_cpu_seconds": 2.14253,
+      "host_before": {
+        "load_average": [
+          3.77001953125,
+          3.5,
+          2.48828125
+        ],
+        "total_ticks": 512374373,
+        "idle_ticks": 487585863
+      },
+      "host_after": {
+        "load_average": [
+          3.78857421875,
+          3.50830078125,
+          2.49658203125
+        ],
+        "total_ticks": 512385926,
+        "idle_ticks": 487595657
+      },
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.78,
+      "server_process_high_water_rss_bytes": 5308416,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.54222,
+      "requests_per_second": 135508,
+      "p50_us": 226.027,
+      "p95_us": 300.854,
+      "p99_us": 426.305,
+      "client_cpu_seconds": 2.13245,
+      "host_before": {
+        "load_average": [
+          3.78857421875,
+          3.50830078125,
+          2.49658203125
+        ],
+        "total_ticks": 512386205,
+        "idle_ticks": 487595908
+      },
+      "host_after": {
+        "load_average": [
+          3.72509765625,
+          3.49951171875,
+          2.49951171875
+        ],
+        "total_ticks": 512394712,
+        "idle_ticks": 487603058
+      },
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-s7sqr_ve/nginx.pid;\nerror_log /tmp/pace-gateway-bench-s7sqr_ve/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-s7sqr_ve/body;\n    proxy_temp_path /tmp/pace-gateway-bench-s7sqr_ve/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:50395 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:54513 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:48887 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.52,
+      "server_process_high_water_rss_bytes": 8368128,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 480000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.89999,
+      "requests_per_second": 97959.4,
+      "p50_us": 315.893,
+      "p95_us": 437.521,
+      "p99_us": 544.913,
+      "client_cpu_seconds": 2.12858,
+      "host_before": {
+        "load_average": [
+          3.72509765625,
+          3.49951171875,
+          2.49951171875
+        ],
+        "total_ticks": 512395062,
+        "idle_ticks": 487603373
+      },
+      "host_after": {
+        "load_average": [
+          3.74755859375,
+          3.50830078125,
+          2.5078125
+        ],
+        "total_ticks": 512406895,
+        "idle_ticks": 487613437
+      },
+      "backend": "baseline",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.87,
+      "server_process_high_water_rss_bytes": 5459968,
+      "trial": 5
+    }
+  ],
+  "summaries": [
+    {
+      "scenario": "proxy",
+      "workers": 1,
+      "backend": "baseline",
+      "requests_per_second": {
+        "median": 97256.8,
+        "min": 96517.3,
+        "max": 97959.4
+      },
+      "p50_us": {
+        "median": 317.024,
+        "min": 315.752,
+        "max": 321.353
+      },
+      "p95_us": {
+        "median": 446.673,
+        "min": 437.521,
+        "max": 451.729
+      },
+      "p99_us": {
+        "median": 544.913,
+        "min": 523.146,
+        "max": 586.215
+      },
+      "server_cpu_seconds": {
+        "median": 4.92,
+        "min": 4.87,
+        "max": 4.97
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5398528,
+        "min": 5332992,
+        "max": 5459968
+      }
+    },
+    {
+      "scenario": "proxy",
+      "workers": 1,
+      "backend": "epoll",
+      "requests_per_second": {
+        "median": 100010,
+        "min": 99837.8,
+        "max": 100663
+      },
+      "p50_us": {
+        "median": 306.188,
+        "min": 304.669,
+        "max": 306.656
+      },
+      "p95_us": {
+        "median": 439.659,
+        "min": 431.845,
+        "max": 440.555
+      },
+      "p99_us": {
+        "median": 567.293,
+        "min": 531.469,
+        "max": 588.963
+      },
+      "server_cpu_seconds": {
+        "median": 4.78,
+        "min": 4.75,
+        "max": 4.79
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5308416,
+        "min": 5263360,
+        "max": 5414912
+      }
+    },
+    {
+      "scenario": "proxy",
+      "workers": 1,
+      "backend": "nginx",
+      "requests_per_second": {
+        "median": 137534,
+        "min": 135508,
+        "max": 138602
+      },
+      "p50_us": {
+        "median": 223.78,
+        "min": 222.479,
+        "max": 226.027
+      },
+      "p95_us": {
+        "median": 286.641,
+        "min": 285.64,
+        "max": 300.854
+      },
+      "p99_us": {
+        "median": 391.622,
+        "min": 372.499,
+        "max": 426.305
+      },
+      "server_cpu_seconds": {
+        "median": 3.48,
+        "min": 3.44,
+        "max": 3.52
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 8404992,
+        "min": 8368128,
+        "max": 8462336
+      }
+    }
+  ]
+}

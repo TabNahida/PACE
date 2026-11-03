@@ -2,7 +2,7 @@
 
 [Guided tutorial](../tutorial/13-gateway.md) · [中文](http-gateway.zh-CN.md)
 
-Include `<pace/http.hpp>` and link `pace_http1`. These APIs are new after 0.4.0.
+Include `<pace/http.hpp>` and link `pace_http1`. These APIs require PACE 0.5.0 or newer.
 The implementation is an embedded, buffered HTTP gateway, with no configuration
 language, process supervisor, compression, disk cache, automatic TLS certificate
 management, active health checks or WebSocket/CONNECT tunneling.
