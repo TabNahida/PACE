@@ -16,10 +16,10 @@
 - **Build only what you use.** A core without third-party runtime dependencies, with optional protocol modules above it.
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="Local Linux TCP echo: PACE leads throughput and p50; Asio leads p95 and p99. Zero-based charts include all three libraries and trial ranges." width="100%"></a>
+  <a href="docs/gateway-optimization.md"><img src="docs/assets/gateway-latest.svg" alt="Local Linux HTTP gateways: PACE before and after optimization versus nginx; all four scenarios with one and four frontend workers." width="100%"></a>
 </p>
 
-<p align="center"><a href="docs/performance.md">Full benchmark results, methodology &amp; raw data →</a></p>
+<p align="center"><a href="docs/gateway-optimization.md">Full benchmark results, methodology &amp; raw data →</a></p>
 
 ## Four layers. Your stack.
 

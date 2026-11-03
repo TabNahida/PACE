@@ -96,13 +96,35 @@ void local_cache_test() {
     require(live_statistics, "live reader statistics");
     require(failures == 0, "cross-reactor replacement/clear and owned copies");
     require(cache.statistics().hits == 800 && cache.statistics().misses == 4, "retired reader statistics");
+    std::barrier race_start(5);
+    workers.clear();
+    for (int n=0; n<4; ++n) workers.emplace_back([&] {
+        pace::run([&]() -> pace::task<void> {
+            race_start.arrive_and_wait();
+            for (int i=0; i<2000; ++i) {
+                auto value = cache.get_copy("race");
+                if (value && value->body != std::string(1024, 'a') && value->body != std::string(1024, 'b')) ++failures;
+            }
+            co_return;
+        });
+    });
+    race_start.arrive_and_wait();
+    for (int i=0; i<1000; ++i) {
+        cache.put("race", h::text(std::string(1024, i%2 ? 'a' : 'b')), 1s);
+        if (i%3 == 0) cache.clear();
+        (void)cache.statistics();
+    }
+    for (auto& worker : workers) worker.join();
+    require(failures == 0, "concurrent mutation preserves immutable local snapshots");
     pace::run([&]() -> pace::task<void> {
         cache.put("ttl", h::text("value"), 1s);
         require(cache.get_copy("ttl").has_value() && cache.get_copy("ttl").has_value(), "prime local TTL");
         co_await pace::sleep_for(1100ms);
         require(!cache.get_copy("ttl"), "local snapshot must respect TTL");
+        cache.put("evicted", h::text("old"), 1s);
+        require(cache.get_copy("evicted").has_value(), "prime local eviction");
         for (int i=0; i<100; ++i) cache.put(std::to_string(i), h::text("other"), 1s);
-        require(!cache.get_copy("ttl"), "eviction must not resurrect local snapshot");
+        require(!cache.get_copy("evicted"), "eviction must not resurrect local snapshot");
     });
 }
 struct directory {
@@ -285,6 +307,13 @@ int main() {
         fs::create_directory_symlink(dir.path, dir.path / "directory-link");
 #endif
         pace::run([&] { return static_test(dir); });
+        pace::task<h::response> retained;
+        pace::run([&]() -> pace::task<void> {
+            h::static_files temporary("/", dir.path);
+            retained = temporary(request("/hello.txt"));
+            co_return;
+        });
+        require(pace::run(std::move(retained)).body == "updated", "local task ownership survives service/context destruction");
         pace::io_context io;
         pace::tcp::listener a(io, {"127.0.0.1", 0}), b(io, {"127.0.0.1", 0});
         upstream first{"a"}, second{"b"};

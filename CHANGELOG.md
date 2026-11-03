@@ -9,7 +9,7 @@
 - Add reverse proxies with per-reactor keep-alive pools, round-robin/least-connections balancing, deadlines and bounded shared response caching.
 - Add sharded CLOCK caches and dense generation-checked reactor descriptor slots.
 - Add selectable Linux io_uring and Windows IOCP socket-notification backends; retain native fallbacks.
-- Add bilingual gateway tutorials, backend reference and reproducible local Linux nginx comparisons.
+- Add bilingual gateway tutorials, backend reference and reproducible local Linux nginx comparisons. Update both README performance panels with the latest same-session before/after matrix and complete results, including the four-worker cached-proxy regression.
 
 ## 0.4.0 — 2026-10-28
 

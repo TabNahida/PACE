@@ -49,4 +49,4 @@ describe deadlines, ownership and individual limits.
 
 The component helpers added in v0.3.1 are documented in [component conveniences](reference/component-conveniences.md). Buffer reuse, concurrency and close budgets are in [protocol tuning](reference/protocol-tuning.md). Direct calls, timeout contracts and HTTP name migration are in [direct clients](reference/direct-clients.md).
 
-[Build a file server and reverse proxy](tutorial/13-gateway.md) · [nginx comparison](gateway-performance.md)
+[Build a file server and reverse proxy](tutorial/13-gateway.md) · [nginx comparison](gateway-optimization.md)

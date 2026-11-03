@@ -1,5 +1,7 @@
 # Local Linux gateway comparison with nginx
 
+For the latest single-worker optimization, before/after comparison and contention diagnostics, see [gateway optimization](gateway-optimization.md). This page retains the earlier measurements.
+
 Measured 2026-11-03 on a **shared local Linux / WSL2 host**. A first run coincided
 with heavy CPU-intensive background jobs. After those jobs finished, we repeated
 the same complete matrix once, with lower background load and per-trial host load

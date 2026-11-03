@@ -175,3 +175,12 @@ allocation and scheduling strategies remain part of the comparison.
 ## HTTP gateway versus nginx
 
 [Gateway results and reproduction](../docs/gateway-performance.md) cover directory mounts, static caching, two-upstream proxies and response caching with 1/4 workers. `run_gateway_benchmarks.py` uses an independent Linux epoll client and preserves all trials; `plot_gateway_benchmarks.py` renders the complete throughput chart. `--baseline /path/to/alternate-pace --backends baseline,epoll` supports controlled PACE A/B experiments.
+
+
+The [latest optimization report](../docs/gateway-optimization.md) compares the same
+session's old/new PACE binaries and nginx, including regressions. The homepage
+renderer is `plot_gateway_optimization.py` (add `--all-backends` for io_uring).
+`pace_gateway_components` and `run_gateway_components.py` isolate 4 KiB content
+hashing and shared-versus-reactor-local hot-cache copies with 1/2/4/8 workers.
+Those operation rates are diagnostics, not server throughput or hardware cache-miss
+measurements. The complete HTTP matrix remains the end-to-end evidence.

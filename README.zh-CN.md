@@ -16,10 +16,10 @@
 - **只构建需要的模块。** 核心没有第三方运行时依赖，协议模块按需启用。
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="本地 Linux TCP echo：PACE 的吞吐和 p50 领先，Asio 的 p95 与 p99 领先。三库柱状图均从零开始，展示各轮范围。" width="100%"></a>
+  <a href="docs/gateway-optimization.md"><img src="docs/assets/gateway-latest.svg" alt="本地 Linux HTTP 网关：PACE 优化前后与 nginx 对照，完整展示单 worker 和四 worker 的四种场景。" width="100%"></a>
 </p>
 
-<p align="center"><a href="docs/performance.md">完整性能数据、测试方法与原始记录 →</a></p>
+<p align="center"><a href="docs/gateway-optimization.md">完整性能数据、测试方法与原始记录 →</a></p>
 
 ## 四层架构，按需组合
 

@@ -4,7 +4,7 @@
 
 For the later HTTP/1 close-completion fix, WebSocket framing costs and HTTP/2/3
 handler concurrency investigation, see [protocol performance](protocol-performance.md).
-The TCP comparison below retains its original workload and data.
+The TCP comparison below retains its original workload and data. For the latest HTTP gateway and nginx comparison, see [gateway optimization](gateway-optimization.md).
 
 PACE now demonstrates a repeatable **median round-trip latency advantage over
 both Asio and libuv in the measured 32-connection workload**. It does not lead
