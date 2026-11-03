@@ -43,3 +43,5 @@ HTTP/1 支持请求头准入、逐请求 body 限额和有界流式响应；HTTP
 各协议的具体边界见对应参考页。
 
 [直接客户端、超时与 HTTP 命名迁移](reference/direct-clients.zh-CN.md)
+
+[搭建静态服务与反向代理](tutorial/13-gateway.zh-CN.md) · [nginx 性能对照](gateway-performance.md)

@@ -78,8 +78,9 @@ canonical TCP types. New documentation uses `pace::tcp::*`. There is no
 
 ## Platform scope
 
-Linux uses epoll, 64-bit macOS/FreeBSD use kqueue, and Windows uses WSAPoll.
-The Windows backend is a readiness implementation rather than IOCP. OS support
+Linux defaults to epoll and optionally supports io_uring; 64-bit macOS/FreeBSD use kqueue.
+Windows selects IOCP socket notifications where supported, with WSAPoll compatibility.
+See [backend selection and capability boundaries](io-backends.md). OS support
 does not imply equal scaling or measured performance. Same-port listener reuse
 is platform-dependent; the worker runtime itself is available independently of
 that listener strategy. See [architecture](../architecture.md) and the

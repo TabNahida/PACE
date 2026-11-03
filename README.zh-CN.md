@@ -93,6 +93,18 @@ xmake -y
 
 </details>
 
+## 静态文件与反向代理
+
+```cpp
+app.mount("/assets", "./public")
+   .proxy("/api", {"http://127.0.0.1:9000", "http://127.0.0.1:9001"});
+app.run_workers(4, {"0.0.0.0", 8080});
+```
+
+按需配置有界缓存、每 worker 连接池、轮询或最少连接数分配。适用于 0.4.0 之后的开发分支。
+[一步步搭建网关 →](docs/tutorial/13-gateway.zh-CN.md) ·
+[nginx 性能对照 →](docs/gateway-performance.md) · [I/O 后端 →](docs/reference/io-backends.md)
+
 ## 继续探索
 
 | | |

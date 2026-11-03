@@ -51,3 +51,5 @@ routing forms, see [API ergonomics](../ergonomics.md).
 Use [component conveniences](../reference/component-conveniences.md) for exact contracts and [protocol tuning](../reference/protocol-tuning.md) for buffer reuse, deadlines and concurrency.
 
 [Direct clients and API migration](../reference/direct-clients.md)
+
+[13. Static files, caching and reverse proxies](13-gateway.md) — build a gateway with one-line mounts and upstream lists (development branch).

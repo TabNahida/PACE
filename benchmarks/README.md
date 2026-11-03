@@ -171,3 +171,7 @@ All servers use a 64 KiB per-connection application buffer. libuv pauses reads w
 each asynchronous write is outstanding, preserving that buffer until completion;
 PACE and Asio likewise await each write before reading again. Library-internal
 allocation and scheduling strategies remain part of the comparison.
+
+## HTTP gateway versus nginx
+
+[Gateway results and reproduction](../docs/gateway-performance.md) cover directory mounts, static caching, two-upstream proxies and response caching with 1/4 workers. `run_gateway_benchmarks.py` uses an independent Linux epoll client and preserves all trials; `plot_gateway_benchmarks.py` renders the complete throughput chart. `--baseline /path/to/alternate-pace --backends baseline,epoll` supports controlled PACE A/B experiments.

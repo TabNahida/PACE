@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add HTTP directory mounts, bounded static responses, validators and byte ranges.
+- Add reverse proxies with per-reactor keep-alive pools, round-robin/least-connections balancing, deadlines and bounded shared response caching.
+- Add sharded CLOCK caches and dense generation-checked reactor descriptor slots.
+- Add selectable Linux io_uring and Windows IOCP socket-notification backends; retain native fallbacks.
+- Add bilingual gateway tutorials, backend reference and reproducible local Linux nginx comparisons.
+
 ## 0.4.0 — 2026-10-28
 
 - Add structured task groups with owned factories, result handles, scope-owned resources and cancel-then-join error propagation; children cannot outlive the boundary.

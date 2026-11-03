@@ -30,7 +30,7 @@ double cpu_time() { timespec ts{}; clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
 int main(int argc, char** argv) {
     std::vector<connection> clients;
     try {
-        if (argc != 6) throw std::invalid_argument("usage: http_load PORT CONNECTIONS ITERATIONS WARMUP PAYLOAD_BYTES");
+        if (argc != 6 && argc != 7) throw std::invalid_argument("usage: http_load PORT CONNECTIONS ITERATIONS WARMUP PAYLOAD_BYTES");
         const auto port = std::stoul(argv[1]); const auto count = std::stoul(argv[2]);
         const auto iterations = std::stoul(argv[3]); const auto warmup = std::stoul(argv[4]); const auto bytes = std::stoul(argv[5]);
         if (!count || count > 4096 || !iterations || bytes > 16*1024*1024) throw std::invalid_argument("invalid workload");
@@ -114,6 +114,11 @@ int main(int argc, char** argv) {
             return std::chrono::duration<double>(timer::now() - started).count();
         };
         phase(warmup, false);
+        if (argc == 7) {
+            if (std::string(argv[6]) != "--barrier") throw std::invalid_argument("unknown option");
+            std::cout << "READY\n" << std::flush;
+            char go; if (!std::cin.get(go)) throw std::runtime_error("missing measurement barrier");
+        }
         const auto cpu_start = cpu_time(); const auto elapsed = phase(iterations, true); const auto cpu = cpu_time() - cpu_start;
         std::sort(latency.begin(), latency.end());
         auto percentile = [&](double p) { return latency[static_cast<std::size_t>((latency.size() - 1) * p)]; };

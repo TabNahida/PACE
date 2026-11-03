@@ -83,3 +83,6 @@ single-use and cannot be restarted.
 
 The [tutorials](../tutorial/README.md) show these rules together. The linked signatures
 describe the current implementation; they do not promise APIs from Asio or libuv.
+
+- [HTTP gateway services](http-gateway.md): directory mounts, reverse proxies, caching and balancing.
+- [I/O backends](io-backends.md): selection, defaults and readiness/completion boundaries.

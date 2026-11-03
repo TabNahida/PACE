@@ -67,6 +67,19 @@ Link with `add_deps("pace_http1")`. [Write the client and server step by step �
 
 Continue step by step: [TCP](docs/tutorial/03-tcp.md) · [UDP](docs/tutorial/07-udp.md) · [DNS](docs/tutorial/08-dns-tls.md) · [QUIC](docs/tutorial/11-quic-http3.md) · [HTTP/3](docs/tutorial/11-quic-http3.md) · [WebSocket](docs/tutorial/09-websocket.md)
 
+## Files and reverse proxies
+
+```cpp
+app.mount("/assets", "./public")
+   .proxy("/api", {"http://127.0.0.1:9000", "http://127.0.0.1:9001"});
+app.run_workers(4, {"0.0.0.0", 8080});
+```
+
+Optional bounded caches, per-worker connection pools and round-robin or
+least-connections balancing. Available on the development branch after 0.4.0.
+[Walk through a gateway →](docs/tutorial/13-gateway.md) ·
+[nginx comparison →](docs/gateway-performance.md) · [I/O backends →](docs/reference/io-backends.md)
+
 ## Get started
 
 You need [xmake](https://xmake.io/guide/quick-start.html) 2.9.8+ and a C++20 compiler.

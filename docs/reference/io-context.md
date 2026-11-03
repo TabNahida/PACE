@@ -7,8 +7,10 @@ submission queues, ready coroutine queues and steady-clock timers. Exactly one
 thread may execute it. It is neither copyable nor movable.
 
 ```cpp
-io_context();
-~io_context();
+explicit io_context(io_backend backend = io_backend::automatic);
+io_backend backend() const noexcept;
+~explicit io_context(io_backend backend = io_backend::automatic);
+io_backend backend() const noexcept;
 io_context(const io_context&) = delete;
 io_context& operator=(const io_context&) = delete;
 ```
@@ -173,3 +175,8 @@ not a supported way to resume an unrelated coroutine from another thread.
 
 See [execution choices](../tutorial/05-execution.md) and
 [shutdown](../tutorial/06-shutdown.md) for complete examples.
+
+[Backend selection](io-backends.md) describes constructor/environment precedence.
+`local_state(shared_ptr<const void> key, factory)` stores lazily constructed shared service state on one reactor. It is reactor-affine, rejects a stopped context, retains the key/value until context destruction and releases values after owned roots are destroyed. It is intended for bounded per-service pools, not per-request data.
+
+For raw sockets, call `release_socket(fd)` immediately before the native close. It cancels pending waits and detaches backend registration identities; the caller still owns and closes the handle. Use `cancel(fd)` when the socket remains open and may be awaited again. PACE socket wrappers handle this distinction automatically. Both require the owning loop, or construction/cleanup while it is not running.

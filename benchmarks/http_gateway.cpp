@@ -17,7 +17,16 @@ int main(int argc, char** argv) {
             pace::http::proxy_options options;
             options.cache = {.max_bytes=bytes, .ttl=std::chrono::seconds(60)};
             options.max_connections = 1024; options.max_idle_connections = 256;
-            app.proxy("/", std::string(argv[4]), options);
+            std::vector<std::string> upstreams;
+            std::string resource = argv[4];
+            std::size_t start = 0;
+            for (;;) {
+                auto comma = resource.find(',', start);
+                upstreams.push_back(resource.substr(start, comma == resource.npos ? resource.npos : comma - start));
+                if (comma == resource.npos) break;
+                start = comma + 1;
+            }
+            app.proxy("/", std::move(upstreams), options);
         } else if (mode == "origin") {
             const std::string payload(std::stoul(argv[6]), 'x');
             app.get("/data.bin", [payload] {
