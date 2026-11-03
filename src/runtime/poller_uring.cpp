@@ -39,8 +39,10 @@ class uring_poller final : public poller_backend {
     }
 public:
     uring_poller() {
+        // A submission batch is not a connection limit. Flush full batches in
+        // entry(); keep per-worker locked memory small even with many reactors.
         io_uring_params params{};
-        checked(io_uring_queue_init_params(4096, &ring_, &params), "io_uring_queue_init");
+        checked(io_uring_queue_init_params(256, &ring_, &params), "io_uring_queue_init");
         try {
             if (!(params.features & IORING_FEAT_NODROP))
                 throw std::system_error(std::make_error_code(std::errc::not_supported), "io_uring requires NODROP");

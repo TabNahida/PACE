@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <algorithm>
 #include <limits>
+#include <string>
+#include <cstddef>
 
 namespace pace::detail {
 namespace {
@@ -19,6 +21,10 @@ struct registration_info {
     UINT8 triggerFlags;
     DWORD registrationResult;
 };
+#ifdef SOCK_NOTIFY_REGISTER_EVENT_IN
+static_assert(sizeof(registration_info) == sizeof(SOCK_NOTIFY_REGISTRATION));
+static_assert(offsetof(registration_info, eventFilter) == offsetof(SOCK_NOTIFY_REGISTRATION, eventFilter));
+#endif
 using process_notifications = DWORD (WSAAPI*)(HANDLE, UINT32, registration_info*, UINT32, ULONG, OVERLAPPED_ENTRY*, UINT32*);
 constexpr UINT8 enable = 1, remove_registration = 4, oneshot_level = 1 | 4;
 constexpr UINT16 input = 1, output = 2, hangup = 4, error_event = 0x40, removed = 0x80;
@@ -63,10 +69,14 @@ public:
         } else id = it->second;
         live_.at(id).token = token;
         registration_info info{fd, reinterpret_cast<void*>(id), static_cast<UINT16>((read ? input : 0) | (write ? output : 0) | hangup), enable, oneshot_level, 0};
-        const auto result = process_(port_, 1, &info, 0, 0, nullptr, nullptr);
+        UINT32 received = 0;
+        const auto result = process_(port_, 1, &info, 0, 0, nullptr, &received);
         if (result || info.registrationResult) {
             if (inserted) { current_.erase(fd); live_.erase(id); }
-            check(result ? result : info.registrationResult, "ProcessSocketNotifications register");
+            const auto message = "ProcessSocketNotifications register (call=" + std::to_string(result)
+                + ", registration=" + std::to_string(info.registrationResult) + ", size=" + std::to_string(sizeof(info))
+                + ", filter=" + std::to_string(info.eventFilter) + ", new=" + std::to_string(inserted) + ")";
+            check(result ? result : info.registrationResult, message.c_str());
         }
     }
     void remove(native_socket_type fd) noexcept override {
