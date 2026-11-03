@@ -27,12 +27,17 @@ public:
     ~response_cache();
     response_cache(const response_cache&) = delete;
     std::shared_ptr<const response> get(std::string_view key, std::chrono::seconds* resident_age = nullptr);
+    // Owned copy. On a running reactor, memoizes one immutable snapshot per
+    // cache/context: repeated hits avoid the shared mutex and refcount writes.
+    // Outside a reactor this uses get(). Each reactor may pin one max_object_bytes
+    // snapshot after eviction; it is released on replacement/context destruction.
+    std::optional<response> get_copy(std::string_view key, std::chrono::seconds* resident_age = nullptr);
     void put(std::string key, response value, std::chrono::seconds ttl);
     void clear();
     [[nodiscard]] cache_statistics statistics() const;
 private:
     struct implementation;
-    std::unique_ptr<implementation> impl_;
+    std::shared_ptr<implementation> impl_;
 };
 
 struct static_options {

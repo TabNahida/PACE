@@ -164,3 +164,34 @@ the lock. Per-reactor pools avoid a global connection mutex. Reactor descriptors
 also use dense generation-checked slots, eliminating a second event-dispatch hash
 lookup and rejecting late events after slot reuse. None uses CPU-model-specific
 cache sizes or affinity. See [measurements and limitations](../gateway-performance.md).
+
+## Reactor-local cache hits
+
+Static mounts and proxies use `response_cache::get_copy()` internally. On a running
+reactor it remembers **one** immutable snapshot per cache/context. Repeated hits
+check the shard's invalidation generation and the original steady-clock expiry,
+then return an independent response copy. They avoid the shard mutex, hash lookup,
+CLOCK writes and snapshot reference-count increments. On a key change, expiry,
+replacement, eviction or clear, the next lookup takes the shared path again.
+Outside a reactor, `get_copy()` copies a regular `get()` snapshot.
+
+Generation and mutex/statistics storage are separated by 128-byte alignment;
+reader hit counters are separately aligned and written only by their owning
+reactor. `statistics()` includes live and retired reader hits (a concurrent sample
+is not a globally atomic snapshot). The cache remains bounded by its configured
+entry budget, but each reactor can retain one evicted snapshot, with body size at
+most `max_object_bytes`, plus headers/key/reader metadata. This memory survives
+until the next lookup on that cache or context destruction, just like a snapshot
+returned by `get()`. Clear prevents subsequent stale hits; already selected
+responses may finish. Mutation racing with a miss can repopulate a cleared cache.
+
+The local snapshot favors consecutive hot-key hits; alternating keys still use
+shared shards. Cached HTTP bodies are still copied into owned responses and wire
+buffers. This is not a zero-copy or universally lock-free cache.
+
+Static ETags now use seed-zero XXH64 over file contents, including same-size edits
+with unchanged timestamps. ETag strings can change after this upgrade, causing a
+normal fresh response instead of 304. The compact internal implementation is
+adapted from [xxHash 0.8.3](https://github.com/Cyan4973/xxHash/tree/v0.8.3), BSD-2-Clause;
+its copyright/license are retained in `include/pace/detail/content_hash.hpp`.
+It adds no runtime package dependency and is not a cryptographic integrity check.

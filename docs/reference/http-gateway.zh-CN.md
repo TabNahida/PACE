@@ -82,3 +82,22 @@ Set-Cookie、Vary、private/no-cache/no-store、Content-Range 和不认识的缓
 采用分片锁、连续 slot 的 CLOCK 替换、不可变快照和锁外响应复制，减少每次命中修改链式 LRU 的开销。
 连接池按 reactor 隔离；事件分发用带 generation 的密集描述符 slot，省掉第二次哈希查找并过滤复用后的旧事件。
 没有绑定本机 CPU cache 大小或亲和性。[性能报告](../gateway-performance.md)给出全部本地场景和局限。
+
+## Reactor 本地缓存命中
+
+静态目录和代理内部使用 `response_cache::get_copy()`。每个 cache/context
+仅保留最近命中的一条不可变快照。连续命中检查分片失效代号和原始单调时钟 TTL，
+再返回独立的 response 副本，避开共享锁、哈希查找、CLOCK 标记写入和快照引用计数增减。
+键变化、过期、替换、淘汰或 clear 后，下次查找重新走共享路径；在 reactor 外调用则复制 `get()` 的结果。
+
+失效代号与锁/统计存储采用 128 字节对齐隔开，reader 命中计数也独立对齐，只有所属 reactor 写入。
+`statistics()` 包含存活及已销毁 reader 的命中数；并发采样不是全局原子快照。
+共享缓存仍遵守 entry budget，但每个 reactor 最多额外固定一条被淘汰的快照
+（正文不超过 `max_object_bytes`，另有头部、键和 reader 元数据），直到该缓存的下次查找或 context 销毁才释放。
+clear 后的新查找不会命中旧快照，已经选中的响应可以完成；并发 miss 仍可能重新填充缓存。
+交替访问不同键仍需访问共享分片，正文仍复制为独立响应和发送缓冲，不能据此宣称零拷贝或所有路径无锁。
+
+静态 ETag 改为对内容计算 seed-zero XXH64，同大小且时间戳不变的编辑也会改变验证器。
+升级后旧 ETag 可能失配并正常返回完整响应。内部实现改编自
+[xxHash 0.8.3](https://github.com/Cyan4973/xxHash/tree/v0.8.3)，
+BSD-2-Clause 许可和版权保留在 `include/pace/detail/content_hash.hpp`，不新增运行时依赖，不能用作密码学完整性校验。

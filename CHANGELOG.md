@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Speed up static content validators (portable XXH64), file traversal, date formatting and HTTP/1 encoding; remove redundant body copies, buffer clearing and a proxy coroutine wrapper.
+- Add reactor-local single-snapshot cache reads with mutation/TTL invalidation, isolated reader counters and borrowed context-service lookup to reduce hot-key contention and reference-count traffic.
+
 - Add HTTP directory mounts, bounded static responses, validators and byte ranges.
 - Add reverse proxies with per-reactor keep-alive pools, round-robin/least-connections balancing, deadlines and bounded shared response caching.
 - Add sharded CLOCK caches and dense generation-checked reactor descriptor slots.

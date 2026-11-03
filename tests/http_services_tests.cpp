@@ -1,6 +1,8 @@
 #include <pace/http.hpp>
 #include <pace/task_group.hpp>
 #include <pace/operation.hpp>
+#include <pace/detail/content_hash.hpp>
+#include <barrier>
 #include <atomic>
 #include <fstream>
 #include <iostream>
@@ -42,6 +44,67 @@ void cache_test() {
     cache.put("large", h::text(std::string(2049, 'x')), 1s);
     require(!cache.get("large"), "object size bound");
 }
+void content_hash_test() {
+    // Generated independently using upstream xxHash v0.8.3 XXH64(input, n, 0).
+    // Exercise all tail lengths, block boundaries, unaligned and empty views.
+    const std::pair<std::size_t, std::uint64_t> vectors[] = {
+        {0, 0xef46db3751d8e999ULL}, {1, 0xf592c0c7639c4cb6ULL}, {3, 0x22c08528601d4f27ULL},
+        {4, 0xfb1e5cf2f1ae4d95ULL}, {7, 0x5613ac510496c04eULL}, {8, 0x57cb2b7521f3e21aULL},
+        {15, 0x90a9714eb00e8d29ULL}, {16, 0xc6843cef99721174ULL}, {31, 0xe4a0e629e519a4aeULL},
+        {32, 0xcc6b8aaada790b2dULL}, {33, 0x35ec49850475a832ULL}, {63, 0xbf9f0ba3cf95b28aULL},
+        {64, 0x155ccce4bf32befcULL}, {65, 0xda5ee441a595cfb8ULL}, {127, 0xf648961449461a69ULL},
+        {255, 0x178ea4a7d2319abeULL}, {4096, 0xdb2d21dfb1db5e57ULL}, {8193, 0x9e399978dc9b16a7ULL}};
+    std::string input(8194, '\0');
+    for (std::size_t i=0; i<8193; ++i) input[i+1] = static_cast<char>(i*37+11);
+    require(pace::detail::content_hash({}) == vectors[0].second, "null empty hash");
+    for (auto [size, expected] : vectors)
+        require(pace::detail::content_hash(std::string_view(input).substr(1, size)) == expected, "portable content hash");
+}
+void local_cache_test() {
+    h::response_cache cache({.max_bytes=16384, .max_entries=8, .max_object_bytes=2048, .ttl=1s, .shards=1});
+    cache.put("hot", h::text("old"), 1s);
+    std::barrier rendezvous(5);
+    std::atomic<unsigned> failures{0};
+    std::vector<std::thread> workers;
+    for (int n=0; n<4; ++n) workers.emplace_back([&] {
+        pace::run([&]() -> pace::task<void> {
+            for (int i=0; i<100; ++i) {
+                auto value=cache.get_copy("hot");
+                if (!value || value->body != "old") ++failures;
+                if (value) value->body = "private mutation";
+            }
+            rendezvous.arrive_and_wait(); // All readers have memoized the old value.
+            rendezvous.arrive_and_wait(); // Main thread replaces it.
+            for (int i=0; i<100; ++i) {
+                auto value=cache.get_copy("hot");
+                if (!value || value->body != "new") ++failures;
+            }
+            rendezvous.arrive_and_wait();
+            rendezvous.arrive_and_wait(); // Main thread clears the shared cache.
+            if (cache.get_copy("hot")) ++failures;
+            co_return;
+        });
+    });
+    rendezvous.arrive_and_wait();
+    const bool live_statistics = cache.statistics().hits == 400;
+    cache.put("hot", h::text("new"), 1s);
+    rendezvous.arrive_and_wait();
+    rendezvous.arrive_and_wait();
+    cache.clear();
+    rendezvous.arrive_and_wait();
+    for (auto& worker : workers) worker.join();
+    require(live_statistics, "live reader statistics");
+    require(failures == 0, "cross-reactor replacement/clear and owned copies");
+    require(cache.statistics().hits == 800 && cache.statistics().misses == 4, "retired reader statistics");
+    pace::run([&]() -> pace::task<void> {
+        cache.put("ttl", h::text("value"), 1s);
+        require(cache.get_copy("ttl").has_value() && cache.get_copy("ttl").has_value(), "prime local TTL");
+        co_await pace::sleep_for(1100ms);
+        require(!cache.get_copy("ttl"), "local snapshot must respect TTL");
+        for (int i=0; i<100; ++i) cache.put(std::to_string(i), h::text("other"), 1s);
+        require(!cache.get_copy("ttl"), "eviction must not resurrect local snapshot");
+    });
+}
 struct directory {
     fs::path path = fs::temp_directory_path() / ("pace-services-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     directory() { fs::create_directories(path / "sub"); }
@@ -80,6 +143,14 @@ pace::task<void> static_test(directory& dir) {
     dir.write("hello.txt", "updated");
     require((co_await files(request("/assets/hello.txt"))).body == "hello world", "explicit static TTL");
     files.clear_cache(); require((co_await files(request("/assets/hello.txt"))).body == "updated", "explicit cache invalidation");
+    h::static_files uncached("/", dir.path);
+    auto before_edit = co_await uncached(request("/hello.txt"));
+    const auto timestamp = fs::last_write_time(dir.path / "hello.txt");
+    dir.write("hello.txt", "changed"); // Same size, same timestamp; validator must cover contents.
+    fs::last_write_time(dir.path / "hello.txt", timestamp);
+    auto after_edit = co_await uncached(request("/hello.txt"));
+    require(before_edit.header("ETag") != after_edit.header("ETag"), "content validator sees same-size edits");
+    dir.write("hello.txt", "updated");
     h::static_options tiny; tiny.max_file_bytes = 2;
     h::static_files limited("/", dir.path, tiny);
     require((co_await limited(request("/hello.txt"))).status == 413, "file allocation bound");
@@ -205,7 +276,9 @@ pace::task<void> proxy_test(pace::io_context& io, pace::tcp::listener& a, pace::
 int main() {
     try {
         watchdog guard;
+        content_hash_test();
         cache_test();
+        local_cache_test();
         directory dir; dir.write("hello.txt", "hello world"); dir.write("sub/index.html", "index"); dir.write(".env", "private");
 #ifndef _WIN32
         fs::create_symlink("/etc/passwd", dir.path / "link");

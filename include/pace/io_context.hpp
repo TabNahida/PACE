@@ -28,6 +28,9 @@ public:
     // Keys and values live until the context is destroyed; values may own sockets.
     std::shared_ptr<void> local_state(std::shared_ptr<const void> key,
         const std::function<std::shared_ptr<void>()>& create);
+    // Borrow a previously created service without shared_ptr reference traffic.
+    // The pointer remains valid until context destruction; owning-loop use only.
+    void* find_local_state(const void* key);
     void spawn(task<void> work);
     void post(std::function<void()> work);
     void run(); // Runs until stop(); unhandled task errors are rethrown after draining.

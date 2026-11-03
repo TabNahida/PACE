@@ -74,7 +74,8 @@ struct io_context::implementation {
     std::unordered_set<void*> roots;
     std::coroutine_handle<> completed_head{};
     std::exception_ptr first_error;
-    std::unordered_map<std::shared_ptr<const void>, std::shared_ptr<void>> services;
+    struct service { std::shared_ptr<const void> key; std::shared_ptr<void> value; };
+    std::unordered_map<const void*, service> services;
     struct fd_state {
         io_awaiter* reader = nullptr;
         io_awaiter* writer = nullptr;
@@ -298,12 +299,19 @@ std::shared_ptr<void> io_context::local_state(std::shared_ptr<const void> key,
     check_affinity(this);
     if (!key || !create) throw std::invalid_argument("invalid context service");
     if (stopped()) throw std::system_error(canceled());
-    auto it = impl_->services.find(key);
-    if (it != impl_->services.end()) return it->second;
+    auto it = impl_->services.find(key.get());
+    if (it != impl_->services.end()) return it->second.value;
     auto value = create();
     if (!value) throw std::invalid_argument("empty context service");
-    impl_->services.emplace(std::move(key), value);
+    const auto address = key.get();
+    impl_->services.emplace(address, implementation::service{std::move(key), value});
     return value;
+}
+void* io_context::find_local_state(const void* key) {
+    check_affinity(this);
+    if (stopped()) throw std::system_error(canceled());
+    const auto it = impl_->services.find(key);
+    return it == impl_->services.end() ? nullptr : it->second.value.get();
 }
 void io_context::spawn(task<void> work) {
     auto& p = *impl_;

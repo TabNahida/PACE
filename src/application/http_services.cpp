@@ -1,6 +1,10 @@
 #include <pace/http.hpp>
 #include <pace/detail/http_url.hpp>
 #include <pace/operation.hpp>
+#include <pace/detail/content_hash.hpp>
+#include <atomic>
+#include <cstdio>
+#include <unordered_set>
 
 #include <algorithm>
 #include <array>
@@ -63,14 +67,17 @@ bool matches(std::string_view path, std::string_view prefix) {
 std::string http_date(std::time_t value) {
     std::tm tm{};
 #ifdef _WIN32
-    gmtime_s(&tm, &value);
+    if (gmtime_s(&tm, &value) != 0) throw std::runtime_error("invalid file timestamp");
 #else
-    gmtime_r(&value, &tm);
+    if (!gmtime_r(&value, &tm)) throw std::runtime_error("invalid file timestamp");
 #endif
-    std::ostringstream text;
-    text.imbue(std::locale::classic());
-    text << std::put_time(&tm, "%a, %d %b %Y %H:%M:%S GMT");
-    return text.str();
+    constexpr const char* days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    constexpr const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    std::array<char, 64> text{};
+    const auto n = std::snprintf(text.data(), text.size(), "%s, %02d %s %04d %02d:%02d:%02d GMT",
+        days[tm.tm_wday], tm.tm_mday, months[tm.tm_mon], tm.tm_year + 1900, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    if (n < 0 || static_cast<std::size_t>(n) >= text.size()) throw std::runtime_error("invalid file timestamp");
+    return {text.data(), static_cast<std::size_t>(n)};
 }
 std::string mime(std::string_view name) {
     auto ext = lower(name.substr(name.find_last_of('.') == name.npos ? name.size() : name.find_last_of('.')));
@@ -104,19 +111,49 @@ struct response_cache::implementation {
         std::size_t cost = 0;
         bool referenced = false;
     };
-    struct shard {
-        mutable std::mutex mutex;
+    struct alignas(128) shard {
+        // Invalidation is written only on mutation, not on a cache hit. Keep it
+        // away from the mutex/stats modified by shared-path readers.
+        alignas(128) std::atomic<std::uint64_t> generation{0};
+        alignas(128) mutable std::mutex mutex;
         std::vector<slot> slots;
         std::unordered_map<std::string, std::size_t, string_hash, std::equal_to<>> index;
         std::size_t hand = 0, budget = 0;
         cache_statistics stats;
+        void invalidate() noexcept {
+            const auto value = generation.load(std::memory_order_relaxed);
+            // Saturation permanently disables memoization, preventing ABA.
+            if (value != UINT64_MAX) generation.store(value + 1, std::memory_order_release);
+        }
         void erase(std::size_t n) {
             auto& s = slots[n];
             if (!s.value) return;
             index.erase(s.key); stats.bytes -= s.cost; --stats.entries;
             s = {};
+            invalidate();
         }
     };
+    struct reader {
+        std::shared_ptr<implementation> owner;
+        std::string key;
+        std::shared_ptr<const response> value;
+        shard* source = nullptr;
+        std::uint64_t generation = UINT64_MAX;
+        clock_type::time_point expiry{}, inserted{};
+        // Only this reactor writes this counter. statistics() may sample it.
+        alignas(128) std::atomic<std::uint64_t> hits{0};
+        explicit reader(std::shared_ptr<implementation> p) : owner(std::move(p)) {
+            std::lock_guard lock(owner->readers_mutex); owner->readers.insert(this);
+        }
+        ~reader() {
+            std::lock_guard lock(owner->readers_mutex);
+            owner->retired_hits += hits.load(std::memory_order_relaxed);
+            owner->readers.erase(this);
+        }
+    };
+    mutable std::mutex readers_mutex;
+    std::unordered_set<reader*> readers;
+    std::uint64_t retired_hits = 0;
     cache_options options;
     std::vector<std::unique_ptr<shard>> shards;
     explicit implementation(cache_options o) : options(o) {
@@ -135,7 +172,7 @@ struct response_cache::implementation {
     }
     shard& select(std::string_view key) const { return *shards[string_hash{}(key) % shards.size()]; }
 };
-response_cache::response_cache(cache_options options) : impl_(std::make_unique<implementation>(options)) {}
+response_cache::response_cache(cache_options options) : impl_(std::make_shared<implementation>(options)) {}
 response_cache::~response_cache() = default;
 std::shared_ptr<const response> response_cache::get(std::string_view key, std::chrono::seconds* resident_age) {
     auto& s = impl_->select(key);
@@ -143,14 +180,51 @@ std::shared_ptr<const response> response_cache::get(std::string_view key, std::c
     const auto it = s.index.find(key);
     if (it != s.index.end()) {
         auto& value = s.slots[it->second];
-        if (clock_type::now() < value.expiry) {
-            if (resident_age) *resident_age = std::chrono::duration_cast<std::chrono::seconds>(clock_type::now() - value.inserted);
+        const auto now = clock_type::now();
+        if (now < value.expiry) {
+            if (resident_age) *resident_age = std::chrono::duration_cast<std::chrono::seconds>(now - value.inserted);
             ++s.stats.hits; value.referenced = true; return value.value;
         }
         s.erase(it->second);
     }
     ++s.stats.misses;
     return {};
+}
+std::optional<response> response_cache::get_copy(std::string_view key, std::chrono::seconds* resident_age) {
+    auto* io = io_context::current();
+    if (!io) {
+        if (auto snapshot = get(key, resident_age)) return *snapshot;
+        return {};
+    }
+    auto* local = static_cast<implementation::reader*>(io->find_local_state(impl_.get()));
+    if (!local) local = static_cast<implementation::reader*>(io->local_state(impl_, [&] {
+        return std::make_shared<implementation::reader>(impl_);
+    }).get());
+    const auto now = clock_type::now();
+    if (local->value && local->key == key && now < local->expiry && local->generation != UINT64_MAX &&
+        local->source->generation.load(std::memory_order_acquire) == local->generation) {
+        local->hits.fetch_add(1, std::memory_order_relaxed);
+        if (resident_age) *resident_age = std::chrono::duration_cast<std::chrono::seconds>(now - local->inserted);
+        return *local->value;
+    }
+    local->value.reset();
+    auto& s = impl_->select(key);
+    {
+        std::lock_guard lock(s.mutex);
+        const auto it = s.index.find(key);
+        if (it == s.index.end()) { ++s.stats.misses; return {}; }
+        auto& value = s.slots[it->second];
+        // Read time after acquiring the lock: contention must not extend TTL.
+        if (clock_type::now() >= value.expiry) { s.erase(it->second); ++s.stats.misses; return {}; }
+        local->key = key;
+        local->value = value.value;
+        local->source = &s;
+        local->generation = s.generation.load(std::memory_order_relaxed);
+        local->expiry = value.expiry; local->inserted = value.inserted;
+        ++s.stats.hits; value.referenced = true;
+    }
+    if (resident_age) *resident_age = std::chrono::duration_cast<std::chrono::seconds>(clock_type::now() - local->inserted);
+    return *local->value;
 }
 void response_cache::put(std::string key, response value, std::chrono::seconds ttl) {
     if (value.body.size() > impl_->options.max_object_bytes || ttl.count() <= 0 || !impl_->options.max_bytes) return;
@@ -177,6 +251,7 @@ void response_cache::put(std::string key, response value, std::chrono::seconds t
     s.index.emplace(key, s.hand);
     s.slots[s.hand] = {std::move(key), std::move(snapshot), expiry, now, cost, true};
     s.stats.bytes += cost; ++s.stats.entries;
+    s.invalidate();
 }
 void response_cache::clear() {
     for (auto& pointer : impl_->shards) {
@@ -186,6 +261,11 @@ void response_cache::clear() {
 }
 cache_statistics response_cache::statistics() const {
     cache_statistics result;
+    {
+        std::lock_guard lock(impl_->readers_mutex);
+        result.hits = impl_->retired_hits;
+        for (const auto* reader : impl_->readers) result.hits += reader->hits.load(std::memory_order_relaxed);
+    }
     for (const auto& pointer : impl_->shards) {
         const auto& s = *pointer; std::lock_guard lock(s.mutex);
         result.hits += s.stats.hits; result.misses += s.stats.misses; result.evictions += s.stats.evictions;
@@ -350,20 +430,22 @@ struct static_files::implementation {
         const auto timestamp = (std::uint64_t(info.ftLastWriteTime.dwHighDateTime) << 32) | info.ftLastWriteTime.dwLowDateTime;
         modified = static_cast<std::time_t>(timestamp / 10000000 - 11644473600ULL);
 #else
-        file.value = ::dup(root_handle.value);
-        if (file.value < 0) throw std::system_error(errno, std::generic_category(), "dup static root");
+        // Borrow the retained root until the first component is opened.
+        // No dup/close pair is needed for ordinary file paths.
         for (std::size_t i = 0; i < parts.size(); ++i) {
-            const auto fd = ::openat(file.value, parts[i].c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC | (i + 1 < parts.size() ? O_DIRECTORY : 0));
+            const auto fd = ::openat(i == 0 ? root_handle.value : file.value, parts[i].c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC | (i + 1 < parts.size() ? O_DIRECTORY : 0));
             if (fd < 0) return text("Not Found\n", 404);
-            ::close(file.value); file.value = fd;
+            if (file.value >= 0) ::close(file.value);
+            file.value = fd;
         }
         struct stat st{};
-        if (::fstat(file.value, &st) < 0) return text("Not Found\n", 404);
+        if (::fstat(file.value < 0 ? root_handle.value : file.value, &st) < 0) return text("Not Found\n", 404);
         if (S_ISDIR(st.st_mode)) {
             if (options.index.empty()) return text("Not Found\n", 404);
-            const auto fd = ::openat(file.value, options.index.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
+            const auto fd = ::openat(file.value < 0 ? root_handle.value : file.value, options.index.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
             if (fd < 0) return text("Not Found\n", 404);
-            ::close(file.value); file.value = fd; parts.push_back(options.index);
+            if (file.value >= 0) ::close(file.value);
+            file.value = fd; parts.push_back(options.index);
             if (::fstat(file.value, &st) < 0) return text("Not Found\n", 404);
         }
         if (!S_ISREG(st.st_mode) || st.st_size < 0) return text("Not Found\n", 404);
@@ -386,8 +468,7 @@ struct static_files::implementation {
             if (!n) return text("File changed during read\n", 503);
             offset += static_cast<std::size_t>(n);
         }
-        std::uint64_t hash = 14695981039346656037ULL;
-        for (unsigned char c : result.body) { hash ^= c; hash *= 1099511628211ULL; }
+        const auto hash = pace::detail::content_hash(result.body);
         std::array<char, 32> buffer{};
         auto [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), hash, 16);
         (void)error;
@@ -408,7 +489,7 @@ struct static_files::implementation {
         std::string key;
         for (const auto& part : parts) { key += '/'; key += part; }
         const bool use_cache = self->options.cache.max_bytes && req.header("Cache-Control").empty() && req.header("Pragma").empty();
-        if (use_cache) if (auto cached = self->cache.get(key)) co_return condition_file(*cached, req);
+        if (use_cache) if (auto cached = self->cache.get_copy(key)) co_return condition_file(std::move(*cached), req);
         auto result = self->load(std::move(parts));
         if (use_cache && result.status == 200) self->cache.put(std::move(key), result, self->options.cache.ttl);
         co_return condition_file(std::move(result), req);
@@ -427,21 +508,21 @@ void strip_headers(std::vector<header_field>& headers, bool outgoing_request) {
         auto more = tokens(f.value); named.insert(named.end(), more.begin(), more.end());
     }
     std::erase_if(headers, [&](const header_field& f) {
-        const auto name = lower(f.name);
-        if (name == "connection" || name == "keep-alive" || name == "proxy-connection" || name == "proxy-authenticate" ||
-            name == "proxy-authorization" || name == "te" || name == "trailer" || name == "transfer-encoding" ||
-            name == "upgrade" || name == "content-length" || name.starts_with(':')) return true;
-        if (std::find(named.begin(), named.end(), name) != named.end()) return true;
-        if (outgoing_request) return name == "host" || name == "expect" || name == "forwarded" || name.starts_with("x-forwarded-");
-        return name == "content-type";
+        const std::string_view name = f.name;
+        if (equal_ci(name, "connection") || equal_ci(name, "keep-alive") || equal_ci(name, "proxy-connection") || equal_ci(name, "proxy-authenticate") ||
+            equal_ci(name, "proxy-authorization") || equal_ci(name, "te") || equal_ci(name, "trailer") || equal_ci(name, "transfer-encoding") ||
+            equal_ci(name, "upgrade") || equal_ci(name, "content-length") || name.starts_with(':')) return true;
+        if (std::any_of(named.begin(), named.end(), [&](const auto& token) { return equal_ci(token, name); })) return true;
+        if (outgoing_request) return equal_ci(name, "host") || equal_ci(name, "expect") || equal_ci(name, "forwarded") || equal_ci(name.substr(0, 12), "x-forwarded-");
+        return equal_ci(name, "content-type");
     });
 }
 bool cache_request(const request& req) {
     if (req.method != "GET" || !req.body.empty() || req.target.size() > 4096) return false;
     for (const auto& f : req.headers) {
-        const auto name = lower(f.name);
-        if (name == "authorization" || name == "cookie" || name == "range" || name.starts_with("if-") ||
-            name == "cache-control" || name == "pragma") return false;
+        const std::string_view name = f.name;
+        if (equal_ci(name, "authorization") || equal_ci(name, "cookie") || equal_ci(name, "range") || equal_ci(name.substr(0, 3), "if-") ||
+            equal_ci(name, "cache-control") || equal_ci(name, "pragma")) return false;
     }
     return true;
 }
@@ -592,19 +673,24 @@ struct reverse_proxy::implementation {
         const std::string key = eligible ? std::string(req.header("Host")) + "\n" + req.target : std::string{};
         if (eligible) {
             std::chrono::seconds age;
-            if (auto cached = self->cache.get(key, &age)) {
-                auto result = *cached;
+            if (auto cached = self->cache.get_copy(key, &age)) {
+                auto result = std::move(*cached);
                 const auto stored_age = result.header("Age");
                 std::uint64_t initial = 0;
                 if (!stored_age.empty()) (void)std::from_chars(stored_age.data(), stored_age.data() + stored_age.size(), initial);
-                age = std::max(age + std::chrono::seconds(initial), origin_age(result));
+                // Date/Age were normalized on insertion. Resident time uses a
+                // monotonic clock; do not parse the same Date on every hit.
+                age += std::chrono::seconds(initial);
                 std::erase_if(result.headers, [](const header_field& f) { return equal_ci(f.name, "Age"); });
                 result.headers.push_back({"Age", std::to_string(age.count())});
                 co_return result;
             }
         }
         auto& io = this_context();
-        auto worker = std::static_pointer_cast<worker_state>(io.local_state(self, [&] { return std::make_shared<worker_state>(self->upstreams.size()); }));
+        auto* worker = static_cast<worker_state*>(io.find_local_state(self.get()));
+        if (!worker) worker = static_cast<worker_state*>(io.local_state(self, [&] {
+            return std::make_shared<worker_state>(self->upstreams.size());
+        }).get());
         std::size_t chosen = self->upstreams.size();
         const auto now = clock_type::now();
         for (std::size_t i = 0; i < worker->upstreams.size(); ++i) {
@@ -630,9 +716,8 @@ struct reverse_proxy::implementation {
         req.version = "HTTP/1.1"; req.chunked = false; req.trailers.clear(); req.keep_alive = true;
         response result;
         try {
-            result = co_await with_deadline(deadline::after(self->options.timeout), [&]() -> task<response> {
-                co_return co_await self->exchange(*worker, chosen, std::move(req));
-            });
+            result = co_await with_deadline(deadline::after(self->options.timeout),
+                self->exchange(*worker, chosen, std::move(req)));
         } catch (const std::system_error& error) {
             parent.throw_if_cancelled();
             if (error.code() == std::errc::operation_canceled) throw;

@@ -186,7 +186,7 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
 template<class Transport>
 task<std::optional<std::string>> read_head(Transport& stream, std::string& pending,
                                            limits bounds, bool* head_request = nullptr) {
-    std::array<char, 8192> buffer{};
+    std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
     for (;;) {
         if (head_request) *head_request = pending.starts_with("HEAD ");
         const auto end = pending.find("\r\n\r\n");
@@ -209,7 +209,7 @@ task<std::optional<std::string>> read_head(Transport& stream, std::string& pendi
 
 template<class Transport>
 task<void> ensure_bytes(Transport& stream, std::string& pending, std::size_t size) {
-    std::array<char, 8192> buffer{};
+    std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
     while (pending.size() < size) {
         const auto wanted = std::min(buffer.size(), size - pending.size());
         const auto count = co_await stream.read_some(std::span<char>(buffer.data(), wanted));
@@ -220,7 +220,7 @@ task<void> ensure_bytes(Transport& stream, std::string& pending, std::size_t siz
 
 template<class Transport>
 task<std::string> read_line(Transport& stream, std::string& pending, std::size_t maximum) {
-    std::array<char, 1024> buffer{};
+    std::array<char, 1024> buffer;
     for (;;) {
         const auto end = pending.find("\r\n");
         if (end != std::string::npos) {
@@ -388,7 +388,7 @@ std::string encode_chunks(std::string_view body, const std::vector<header_field>
         result += "\r\n"; result += body; result += "\r\n";
     }
     result += "0\r\n";
-    for (const auto& field : trailers) result += field.name + ": " + field.value + "\r\n";
+    for (const auto& field : trailers) result.append(field.name).append(": ").append(field.value).append("\r\n");
     result += "\r\n";
     return result;
 }
@@ -406,7 +406,12 @@ std::string encode_response(const response& result, bool keep_alive, bool head_r
         throw std::invalid_argument("trailers require an HTTP/1.1 chunked body");
     const bool chunked = result.chunked && !no_body && !http10;
     const auto declared = trailer_declaration(result.trailers);
-    std::string output = "HTTP/1.1 " + std::to_string(result.status) + " " + std::string(reason(result.status)) + "\r\n";
+    std::string output;
+    std::size_t capacity = 192 + result.content_type.size();
+    for (const auto& field : result.headers) capacity += field.name.size() + field.value.size() + 4;
+    if (!streamed_length && !head_request && !no_body) capacity += result.body.size();
+    output.reserve(capacity);
+    output.append("HTTP/1.1 ").append(std::to_string(result.status)).append(" ").append(reason(result.status)).append("\r\n");
     if (chunked) output += "Transfer-Encoding: chunked\r\n" + (head_request ? std::string{} : declared);
     else if (!omit_length) output += "Content-Length: " + std::to_string(result.status == 205 ? 0 : streamed_length.value_or(head_request ? result.representation_length.value_or(result.body.size()) : result.body.size())) + "\r\n";
     if (!result.content_type.empty()) output += "Content-Type: " + result.content_type + "\r\n";
@@ -415,10 +420,13 @@ std::string encode_response(const response& result, bool keep_alive, bool head_r
         validate_output_field(field);
         if (managed_field(field.name) || equal_ci(field.name, "content-type"))
             throw std::invalid_argument("HTTP framing and content-type headers are managed by PACE");
-        output += field.name + ": " + field.value + "\r\n";
+        output.append(field.name).append(": ").append(field.value).append("\r\n");
     }
     output += "\r\n";
-    if (!streamed_length && !head_request && !no_body) output += chunked ? encode_chunks(result.body, result.trailers) : result.body;
+    if (!streamed_length && !head_request && !no_body) {
+        if (chunked) output += encode_chunks(result.body, result.trailers);
+        else output += result.body;
+    }
     return output;
 }
 
@@ -430,7 +438,11 @@ std::string encode_request(const request& outgoing) {
     if ((!outgoing.trailers.empty() && !outgoing.chunked) || (outgoing.chunked && version != "HTTP/1.1"))
         throw std::invalid_argument("trailers/chunks require HTTP/1.1 chunked framing");
     bool host = false;
-    std::string result = outgoing.method + " " + outgoing.target + " " + std::string(version) + "\r\n";
+    std::string result;
+    std::size_t capacity = 128 + outgoing.method.size() + outgoing.target.size() + outgoing.body.size();
+    for (const auto& field : outgoing.headers) capacity += field.name.size() + field.value.size() + 4;
+    result.reserve(capacity);
+    result.append(outgoing.method).append(" ").append(outgoing.target).append(" ").append(version).append("\r\n");
     for (const auto& field : outgoing.headers) {
         validate_output_field(field);
         if (managed_field(field.name) || equal_ci(field.name, "expect") || equal_ci(field.name, "upgrade"))
@@ -440,14 +452,14 @@ std::string encode_request(const request& outgoing) {
                 throw std::invalid_argument("invalid HTTP Host");
             host = true;
         }
-        result += field.name + ": " + field.value + "\r\n";
+        result.append(field.name).append(": ").append(field.value).append("\r\n");
     }
     if (!host && version == "HTTP/1.1") throw std::invalid_argument("HTTP/1.1 client requires Host");
     result += outgoing.keep_alive ? "Connection: keep-alive\r\n" : "Connection: close\r\n";
     if (outgoing.chunked) result += "Transfer-Encoding: chunked\r\n" + trailer_declaration(outgoing.trailers);
     else result += "Content-Length: " + std::to_string(outgoing.body.size()) + "\r\n";
     result += "\r\n";
-    result += outgoing.chunked ? encode_chunks(outgoing.body, outgoing.trailers) : outgoing.body;
+    if (outgoing.chunked) result += encode_chunks(outgoing.body, outgoing.trailers); else result += outgoing.body;
     return result;
 }
 
@@ -484,7 +496,7 @@ task<response> read_response(Transport& stream, std::string& pending, limits bou
             result.close = true;
             if (pending.size() > bounds.max_body_bytes) throw parse_failure{413};
             result.body = std::move(pending); pending.clear();
-            std::array<char, 8192> buffer{};
+            std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
             for (;;) {
                 const auto count = co_await stream.read_some(buffer);
                 if (!count) break;

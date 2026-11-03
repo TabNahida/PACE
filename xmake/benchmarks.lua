@@ -18,6 +18,11 @@ if has_config("protocol_benchmarks") then
         target_end()
     end
     if has_config("http1") then
+        target("pace_gateway_components")
+            set_kind("binary")
+            add_files(path.join(pace_root, "benchmarks/gateway_components.cpp"))
+            add_deps("pace_http1")
+        target_end()
         target("pace_http_gateway")
             set_kind("binary")
             add_files(path.join(pace_root, "benchmarks/http_gateway.cpp"))

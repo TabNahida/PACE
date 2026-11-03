@@ -180,3 +180,9 @@ See [execution choices](../tutorial/05-execution.md) and
 `local_state(shared_ptr<const void> key, factory)` stores lazily constructed shared service state on one reactor. It is reactor-affine, rejects a stopped context, retains the key/value until context destruction and releases values after owned roots are destroyed. It is intended for bounded per-service pools, not per-request data.
 
 For raw sockets, call `release_socket(fd)` immediately before the native close. It cancels pending waits and detaches backend registration identities; the caller still owns and closes the handle. Use `cancel(fd)` when the socket remains open and may be awaited again. PACE socket wrappers handle this distinction automatically. Both require the owning loop, or construction/cleanup while it is not running.
+
+`find_local_state(key.get())` borrows an existing context service without changing
+shared ownership counts. Call it only on its running owner loop; it returns null
+when absent and throws on wrong affinity or stopped context. The returned pointer
+is valid until context destruction. `local_state(key, factory)` retains ownership
+of both key and value and is still used to create services.
