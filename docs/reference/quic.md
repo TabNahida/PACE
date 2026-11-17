@@ -1,12 +1,14 @@
 # QUIC transport
 
-Enable `--quic=y` and include `<pace/quic.hpp>`. This optional Layer 2 extension
-uses OpenSSL 3.5 or newer for QUIC v1 and its TLS 1.3 handshake, loss recovery,
-congestion control, flow control and packet encryption. The build exports
-`PACE_HAS_QUIC`; HTTP/3 is a separate application module in `<pace/http3.hpp>`.
+Enable `--quic=y` and include `<pace/quic.hpp>`. Select the transport with
+`--quic_backend=openssl` (default) or `--quic_backend=ngtcp2`. Both implement the
+same QUIC v1 / TLS 1.3 API and export `PACE_HAS_QUIC`; the ngtcp2 build also exports
+`PACE_QUIC_NGTCP2`. HTTP/3 works with either backend. OpenSSL 3.5.7 supplies TLS and
+cryptography in both builds; ngtcp2 1.26.0 supplies packet processing, loss recovery,
+congestion control and flow control in the alternative backend.
 
 ```sh
-xmake f -m release --quic=y --tests=y --examples=y -y
+xmake f -m release --quic=y --quic_backend=ngtcp2 --tests=y --examples=y -y
 xmake -y
 xmake run pace_quic_tests
 xmake run tutorial_quic
@@ -49,15 +51,16 @@ or while it is in use.
 
 `connect(peer, identity, timeout)` and `accept(handshake_timeout)` default to a
 10-second handshake deadline. The accept timeout starts when a connection is
-accepted from OpenSSL; it does not bound the idle wait for a new peer. A nonpositive
+removed from the transport accept queue; it does not bound the idle wait for a new peer. A nonpositive
 timeout allows one immediate handshake attempt. Certificate/ALPN failures and
 individual handshake deadlines propagate to the caller. A server can continue
 accepting after such a peer failure while `listener.is_open()` is true. Reactor
 cancellation and engine failures are propagated and close the engine.
 
 Endpoints accept numeric IPv4 and IPv6 addresses. IPv6 listeners are IPv6-only;
-scoped QUIC destinations are explicitly rejected because OpenSSL's public
-`BIO_ADDR_rawmake` API cannot encode an interface scope. Resolve hostnames with
+the OpenSSL backend rejects scoped destinations because its public
+`BIO_ADDR_rawmake` API cannot encode an interface scope. The ngtcp2 backend
+preserves the endpoint scope ID. Resolve hostnames with
 the separate DNS extension before connecting.
 
 ## Independent streams
@@ -82,7 +85,7 @@ streams is not an application ordering guarantee. One reader and one writer may
 be outstanding on the same stream; distinct streams may progress concurrently.
 Overlapping reads, writes, opens, or accepts of the same kind throw `logic_error`.
 
-`write_all()` accepts the complete borrowed byte sequence into OpenSSL's transport
+`write_all()` accepts the complete borrowed byte sequence into the transport's
 buffers, applying backpressure when necessary. It does not imply peer receipt.
 Keep input/output memory alive until the operation completes. `read_some()` on a
 nonempty buffer returns zero only for stream FIN; a connection failure/reset is
@@ -100,20 +103,32 @@ Nonblocking application protocol drivers can use:
 - `wait_events()` on a connection or stream: suspends until shared transport
   progress or cancellation. Wakeups may be spurious. Recheck all relevant stream
   state after a wakeup, since one UDP socket serves many streams/connections.
-- `pending_write_bytes()`: bytes still retained by OpenSSL's send buffer pending
-  acknowledgement. For the supported OpenSSL implementation, subtracting this
-  from cumulative accepted bytes yields the acknowledged contiguous prefix;
+- `pending_write_bytes()`: bytes retained by the transport pending
+  acknowledgement. Subtracting this from cumulative accepted bytes yields the
+  acknowledged contiguous prefix in both backends;
   this excludes FIN acknowledgement and does not prove application consumption.
 
-Linux uses native OpenSSL datagram BIOs, UDP readiness, writable readiness when
-needed, and a rearmable `timerfd` driven by OpenSSL's next deadline. There is no
-fixed millisecond polling on Linux. Successful writes are coalesced into engine
-ticks. Established connections use explicit event processing, so an operation
-on one stream cannot silently consume packets without waking other streams.
-Other POSIX builds retain a bounded 1–10 ms timer fallback. The
-[platform matrix](platform.md) links to current functional validation results. Windows QUIC/HTTP3 is not implemented and enabling it
-produces a build diagnostic. Core networking and other optional protocols retain
-their existing platform support.
+Both backends use PACE UDP readiness and cancellable `io_context::call_at` /
+`call_after` timers. There is no private `timerfd` or periodic timer polling.
+Protocol waiters are intrusive nodes in coroutine frames, and notification queues
+continuations on the reactor instead of resuming application code inside library
+callbacks. Successful writes are coalesced into scheduled transport work.
+
+The OpenSSL backend uses datagram BIOs and explicit event processing. The ngtcp2
+backend routes connection IDs on the listener socket, schedules per-connection
+expiry timers, limits receive/transmit batches to 64 packets, and rotates between
+writable streams. Its send buffers are stable until acknowledgement; receive
+credit is returned when the application consumes data. The per-stream window is
+256 KiB and the connection window is 4 MiB. At most 64 incoming streams in each
+direction are exposed at once; credit is recycled after their handles are released.
+The pending accept queue is capped at 128 connections; incomplete server handshakes
+expire after 10 seconds even without an application accept. The initial backend
+uses 1200-byte packets and disables active migration and PMTU discovery.
+
+Windows QUIC/HTTP3 is not implemented and enabling it produces a build diagnostic.
+The [platform matrix](platform.md) documents platform validation; the new ngtcp2
+backend currently has Linux validation. Core networking and other optional
+protocols retain their existing platform support.
 
 ## Lifetime, close and errors
 
@@ -137,7 +152,7 @@ one accepted connection leaves other connections on that listener operational.
 
 Cancellation throws `system_error(operation_canceled)`, handshake deadlines use
 `timed_out`, remote connection closure uses `connection_aborted`, and TLS/QUIC
-protocol failures use `protocol_error` with OpenSSL diagnostics. Invalid API
+protocol failures use `protocol_error` with backend diagnostics. Invalid API
 arguments throw `invalid_argument`; operation overlap/state errors use
 `logic_error`. Catch per-peer errors inside servers so they do not stop unrelated
 root tasks.
@@ -145,7 +160,7 @@ root tasks.
 This initial transport API does not expose 0-RTT, session resumption controls,
 connection migration, QUIC DATAGRAM, custom congestion algorithms or
 application-level graceful shutdown. It is not a replacement implementation of
-QUIC cryptography: those protocol mechanisms remain in OpenSSL.
+QUIC cryptography: those protocol mechanisms remain in OpenSSL and ngtcp2.
 
 ## Validation and references
 
@@ -161,3 +176,8 @@ The event integration follows OpenSSL's
 [event deadlines](https://docs.openssl.org/3.5/man3/SSL_get_event_timeout/),
 [QUIC listener](https://docs.openssl.org/3.5/man3/SSL_new_listener/) and
 [stream configuration](https://docs.openssl.org/3.5/man3/SSL_get_value_uint/) APIs.
+
+The ngtcp2 integration follows its [programmer guide](https://nghttp2.org/ngtcp2/programmers-guide.html)
+and [OpenSSL crypto adapter](https://nghttp2.org/ngtcp2/ngtcp2_crypto_ossl_configure_client_session.html).
+The `QUIC backends and modern compilers` Actions workflow tests both backends with
+GCC 15 and Clang 21, including the C++20 named module consumer.

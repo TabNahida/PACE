@@ -434,7 +434,7 @@ task<void> serve_connection(quic::connection transport, http::handler handle, li
     session state(true, bounds);
     auto dispatch = std::make_shared<detail::http_dispatch>(transport.context(), std::move(handle));
     dispatch->wake = [&] { detail::quic_driver::wake(transport); };
-    detail::close_http_dispatch close{dispatch};
+    detail::close_http_dispatch close{*dispatch};
     try {
         co_await state.initialize(transport);
         for (;;) {

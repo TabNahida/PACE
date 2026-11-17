@@ -50,6 +50,16 @@ if has_config("benchmarks") then
     target_end()
 end
 if has_config("components") then
+    target("pace_inbox_allocations")
+        set_kind("binary")
+        add_files(path.join(pace_root, "benchmarks/inbox_allocations.cpp"))
+        add_deps("pace_runtime")
+    target_end()
+    target("pace_router_bench")
+        set_kind("binary")
+        add_files(path.join(pace_root, "benchmarks/router_bench.cpp"))
+        add_deps("pace_runtime")
+    target_end()
     target("pace_components")
         set_kind("binary")
         add_files(path.join(pace_root, "benchmarks/components_bench.cpp"))

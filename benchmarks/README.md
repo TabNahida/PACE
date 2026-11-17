@@ -2,6 +2,11 @@
 
 [Complete performance results](../docs/performance.md) · [Worker/execution scaling](scaling.md)
 
+For the November router and inbox changes, see the
+[paired hot-path measurements](results/module-hotpaths-2026-11-16/README.md).
+`--components=y` also builds `pace_router_bench` and `pace_inbox_allocations`;
+the latter counts allocations separately from timing measurements.
+
 [HTTP/WebSocket protocol investigation](../docs/protocol-performance.md) uses
 separate probes for response completion, frame processing and multiplexed handlers:
 

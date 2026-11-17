@@ -1,0 +1,2110 @@
+{
+  "cpu_affinity": [
+    0,
+    1
+  ],
+  "compiler": "g++ 13.3.0",
+  "flags": "-std=c++20 -O3 -DNDEBUG -pthread",
+  "rows": [
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "before",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 395894251,
+        "ns_per_operation": 1979.471255,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "after",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 398468312,
+        "ns_per_operation": 1992.34156,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "after",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 399403183,
+        "ns_per_operation": 1997.015915,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "before",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 410659326,
+        "ns_per_operation": 2053.29663,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "before",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 390300267,
+        "ns_per_operation": 1951.501335,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "after",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 387486996,
+        "ns_per_operation": 1937.43498,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "after",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 389470252,
+        "ns_per_operation": 1947.35126,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "before",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 397522104,
+        "ns_per_operation": 1987.61052,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "before",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 151177985,
+        "ns_per_operation": 755.889925,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "after",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 42072727,
+        "ns_per_operation": 210.363635,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "after",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 40676265,
+        "ns_per_operation": 203.381325,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "before",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 57721296,
+        "ns_per_operation": 288.60648,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "before",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 59229083,
+        "ns_per_operation": 296.145415,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_1",
+      "version": "after",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 1,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 42778521,
+        "ns_per_operation": 213.892605,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "before",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6875089,
+        "ns_per_operation": 34.375445,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "after",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6919249,
+        "ns_per_operation": 34.596245,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "after",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 7265833,
+        "ns_per_operation": 36.329165,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "before",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6767425,
+        "ns_per_operation": 33.837125,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "before",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 7215100,
+        "ns_per_operation": 36.0755,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "after",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6933665,
+        "ns_per_operation": 34.668325,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "after",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6850429,
+        "ns_per_operation": 34.252145,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "before",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6660954,
+        "ns_per_operation": 33.30477,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "before",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6809031,
+        "ns_per_operation": 34.045155,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "after",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 7123011,
+        "ns_per_operation": 35.615055,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "after",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6935024,
+        "ns_per_operation": 34.67512,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "before",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 7514066,
+        "ns_per_operation": 37.57033,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "before",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6755634,
+        "ns_per_operation": 33.77817,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_64",
+      "version": "after",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 64,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 7102767,
+        "ns_per_operation": 35.513835,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "before",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6168910,
+        "ns_per_operation": 30.84455,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "after",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5757273,
+        "ns_per_operation": 28.786365,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "after",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5406133,
+        "ns_per_operation": 27.030665,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "before",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5214221,
+        "ns_per_operation": 26.071105,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "before",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5269225,
+        "ns_per_operation": 26.346125,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "after",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5668686,
+        "ns_per_operation": 28.34343,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "after",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5390454,
+        "ns_per_operation": 26.95227,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "before",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5279677,
+        "ns_per_operation": 26.398385,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "before",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5195754,
+        "ns_per_operation": 25.97877,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "after",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5261911,
+        "ns_per_operation": 26.309555,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "after",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5456837,
+        "ns_per_operation": 27.284185,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "before",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5440492,
+        "ns_per_operation": 27.20246,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "before",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 5420772,
+        "ns_per_operation": 27.10386,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "cross_thread_post_batch_256",
+      "version": "after",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "cross_thread_post",
+        "trial": 1,
+        "iterations": 200000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 2,
+        "completed_operations": 200000,
+        "elapsed_ns": 6964499,
+        "ns_per_operation": 34.822495,
+        "checksum": 19999900000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "before",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 10383733,
+        "ns_per_operation": 20.767466,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "after",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 9465000,
+        "ns_per_operation": 18.93,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "after",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 9388940,
+        "ns_per_operation": 18.77788,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "before",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 10287871,
+        "ns_per_operation": 20.575742,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "before",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 10489335,
+        "ns_per_operation": 20.97867,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "after",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 9766120,
+        "ns_per_operation": 19.53224,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "after",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 9406807,
+        "ns_per_operation": 18.813614,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "before",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 10326352,
+        "ns_per_operation": 20.652704,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "before",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 10304882,
+        "ns_per_operation": 20.609764,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "after",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 9383100,
+        "ns_per_operation": 18.7662,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "after",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 9411414,
+        "ns_per_operation": 18.822828,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "before",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 10229790,
+        "ns_per_operation": 20.45958,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "before",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 10345679,
+        "ns_per_operation": 20.691358,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "yield",
+      "version": "after",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "yield",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 10687787,
+        "ns_per_operation": 21.375574,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "before",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11708931,
+        "ns_per_operation": 23.417862,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "after",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 12190332,
+        "ns_per_operation": 24.380664,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "after",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11255783,
+        "ns_per_operation": 22.511566,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "before",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11709873,
+        "ns_per_operation": 23.419746,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "before",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11686642,
+        "ns_per_operation": 23.373284,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "after",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11092181,
+        "ns_per_operation": 22.184362,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "after",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11084386,
+        "ns_per_operation": 22.168772,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "before",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11635003,
+        "ns_per_operation": 23.270006,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "before",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11900524,
+        "ns_per_operation": 23.801048,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "after",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11067661,
+        "ns_per_operation": 22.135322,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "after",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11560273,
+        "ns_per_operation": 23.120546,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "before",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11776954,
+        "ns_per_operation": 23.553908,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "before",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11664230,
+        "ns_per_operation": 23.32846,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "post",
+      "version": "after",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "post",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 11102639,
+        "ns_per_operation": 22.205278,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "before",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16520067,
+        "ns_per_operation": 33.040134,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "after",
+      "trial": 1,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16797121,
+        "ns_per_operation": 33.594242,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "after",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16591579,
+        "ns_per_operation": 33.183158,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "before",
+      "trial": 2,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16727943,
+        "ns_per_operation": 33.455886,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "before",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16490903,
+        "ns_per_operation": 32.981806,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "after",
+      "trial": 3,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16694973,
+        "ns_per_operation": 33.389946,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "after",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16088886,
+        "ns_per_operation": 32.177772,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "before",
+      "trial": 4,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16789980,
+        "ns_per_operation": 33.57996,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "before",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 17034229,
+        "ns_per_operation": 34.068458,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "after",
+      "trial": 5,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16395690,
+        "ns_per_operation": 32.79138,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "after",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16328023,
+        "ns_per_operation": 32.656046,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "before",
+      "trial": 6,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16427099,
+        "ns_per_operation": 32.854198,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "before",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16339458,
+        "ns_per_operation": 32.678916,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "spawn_completion",
+      "version": "after",
+      "trial": 7,
+      "result": {
+        "benchmark": "components",
+        "component": "spawn_completion",
+        "trial": 1,
+        "iterations": 500000,
+        "warmup": 5000,
+        "chain_depth": 4,
+        "batch_size": 256,
+        "threads": 1,
+        "completed_operations": 500000,
+        "elapsed_ns": 16641606,
+        "ns_per_operation": 33.283212,
+        "checksum": 124999750000,
+        "validated": true
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "before",
+      "trial": 1,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 80.3381
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "after",
+      "trial": 1,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 81.8581
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "after",
+      "trial": 2,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 77.1304
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "before",
+      "trial": 2,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 80.5443
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "before",
+      "trial": 3,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 78.8662
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "after",
+      "trial": 3,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 76.1616
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "after",
+      "trial": 4,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 79.2194
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "before",
+      "trial": 4,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 81.4975
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "before",
+      "trial": 5,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 87.1279
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "after",
+      "trial": 5,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 83.2796
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "after",
+      "trial": 6,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 76.5428
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "before",
+      "trial": 6,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 80.837
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "before",
+      "trial": 7,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 78.06
+      }
+    },
+    {
+      "case": "router_1",
+      "version": "after",
+      "trial": 7,
+      "result": {
+        "routes": 1,
+        "iterations": 200000,
+        "ns_per_operation": 76.7476
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "before",
+      "trial": 1,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 87.1659
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "after",
+      "trial": 1,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 86.6799
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "after",
+      "trial": 2,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 80.4008
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "before",
+      "trial": 2,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 82.9901
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "before",
+      "trial": 3,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 83.6766
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "after",
+      "trial": 3,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 80.3438
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "after",
+      "trial": 4,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 84.7131
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "before",
+      "trial": 4,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 83.5918
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "before",
+      "trial": 5,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 84.4058
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "after",
+      "trial": 5,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 80.6593
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "after",
+      "trial": 6,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 87.1684
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "before",
+      "trial": 6,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 84.9214
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "before",
+      "trial": 7,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 85.2772
+      }
+    },
+    {
+      "case": "router_16",
+      "version": "after",
+      "trial": 7,
+      "result": {
+        "routes": 16,
+        "iterations": 200000,
+        "ns_per_operation": 82.6067
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "before",
+      "trial": 1,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 434.545
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "after",
+      "trial": 1,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 98.1067
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "after",
+      "trial": 2,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 94.5898
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "before",
+      "trial": 2,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 432.33
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "before",
+      "trial": 3,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 441.032
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "after",
+      "trial": 3,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 94.0806
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "after",
+      "trial": 4,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 94.6995
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "before",
+      "trial": 4,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 438.355
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "before",
+      "trial": 5,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 430.975
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "after",
+      "trial": 5,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 93.8536
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "after",
+      "trial": 6,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 95.2987
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "before",
+      "trial": 6,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 435.294
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "before",
+      "trial": 7,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 442.656
+      }
+    },
+    {
+      "case": "router_1024",
+      "version": "after",
+      "trial": 7,
+      "result": {
+        "routes": 1024,
+        "iterations": 200000,
+        "ns_per_operation": 96.108
+      }
+    }
+  ]
+}

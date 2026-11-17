@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pace/http_types.hpp>
+#include <algorithm>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -20,6 +21,17 @@ task<response> invoke_handler(std::shared_ptr<Function> function, request incomi
     else
         co_return co_await call_handler(*function, std::move(incoming));
 }
+// Stateless trivial callables and function pointers need no shared owner.
+// The coroutine frame owns its copy, including across a nested coroutine call.
+// Keep invocation lazy and exceptions inside the returned task.
+template<class Function>
+task<response> invoke_function(Function function, request incoming) {
+    using result = decltype(call_handler(function, std::move(incoming)));
+    if constexpr (std::is_same_v<result, response>)
+        co_return call_handler(function, std::move(incoming));
+    else
+        co_return co_await call_handler(function, std::move(incoming));
+}
 inline task<response> immediate_response(response outgoing) { co_return outgoing; }
 } // namespace detail
 
@@ -32,21 +44,34 @@ handler make_handler(Function&& function) {
     using result = decltype(detail::call_handler(std::declval<owned_type&>(), std::declval<request>()));
     static_assert(std::is_same_v<result, response> || std::is_same_v<result, task<response>>,
                   "an HTTP handler must return response or task<response>");
-    auto owned = std::make_shared<owned_type>(std::forward<Function>(function));
-    return [owned = std::move(owned)](request incoming) {
-        return detail::invoke_handler(owned, std::move(incoming));
-    };
+    if constexpr (std::is_pointer_v<owned_type> || (std::is_empty_v<owned_type> &&
+                  std::is_trivially_copy_constructible_v<owned_type> && std::is_trivially_destructible_v<owned_type>)) {
+        return [owned = owned_type(std::forward<Function>(function))](request incoming) {
+            return detail::invoke_function(owned, std::move(incoming));
+        };
+    } else {
+        auto owned = std::make_shared<owned_type>(std::forward<Function>(function));
+        return [owned = std::move(owned)](request incoming) {
+            return detail::invoke_handler(owned, std::move(incoming));
+        };
+    }
 }
 
 // Exact, case-sensitive method/path routing for HTTP/1, HTTP/2 and HTTP/3.
 // Queries are excluded from path matching; percent escapes are not decoded.
 // Configure before serving. Copies share a table until registration detaches
-// it; callable instances stay shared. Synchronize state shared across workers.
+// it; stateful callable instances stay shared. Synchronize state shared across workers.
 class router {
     struct route { std::string method, path; handler handle; };
     // HTTP servers copy their handler per connection. Share the read-only table
     // there instead of allocating/copying every route string on each accept.
     std::shared_ptr<std::vector<route>> routes_ = std::make_shared<std::vector<route>>();
+    // Group paths in sorted order, retaining registration order within a path
+    // for Allow. Registration is cold; requests perform one binary search.
+    static auto first_path(const std::vector<route>& routes, std::string_view path) {
+        return std::lower_bound(routes.begin(), routes.end(), path,
+            [](const route& entry, std::string_view key) { return entry.path < key; });
+    }
 public:
     template<class Function>
     router& add(std::string method, std::string path, Function&& function) {
@@ -59,12 +84,17 @@ public:
         for (unsigned char c : method) if (!token(c)) throw std::invalid_argument("invalid route method");
         for (unsigned char c : path)
             if (c <= 32 || c == 127 || c == '?' || c == '#') throw std::invalid_argument("invalid route path");
-        if (routes_)
-            for (const auto& entry : *routes_)
-                if (entry.method == method && entry.path == path) throw std::invalid_argument("duplicate route");
+        std::size_t position = 0;
+        if (routes_) {
+            auto it = first_path(*routes_, path);
+            for (; it != routes_->end() && it->path == path; ++it)
+                if (it->method == method) throw std::invalid_argument("duplicate route");
+            position = static_cast<std::size_t>(it - routes_->begin());
+        }
         if (!routes_) routes_ = std::make_shared<std::vector<route>>();
         else if (routes_.use_count() != 1) routes_ = std::make_shared<std::vector<route>>(*routes_);
-        routes_->push_back({std::move(method), std::move(path), make_handler(std::forward<Function>(function))});
+        routes_->insert(routes_->begin() + position,
+            {std::move(method), std::move(path), make_handler(std::forward<Function>(function))});
         return *this;
     }
     template<class Function> router& get(std::string path, Function&& function) {
@@ -77,19 +107,20 @@ public:
         if (!routes_) return detail::immediate_response({.status = 404, .body = "Not Found\n"});
         const auto path = std::string_view(incoming.target).substr(0, incoming.target.find('?'));
         const handler* get_fallback = nullptr;
-        bool path_found = false, has_head = false;
-        for (const auto& entry : *routes_) {
-            if (entry.path != path) continue;
-            path_found = true;
+        bool has_head = false;
+        const auto first = first_path(*routes_, path);
+        auto last = first;
+        for (; last != routes_->end() && last->path == path; ++last) {
+            const auto& entry = *last;
             if (entry.method == incoming.method) return entry.handle(std::move(incoming));
             if (entry.method == "GET") get_fallback = &entry.handle;
             if (entry.method == "HEAD") has_head = true;
         }
         if (incoming.method == "HEAD" && get_fallback) return (*get_fallback)(std::move(incoming));
-        if (!path_found) return detail::immediate_response({.status = 404, .body = "Not Found\n"});
+        if (first == last) return detail::immediate_response({.status = 404, .body = "Not Found\n"});
         std::string allow;
-        for (const auto& entry : *routes_) {
-            if (entry.path != path) continue;
+        for (auto it = first; it != last; ++it) {
+            const auto& entry = *it;
             if (!allow.empty()) allow += ", ";
             allow += entry.method;
             if (entry.method == "GET" && !has_head) allow += ", HEAD";

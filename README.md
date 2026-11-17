@@ -76,6 +76,8 @@ For a sockets-only build, disable the default application protocols with `--http
 
 </details>
 
+Optional **C++20 named module** support is available with `--modules=y` and `add_deps("pace_module")`: use `import pace;`. See the [build guide](docs/tutorial/01-build.md#c-named-module-import-pace) for validated toolchains and setup.
+
 ## Explore
 
 | | |
@@ -89,3 +91,5 @@ For a sockets-only build, disable the default application protocols with `--http
 PACE is under active development; APIs and protocol coverage are evolving. See the [reference](docs/reference/README.md) for current limits.
 
 [MIT](LICENSE) · © 2026 Tab Nahida
+
+Select the optional ngtcp2 QUIC backend with `--quic_backend=ngtcp2`; OpenSSL remains the default. Both expose the same QUIC/HTTP3 API. See the [QUIC reference](docs/reference/quic.md).

@@ -1,6 +1,7 @@
 #include <pace/runtime.hpp>
 #include <pace/run.hpp>
 #include <pace/detail/poller.hpp>
+#include <pace/detail/reactor_signal.hpp>
 #include <pace/detail/profiling.hpp>
 #include <array>
 #include <atomic>
@@ -175,6 +176,39 @@ void timer_fairness_with_ready_work() {
     // not wall-clock latency, so slow or oversubscribed CI machines still pass.
     require(timer_fired && yields > 0 && yields < 4096 && posts > 0 && posts < 4096,
             "due timer must make progress while callbacks and coroutines are ready");
+}
+
+pace::task<void> signal_wait(pace::detail::reactor_signal& signal, int& resumed, bool& notifying) {
+    co_await signal.wait();
+    require(!notifying, "protocol signal resumed inline inside a callback");
+    ++resumed;
+}
+pace::task<void> signal_deadline(pace::io_context& io, pace::detail::reactor_signal& signal, int& resumed) {
+    co_await signal.wait(std::chrono::steady_clock::now() + 2ms);
+    ++resumed;
+    signal.notify(); // The expired waiter must already be unlinked.
+    io.stop();
+}
+pace::task<void> signal_notify(pace::io_context& io, pace::detail::reactor_signal& signal, int& resumed, bool& notifying) {
+    co_await io.yield();
+    notifying = true; signal.notify(); signal.notify(); notifying = false;
+    co_await io.yield();
+    require(resumed == 2, "protocol signal must resume each waiter exactly once");
+    io.stop();
+}
+void protocol_signals() {
+    {
+        pace::io_context io; pace::detail::reactor_signal signal(io);
+        int resumed = 0; bool notifying = false;
+        io.spawn(signal_wait(signal, resumed, notifying)); io.spawn(signal_wait(signal, resumed, notifying));
+        io.spawn(signal_notify(io, signal, resumed, notifying)); io.run();
+        require(resumed == 2, "protocol waiters did not complete");
+    }
+    {
+        pace::io_context io; pace::detail::reactor_signal signal(io); int resumed = 0;
+        io.spawn(signal_deadline(io, signal, resumed)); io.run();
+        require(resumed == 1, "protocol deadline did not fire");
+    }
 }
 
 void cancellable_callback_timers() {
@@ -987,6 +1021,7 @@ void run_tests() {
     repeated_sleep_and_wake();
     timer_fairness_with_ready_work();
     cancellable_callback_timers();
+    protocol_signals();
     shutdown_exactly_once();
     runtime_thread_modes();
     runtime_caller_failures();

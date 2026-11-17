@@ -89,3 +89,7 @@ xmake -y
 PACE 正在积极开发，API 与协议覆盖仍在演进。当前限制请参阅 [API 文档](docs/reference/README.zh-CN.md)。
 
 [MIT](LICENSE) · © 2026 Tab Nahida
+
+可选的 **C++20 命名模块**支持：开启 `--modules=y`，依赖 `pace_module`，即可使用 `import pace;`。已验证工具链与使用方法见[构建指南](docs/tutorial/01-build.zh-CN.md)。
+
+QUIC 可通过 `--quic_backend=ngtcp2` 切换后端；OpenSSL 仍为默认后端，两者共用 QUIC/HTTP3 API。参见 [QUIC 文档](docs/reference/quic.md)。

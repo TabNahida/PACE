@@ -26,7 +26,8 @@ struct http_dispatch : std::enable_shared_from_this<http_dispatch> {
     // A transport EOF removes network readability as a useful wake source.
     // Keep one context-affine, RAII-unlinked waiter for handler completion.
     struct completion_awaiter {
-        std::shared_ptr<http_dispatch> state;
+        // The awaiting serve_impl frame owns dispatch throughout this await.
+        http_dispatch* state;
         std::coroutine_handle<> continuation{};
         ~completion_awaiter() {
             if (state->waiter == continuation) state->waiter = {};
@@ -43,7 +44,7 @@ struct http_dispatch : std::enable_shared_from_this<http_dispatch> {
                 throw std::system_error(std::make_error_code(std::errc::operation_canceled));
         }
     };
-    completion_awaiter wait_completion() { return {shared_from_this(), {}}; }
+    completion_awaiter wait_completion() { return {this, {}}; }
     void notify() {
         if (waiter) {
             const auto continuation = std::exchange(waiter, {});
@@ -80,7 +81,8 @@ struct http_dispatch : std::enable_shared_from_this<http_dispatch> {
     }
 };
 struct close_http_dispatch {
-    std::shared_ptr<http_dispatch> state;
-    ~close_http_dispatch() { state->close(); }
+    // This guard is nested inside the protocol owner's shared_ptr lifetime.
+    http_dispatch& state;
+    ~close_http_dispatch() { state.close(); }
 };
 } // namespace pace::detail

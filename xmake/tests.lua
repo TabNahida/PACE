@@ -3,6 +3,15 @@ option("tests", {default = true, showmenu = true, description = "Build correctne
 -- Paths stay anchored to PACE when included by another project.
 local pace_root = path.directory(os.scriptdir())
 if has_config("tests") then
+    if has_config("modules") then
+        target("pace_module_tests")
+            set_kind("binary")
+            add_files(path.join(pace_root, "tests/module_tests.cpp"), path.join(pace_root, "tests/module_headers.cpp"))
+            add_deps("pace_module")
+            set_rundir(pace_root)
+            add_tests("default")
+        target_end()
+    end
     local test_names = {"runtime", "network", "udp"}
     if has_config("http1") then table.insert(test_names, "http_extended") end
     if has_config("websocket") then table.insert(test_names, "websocket") end

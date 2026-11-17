@@ -149,6 +149,7 @@ xmake retains configuration between commands.
 | `--scaling=y/n` | n | Worker-count and execution-mode scaling benchmark |
 | `--profiling=y/n` | n | Intrusive stage timing diagnostics |
 | `--sanitizers=y/n` | n | Address/undefined-behavior instrumentation on supported non-Windows toolchains |
+| `--modules=y/n` | n | Optional C++20 named module (`import pace`) |
 | `--cxxstandard=...` | cxx20 | C++ language selection |
 
 Normal PACE use has no Asio or libuv dependency. Enabling comparison benchmarks
@@ -259,3 +260,67 @@ Use a different configuration directory for another feature set. When returning
 to the repository's default configuration, unset `XMAKE_CONFIGDIR`.
 
 Next: [tasks and timers](02-tasks-timers.md).
+
+## C++ named module (`import pace`)
+
+C++20 and newer can opt into the named module facade. It is off by default;
+ordinary header-based targets remain available. This is a C++ language module,
+separate from the independently linked protocol targets above. No `import std`
+is required. See the [Clang module guide](https://clang.llvm.org/docs/StandardCPlusPlusModules.html#abi-non-breaking-styles)
+for the ABI-preserving export-using approach used here.
+
+Validated locally with **Clang 18.1.3, libstdc++ 13 and xmake 3.1.1**. Install a
+matching `clang-scan-deps` (Ubuntu: `clang-tools-18`) and put its directory on
+`PATH`; xmake's fallback scanner in 3.1.1 drops the language-standard flag and
+cannot scan the coroutine headers. GCC 13.3 fails to expose the exported using
+declarations to importers; use Clang for this mode. MSVC, Apple Clang and newer
+GCC releases are not yet validated. They remain covered by the existing
+header-mode platform matrix where applicable.
+
+```sh
+# Ubuntu LLVM packages put matching binaries in this directory.
+export PATH="/usr/lib/llvm-18/bin:$PATH"
+xmake f -c -m release --toolchain=clang --modules=y --cxxstandard=cxx20 --tests=y --examples=n -y
+xmake -y pace_module_tests
+xmake run pace_module_tests
+```
+
+For your application, replace `add_deps("pace")` with
+`add_deps("pace_module")`, configure `--modules=y`, and write:
+
+```cpp
+#include <coroutine>
+#include <iostream>
+import pace;
+
+pace::task<int> answer() {
+    co_await pace::yield();
+    co_return 42;
+}
+int main() {
+    std::cout << pace::run(answer) << '\n';
+}
+```
+
+Include the standard headers your source uses **before** `import pace`; no
+PACE header is needed in the importing translation unit. The facade exports
+runtime, TCP/UDP and shared HTTP message/router APIs, plus only enabled optional
+protocols. `--http1=n --websocket=n` produces a core-only module with no optional
+protocol library dependencies. Use `--cxxstandard=cxx23` or `cxxlatest` with the
+same option when needed; the module does not impose a C++23 minimum.
+
+The implementation remains in the existing static libraries. Header consumers
+and import consumers in different translation units share the same types and
+link together; the module smoke test exercises that ABI boundary. Do not
+rebuild implementation `.cpp` files as module implementation units. Module
+imports do not export macros; xmake still propagates feature definitions and
+link dependencies through `pace_module`. Rebuild BMIs after changing compiler,
+standard or protocol options, and do not distribute cached BMIs across different
+toolchains. xmake may warn that `std`/`std.compat` modules are missing; this
+facade uses standard-library headers and does not need those modules.
+
+[Module CI](../../.github/workflows/modules.yml) covers Clang C++20 core/default
+builds and C++23 with all optional protocols. This adds an import interface;
+no compile-time or runtime speedup is claimed for modules themselves.
+
+Choose `--quic_backend=openssl` (default) or `--quic_backend=ngtcp2` together with `--quic=y` or `--http3=y`. Both support C++20 and use OpenSSL 3.5.7 for TLS; the alternative backend additionally requires ngtcp2 1.26.0.

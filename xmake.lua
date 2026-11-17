@@ -5,13 +5,15 @@ add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_warnings("allextra")
 
 option("cxxstandard", {default = "cxx20", values = {"cxx20", "cxx23", "cxxlatest"}, description = "C++ language standard (C++20 or newer)"})
+option("modules", {default = false, showmenu = true, description = "Build the optional C++20 named module (import pace)"})
 option("sanitizers", {default = false, description = "Enable AddressSanitizer and UndefinedBehaviorSanitizer"})
 option("profiling", {default = false, description = "Enable intrusive per-thread stage timings (diagnostics only)"})
 option("http1", {default = true, showmenu = true, description = "Enable the HTTP/1.0 and HTTP/1.1 application module"})
 option("websocket", {default = true, showmenu = true, description = "Enable the WebSocket application module"})
 option("tls", {default = false, showmenu = true, description = "Enable TLS/HTTPS with OpenSSL"})
 option("dns", {default = false, showmenu = true, description = "Enable asynchronous DNS with c-ares"})
-option("quic", {default = false, showmenu = true, description = "Enable QUIC with OpenSSL 3.5+ (also enabled by http3)"})
+option("quic", {default = false, showmenu = true, description = "Enable QUIC (also enabled by http3)"})
+option("quic_backend", {default = "openssl", values = {"openssl", "ngtcp2"}, showmenu = true, description = "QUIC transport implementation"})
 option("http2", {default = false, showmenu = true, description = "Enable HTTP/2 with nghttp2 (enable tls for HTTPS)"})
 option("http3", {default = false, showmenu = true, description = "Enable HTTP/3 with nghttp3 and QUIC"})
 set_languages(get_config("cxxstandard") or "cxx20")
@@ -35,6 +37,10 @@ if has_config("tls") or enable_quic then
     else
         add_requires("openssl3 3.5.7")
     end
+end
+if enable_quic and get_config("quic_backend") == "ngtcp2" then
+    add_requires("ngtcp2 1.26.0", {configs = {openssl = "openssl3"}})
+    add_requireconfs("ngtcp2.openssl3", {version = "3.5.7", override = true})
 end
 if has_config("http2") then add_requires("nghttp2 1.70.0") end
 if has_config("dns") then add_requires("c-ares 1.34.8") end
@@ -75,7 +81,13 @@ local application_targets = {}
 local function protocol_target(name, layer, package_name, feature, dependencies)
     target("pace_" .. name)
         set_kind("static")
-        add_files("src/" .. layer .. "/" .. name .. ".cpp")
+        if name == "quic" and get_config("quic_backend") == "ngtcp2" then
+            add_files("src/extensions/quic_ngtcp2.cpp")
+            add_packages("ngtcp2", {public = true})
+            add_defines("PACE_QUIC_NGTCP2", {public = true})
+        else
+            add_files("src/" .. layer .. "/" .. name .. ".cpp")
+        end
         add_deps("pace_net", {public = true})
         for _, dep in ipairs(dependencies or {}) do add_deps(dep, {public = true}) end
         if package_name then add_packages(package_name, {public = true}) end
@@ -119,4 +131,5 @@ target("pace")
 target_end()
 
 -- Auxiliary targets keep their options and dependencies in separate modules.
+includes("xmake/modules.lua")
 includes("xmake/tests.lua", "xmake/examples.lua", "xmake/benchmarks.lua")

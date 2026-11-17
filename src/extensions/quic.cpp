@@ -1,5 +1,6 @@
 #include <pace/quic.hpp>
 #include <pace/detail/protocol_driver.hpp>
+#include <pace/detail/reactor_signal.hpp>
 #ifdef PACE_HAS_QUIC
 #include <pace/detail/socket_address.hpp>
 #include <openssl/ssl.h>
@@ -15,13 +16,8 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #endif
-#if defined(__linux__)
-#include <sys/timerfd.h>
-#include <unistd.h>
-#endif
 #include <algorithm>
 #include <array>
-#include <list>
 #include <stdexcept>
 #include <utility>
 
@@ -79,21 +75,12 @@ struct configuration {
 // on a server listener, so accepted connections share this event engine.
 struct engine : std::enable_shared_from_this<engine> {
     using clock = std::chrono::steady_clock;
-    struct event {
+    struct event : pace::detail::reactor_signal::awaiter {
         engine& owner;
-        clock::time_point deadline = clock::time_point::max();
-        std::coroutine_handle<> continuation{};
-        std::list<event*>* queue = nullptr;
-        std::list<event*>::iterator position{};
-        ~event() { if (queue) queue->erase(position); }
-        bool await_ready() { owner.check(); return false; }
-        void await_suspend(std::coroutine_handle<> handle) {
-            continuation = handle;
-            position = owner.waiters.insert(owner.waiters.end(), this);
-            queue = &owner.waiters;
-            owner.refresh();
-        }
-        void await_resume() { owner.check(); }
+        event(engine& value, clock::time_point deadline = clock::time_point::max())
+            : awaiter(value.events, deadline), owner(value) {}
+        bool await_ready() { owner.check(); return awaiter::await_ready(); }
+        void await_resume() { awaiter::await_resume(); owner.check(); }
     };
     io_context& io;
     udp::socket socket;
@@ -101,17 +88,10 @@ struct engine : std::enable_shared_from_this<engine> {
     SSL* ssl = nullptr;
     bool open = true, started = false, accepting = false, write_waiting = false, tick_queued = false;
     std::exception_ptr failure;
-    std::list<event*> waiters;
-#if defined(__linux__)
-    int timer = -1;
-#endif
+    pace::detail::reactor_signal events;
+    io_context::timer_handle timer;
     engine(io_context& owner, udp::endpoint local, std::shared_ptr<configuration> settings)
-        : io(owner), socket(owner, std::move(local)), config(std::move(settings)) {
-#if defined(__linux__)
-        timer = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
-        if (timer < 0) throw std::system_error(errno, std::generic_category(), "QUIC timerfd");
-#endif
-    }
+        : io(owner), socket(owner, std::move(local)), config(std::move(settings)), events(owner) {}
     ~engine() {
         close();
         SSL_free(ssl);
@@ -121,24 +101,12 @@ struct engine : std::enable_shared_from_this<engine> {
         if (failure) std::rethrow_exception(failure);
         if (!open) throw std::system_error(std::make_error_code(std::errc::operation_canceled));
     }
-    // Resume a detached list. A resumed operation may register a new wait or
-    // destroy another waiting operation; its destructor unlinks from this list.
-    void notify() noexcept {
-        std::list<event*> ready;
-        ready.splice(ready.end(), waiters);
-        for (auto* waiter : ready) waiter->queue = &ready;
-        while (!ready.empty()) {
-            auto* waiter = ready.front(); ready.pop_front(); waiter->queue = nullptr;
-            waiter->continuation.resume();
-        }
-    }
+    void notify() { events.notify(); }
     void close() noexcept {
         if (!open) return;
         open = false;
+        timer.cancel();
         socket.close();
-#if defined(__linux__)
-        if (timer >= 0) { io.cancel(timer); ::close(timer); timer = -1; }
-#endif
         notify();
     }
     clock::duration timeout() {
@@ -146,26 +114,20 @@ struct engine : std::enable_shared_from_this<engine> {
         required(SSL_get_event_timeout(ssl, &value, &infinite), "QUIC next event timeout");
         auto delay = infinite ? clock::duration::max() :
             std::chrono::duration_cast<clock::duration>(std::chrono::seconds(value.tv_sec) + std::chrono::microseconds(value.tv_usec));
-        const auto now = clock::now();
-        for (auto* waiter : waiters) {
-            if (waiter->deadline != clock::time_point::max()) delay = std::min(delay, waiter->deadline - now);
-        }
         return delay;
     }
     void refresh() {
         if (!open || !started || io.stopped()) return;
-#if defined(__linux__)
         const auto delay = timeout();
-        itimerspec value{};
+        timer.cancel();
         if (delay != clock::duration::max()) {
-            // timerfd uses zero to disarm; an already due event needs 1 ns.
-            const auto ns = std::max(std::chrono::duration_cast<std::chrono::nanoseconds>(delay).count(), INT64_C(1));
-            value.it_value.tv_sec = ns / 1000000000;
-            value.it_value.tv_nsec = ns % 1000000000;
+            timer = io.call_after(delay, [weak = weak_from_this()] {
+                if (auto self = weak.lock(); self && self->open) {
+                    try { self->tick(); }
+                    catch (...) { self->failure = std::current_exception(); self->close(); }
+                }
+            });
         }
-        if (timerfd_settime(timer, 0, &value, nullptr) < 0)
-            throw std::system_error(errno, std::generic_category(), "QUIC timer arm");
-#endif
         if (!write_waiting && SSL_net_write_desired(ssl)) {
             write_waiting = true;
             io.spawn(write_pump(weak_from_this()));
@@ -222,44 +184,7 @@ struct engine : std::enable_shared_from_this<engine> {
             }
         }
     }
-    static task<void> timer_pump(std::weak_ptr<engine> weak) {
-        for (;;) {
-            io_context* io = nullptr;
-#if defined(__linux__)
-            int timer = -1;
-#else
-            clock::duration delay;
-#endif
-            { auto self = weak.lock(); if (!self || !self->open) co_return;
-              io = &self->io;
-#if defined(__linux__)
-              timer = self->timer;
-#else
-              // Portable fallback until the runtime offers cancellable timers.
-              // Linux uses rearmable timerfd and has no periodic polling.
-              delay = std::clamp(self->timeout(), clock::duration(1ms), clock::duration(10ms));
-#endif
-            }
-            try {
-#if defined(__linux__)
-                co_await io->wait_readable(timer);
-                std::uint64_t expirations;
-                const auto count = ::read(timer, &expirations, sizeof(expirations));
-                if (count < 0 && errno != EAGAIN && errno != EINTR)
-                    throw std::system_error(errno, std::generic_category(), "QUIC timer read");
-#else
-                co_await io->sleep_for(delay);
-#endif
-                auto self = weak.lock(); if (!self || !self->open) co_return;
-                self->tick();
-            } catch (...) {
-                if (auto self = weak.lock(); self && self->open) {
-                    self->failure = std::current_exception(); self->close();
-                }
-                co_return;
-            }
-        }
-    }
+
 };
 struct connection_state {
     std::shared_ptr<engine> owner;
@@ -288,7 +213,6 @@ void start(const std::shared_ptr<detail::engine>& engine) {
     if (!engine->started) {
         engine->started = true;
         engine->io.spawn(detail::engine::read_pump(engine));
-        engine->io.spawn(detail::engine::timer_pump(engine));
         engine->refresh();
     }
 }

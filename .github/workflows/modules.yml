@@ -1,0 +1,39 @@
+name: C++ named modules
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  modules:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: core-cxx20, standard: cxx20, applications: 'n', optional: 'n'}
+          - {name: default-cxx20, standard: cxx20, applications: 'y', optional: 'n'}
+          - {name: all-cxx23, standard: cxx23, applications: 'y', optional: 'y'}
+    name: Clang / ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install matching compiler and module scanner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 clang-tools-18
+          echo /usr/lib/llvm-18/bin >> "$GITHUB_PATH"
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.1.1'
+          actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: modules-${{ matrix.name }}
+      - name: Configure
+        run: xmake f -c -m release --toolchain=clang --modules=y --cxxstandard=${{ matrix.standard }} --http1=${{ matrix.applications }} --websocket=${{ matrix.applications }} --tls=${{ matrix.optional }} --dns=${{ matrix.optional }} --quic=${{ matrix.optional }} --http2=${{ matrix.optional }} --http3=${{ matrix.optional }} --tests=y --examples=n -y
+      - name: Build module and header consumers
+        run: xmake -y
+      - name: Test enabled protocols and cross-translation-unit ABI
+        run: xmake test -v

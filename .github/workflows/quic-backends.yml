@@ -1,0 +1,64 @@
+name: QUIC backends and modern compilers
+on:
+  push:
+    branches: [main, 'codex/quic-ngtcp2']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pace-quic-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  protocols:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc-15, clang-21]
+        backend: [openssl, ngtcp2]
+    name: ${{ matrix.compiler }} / ${{ matrix.backend }} / C++20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GCC 15
+        if: matrix.compiler == 'gcc-15'
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install -y g++-15
+          echo 'PACE_CC=gcc-15' >> "$GITHUB_ENV"
+          echo 'PACE_CXX=g++-15' >> "$GITHUB_ENV"
+          echo 'PACE_TOOLCHAIN=gcc' >> "$GITHUB_ENV"
+      - name: Install Clang 21 and matching module scanner
+        if: matrix.compiler == 'clang-21'
+        run: |
+          curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh 21
+          sudo apt-get install -y clang-tools-21
+          echo /usr/lib/llvm-21/bin >> "$GITHUB_PATH"
+          echo 'PACE_CC=clang-21' >> "$GITHUB_ENV"
+          echo 'PACE_CXX=clang++-21' >> "$GITHUB_ENV"
+          echo 'PACE_TOOLCHAIN=clang' >> "$GITHUB_ENV"
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.1.1'
+          actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: quic-${{ matrix.compiler }}-${{ matrix.backend }}
+      - name: Record compiler versions
+        run: |
+          "$PACE_CXX" --version
+          xmake --version
+      - name: Configure all protocols
+        run: xmake f -c -m release --toolchain="$PACE_TOOLCHAIN" --cc="$PACE_CC" --cxx="$PACE_CXX" --ld="$PACE_CXX" --cxxstandard=cxx20 --quic_backend=${{ matrix.backend }} --http1=y --websocket=y --tls=y --dns=y --quic=y --http2=y --http3=y --tests=y --examples=y -y
+      - name: Build
+        run: xmake -y
+      - name: Test protocols and tutorials
+        run: xmake test -v
+      - name: Build named module with all protocols
+        run: |
+          xmake f --modules=y -y
+          xmake -y pace_module_tests
+      - name: Test module ABI against header consumer
+        run: xmake run pace_module_tests

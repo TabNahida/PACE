@@ -468,7 +468,7 @@ template<class Stream> task<void> serve_impl(Stream transport,http::handler hand
             dispatch->wake = [&] {
                 if (!wake) { wake = true; transport.context().cancel(driver.native_handle()); }
             };
-            detail::close_http_dispatch close{dispatch};
+            detail::close_http_dispatch close{*dispatch};
             for (;;) {
                 wake = false;
                 bool progress = false;

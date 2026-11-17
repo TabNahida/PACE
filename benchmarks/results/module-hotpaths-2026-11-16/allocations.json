@@ -1,0 +1,38 @@
+[
+  {
+    "trial": 1,
+    "version": "before",
+    "rounds": 10000,
+    "reactor_allocations": 40629
+  },
+  {
+    "trial": 1,
+    "version": "after",
+    "rounds": 10000,
+    "reactor_allocations": 625
+  },
+  {
+    "trial": 2,
+    "version": "before",
+    "rounds": 10000,
+    "reactor_allocations": 40629
+  },
+  {
+    "trial": 2,
+    "version": "after",
+    "rounds": 10000,
+    "reactor_allocations": 625
+  },
+  {
+    "trial": 3,
+    "version": "before",
+    "rounds": 10000,
+    "reactor_allocations": 40629
+  },
+  {
+    "trial": 3,
+    "version": "after",
+    "rounds": 10000,
+    "reactor_allocations": 625
+  }
+]

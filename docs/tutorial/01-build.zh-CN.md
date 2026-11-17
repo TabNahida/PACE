@@ -104,3 +104,54 @@ xmake run tutorial_tasks
 `XMAKE_CONFIGDIR`，仅改变输出目录 `-o` 并不能隔离配置。
 Windows 需要可用的 Visual Studio C++ 工具链；FreeBSD 应安装 xmake-io 的工具，
 不要误用系统中同名的另一种 xmake。详见[完整构建说明](01-build.md)。
+
+## C++ 命名模块（`import pace`）
+
+使用 `--modules=y` 开启 C++20 及以上的命名模块接口，默认关闭，无需 C++23
+或 `import std`。应用目标依赖 `pace_module`，源文件使用 `import pace;`；
+原有头文件模式和各协议库目标继续可用。这与“HTTP/TLS 协议模块”的构建选项是两回事。
+
+本地验证工具链为 **Clang 18.1.3 + libstdc++ 13 + xmake 3.1.1**。
+需要配套的 `clang-scan-deps`（Ubuntu 包名 `clang-tools-18`）可在 PATH 中找到。
+xmake 3.1.1 的备用扫描器会丢弃标准选项，无法扫描协程头文件。
+本机 GCC 13.3 不能正确向导入方暴露此接口的 `export using` 声明；module 模式请使用
+Clang。MSVC、Apple Clang 和更新版 GCC 尚未验证；普通头文件模式的支持范围不变。
+
+```sh
+export PATH="/usr/lib/llvm-18/bin:$PATH"
+xmake f -c -m release --toolchain=clang --modules=y --cxxstandard=cxx20 --tests=y --examples=n -y
+xmake -y pace_module_tests
+xmake run pace_module_tests
+```
+
+应用目标改用 `add_deps("pace_module")`，并开启 `--modules=y`：
+
+```cpp
+#include <coroutine>
+#include <iostream>
+import pace;
+
+pace::task<int> answer() {
+    co_await pace::yield();
+    co_return 42;
+}
+int main() {
+    std::cout << pace::run(answer) << '\n';
+}
+```
+
+将应用自身使用的标准库头文件放在 `import pace` 之前；导入方无需包含 PACE
+头文件。接口导出 runtime、TCP/UDP、公共 HTTP 消息与 router，以及构建时已启用
+的可选协议。使用 `--http1=n --websocket=n` 可构建不依赖可选协议库的核心模式。
+
+实现继续来自现有静态库。不同翻译单元可分别使用头文件和 module，并共享同一套类型
+和 ABI；测试覆盖了跨翻译单元的协程及 HTTP 类型传递。不要将实现 `.cpp` 文件改成
+模块实现单元。命名模块不导出宏，功能宏和链接依赖由 xmake 的 `pace_module` 目标传递。
+切换编译器、语言标准或协议配置时必须重建 BMI，不能跨工具链复用缓存。
+xmake 关于缺少 `std`/`std.compat` 的提示不影响本接口，因为本接口使用标准库头文件。
+
+新增的 [module CI](../../.github/workflows/modules.yml) 覆盖 Clang 的 C++20
+核心/默认配置，以及 C++23 全协议配置。module 本身尚未测量编译速度收益。
+实现采用 [Clang 文档中的 ABI 兼容 export-using 方案](https://clang.llvm.org/docs/StandardCPlusPlusModules.html#abi-non-breaking-styles)。
+
+QUIC 后端通过 `--quic_backend=openssl`（默认）或 `--quic_backend=ngtcp2` 选择，需要同时启用 `--quic=y` 或 `--http3=y`。两者均支持 C++20，使用 OpenSSL 3.5.7 提供 TLS；ngtcp2 后端额外依赖 ngtcp2 1.26.0。

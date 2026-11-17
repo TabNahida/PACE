@@ -962,6 +962,49 @@ pace::task<void> router_contracts(pace::io_context& io) {
     try { (void)co_await throwing(message()); }
     catch (const std::runtime_error&) { threw = true; }
     require(threw, "adapter lost synchronous handler exception");
+    // Captureless lambdas/function pointers need no shared callable,
+    // but remain lazy and survive destruction of the adapter before first run.
+    pace::task<response> stateless;
+    {
+        auto adapter = pace::http::make_handler([]() -> pace::task<response> {
+            co_await pace::yield();
+            co_return response{.body = "stateless"};
+        });
+        stateless = adapter(message());
+    }
+    require((co_await std::move(stateless)).body == "stateless", "stateless coroutine adapter lifetime");
+    auto delayed_throw = throwing(message()); // Must not throw before awaiting.
+    threw = false;
+    try { (void)co_await std::move(delayed_throw); }
+    catch (const std::runtime_error&) { threw = true; }
+    require(threw, "stateless handler exception was not lazy");
+    struct convertible_handler {
+        using pointer = response (*)(request);
+        operator pointer() const { return [](request) { return response{.status = 500}; }; }
+        response operator()(request) const { return response{.body = "call operator"}; }
+    };
+    auto convertible = pace::http::make_handler(convertible_handler{});
+    require((co_await convertible(message())).body == "call operator",
+            "adapter used a conversion instead of invoking the callable");
+    auto counter = pace::http::make_handler([count = 0]() mutable {
+        return response{.body = std::to_string(++count)};
+    });
+    auto counter_copy = counter;
+    require((co_await counter(message())).body == "1" && (co_await counter_copy(message())).body == "2",
+            "stateful handler copies no longer share callable state");
+    router indexed;
+    for (int i = 127; i >= 0; --i)
+        indexed.get("/indexed/" + std::to_string(i), [i] { return response{.body = std::to_string(i)}; });
+    indexed.post("/indexed/64", [] { return response{}; });
+    indexed.add("HEAD", "/indexed/64", [] { return response{.body = "head"}; });
+    for (int i = 0; i < 128; ++i)
+        require((co_await indexed(message("GET", "/indexed/" + std::to_string(i)))).body == std::to_string(i),
+                "sorted route lookup lost a route");
+    auto indexed_denied = co_await indexed(message("DELETE", "/indexed/64"));
+    require(indexed_denied.status == 405 && indexed_denied.header("Allow") == "GET, POST, HEAD",
+            "path grouping changed Allow registration order");
+    require((co_await indexed(message("HEAD", "/indexed/64"))).body == "head", "indexed HEAD priority");
+    require((co_await indexed(message("GET", "/indexed/640"))).status == 404, "route matched a path prefix");
     routes.get("/fail", [](request) -> response { throw std::runtime_error("route failure"); });
     auto listener = std::make_shared<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0});
     io.spawn(serve_routes(listener, routes));

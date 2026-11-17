@@ -307,13 +307,15 @@ void io_context::run() {
         } catch (...) { if (!p.first_error) p.first_error = error; stop(); }
     };
     std::array<detail::poll_event, 256> events{};
+    // Reuse the empty batches between drains. Reconstructing two deques on
+    // every producer wake allocates their maps/blocks even for a single post.
+    std::deque<task<void>> new_tasks;
+    std::deque<std::function<void()>> new_posts;
     for (;;) {
         profiling::scope inbox_timing(profiling::stage::inbox);
         // Most turns contain no external submissions. Avoid constructing empty
         // deques (which can allocate) and taking the inbox lock on those turns.
         if (p.inbox_pending.load(std::memory_order_acquire)) {
-            std::deque<task<void>> new_tasks;
-            std::deque<std::function<void()>> new_posts;
             {
                 std::lock_guard lock(p.inbox_mutex);
                 new_tasks.swap(p.incoming_tasks);
@@ -331,6 +333,8 @@ void io_context::run() {
                 p.ready.push_back(h);
             }
             for (auto& work : new_posts) p.posts.push_back(std::move(work));
+            new_tasks.clear();
+            new_posts.clear();
         }
         inbox_timing.close();
         if (stopped() && !p.cancellation_started) p.cancel_all();

@@ -11,7 +11,7 @@ namespace pace::quic {
 enum class role { client, server };
 enum class stream_type { bidirectional, unidirectional };
 namespace detail { struct configuration; struct engine; struct connection_state; struct stream_state; }
-// OpenSSL 3.5+ native QUIC, TLS 1.3 with mandatory peer verification on clients.
+// OpenSSL native QUIC or ngtcp2, TLS 1.3 with mandatory client peer verification.
 // POSIX transport (Linux, macOS and FreeBSD). Windows QUIC is not supported.
 class context {
 public:

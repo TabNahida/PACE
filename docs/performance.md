@@ -6,6 +6,10 @@ For the later HTTP/1 close-completion fix, WebSocket framing costs and HTTP/2/3
 handler concurrency investigation, see [protocol performance](protocol-performance.md).
 The TCP comparison below retains its original workload and data.
 
+The [November ownership and hot-path review](ownership-performance-review.md)
+records router lookup and inbox allocation changes, with separate component
+measurements and their limits.
+
 PACE now demonstrates a repeatable **median round-trip latency advantage over
 both Asio and libuv in the measured 32-connection workload**. It does not lead
 every metric: Asio has substantially lower p95/p99, and PACE still has the
