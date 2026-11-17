@@ -272,9 +272,12 @@ for the ABI-preserving export-using approach used here.
 Validated locally with **Clang 18.1.3, libstdc++ 13 and xmake 3.1.1**. Install a
 matching `clang-scan-deps` (Ubuntu: `clang-tools-18`) and put its directory on
 `PATH`; xmake's fallback scanner in 3.1.1 drops the language-standard flag and
-cannot scan the coroutine headers. GCC 13.3 fails to expose the exported using
-declarations to importers; use Clang for this mode. MSVC, Apple Clang and newer
-GCC releases are not yet validated. They remain covered by the existing
+cannot scan the coroutine headers. Clang 21 also passes the remote all-protocol
+module test with both QUIC backends. GCC 13.3 fails to expose exported using
+declarations; GCC 15.2 crashes in `expand_CO_FRAME` while importing inline
+coroutines. The module therefore diagnoses GCC versions below 16 explicitly;
+header builds remain supported. GCC's [coroutine/module serialization fix](https://gcc.gnu.org/pipermail/gcc-patches/2026-January/705464.html)
+is in GCC 16. MSVC and Apple Clang module builds are not yet validated. They remain covered by the existing
 header-mode platform matrix where applicable.
 
 ```sh

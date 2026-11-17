@@ -1,6 +1,9 @@
 // ABI-preserving facade: declarations belong to the global module, just as
 // they do for #include consumers. Keep this export list in sync with the API.
 module;
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 16
+#error PACE_named_modules_require_Clang_or_GCC_16_with_coroutine_module_fixes
+#endif
 #include <pace/pace.hpp>
 #include <pace/http_router.hpp>
 
