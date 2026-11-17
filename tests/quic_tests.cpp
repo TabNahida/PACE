@@ -103,7 +103,28 @@ pace::task<void> client_roundtrip(pace::quic::connection& connection,
     require(co_await read_to_end(reply) == "server uni", "unidirectional response mismatch");
     done.arrive();
 }
-void roundtrip(const std::filesystem::path& fixtures, std::string name, const char* bind = "127.0.0.1") {
+pace::task<void> lossy_relay(pace::udp::socket& socket, pace::udp::endpoint server, unsigned& dropped) {
+    std::array<char, 65536> bytes{};
+    std::optional<pace::udp::endpoint> client;
+    unsigned to_server = 0, to_client = 0;
+    try {
+        for (;;) {
+            auto packet = co_await socket.receive_from(bytes);
+            const bool reply = packet.sender.port == server.port;
+            if (!reply) client = packet.sender;
+            auto& count = reply ? to_client : to_server;
+            ++count;
+            // Drop the first Initial to exercise PTO, then lose application
+            // packets in both directions to exercise retransmission/ACK storage.
+            if ((!reply && count == 1) || count % (reply ? 19 : 17) == 0) { ++dropped; continue; }
+            if (reply && !client) continue;
+            co_await socket.send_to(std::string_view(bytes.data(), packet.size), reply ? *client : server);
+        }
+    } catch (const std::system_error& error) {
+        if (error.code() != std::errc::operation_canceled) throw;
+    }
+}
+void roundtrip(const std::filesystem::path& fixtures, std::string name, const char* bind = "127.0.0.1", bool loss = false) {
     pace::io_context io; configurations config(fixtures);
     if (name == "::1") {
         config.server.use_certificate_chain((fixtures / "a.example.pem").string(), (fixtures / "a.example-key.pem").string());
@@ -112,9 +133,12 @@ void roundtrip(const std::filesystem::path& fixtures, std::string name, const ch
     pace::quic::listener listener(io, {bind, 0}, config.server);
     pace::quic::connection client(io, config.client);
     completion done{io, 0, 10};
+    pace::udp::socket relay(io, {bind, 0}); unsigned dropped = 0;
+    if (loss) io.spawn(lossy_relay(relay, listener.local_endpoint(), dropped));
     io.spawn(server_roundtrip(listener, done));
-    io.spawn(client_roundtrip(client, listener.local_endpoint(), std::move(name), done));
+    io.spawn(client_roundtrip(client, loss ? relay.local_endpoint() : listener.local_endpoint(), std::move(name), done));
     io.run(); require(done.count == 10, "QUIC concurrent streams did not complete");
+    if (loss) require(dropped > 10, "loss simulation did not exercise retransmission");
 }
 pace::task<void> accept_failure(pace::quic::listener& listener) {
     try { auto connection = co_await listener.accept(100ms); }
@@ -273,13 +297,76 @@ void accept_cancellation(const std::filesystem::path& fixtures) {
     io.spawn(pending_accept(listener, canceled)); io.spawn(close_acceptor(listener));
     io.run(); require(canceled, "QUIC accept failed to unwind");
 }
+pace::task<void> recycle_server(pace::quic::listener& listener, completion& done) {
+    auto connection = co_await listener.accept();
+    for (unsigned i = 0; i < 160; ++i) {
+        auto stream = co_await connection.accept_stream();
+        require(co_await read_to_end(stream) == std::string(48 * 1024, static_cast<char>(i)), "recycled stream data mismatch");
+    }
+    done.arrive();
+}
+pace::task<void> recycle_client(pace::quic::connection& connection, pace::udp::endpoint endpoint, completion& done) {
+    co_await connection.connect(endpoint, "localhost");
+    for (unsigned i = 0; i < 160; ++i) {
+        auto stream = co_await connection.open_stream(pace::quic::stream_type::unidirectional);
+        const std::string message(48 * 1024, static_cast<char>(i));
+        co_await stream.write_all(message); stream.finish_write();
+        while (stream.pending_write_bytes()) co_await stream.wait_events();
+    }
+    done.arrive();
+}
+void recycle_streams(const std::filesystem::path& fixtures) {
+    pace::io_context io; configurations config(fixtures);
+    pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
+    pace::quic::connection client(io, config.client); completion done{io};
+    io.spawn(recycle_server(listener, done)); io.spawn(recycle_client(client, listener.local_endpoint(), done));
+    io.run(); require(done.count == 2, "stream or connection flow-control credit was not recycled");
+}
+pace::task<void> interop_server(pace::quic::listener& listener) {
+    auto connection = co_await listener.accept();
+    auto stream = co_await connection.accept_stream();
+    auto message = co_await read_to_end(stream);
+    require(message == payload(0), "cross-backend request mismatch");
+    co_await stream.write_all(message); stream.finish_write();
+    while (stream.pending_write_bytes()) co_await stream.wait_events();
+    listener.context().stop();
+}
+pace::task<void> interop_client(pace::quic::connection& connection, pace::udp::endpoint endpoint) {
+    co_await connection.connect(endpoint, "localhost");
+    auto stream = co_await connection.open_stream();
+    const auto message = payload(0);
+    co_await stream.write_all(message); stream.finish_write();
+    require(co_await read_to_end(stream) == message, "cross-backend response mismatch");
+    // Allow the delayed final ACK to leave before stopping the UDP reactor.
+    co_await connection.context().sleep_for(100ms);
+    connection.context().stop();
+}
+void interop(const std::filesystem::path& fixtures, bool server, uint16_t port) {
+    pace::io_context io; configurations config(fixtures);
+    if (server) {
+        pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
+        std::cout << listener.local_endpoint().port << std::endl;
+        io.spawn(interop_server(listener)); io.run();
+    } else {
+        pace::quic::connection client(io, config.client);
+        io.spawn(interop_client(client, {"127.0.0.1", port})); io.run();
+    }
+}
 } // namespace
 int main(int argc, char** argv) {
     watchdog guard;
     try {
-        const auto fixtures = argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path() / "certs";
+        const bool cross_backend = argc > 1 && std::string_view(argv[1]).starts_with("--interop-");
+        const auto fixtures = argc > 1 && !cross_backend ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path() / "certs";
+        if (cross_backend) {
+            const bool server = std::string_view(argv[1]) == "--interop-server";
+            if (!server && argc != 3) throw std::invalid_argument("interop client requires port");
+            interop(fixtures, server, server ? 0 : static_cast<uint16_t>(std::stoul(argv[2])));
+            return 0;
+        }
         roundtrip(fixtures, "localhost");
         roundtrip(fixtures, "127.0.0.1");
+        roundtrip(fixtures, "localhost", "127.0.0.1", true);
         roundtrip(fixtures, "localhost", "::1");
         roundtrip(fixtures, "::1", "::1");
         rejects(fixtures, "::1", true, false, false, "::1");
@@ -290,6 +377,7 @@ int main(int argc, char** argv) {
         deadlines(false); deadlines(true);
         closure(fixtures, false); closure(fixtures, true);
         serialization_and_reset(fixtures);
+        recycle_streams(fixtures);
         connection_isolation(fixtures); accept_cancellation(fixtures);
         std::cout << "QUIC tests passed\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

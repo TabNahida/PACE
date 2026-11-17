@@ -56,9 +56,31 @@ jobs:
         run: xmake -y
       - name: Test protocols and tutorials
         run: xmake test -v
+      - uses: actions/upload-artifact@v4
+        if: matrix.compiler == 'clang-21'
+        with:
+          name: quic-peer-${{ matrix.compiler }}-${{ matrix.backend }}
+          path: build/linux/x86_64/release/pace_quic_tests
+          if-no-files-found: error
       - name: Build named module with all protocols
         run: |
-          xmake f --modules=y -y
-          xmake -y pace_module_tests
+          xmake f -c -m release --toolchain="$PACE_TOOLCHAIN" --cc="$PACE_CC" --cxx="$PACE_CXX" --ld="$PACE_CXX" --modules=y --cxxstandard=cxx20 --quic_backend=${{ matrix.backend }} --http1=y --websocket=y --tls=y --dns=y --quic=y --http2=y --http3=y --tests=y --examples=n -y
+          xmake -v -y pace_module_tests
       - name: Test module ABI against header consumer
         run: xmake run pace_module_tests
+
+  interoperability:
+    needs: protocols
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: quic-peer-clang-21-*
+          path: peers
+      - name: Exchange payloads between different backends in both directions
+        run: |
+          chmod +x peers/*/pace_quic_tests
+          python3 tests/quic_backend_interop.py peers/quic-peer-clang-21-openssl/pace_quic_tests peers/quic-peer-clang-21-ngtcp2/pace_quic_tests

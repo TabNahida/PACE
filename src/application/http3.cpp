@@ -344,7 +344,7 @@ struct session {
                 const auto now = static_cast<nghttp3_tstamp>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count());
                 checked(nghttp3_conn_read_stream2(native, id, reinterpret_cast<uint8_t*>(bytes.data()), *size, !*size, now));
-                // OpenSSL extends QUIC receive credit when try_read consumes the
+                // The transport extends QUIC receive credit when try_read consumes the
                 // plaintext. QPACK dynamic decoding is disabled above.
                 progress = true;
                 if (!*size) { wire.read_fin = true; break; }
@@ -384,7 +384,7 @@ struct session {
             auto& [id, wire] = *it;
             if (!wire.writable()) { ++it; continue; }
             const auto pending = wire.stream.pending_write_bytes();
-            // OpenSSL retains its send buffer through the contiguous ACK
+            // Both QUIC backends retain send buffers through the contiguous ACK
             // frontier. nghttp3 retains body references until this frontier.
             const auto acknowledged = wire.written - pending;
             if (acknowledged > wire.acknowledged) {

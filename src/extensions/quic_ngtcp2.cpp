@@ -99,10 +99,13 @@ struct engine : std::enable_shared_from_this<engine> {
     std::unordered_map<std::string, std::weak_ptr<connection_state>> routes;
     std::deque<std::shared_ptr<connection_state>> pending;
     std::deque<std::weak_ptr<connection_state>> blocked;
+    std::array<uint8_t, 32> retry_secret{};
     bool open = true, started = false, accepting = false, writing = false;
     std::exception_ptr failure;
     engine(io_context& value, udp::endpoint local, std::shared_ptr<configuration> cfg)
-        : io(value), socket(value, std::move(local)), config(std::move(cfg)), events(value) {}
+        : io(value), socket(value, std::move(local)), config(std::move(cfg)), events(value) {
+        if (config->mode == role::server) required(RAND_bytes(retry_secret.data(), retry_secret.size()), "QUIC Retry secret");
+    }
     ~engine() { close(); }
     void check() {
         affinity(io); if (failure) std::rethrow_exception(failure);
@@ -111,6 +114,7 @@ struct engine : std::enable_shared_from_this<engine> {
     void close() noexcept;
     void start();
     void receive();
+    void retry(const ngtcp2_pkt_hd& initial, const address& peer);
     void wait_writable(const std::shared_ptr<connection_state>& connection);
     static task<void> read_pump(std::weak_ptr<engine> weak);
     static task<void> write_pump(std::weak_ptr<engine> weak);
@@ -154,7 +158,7 @@ struct connection_state : std::enable_shared_from_this<connection_state> {
         open = false; timer.cancel(); events.notify();
     }
     void error(int code);
-    void init(const address& peer, const ngtcp2_pkt_hd* initial, const std::string& name = {});
+    void init(const address& peer, const ngtcp2_pkt_hd* initial, const std::string& name = {}, const ngtcp2_cid* original = nullptr);
     void register_cid(const ngtcp2_cid& cid) {
         auto key = cid_key(cid.data, cid.datalen);
         cids.push_back(key); owner->routes.emplace(std::move(key), weak_from_this());
@@ -290,7 +294,7 @@ ngtcp2_callbacks connection_state::callbacks() {
     };
     return cb;
 }
-void connection_state::init(const address& peer, const ngtcp2_pkt_hd* initial, const std::string& name) {
+void connection_state::init(const address& peer, const ngtcp2_pkt_hd* initial, const std::string& name, const ngtcp2_cid* original) {
     remote = peer;
     const auto endpoint = owner->socket.local_endpoint();
     local = pace::detail::parse_socket_address(endpoint.address, endpoint.port, endpoint.family, endpoint.scope_id);
@@ -308,7 +312,14 @@ void connection_state::init(const address& peer, const ngtcp2_pkt_hd* initial, c
     params.active_connection_id_limit = 2;
     params.disable_active_migration = 1;
     params.max_idle_timeout = 30 * NGTCP2_SECONDS;
-    if (initial) { params.original_dcid = initial->dcid; params.original_dcid_present = 1; }
+    if (initial) {
+        params.original_dcid = original ? *original : initial->dcid; params.original_dcid_present = 1;
+        if (original) {
+            params.retry_scid = initial->dcid; params.retry_scid_present = 1;
+            settings.token = initial->token; settings.tokenlen = initial->tokenlen;
+            settings.token_type = NGTCP2_TOKEN_TYPE_RETRY;
+        }
+    }
     const auto cb = callbacks();
     const int result = initial ? ngtcp2_conn_server_new(&conn, &dcid, &scid, &path, initial->version, &cb, &settings, &params, nullptr, this)
         : ngtcp2_conn_client_new(&conn, &dcid, &scid, &path, NGTCP2_PROTO_VER_V1, &cb, &settings, &params, nullptr, this);
@@ -432,6 +443,19 @@ void engine::close() noexcept {
     }
     pending.clear(); routes.clear(); blocked.clear(); events.notify();
 }
+void engine::retry(const ngtcp2_pkt_hd& initial, const address& peer) {
+    const auto scid = random_cid();
+    std::array<uint8_t, NGTCP2_CRYPTO_MAX_RETRY_TOKENLEN2> token{};
+    const auto size = ngtcp2_crypto_generate_retry_token2(token.data(), retry_secret.data(), retry_secret.size(),
+        initial.version, peer.data(), peer.length, &scid, &initial.dcid, timestamp());
+    if (size < 0) fail("QUIC Retry token");
+    std::array<uint8_t, packet_size> data{};
+    const auto length = ngtcp2_crypto_write_retry(data.data(), data.size(), initial.version, &initial.scid, &scid, &initial.dcid, token.data(), size);
+    if (length < 0) fail("QUIC Retry packet");
+    // Stateless Retry is best-effort: a lost response is regenerated when the
+    // client retransmits. It never allocates a per-peer writable queue.
+    ::sendto(socket.native_handle(), data.data(), length, 0, peer.data(), peer.length);
+}
 void engine::receive() {
     std::array<uint8_t, 65536> bytes{};
     for (std::size_t count = 0; count < batch_size; ++count) {
@@ -446,20 +470,32 @@ void engine::receive() {
         if (ngtcp2_pkt_decode_version_cid(&decoded, bytes.data(), length, cid_size) != 0) continue;
         auto it = routes.find(cid_key(decoded.dcid, decoded.dcidlen));
         std::shared_ptr<connection_state> connection = it == routes.end() ? nullptr : it->second.lock();
+        const bool fresh = !connection;
+        ngtcp2_pkt_hd initial{};
         if (!connection) {
             if (config->mode != role::server) continue;
             std::erase_if(pending, [](const auto& state) { return !state->open; });
             if (pending.size() >= 128) continue;
-            ngtcp2_pkt_hd initial{};
             if (ngtcp2_accept(&initial, bytes.data(), length) != 0) continue;
+            ngtcp2_cid original{};
+            if (initial.tokenlen && ngtcp2_crypto_verify_retry_token2(&original, initial.token, initial.tokenlen,
+                    retry_secret.data(), retry_secret.size(), initial.version, peer.data(), peer.length,
+                    &initial.dcid, 10 * NGTCP2_SECONDS, timestamp()) != 0) continue;
             connection = std::make_shared<connection_state>(shared_from_this());
-            connection->init(peer, &initial);
-            pending.push_back(connection); events.notify();
+            connection->init(peer, &initial, {}, initial.tokenlen ? &original : nullptr);
         }
         if (!connection->open) continue;
         ngtcp2_path path{{connection->local.data(), connection->local.length}, {peer.data(), peer.length}, nullptr};
         ngtcp2_pkt_info info{};
-        connection->error(ngtcp2_conn_read_pkt(connection->conn, &path, &info, bytes.data(), length, timestamp()));
+        const int result = ngtcp2_conn_read_pkt(connection->conn, &path, &info, bytes.data(), length, timestamp());
+        // Out-of-order ClientHello fragments require address validation before
+        // ngtcp2 will buffer them. Retry tokens bind address, CID and expiry.
+        if (fresh && (result == NGTCP2_ERR_RETRY || result == NGTCP2_ERR_DROP_CONN)) {
+            if (result == NGTCP2_ERR_RETRY) retry(initial, peer);
+            connection->stop(); continue;
+        }
+        connection->error(result);
+        if (fresh && connection->open) { pending.push_back(connection); events.notify(); }
         connection->schedule(); connection->refresh(); connection->events.notify(); connection->collect();
     }
 }

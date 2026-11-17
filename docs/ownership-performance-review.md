@@ -31,6 +31,13 @@ local isolated components, not end-to-end network throughput.
   This reduces allocator work; local enqueue timing does not demonstrate a
   consistent throughput gain.
 
+- QUIC now uses PACE callback timers on all supported POSIX platforms. Intrusive
+  waiters avoid list-node allocations and queue continuations on the reactor.
+  The ngtcp2 backend uses per-connection progress signals, uniquely owned stream
+  buffers, bounded packet batches and bounded send/receive windows. Its connection
+  routing and background pumps use weak references. This is a scheduling and
+  ownership improvement; no QUIC throughput gain has been measured.
+
 ## Ownership retained deliberately
 
 | Area | Ownership/lifetime finding |
@@ -56,9 +63,6 @@ change. Further changes need workload-specific measurements:
 - DNS initialization reads resolver/hosts configuration synchronously. Sharing
   initialized resolver channels would change cancellation and concurrency
   semantics; large lookup workloads should measure this cost separately.
-- QUIC on non-Linux POSIX uses a periodic timer fallback (1–10 ms), while Linux
-  uses a rearmable timerfd. A cancellable portable timer could reduce wakeups
-  and latency, but cannot be validated by Linux-only timing.
 - HTTP parsing/serialization and buffered message bodies still copy/allocate.
   Measure response size, streaming usage, TLS encryption and socket backpressure
   before replacing buffers or changing ownership APIs.
