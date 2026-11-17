@@ -184,4 +184,6 @@ The event integration follows OpenSSL's
 The ngtcp2 integration follows its [programmer guide](https://nghttp2.org/ngtcp2/programmers-guide.html)
 and [OpenSSL crypto adapter](https://nghttp2.org/ngtcp2/ngtcp2_crypto_ossl_configure_client_session.html).
 The `QUIC backends and modern compilers` Actions workflow tests both backends with
-GCC 15 and Clang 21, including the C++20 named module consumer.
+GCC 15/16 and Clang 21. GCC 16 and Clang 21 also build the C++20 named module
+consumer; GCC 15 header-mode tests remain enabled despite its coroutine/module
+compiler defect.

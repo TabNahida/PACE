@@ -114,8 +114,12 @@ Windows 需要可用的 Visual Studio C++ 工具链；FreeBSD 应安装 xmake-io
 本地验证工具链为 **Clang 18.1.3 + libstdc++ 13 + xmake 3.1.1**。
 需要配套的 `clang-scan-deps`（Ubuntu 包名 `clang-tools-18`）可在 PATH 中找到。
 xmake 3.1.1 的备用扫描器会丢弃标准选项，无法扫描协程头文件。
-本机 GCC 13.3 不能正确向导入方暴露此接口的 `export using` 声明；module 模式请使用
-Clang。MSVC、Apple Clang 和更新版 GCC 尚未验证；普通头文件模式的支持范围不变。
+本机 Clang 21 已通过远程全协议 module 测试，覆盖两种 QUIC 后端。
+GCC 13.3 不能正确向导入方暴露 `export using` 声明；GCC 15.2 在导入内联协程时
+触发 `expand_CO_FRAME` 编译器内部错误。因此 module 对 GCC 16 以下版本给出
+明确诊断；普通头文件模式不受影响。GCC 16 包含上游的
+[协程与模块序列化修复](https://gcc.gnu.org/pipermail/gcc-patches/2026-January/705464.html)。
+MSVC、Apple Clang 的 module 模式尚未验证。
 
 ```sh
 export PATH="/usr/lib/llvm-18/bin:$PATH"

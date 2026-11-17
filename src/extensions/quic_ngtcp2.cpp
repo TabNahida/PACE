@@ -96,7 +96,9 @@ struct engine : std::enable_shared_from_this<engine> {
     udp::socket socket;
     std::shared_ptr<configuration> config;
     pace::detail::reactor_signal events;
-    std::unordered_map<std::string, std::weak_ptr<connection_state>> routes;
+    // Reactor-affine borrowed pointers: state destruction removes every CID,
+    // and packet processing never suspends or resumes application code inline.
+    std::unordered_map<std::string, connection_state*> routes;
     std::deque<std::shared_ptr<connection_state>> pending;
     std::deque<std::weak_ptr<connection_state>> blocked;
     std::array<uint8_t, 32> retry_secret{};
@@ -161,7 +163,7 @@ struct connection_state : std::enable_shared_from_this<connection_state> {
     void init(const address& peer, const ngtcp2_pkt_hd* initial, const std::string& name = {}, const ngtcp2_cid* original = nullptr);
     void register_cid(const ngtcp2_cid& cid) {
         auto key = cid_key(cid.data, cid.datalen);
-        cids.push_back(key); owner->routes.emplace(std::move(key), weak_from_this());
+        cids.push_back(key); owner->routes.emplace(std::move(key), this);
     }
     stream_buffer& get_stream(int64_t id, bool remote_stream = false) {
         auto [it, inserted] = streams.try_emplace(id);
@@ -438,8 +440,8 @@ void engine::close() noexcept {
     if (!open) return;
     open = false; socket.close();
     while (!routes.empty()) {
-        auto weak = routes.begin()->second; routes.erase(routes.begin());
-        if (auto connection = weak.lock()) connection->stop();
+        auto connection = routes.begin()->second->shared_from_this();
+        routes.erase(routes.begin()); connection->stop();
     }
     pending.clear(); routes.clear(); blocked.clear(); events.notify();
 }
@@ -469,7 +471,8 @@ void engine::receive() {
         ngtcp2_version_cid decoded{};
         if (ngtcp2_pkt_decode_version_cid(&decoded, bytes.data(), length, cid_size) != 0) continue;
         auto it = routes.find(cid_key(decoded.dcid, decoded.dcidlen));
-        std::shared_ptr<connection_state> connection = it == routes.end() ? nullptr : it->second.lock();
+        auto* connection = it == routes.end() ? nullptr : it->second;
+        std::shared_ptr<connection_state> created;
         const bool fresh = !connection;
         ngtcp2_pkt_hd initial{};
         if (!connection) {
@@ -481,7 +484,7 @@ void engine::receive() {
             if (initial.tokenlen && ngtcp2_crypto_verify_retry_token2(&original, initial.token, initial.tokenlen,
                     retry_secret.data(), retry_secret.size(), initial.version, peer.data(), peer.length,
                     &initial.dcid, 10 * NGTCP2_SECONDS, timestamp()) != 0) continue;
-            connection = std::make_shared<connection_state>(shared_from_this());
+            created = std::make_shared<connection_state>(shared_from_this()); connection = created.get();
             connection->init(peer, &initial, {}, initial.tokenlen ? &original : nullptr);
         }
         if (!connection->open) continue;
@@ -495,7 +498,7 @@ void engine::receive() {
             connection->stop(); continue;
         }
         connection->error(result);
-        if (fresh && connection->open) { pending.push_back(connection); events.notify(); }
+        if (fresh && connection->open) { pending.push_back(std::move(created)); events.notify(); }
         connection->schedule(); connection->refresh(); connection->events.notify(); connection->collect();
     }
 }

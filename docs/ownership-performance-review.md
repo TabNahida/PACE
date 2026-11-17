@@ -35,7 +35,8 @@ local isolated components, not end-to-end network throughput.
   waiters avoid list-node allocations and queue continuations on the reactor.
   The ngtcp2 backend uses per-connection progress signals, uniquely owned stream
   buffers, bounded packet batches and bounded send/receive windows. Its connection
-  routing and background pumps use weak references. This is a scheduling and
+  routing table borrows reactor-affine states (removed on destruction), avoiding
+  a weak-pointer lock on each received packet. Background pumps use weak references. This is a scheduling and
   ownership improvement; no QUIC throughput gain has been measured.
 
 ## Ownership retained deliberately
