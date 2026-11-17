@@ -277,7 +277,10 @@ module test with both QUIC backends. GCC 13.3 fails to expose exported using
 declarations; GCC 15.2 crashes in `expand_CO_FRAME` while importing inline
 coroutines. The module therefore diagnoses GCC versions below 16 explicitly;
 header builds remain supported. GCC's [coroutine/module serialization fix](https://gcc.gnu.org/pipermail/gcc-patches/2026-January/705464.html)
-is in GCC 16. MSVC and Apple Clang module builds are not yet validated. They remain covered by the existing
+is in GCC 16. Remote module/ABI tests pass with GCC 16.0.1's 20260315 snapshot
+(experimental toolchain PPA build) and Clang 21.1.8, using C++20 and both QUIC
+backends. See the [Actions run](https://github.com/TabNahida/PACE/actions/runs/43988664266).
+MSVC and Apple Clang module builds are not yet validated. They remain covered by the existing
 header-mode platform matrix where applicable.
 
 ```sh

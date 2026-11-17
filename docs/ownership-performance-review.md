@@ -83,3 +83,26 @@ change. Further changes need workload-specific measurements:
   export-using import limitation is recorded in the build guide.
 
 See [raw measurements and reproduction](../benchmarks/results/module-hotpaths-2026-11-16/README.md).
+
+### QUIC backend and modern compiler follow-up
+
+- OpenSSL and ngtcp2 backends use the same QUIC and HTTP/3 tests. Additional cases
+  drop the first Initial and subsequent packets in both directions, recycle 160
+  streams (exceeding the stream count and connection window), and exchange
+  192 KiB binary payloads between different backends with each acting as server.
+- Both backends pass local ASan + UBSan + leak detection for runtime, QUIC and
+  HTTP/3, including loss recovery and stream recycling. The ngtcp2 all-enabled
+  local configuration also passes the Clang 18 C++20 named-module ABI test.
+- [Remote validation](https://github.com/TabNahida/PACE/actions/runs/43988664266)
+  tests code commit `cc258c0c1a73e9580f155d2e13438f559305928f` on Ubuntu 24.04.
+  GCC 15.2, GCC 16.0.1 (20260315 experimental snapshot), and Clang 21.1.8 each
+  pass 25 protocol/example tests with both backends. GCC 16 and Clang 21 also
+  pass C++20 `import pace` with all protocols and header/import ABI mixing.
+  The separate OpenSSL ↔ ngtcp2 interoperability job passes in both directions;
+  all seven jobs are green.
+- GCC 15 module imports reproduce an `expand_CO_FRAME` compiler ICE; GCC 13
+  cannot expose this facade's exported using declarations. Module builds now
+  reject GCC versions below 16 with a diagnostic. Header builds retain their
+  existing compiler requirements. The upstream fix is described in the build guide.
+- These are correctness results. No QUIC throughput or latency improvement is
+  claimed, and the older protocol benchmarks have not been rerun for ngtcp2.

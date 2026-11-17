@@ -103,10 +103,12 @@ preserves TLS retry buffers. It also batches generated frames at a 64 KiB
 threshold, potentially including one final frame. The TLS path reserves 128 KiB
 of bounded ciphertext buffers per connection so simultaneous writes can keep
 receiving under socket backpressure. HTTP/3 wakes its existing
-QUIC event driver. Neither HTTP adapter adds a periodic polling timer; the QUIC
-transport uses timerfd on Linux and retains its existing 1–10 ms timer fallback
-on macOS/FreeBSD. Setting the handler limit to one retains sequential
-application dispatch.
+QUIC event driver. Neither HTTP adapter adds a periodic polling timer. The
+historical benchmark above used Linux timerfd; the current QUIC backends use
+PACE's cancellable callback timers on POSIX, without periodic polling. This
+integration change and the ngtcp2 backend have functional coverage, but have
+not been benchmarked against those historical results. Setting the handler
+limit to one retains sequential application dispatch.
 
 See the [HTTP/2](reference/http2.md) and [HTTP/3](reference/http3.md) references
 for bounds, handler lifetime and cancellation contracts. Regression tests cover

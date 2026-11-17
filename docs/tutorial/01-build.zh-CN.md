@@ -119,6 +119,9 @@ GCC 13.3 不能正确向导入方暴露 `export using` 声明；GCC 15.2 在导�
 触发 `expand_CO_FRAME` 编译器内部错误。因此 module 对 GCC 16 以下版本给出
 明确诊断；普通头文件模式不受影响。GCC 16 包含上游的
 [协程与模块序列化修复](https://gcc.gnu.org/pipermail/gcc-patches/2026-January/705464.html)。
+远程验证通过的版本为 Clang 21.1.8 和 GCC 16.0.1 的 20260315 快照
+（toolchain PPA 的实验构建），使用 C++20，覆盖两种 QUIC 后端及头文件/module ABI 混用。
+见 [Actions 记录](https://github.com/TabNahida/PACE/actions/runs/43988664266)。
 MSVC、Apple Clang 的 module 模式尚未验证。
 
 ```sh

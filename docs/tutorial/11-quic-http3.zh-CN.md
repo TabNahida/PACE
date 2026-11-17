@@ -4,7 +4,9 @@
 
 QUIC 在 UDP 上提供经过认证的可靠多路流；HTTP/3 再增加 HTTP 分帧和 QPACK。
 先完成 QUIC 流，再交给 HTTP/3 适配层，不要把裸 UDP 数据报当成 QUIC，
-也不要把任意 QUIC stream 字节当成 HTTP/3。当前后端需要 POSIX 平台。
+也不要把任意 QUIC stream 字节当成 HTTP/3。两种后端均需要 POSIX 平台。
+通过 `--quic_backend=openssl`（默认）或 `--quic_backend=ngtcp2` 选择实现；
+本章示例和 HTTP/3 API 无需改变。
 
 ## 第一步：先配置身份和应用协议
 
