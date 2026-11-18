@@ -12,8 +12,8 @@ using namespace std::chrono_literals;
 
 struct cancellation_batch {
     static constexpr unsigned count = 4096;
-    pace::io_context io;
-    pace::cancellation_source source;
+    pace::io_context io{};
+    pace::cancellation_source source{};
     std::counting_semaphore<2> armed{0};
     unsigned started = 0, finished = 0;
     clock_type::time_point begin;
