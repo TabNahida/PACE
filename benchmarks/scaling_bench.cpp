@@ -17,6 +17,10 @@
 #include <signal.h>
 #endif
 
+#if defined(__linux__)
+#include <sched.h>
+#endif
+
 #include <pace/runtime.hpp>
 #include <pace/tcp.hpp>
 
@@ -35,6 +39,7 @@
 #include <latch>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -49,9 +54,35 @@ std::int64_t nanoseconds(clock_type::time_point begin, clock_type::time_point en
 
 struct options {
     std::string mode = "runtime";
+    std::string role = "combined";
+    bool pin_threads = false;
+    std::vector<std::uint16_t> ports;
     std::size_t workers = 1, clients = 8, requests = 2000, warmup = 200, bytes = 64;
-    std::size_t timeout_ms = 5000, trial = 1;
+    std::size_t timeout_ms = 5000, trial = 1, pipeline = 1;
 };
+
+// Map independent workers or clients onto CPUs in the process affinity mask.
+void pin_thread(std::size_t index) {
+#if defined(__linux__)
+    cpu_set_t available;
+    if (::sched_getaffinity(0, sizeof(available), &available) < 0)
+        throw std::system_error(errno, std::generic_category(), "sched_getaffinity");
+    index %= static_cast<std::size_t>(CPU_COUNT(&available));
+    for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+        if (!CPU_ISSET(cpu, &available)) continue;
+        if (index-- != 0) continue;
+        cpu_set_t selected;
+        CPU_ZERO(&selected);
+        CPU_SET(cpu, &selected);
+        if (::sched_setaffinity(0, sizeof(selected), &selected) < 0)
+            throw std::system_error(errno, std::generic_category(), "sched_setaffinity");
+        return;
+    }
+#else
+    (void)index;
+    throw std::invalid_argument("--pin-threads requires Linux");
+#endif
+}
 
 class cluster {
 public:
@@ -68,7 +99,8 @@ public:
             listeners_.push_back(std::make_unique<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0}));
             ports_.push_back(listeners_.back()->local_endpoint().port);
             io.spawn(accept_loop(*listeners_.back()));
-            io.post([this] {
+            io.post([this, i, pin = config.pin_threads] {
+                if (pin) pin_thread(i);
                 if (remaining_.fetch_sub(1) == 1) {
                     launch_ns_ = nanoseconds(launch_begin_, clock_type::now());
                     finish_ready(nullptr);
@@ -197,9 +229,7 @@ void connect_client(socket_type socket, std::uint16_t port, std::size_t timeout_
         throw std::runtime_error("client connect: " + socket_error());
 }
 
-std::uint64_t exchange(socket_type socket, std::vector<char>& payload,
-                       std::vector<char>& received, std::uint64_t sequence) {
-    std::memcpy(payload.data(), &sequence, sizeof(sequence));
+void exchange(socket_type socket, std::span<const char> payload, std::span<char> received) {
     std::size_t position = 0;
     while (position < payload.size()) {
         const auto count = ::send(socket, payload.data() + position, static_cast<int>(payload.size() - position), 0);
@@ -214,10 +244,8 @@ std::uint64_t exchange(socket_type socket, std::vector<char>& payload,
         if (count <= 0) throw std::runtime_error("client receive/EOF: " + socket_error());
         position += static_cast<std::size_t>(count);
     }
-    if (received != payload) throw std::runtime_error("echo payload mismatch");
-    std::uint64_t actual{};
-    std::memcpy(&actual, received.data(), sizeof(actual));
-    return actual;
+    if (std::memcmp(received.data(), payload.data(), payload.size()) != 0)
+        throw std::runtime_error("echo payload mismatch");
 }
 
 struct client_result {
@@ -226,81 +254,120 @@ struct client_result {
     std::exception_ptr error;
 };
 
-void benchmark(const options& config) {
-    const auto setup_begin = clock_type::now();
-    cluster service(config);
-    const auto setup_ns = nanoseconds(setup_begin, clock_type::now());
-    std::vector<client_result> results(config.clients);
-    std::exception_ptr coordinator_error;
-    std::int64_t warmup_ns{}, steady_ns{};
-    clock_type::time_point shutdown_begin{};
-    std::thread coordinator([&] {
-        try {
-            service.wait_ready();
-            const auto warmup_begin = clock_type::now();
-            std::latch ready(static_cast<std::ptrdiff_t>(config.clients));
-            std::promise<void> start_signal;
-            const auto start = start_signal.get_future().share();
-            std::atomic<bool> abort{false};
-            std::vector<std::thread> clients;
-            try {
-                clients.reserve(config.clients);
-                for (std::size_t id = 0; id < config.clients; ++id) {
-                    clients.emplace_back([&, id] {
-                        bool signaled = false;
-                        try {
-                            socket_guard socket{::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)};
-                            if (socket.fd == invalid_socket) throw std::runtime_error("client socket: " + socket_error());
-                            connect_client(socket.fd, service.port(id % config.workers), config.timeout_ms);
-                            std::vector<char> payload(config.bytes), received(config.bytes);
-                            for (std::size_t i = 0; i < config.bytes; ++i)
-                                payload[i] = static_cast<char>((i * 31 + id * 17) % 251);
-                            auto& result = results[id];
-                            result.latencies.reserve(config.requests);
-                            const auto tag = static_cast<std::uint64_t>(id) << 48;
-                            for (std::size_t i = 0; i < config.warmup; ++i)
-                                exchange(socket.fd, payload, received, (std::uint64_t{1} << 63) | tag | i);
-                            ready.count_down();
-                            signaled = true;
-                            start.wait();
-                            if (abort.load()) return;
-                            for (std::size_t i = 0; i < config.requests; ++i) {
-                                const auto begin = clock_type::now();
-                                const auto response = exchange(socket.fd, payload, received, tag | i);
-                                result.latencies.push_back(std::chrono::duration<double, std::micro>(clock_type::now() - begin).count());
-                                result.checksum += (id + 1) * ((response & ((std::uint64_t{1} << 48) - 1)) + 1);
+void run_clients(const options& config, const std::vector<std::uint16_t>& ports,
+                 std::vector<client_result>& results, std::int64_t& warmup_ns, std::int64_t& steady_ns) {
+    const auto warmup_begin = clock_type::now();
+    std::latch ready(static_cast<std::ptrdiff_t>(config.clients));
+    std::promise<void> start_signal;
+    const auto start = start_signal.get_future().share();
+    std::atomic<bool> abort{false};
+    std::vector<std::thread> clients;
+    try {
+        clients.reserve(config.clients);
+        for (std::size_t id = 0; id < config.clients; ++id) {
+            clients.emplace_back([&, id] {
+                bool signaled = false;
+                try {
+                    if (config.pin_threads) pin_thread(id);
+                    socket_guard socket{::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)};
+                    if (socket.fd == invalid_socket) throw std::runtime_error("client socket: " + socket_error());
+                    connect_client(socket.fd, ports[id % config.workers], config.timeout_ms);
+                    std::vector<char> payload(config.bytes * config.pipeline), received(payload.size());
+                    for (std::size_t i = 0; i < payload.size(); ++i)
+                        payload[i] = static_cast<char>((i * 31 + id * 17) % 251);
+                    client_result result;
+                    result.latencies.reserve(config.requests);
+                    auto run_batches = [&](std::size_t requests, bool measured) {
+                        const auto tag = (static_cast<std::uint64_t>(id) << 48)
+                            | (measured ? 0 : std::uint64_t{1} << 63);
+                        for (std::size_t first = 0; first < requests; first += config.pipeline) {
+                            const auto count = std::min(config.pipeline, requests - first);
+                            for (std::size_t n = 0; n < count; ++n) {
+                                const std::uint64_t sequence = tag | (first + n);
+                                std::memcpy(payload.data() + n * config.bytes, &sequence, sizeof(sequence));
                             }
-                        } catch (...) {
-                            results[id].error = std::current_exception();
-                            if (!signaled) ready.count_down();
+                            const auto length = count * config.bytes;
+                            const auto begin = clock_type::now();
+                            exchange(socket.fd, std::span(payload).first(length), std::span(received).first(length));
+                            if (measured) {
+                                // All requests in this write have completed when the last echo arrives.
+                                const auto elapsed = std::chrono::duration<double, std::micro>(clock_type::now() - begin);
+                                result.latencies.insert(result.latencies.end(), count, elapsed.count());
+                                for (std::size_t n = 0; n < count; ++n) {
+                                    std::uint64_t sequence;
+                                    std::memcpy(&sequence, received.data() + n * config.bytes, sizeof(sequence));
+                                    result.checksum += (id + 1) * ((sequence & ((std::uint64_t{1} << 48) - 1)) + 1);
+                                }
+                            }
                         }
-                    });
+                    };
+                    run_batches(config.warmup, false);
+                    ready.count_down();
+                    signaled = true;
+                    start.wait();
+                    if (abort.load()) return;
+                    run_batches(config.requests, true);
+                    results[id] = std::move(result);
+                } catch (...) {
+                    results[id].error = std::current_exception();
+                    if (!signaled) ready.count_down();
                 }
-            } catch (...) {
-                abort.store(true);
-                start_signal.set_value();
-                service.stop();
-                for (auto& client : clients) client.join();
-                throw;
-            }
-            ready.wait();
-            warmup_ns = nanoseconds(warmup_begin, clock_type::now());
-            for (const auto& result : results) if (result.error) abort.store(true);
-            const auto begin = clock_type::now();
-            start_signal.set_value();
-            for (auto& client : clients) client.join();
-            steady_ns = nanoseconds(begin, clock_type::now());
-            for (const auto& result : results) if (result.error) std::rethrow_exception(result.error);
-        } catch (...) { coordinator_error = std::current_exception(); }
-        shutdown_begin = clock_type::now();
-        service.stop();
-    });
-    try { service.run(); }
-    catch (...) { service.fail(std::current_exception()); }
-    const auto shutdown_end = clock_type::now();
-    coordinator.join();
-    service.check_error();
-    if (coordinator_error) std::rethrow_exception(coordinator_error);
+            });
+        }
+    } catch (...) {
+        abort.store(true);
+        start_signal.set_value();
+        for (auto& client : clients) client.join();
+        throw;
+    }
+    ready.wait();
+    warmup_ns = nanoseconds(warmup_begin, clock_type::now());
+    const auto begin = clock_type::now();
+    start_signal.set_value();
+    for (auto& client : clients) client.join();
+    steady_ns = nanoseconds(begin, clock_type::now());
+    for (const auto& result : results) if (result.error) std::rethrow_exception(result.error);
+}
+
+void benchmark(const options& config) {
+    std::vector<client_result> results(config.clients);
+    std::int64_t setup_ns{}, launch_ns{}, warmup_ns{}, steady_ns{}, shutdown_ns{};
+    if (config.role == "client") {
+        run_clients(config, config.ports, results, warmup_ns, steady_ns);
+    } else {
+        const auto setup_begin = clock_type::now();
+        cluster service(config);
+        setup_ns = nanoseconds(setup_begin, clock_type::now());
+        std::exception_ptr coordinator_error;
+        clock_type::time_point shutdown_begin{};
+        std::thread coordinator([&] {
+            try {
+                service.wait_ready();
+                std::vector<std::uint16_t> ports;
+                for (std::size_t i = 0; i < config.workers; ++i) ports.push_back(service.port(i));
+                if (config.role == "server") {
+                    for (std::size_t i = 0; i < ports.size(); ++i)
+                        std::cout << (i ? "," : "") << ports[i];
+                    std::cout << std::endl;
+                    std::string stop;
+                    std::getline(std::cin, stop);
+                } else {
+                    run_clients(config, ports, results, warmup_ns, steady_ns);
+                }
+            } catch (...) { coordinator_error = std::current_exception(); }
+            shutdown_begin = clock_type::now();
+            service.stop();
+        });
+        try { service.run(); }
+        catch (...) { service.fail(std::current_exception()); }
+        const auto shutdown_end = clock_type::now();
+        coordinator.join();
+        service.check_error();
+        if (coordinator_error) std::rethrow_exception(coordinator_error);
+        if (config.role == "server") return;
+        launch_ns = service.launch_ns();
+        shutdown_ns = nanoseconds(shutdown_begin, shutdown_end);
+    }
 
     std::vector<double> samples;
     std::vector<std::size_t> per_worker(config.workers);
@@ -325,16 +392,15 @@ void benchmark(const options& config) {
     };
     const double seconds = static_cast<double>(steady_ns) / 1e9;
     const double throughput = static_cast<double>(samples.size()) / seconds;
-    const auto launch_ns = service.launch_ns();
     std::cout << std::fixed << std::setprecision(12)
         << "{\"benchmark\":\"tcp_worker_scaling\",\"mode\":\"" << config.mode
-        << "\",\"trial\":" << config.trial << ",\"worker_count\":" << config.workers
+        << "\",\"role\":\"" << config.role << "\",\"trial\":" << config.trial << ",\"worker_count\":" << config.workers
         << ",\"server_threads\":" << config.workers
         << ",\"spawned_server_threads\":" << (config.mode == "caller" ? config.workers - 1 : config.workers)
         << ",\"caller_runs_reactor\":" << (config.mode == "caller" ? "true" : "false")
         << ",\"client_threads\":" << config.clients << ",\"connections\":" << config.clients
         << ",\"connections_per_worker\":" << config.clients / config.workers
-        << ",\"listener_count\":" << config.workers << ",\"pipeline\":1,\"payload_bytes\":" << config.bytes
+        << ",\"listener_count\":" << config.workers << ",\"pipeline\":" << config.pipeline << ",\"payload_bytes\":" << config.bytes
         << ",\"requests_per_client\":" << config.requests << ",\"warmup_per_client\":" << config.warmup
         << ",\"socket_timeout_ms\":" << config.timeout_ms
         << ",\"completed_requests\":" << samples.size() << ",\"checksum\":" << checksum
@@ -343,9 +409,13 @@ void benchmark(const options& config) {
         if (i) std::cout << ',';
         std::cout << per_worker[i];
     }
-    std::cout << "],\"setup_ns\":" << setup_ns << ",\"launch_ns\":" << launch_ns
-        << ",\"startup_ns\":" << setup_ns + launch_ns << ",\"client_setup_warmup_ns\":" << warmup_ns
-        << ",\"steady_ns\":" << steady_ns << ",\"shutdown_ns\":" << nanoseconds(shutdown_begin, shutdown_end)
+    std::cout << "]";
+    if (config.role == "combined") {
+        std::cout << ",\"setup_ns\":" << setup_ns << ",\"launch_ns\":" << launch_ns
+            << ",\"startup_ns\":" << setup_ns + launch_ns << ",\"shutdown_ns\":" << shutdown_ns;
+    }
+    std::cout << ",\"pinned_threads\":" << (config.pin_threads ? "true" : "false")
+        << ",\"client_setup_warmup_ns\":" << warmup_ns << ",\"steady_ns\":" << steady_ns
         << ",\"seconds\":" << seconds << ",\"requests_per_second\":" << throughput
         << ",\"roundtrip_mib_per_second\":" << throughput * config.bytes * 2 / (1024 * 1024)
         << ",\"p50_us\":" << percentile(0.50) << ",\"p99_us\":" << percentile(0.99)
@@ -403,19 +473,34 @@ int main(int argc, char** argv) {
         options config;
         for (int i = 1; i < argc; ++i) {
             const std::string_view argument = argv[i];
+            if (argument == "--pin-threads") { config.pin_threads = true; continue; }
             if (argument == "--list") { list_capabilities(); return 0; }
             if (argument == "--help") {
                 std::cout << "pace_scaling --mode runtime|caller|external --workers N [--clients 8] "
-                    "[--requests 2000] [--warmup 200] [--bytes 64] [--timeout-ms 5000] [--trial 1]\n";
+                    "[--role combined|server|client] [--ports P1,P2,...] [--pin-threads] [--pipeline 1] [--requests 2000] [--warmup 200] [--bytes 64] [--timeout-ms 5000] [--trial 1]\n";
                 return 0;
             }
             if (++i == argc) throw std::invalid_argument("missing option value");
             if (argument == "--mode") { config.mode = argv[i]; continue; }
+            if (argument == "--role") { config.role = argv[i]; continue; }
+            if (argument == "--ports") {
+                std::string_view ports = argv[i];
+                for (;;) {
+                    const auto comma = ports.find(',');
+                    const auto port = integer(ports.substr(0, comma));
+                    if (!port || port > 65535) throw std::invalid_argument("invalid port");
+                    config.ports.push_back(static_cast<std::uint16_t>(port));
+                    if (comma == ports.npos) break;
+                    ports.remove_prefix(comma + 1);
+                }
+                continue;
+            }
             const auto value = integer(argv[i]);
             if (argument == "--workers") config.workers = value;
             else if (argument == "--clients") config.clients = value;
             else if (argument == "--requests") config.requests = value;
             else if (argument == "--warmup") config.warmup = value;
+            else if (argument == "--pipeline") config.pipeline = value;
             else if (argument == "--bytes") config.bytes = value;
             else if (argument == "--timeout-ms") config.timeout_ms = value;
             else if (argument == "--trial") config.trial = value;
@@ -430,6 +515,12 @@ int main(int argc, char** argv) {
             config.clients * config.requests > 20000000 || config.warmup > 1000000 || config.bytes < 8 ||
             config.bytes > 1048576 || config.timeout_ms < 1 || config.timeout_ms > 600000 || config.trial < 1)
             throw std::invalid_argument("out-of-range workload; clients must be a positive multiple of workers");
+        if (!config.pipeline || config.pipeline > 1024 || config.bytes * config.pipeline > 1048576)
+            throw std::invalid_argument("pipeline must fit 1 to 1024 requests and at most 1 MiB per batch");
+        if (config.role != "combined" && config.role != "server" && config.role != "client")
+            throw std::invalid_argument("unknown role");
+        if (config.ports.size() != (config.role == "client" ? config.workers : 0))
+            throw std::invalid_argument("client requires one --ports entry per worker");
         benchmark(config);
         return 0;
     } catch (const std::exception& error) {

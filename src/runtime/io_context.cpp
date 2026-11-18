@@ -57,7 +57,9 @@ struct io_context::cancellation_records {
 
 struct io_context::implementation {
     detail::poller poller;
-    explicit implementation(io_backend backend) : poller(detail::poller::supports_persistent, backend) {}
+    const bool persistent_interests;
+    explicit implementation(io_backend backend)
+        : poller(detail::poller::supports_persistent, backend), persistent_interests(poller.persistent()) {}
     std::atomic<bool> stopping{false};
     std::atomic<bool> running{false};
     bool has_run = false;
@@ -216,7 +218,7 @@ struct io_context::implementation {
     }
     void update(fd_state& state, std::uint64_t token) {
         const unsigned interests = (state.reader ? 1U : 0U) | (state.writer ? 2U : 0U);
-        if (poller.persistent()) {
+        if (persistent_interests) {
             if (interests == state.interests) return;
         }
         poller.update(state.fd, state.reader != nullptr, state.writer != nullptr, token);
@@ -569,16 +571,18 @@ void io_context::run() {
             continue;
         }
         profiling::scope timer_timing(profiling::stage::timers);
-        const auto now = std::chrono::steady_clock::now();
-        while (!p.timers.empty() && p.timers.top()->deadline <= now) {
-            p.ready.push_back(p.timers.top()->continuation); p.timers.pop();
-        }
-        for (std::size_t i = 0; i < 256 && p.callbacks && !p.callbacks->callbacks.empty(); ++i) {
-            auto it = p.callbacks->callbacks.begin();
-            if (it->first.first > now) break;
-            auto node = p.callbacks->callbacks.extract(it);
-            try { node.mapped()(); } catch (...) { record_error(std::current_exception()); }
-            if (stopped()) break;
+        if (!p.timers.empty() || (p.callbacks && !p.callbacks->callbacks.empty())) {
+            const auto now = std::chrono::steady_clock::now();
+            while (!p.timers.empty() && p.timers.top()->deadline <= now) {
+                p.ready.push_back(p.timers.top()->continuation); p.timers.pop();
+            }
+            for (std::size_t i = 0; i < 256 && p.callbacks && !p.callbacks->callbacks.empty(); ++i) {
+                auto it = p.callbacks->callbacks.begin();
+                if (it->first.first > now) break;
+                auto node = p.callbacks->callbacks.extract(it);
+                try { node.mapped()(); } catch (...) { record_error(std::current_exception()); }
+                if (stopped()) break;
+            }
         }
         if (stopped()) continue;
         int timeout = -1;
@@ -597,7 +601,7 @@ void io_context::run() {
         // timers are still checked on every bounded dispatch turn above.
         if (timeout == 0 && !p.descriptor_count) continue;
         try {
-            if (p.poller.persistent()) p.reconcile_descriptors();
+            if (p.persistent_interests) p.reconcile_descriptors();
             const auto count = profiling::measure(timeout == 0 ? profiling::stage::poll_nonblocking
                 : profiling::stage::poll_blocking, [&] { return p.poller.wait(events, timeout); });
             profiling::scope event_timing(profiling::stage::event_dispatch);
@@ -608,7 +612,7 @@ void io_context::run() {
                 auto& state = *found;
                 if (event.readable || event.error) p.finish(state, state.reader);
                 if (event.writable || event.error) p.finish(state, state.writer);
-                if (p.poller.persistent()) {
+                if (p.persistent_interests) {
                     if (!state.dirty) {
                         p.dirty_descriptors.push_back(event.token);
                         state.dirty = true;
