@@ -52,13 +52,18 @@ struct pending_operation {
 };
 native_socket_type create_socket(address_family family) {
     detail::initialize_sockets();
-    const auto fd = static_cast<native_socket_type>(::socket(detail::native_address_family(family), SOCK_DGRAM, IPPROTO_UDP));
+#if defined(__linux__)
+    constexpr int type = SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC;
+#else
+    constexpr int type = SOCK_DGRAM;
+#endif
+    const auto fd = static_cast<native_socket_type>(::socket(detail::native_address_family(family), type, IPPROTO_UDP));
     if (fd == invalid_socket) fail("UDP socket");
     try {
 #if defined(_WIN32)
         u_long nonblocking = 1;
         if (::ioctlsocket(fd, FIONBIO, &nonblocking) != 0) fail("UDP nonblocking");
-#else
+#elif !defined(__linux__)
         const int flags = ::fcntl(fd, F_GETFL, 0);
         if (flags < 0 || ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0 ||
             ::fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) fail("UDP nonblocking");

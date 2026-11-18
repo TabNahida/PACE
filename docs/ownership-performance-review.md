@@ -1,4 +1,4 @@
-# Ownership and hot-path review (16–17 November 2026)
+# Ownership and hot-path review (16–18 November 2026)
 
 This review covers runtime scheduling and worker ownership, HTTP dispatch and
 routing, TLS configuration, DNS lookups, and QUIC pumps. Changes preserve the
@@ -37,7 +37,7 @@ local isolated components, not end-to-end network throughput.
   buffers, bounded packet batches and bounded send/receive windows. Its connection
   routing table borrows reactor-affine states (removed on destruction), avoiding
   a weak-pointer lock on each received packet. Background pumps use weak references. This is a scheduling and
-  ownership improvement; no QUIC throughput gain has been measured.
+  ownership change. The [transport comparison](../benchmarks/results/quic-backends-2026-11-18/README.md) measures both backends.
 
 ## Ownership retained deliberately
 
@@ -58,9 +58,8 @@ local isolated components, not end-to-end network throughput.
 These were inspected but are not established as dominant bottlenecks in this
 change. Further changes need workload-specific measurements:
 
-- Root coroutine tracking allocates unordered-set nodes on spawn and erases them
-  on completion. An intrusive owner list could remove allocations, but would
-  enlarge promise state and needs exception/shutdown analysis.
+- The root-task registry and cancellation of sleeping tasks were measured in the
+  [runtime and socket follow-up](../benchmarks/results/runtime-network-2026-11-18/README.md).
 - DNS initialization reads resolver/hosts configuration synchronously. Sharing
   initialized resolver channels would change cancellation and concurrency
   semantics; large lookup workloads should measure this cost separately.

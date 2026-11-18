@@ -32,8 +32,8 @@ protocol. `<pace/extensions.hpp>` and `<pace/application.hpp>` group the upper
 layers. Public protocol headers remain at their existing paths.
 
 HTTP/1 and WebSocket default on for source compatibility and can be disabled;
-all third-party protocols default off. QUIC requires OpenSSL 3.5+ but does not
-enable the TCP TLS module. HTTP/3 enables QUIC plus nghttp3, without depending on
+all third-party protocols default off. QUIC uses ngtcp2 and OpenSSL by default.
+Both QUIC backends are independent of the TCP TLS module. HTTP/3 enables QUIC plus nghttp3, without depending on
 HTTP/1 or HTTP/2. TLS uses OpenSSL, DNS uses c-ares, and HTTP/2 uses nghttp2.
 QUIC/HTTP3 require POSIX; Windows builds reject these options until a native
 transport adapter is implemented. See the [platform matrix](reference/platform.md).
@@ -155,8 +155,8 @@ The HTTP/1 layer supports clients and servers, Content-Length and chunked framin
 
 [DNS](reference/dns.md) integrates c-ares with readiness and timers. It resolves
 A/AAAA and CNAME records without a blocking network lookup thread.
-[QUIC](reference/quic.md) uses OpenSSL's native QUIC/TLS 1.3 implementation over
-UDP and exposes bidirectional/unidirectional streams. [HTTP/3](reference/http3.md)
+[QUIC](reference/quic.md) exposes bidirectional and unidirectional streams over UDP.
+Its default transport is ngtcp2 with OpenSSL for TLS 1.3. Native OpenSSL QUIC is also available. [HTTP/3](reference/http3.md)
 uses nghttp3 for HTTP framing and QPACK over those streams. These protocols are
 optional and are tested against local peers.
 

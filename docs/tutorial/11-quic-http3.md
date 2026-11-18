@@ -5,8 +5,8 @@
 QUIC adds authenticated, reliable streams above UDP. HTTP/3 then supplies HTTP
 framing and QPACK on those streams. Build one layer at a time: raw UDP datagrams
 are not QUIC, and arbitrary QUIC stream bytes are not HTTP/3 messages.
-Both backends currently require POSIX. Choose `--quic_backend=openssl`
-(default) or `--quic_backend=ngtcp2`; the examples and HTTP/3 API work with either.
+Both backends currently require POSIX. Choose `--quic_backend=ngtcp2`
+(default) or `--quic_backend=openssl`; the examples and HTTP/3 API work with either.
 
 
 ## Start with one HTTP/3 URL

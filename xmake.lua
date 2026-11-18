@@ -14,7 +14,7 @@ option("websocket", {default = true, showmenu = true, description = "Enable the 
 option("tls", {default = false, showmenu = true, description = "Enable TLS/HTTPS with OpenSSL"})
 option("dns", {default = false, showmenu = true, description = "Enable asynchronous DNS with c-ares"})
 option("quic", {default = false, showmenu = true, description = "Enable QUIC (also enabled by http3)"})
-option("quic_backend", {default = "openssl", values = {"openssl", "ngtcp2"}, showmenu = true, description = "QUIC transport implementation"})
+option("quic_backend", {default = "ngtcp2", values = {"ngtcp2", "openssl"}, showmenu = true, description = "QUIC transport implementation"})
 option("http2", {default = false, showmenu = true, description = "Enable HTTP/2 with nghttp2 (enable tls for HTTPS)"})
 option("http3", {default = false, showmenu = true, description = "Enable HTTP/3 with nghttp3 and QUIC"})
 set_languages(get_config("cxxstandard") or "cxx20")

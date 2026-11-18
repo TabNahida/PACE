@@ -122,4 +122,4 @@ PACE is under active development; APIs and protocol coverage are evolving. See t
 
 [MIT](LICENSE) · © 2026 Tab Nahida
 
-Select the optional ngtcp2 QUIC backend with `--quic_backend=ngtcp2`; OpenSSL remains the default. Both expose the same QUIC/HTTP3 API. See the [QUIC reference](docs/reference/quic.md).
+QUIC uses ngtcp2 by default. Select the native OpenSSL backend with `--quic_backend=openssl`. Both expose the same QUIC/HTTP3 API. See the [QUIC reference](docs/reference/quic.md).

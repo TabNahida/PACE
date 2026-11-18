@@ -3,11 +3,11 @@
 Short forms and owning helpers: [component conveniences](component-conveniences.md).
 
 Enable `--quic=y` and include `<pace/quic.hpp>`. Select the transport with
-`--quic_backend=openssl` (default) or `--quic_backend=ngtcp2`. Both implement the
+`--quic_backend=ngtcp2` (default) or `--quic_backend=openssl`. Both implement the
 same QUIC v1 / TLS 1.3 API and export `PACE_HAS_QUIC`; the ngtcp2 build also exports
 `PACE_QUIC_NGTCP2`. HTTP/3 works with either backend. OpenSSL 3.5.7 supplies TLS and
 cryptography in both builds; ngtcp2 1.26.0 supplies packet processing, loss recovery,
-congestion control and flow control in the alternative backend.
+congestion control and flow control in the default backend.
 
 ```sh
 xmake f -m release --quic=y --quic_backend=ngtcp2 --tests=y --examples=y -y

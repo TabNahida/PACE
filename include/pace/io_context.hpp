@@ -4,6 +4,7 @@
 #include <pace/platform.hpp>
 #include <pace/io_backend.hpp>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -97,8 +98,10 @@ public:
         bool await_ready() noexcept;
         template<class P> bool await_suspend(std::coroutine_handle<P> handle) {
             if constexpr (requires { handle.promise().cancellation; }) token = handle.promise().cancellation;
-            if (auto e = token.error()) { error = e; return false; }
-            registration = context.on_cancel(token, [this](std::error_code e) { context.cancel_wait(*this, e); });
+            if (token.stop_possible()) {
+                if (auto e = token.error()) { error = e; return false; }
+                registration = context.on_cancel(token, [this](std::error_code e) { context.cancel_wait(*this, e); });
+            }
             return context.arm(*this, handle);
         }
         void await_resume();
@@ -115,11 +118,15 @@ public:
         std::coroutine_handle<> continuation;
         cancellation_token token{};
         cancellation_handle registration{};
+        // Position in the owning reactor's deadline heap while suspended.
+        std::size_t heap_index = static_cast<std::size_t>(-1);
         bool await_ready() noexcept;
         template<class P> bool await_suspend(std::coroutine_handle<P> handle) {
             if constexpr (requires { handle.promise().cancellation; }) token = handle.promise().cancellation;
-            if (auto e = token.error()) { error = e; return false; }
-            registration = context.on_cancel(token, [this](std::error_code e) { context.cancel_wait(*this, e); });
+            if (token.stop_possible()) {
+                if (auto e = token.error()) { error = e; return false; }
+                registration = context.on_cancel(token, [this](std::error_code e) { context.cancel_wait(*this, e); });
+            }
             return context.arm(*this, handle);
         }
         void await_resume();

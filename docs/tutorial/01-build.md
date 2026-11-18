@@ -181,4 +181,4 @@ facade uses standard-library headers and does not need those modules.
 builds and C++23 with all optional protocols. This adds an import interface;
 no compile-time or runtime speedup is claimed for modules themselves.
 
-Choose `--quic_backend=openssl` (default) or `--quic_backend=ngtcp2` together with `--quic=y` or `--http3=y`. Both support C++20 and use OpenSSL 3.5.7 for TLS; the alternative backend additionally requires ngtcp2 1.26.0.
+Choose `--quic_backend=ngtcp2` (default) or `--quic_backend=openssl` together with `--quic=y` or `--http3=y`. Both support C++20 and use OpenSSL 3.5.7 for TLS; the default backend also requires ngtcp2 1.26.0.

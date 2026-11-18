@@ -66,16 +66,36 @@ void configure_socket(native_socket_type fd) {
 #endif
 }
 
+native_socket_type accept_socket(native_socket_type listener) {
+#if defined(__linux__)
+    const auto fast = ::accept4(listener, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+    if (fast != invalid_socket || errno != ENOSYS) return fast;
+#endif
+    const auto fd = ::accept(listener, nullptr, nullptr);
+    if (fd != invalid_socket) {
+        try { configure_socket(fd); }
+        catch (...) { close_socket(fd); throw; }
+    }
+    return fd;
+}
+
 int set_option(native_socket_type fd, int level, int name, int value) {
     return ::setsockopt(fd, level, name, reinterpret_cast<const char*>(&value), sizeof(value));
 }
 
 native_socket_type create_socket(address_family family) {
     detail::initialize_sockets();
-    native_socket_type fd = ::socket(detail::native_address_family(family), SOCK_STREAM, 0);
+#if defined(__linux__)
+    constexpr int type = SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC;
+#else
+    constexpr int type = SOCK_STREAM;
+#endif
+    native_socket_type fd = ::socket(detail::native_address_family(family), type, 0);
     if (fd == invalid_socket) socket_error("socket");
     try {
+#if !defined(__linux__)
         configure_socket(fd);
+#endif
         // Outbound mapped IPv4 destinations work consistently across systems.
         // A listener overrides this before binding, defaulting to IPv6-only.
         if (family == address_family::ipv6 && set_option(fd, IPPROTO_IPV6, IPV6_V6ONLY, 0) < 0)
@@ -340,12 +360,8 @@ listener& listener::operator=(listener&& other) noexcept {
 task<stream> listener::accept() {
     for (;;) {
         check_operation(*context_, fd_);
-        const native_socket_type accepted = detail::profiling::measure(detail::profiling::stage::accept, [&] { return ::accept(fd_, nullptr, nullptr); });
-        if (accepted != invalid_socket) {
-            try { configure_socket(accepted); }
-            catch (...) { close_socket(accepted); throw; }
-            co_return stream(*context_, accepted, family_);
-        }
+        const native_socket_type accepted = detail::profiling::measure(detail::profiling::stage::accept, [&] { return accept_socket(fd_); });
+        if (accepted != invalid_socket) co_return stream(*context_, accepted, family_);
         const auto error = last_socket_error();
         if (interrupted(error)) continue;
 #if defined(_WIN32)

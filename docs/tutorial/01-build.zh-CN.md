@@ -156,4 +156,4 @@ xmake 关于缺少 `std`/`std.compat` 的提示不影响本接口，因为本接
 核心/默认配置，以及 C++23 全协议配置。module 本身尚未测量编译速度收益。
 实现采用 [Clang 文档中的 ABI 兼容 export-using 方案](https://clang.llvm.org/docs/StandardCPlusPlusModules.html#abi-non-breaking-styles)。
 
-QUIC 后端通过 `--quic_backend=openssl`（默认）或 `--quic_backend=ngtcp2` 选择，需要同时启用 `--quic=y` 或 `--http3=y`。两者均支持 C++20，使用 OpenSSL 3.5.7 提供 TLS；ngtcp2 后端额外依赖 ngtcp2 1.26.0。
+QUIC 后端通过 `--quic_backend=ngtcp2`（默认）或 `--quic_backend=openssl` 选择，需要同时启用 `--quic=y` 或 `--http3=y`。两者均支持 C++20，使用 OpenSSL 3.5.7 提供 TLS；ngtcp2 后端额外依赖 ngtcp2 1.26.0。

@@ -29,12 +29,12 @@ struct http_dispatch : std::enable_shared_from_this<http_dispatch> {
         if (--active == 0 && drain_waiter) scheduler_access::schedule(io, std::exchange(drain_waiter, {}));
     }
     struct drain_awaiter {
-        std::shared_ptr<http_dispatch> state;
-        bool await_ready() const noexcept { return state->active == 0; }
-        void await_suspend(std::coroutine_handle<> h) { state->drain_waiter = h; }
+        http_dispatch& state;
+        bool await_ready() const noexcept { return state.active == 0; }
+        void await_suspend(std::coroutine_handle<> h) { state.drain_waiter = h; }
         void await_resume() const noexcept {}
     };
-    static task<void> drain_impl(std::shared_ptr<http_dispatch> state) { co_await drain_awaiter{state}; }
+    static task<void> drain_impl(std::shared_ptr<http_dispatch> state) { co_await drain_awaiter{*state}; }
     task<void> drain() { return task_access::bind(drain_impl(shared_from_this()), {}); }
     // A transport EOF removes network readability as a useful wake source.
     // Keep one context-affine, RAII-unlinked waiter for handler completion.

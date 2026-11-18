@@ -2,6 +2,7 @@
 
 #include <pace/cancellation.hpp>
 #include <coroutine>
+#include <cstddef>
 #include <exception>
 #include <optional>
 #include <stdexcept>
@@ -92,6 +93,7 @@ template<>
 class [[nodiscard]] task<void> {
 public:
     struct promise_type : detail::promise_base {
+        std::size_t root_index; // Used only while owned by io_context::spawn.
         task get_return_object() noexcept { return task{handle_type::from_promise(*this)}; }
         void return_void() const noexcept {}
     };

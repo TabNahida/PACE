@@ -45,7 +45,8 @@ xmake retains configuration between commands.
 | `--websocket=y/n` | y | WebSocket application module |
 | `--tls=y/n` | n | TLS and HTTPS with OpenSSL |
 | `--dns=y/n` | n | Asynchronous DNS with c-ares |
-| `--quic=y/n` | n | QUIC with OpenSSL 3.5+; also enabled by HTTP/3 |
+| `--quic=y/n` | n | QUIC transport, also enabled by HTTP/3 |
+| `--quic_backend` | ngtcp2 | Select ngtcp2 or native OpenSSL |
 | `--http2=y/n` | n | HTTP/2 with nghttp2; TLS is a separate option |
 | `--http3=y/n` | n | HTTP/3 with nghttp3 and QUIC; independent of HTTP/1/2 |
 | `--benchmarks=y/n` | n | TCP comparison against standalone Asio and libuv |
@@ -92,7 +93,7 @@ xmake test -v
 ```
 
 HTTP/3 automatically enables QUIC. QUIC does not need `--tls=y`: it embeds TLS
-1.3 through OpenSSL's QUIC API. All protocol tests use local peers; DNS tests run
+1.3 using OpenSSL in both backends. All protocol tests use local peers; DNS tests run
 a local nameserver and the default DNS tutorial resolves numeric loopback.
 The QUIC/HTTP3 backend currently requires POSIX;
 enabling it on Windows/MinGW produces an explicit configuration error. The

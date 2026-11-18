@@ -55,27 +55,27 @@ task<void> run_child(std::shared_ptr<group_state> group, std::shared_ptr<owned_c
     group->child_finished();
 }
 struct group_wait {
-    std::shared_ptr<group_state> state;
+    group_state& state; // drain_group's frame owns the state throughout this wait.
     bool cancellable = false;
     bool registered = false;
     std::list<group_wait*>::iterator position;
     std::coroutine_handle<> continuation;
     io_context::cancellation_handle cancellation;
     std::error_code error;
-    group_wait(std::shared_ptr<group_state> owner, bool can_cancel)
-        : state(std::move(owner)), cancellable(can_cancel) {}
-    ~group_wait() { if (registered) state->waiters.erase(position); }
-    bool await_ready() const noexcept { return state->pending == 0; }
+    group_wait(group_state& owner, bool can_cancel)
+        : state(owner), cancellable(can_cancel) {}
+    ~group_wait() { if (registered) state.waiters.erase(position); }
+    bool await_ready() const noexcept { return state.pending == 0; }
     void await_suspend(std::coroutine_handle<> h) {
-        if (cancellable) cancellation = state->io.on_cancel(state->source.token(), [this](std::error_code reason) {
+        if (cancellable) cancellation = state.io.on_cancel(state.source.token(), [this](std::error_code reason) {
             error = reason;
             if (registered) {
-                state->waiters.erase(position); registered = false;
-                scheduler_access::schedule(state->io, continuation);
+                state.waiters.erase(position); registered = false;
+                scheduler_access::schedule(state.io, continuation);
             }
         });
         continuation = h;
-        position = state->waiters.insert(state->waiters.end(), this);
+        position = state.waiters.insert(state.waiters.end(), this);
         registered = true;
     }
     void await_resume() {
@@ -100,7 +100,7 @@ inline task<void> drain_group(std::shared_ptr<group_state> state, bool boundary 
         group_state& state; bool boundary;
         ~reset() { if (!boundary) state.joining = false; }
     } guard{*state, boundary};
-    co_await group_wait(state, !boundary);
+    co_await group_wait(*state, !boundary);
 }
 }
 // A move-only result handle. Destroying it neither detaches nor cancels the child:
@@ -158,8 +158,9 @@ public:
         state_->check();
         if (!state_->accepting) throw std::logic_error("task group is closed");
         auto owned = std::make_shared<T>(std::move(value));
-        state_->resources.push_back(owned);
-        return *owned;
+        auto& result = *owned;
+        state_->resources.push_back(std::move(owned));
+        return result;
     }
     void cancel() { state_->check(); state_->source.request_cancellation(); }
     cancellation_token token() const noexcept { return state_->source.token(); }
@@ -170,8 +171,8 @@ public:
     template<class Factory> static auto run(Factory factory) -> task<typename detail::entry_result<std::invoke_result_t<Factory&, task_group&>>::type> {
         using result = typename detail::entry_result<std::invoke_result_t<Factory&, task_group&>>::type;
         auto token = co_await this_task::cancellation();
-        auto state = std::make_shared<detail::group_state>(this_context(), token);
-        task_group group(state);
+        task_group group(std::make_shared<detail::group_state>(this_context(), token));
+        const auto& state = group.state_;
         detail::entry_state<result> value;
         try {
             auto body = detail::task_access::bind(std::invoke(factory, group), state->source.token());

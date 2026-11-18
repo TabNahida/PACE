@@ -47,7 +47,7 @@ namespace detail {
 // stop-token dependency is needed on older Apple/Android toolchains.
 class cancellation_registration {
 public:
-    cancellation_registration(cancellation_token, std::function<void()>);
+    cancellation_registration(const cancellation_token&, std::function<void()>);
     ~cancellation_registration();
     cancellation_registration(const cancellation_registration&) = delete;
 private:

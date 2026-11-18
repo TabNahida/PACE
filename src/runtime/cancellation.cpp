@@ -61,7 +61,7 @@ struct cancellation_state {
         return true;
     }
 };
-cancellation_registration::cancellation_registration(cancellation_token token, std::function<void()> callback) {
+cancellation_registration::cancellation_registration(const cancellation_token& token, std::function<void()> callback) {
     if (!token.state_) return;
     impl_ = std::make_shared<implementation>();
     impl_->owner = token.state_;

@@ -8,9 +8,8 @@
 #include <deque>
 #include <map>
 #include <mutex>
-#include <queue>
+#include <optional>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace pace {
@@ -37,7 +36,7 @@ struct io_context::cancellation_records {
     struct record {
         cancellation_token token;
         std::function<void(std::error_code)> callback;
-        std::unique_ptr<detail::cancellation_registration> wake;
+        std::optional<detail::cancellation_registration> wake;
     };
     std::map<std::uint64_t, record> entries;
     std::uint64_t next_id = 0;
@@ -71,7 +70,23 @@ struct io_context::implementation {
     std::deque<std::function<void()>> incoming_posts;
     std::deque<std::function<void()>> posts;
     std::deque<std::coroutine_handle<>> ready;
-    std::unordered_set<void*> roots;
+    std::vector<task<void>::handle_type> roots;
+    void adopt_root(io_context& io, task<void>& work) {
+        const auto handle = work.release();
+        if (!handle) return;
+        auto& promise = handle.promise();
+        promise.root_index = roots.size();
+        try {
+            roots.push_back(handle);
+            ready.push_back(handle);
+        } catch (...) {
+            if (roots.size() > promise.root_index) roots.pop_back();
+            handle.destroy();
+            throw;
+        }
+        promise.on_completion = io_context::completed;
+        promise.completion_context = &io;
+    }
     std::coroutine_handle<> completed_head{};
     std::exception_ptr first_error;
     struct service { std::shared_ptr<const void> key; std::shared_ptr<void> value; };
@@ -92,17 +107,52 @@ struct io_context::implementation {
     std::unordered_map<native_socket_type, std::uint64_t> tokens;
     std::uint64_t next_token = 0;
     std::vector<std::uint64_t> dirty_descriptors;
-    struct later {
-        bool operator()(const timer_awaiter* a, const timer_awaiter* b) const noexcept {
-            return a->deadline > b->deadline;
+    // Cancellation can remove any sleeper, including thousands at once. Keep
+    // its slot in the coroutine frame to avoid a scan and heap rebuild.
+    struct timer_queue {
+        std::vector<timer_awaiter*> heap;
+        bool empty() const noexcept { return heap.empty(); }
+        timer_awaiter* top() const noexcept { return heap.front(); }
+
+        void place(std::size_t slot, timer_awaiter* timer) noexcept {
+            heap[slot] = timer;
+            timer->heap_index = slot;
         }
-    };
-    struct timer_queue : std::priority_queue<timer_awaiter*, std::vector<timer_awaiter*>, later> {
-        bool erase(timer_awaiter* timer) {
-            const auto it = std::find(c.begin(), c.end(), timer);
-            if (it == c.end()) return false;
-            c.erase(it); std::make_heap(c.begin(), c.end(), comp); return true;
+        void sift_up(std::size_t slot, timer_awaiter* timer) noexcept {
+            while (slot) {
+                const auto parent = (slot - 1) / 2;
+                if (heap[parent]->deadline <= timer->deadline) break;
+                place(slot, heap[parent]);
+                slot = parent;
+            }
+            place(slot, timer);
         }
+        void push(timer_awaiter* timer) {
+            heap.push_back(timer);
+            sift_up(heap.size() - 1, timer);
+        }
+        bool erase(timer_awaiter* timer) noexcept {
+            auto slot = timer->heap_index;
+            if (slot >= heap.size() || heap[slot] != timer) return false;
+            auto* last = heap.back();
+            heap.pop_back();
+            timer->heap_index = static_cast<std::size_t>(-1);
+            if (slot == heap.size()) return true;
+            if (slot && last->deadline < heap[(slot - 1) / 2]->deadline) {
+                sift_up(slot, last);
+                return true;
+            }
+            while (slot < heap.size() / 2) {
+                auto child = 2 * slot + 1;
+                if (child + 1 < heap.size() && heap[child + 1]->deadline < heap[child]->deadline) ++child;
+                if (last->deadline <= heap[child]->deadline) break;
+                place(slot, heap[child]);
+                slot = child;
+            }
+            place(slot, last);
+            return true;
+        }
+        void pop() noexcept { erase(top()); }
     } timers;
     std::shared_ptr<callback_timers> callbacks;
 
@@ -212,11 +262,11 @@ io_context::cancellation_handle io_context::on_cancel(cancellation_token token,
     cancellation_handle result;
     result.id_ = ++records.next_id; result.records_ = impl_->cancellations;
     auto [it, inserted] = records.entries.try_emplace(result.id_);
-    it->second.token = token;
+    it->second.token = std::move(token);
     it->second.callback = std::move(callback);
-    it->second.wake = std::make_unique<detail::cancellation_registration>(token, [this] {
-        impl_->local_cancellation.store(true, std::memory_order_release);
-        impl_->poller.wake();
+    it->second.wake.emplace(it->second.token, [this] {
+        if (!impl_->local_cancellation.exchange(true, std::memory_order_release))
+            impl_->poller.wake();
     });
     return result;
 }
@@ -284,7 +334,7 @@ io_context::~io_context() {
     impl_->incoming_tasks.clear();
     impl_->incoming_posts.clear();
     impl_->posts.clear();
-    for (auto address : impl_->roots) task<void>::handle_type::from_address(address).destroy();
+    for (auto root : impl_->roots) root.destroy();
     impl_->roots.clear();
     impl_->ready.clear();
     impl_->services.clear();
@@ -317,12 +367,7 @@ void io_context::spawn(task<void> work) {
     auto& p = *impl_;
     if (current() == this) {
         if (stopped()) throw std::system_error(canceled());
-        auto h = work.release();
-        if (!h) return;
-        try { p.roots.insert(h.address()); p.ready.push_back(h); }
-        catch (...) { p.roots.erase(h.address()); h.destroy(); throw; }
-        h.promise().on_completion = completed;
-        h.promise().completion_context = this;
+        p.adopt_root(*this, work);
         return;
     }
     bool notify;
@@ -331,7 +376,7 @@ void io_context::spawn(task<void> work) {
         if (stopped()) throw std::system_error(canceled());
         p.incoming_tasks.push_back(std::move(work));
         notify = !p.inbox_pending.load(std::memory_order_relaxed);
-        p.inbox_pending.store(true, std::memory_order_release);
+        if (notify) p.inbox_pending.store(true, std::memory_order_release);
     }
     if (notify) p.poller.wake();
 }
@@ -349,7 +394,7 @@ void io_context::post(std::function<void()> work) {
         if (stopped()) throw std::system_error(canceled());
         p.incoming_posts.push_back(std::move(work));
         notify = !p.inbox_pending.load(std::memory_order_relaxed);
-        p.inbox_pending.store(true, std::memory_order_release);
+        if (notify) p.inbox_pending.store(true, std::memory_order_release);
     }
     if (notify) p.poller.wake();
 }
@@ -368,8 +413,10 @@ bool io_context::io_awaiter::await_ready() noexcept {
     return false;
 }
 void io_context::io_awaiter::await_resume() {
-    registration.cancel();
-    token.throw_if_cancelled();
+    if (token.stop_possible()) {
+        registration.cancel();
+        token.throw_if_cancelled();
+    }
     if (error) throw std::system_error(error);
     if (context.stopped()) throw std::system_error(canceled());
 }
@@ -423,8 +470,10 @@ bool io_context::timer_awaiter::await_ready() noexcept {
     return false; // Even zero-duration sleeps yield, so they cannot starve shutdown.
 }
 void io_context::timer_awaiter::await_resume() {
-    registration.cancel();
-    token.throw_if_cancelled();
+    if (token.stop_possible()) {
+        registration.cancel();
+        token.throw_if_cancelled();
+    }
     if (error) throw std::system_error(error);
     if (context.stopped()) throw std::system_error(canceled());
 }
@@ -478,20 +527,14 @@ void io_context::run() {
                 // The first producer after this drain must wake the poller.
                 p.inbox_pending.store(false, std::memory_order_relaxed);
             }
-            for (auto& work : new_tasks) {
-                auto h = work.release();
-                if (!h) continue;
-                p.roots.insert(h.address());
-                h.promise().on_completion = completed;
-                h.promise().completion_context = this;
-                p.ready.push_back(h);
-            }
+            for (auto& work : new_tasks) p.adopt_root(*this, work);
             for (auto& work : new_posts) p.posts.push_back(std::move(work));
             new_tasks.clear();
             new_posts.clear();
         }
         inbox_timing.close();
-        if (p.local_cancellation.exchange(false, std::memory_order_acq_rel) && p.cancellations)
+        if (p.local_cancellation.load(std::memory_order_acquire) &&
+            p.local_cancellation.exchange(false, std::memory_order_acq_rel) && p.cancellations)
             record_error(p.cancellations->dispatch());
         if (stopped() && !p.cancellation_started) p.cancel_all();
         profiling::scope post_timing(profiling::stage::post_dispatch);
@@ -511,7 +554,10 @@ void io_context::run() {
             auto h = task<void>::handle_type::from_address(p.completed_head.address());
             p.completed_head = h.promise().completed_next;
             record_error(h.promise().exception);
-            p.roots.erase(h.address());
+            const auto slot = h.promise().root_index;
+            p.roots[slot] = p.roots.back();
+            p.roots[slot].promise().root_index = slot;
+            p.roots.pop_back();
             h.destroy();
         }
         reap_timing.close();

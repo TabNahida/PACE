@@ -211,6 +211,42 @@ void protocol_signals() {
     }
 }
 
+void cancel_sleepers_out_of_order() {
+    pace::io_context io;
+    pace::cancellation_source source;
+    constexpr int count = 97;
+    const auto start = std::chrono::steady_clock::now() + 20ms;
+    std::vector<int> fired;
+    int canceled = 0;
+    auto sleeper = [&](int rank) -> pace::task<void> {
+        auto timer = io.sleep_for(0ms);
+        timer.deadline = start + rank * 100us;
+        try {
+            co_await timer;
+            require(rank % 3 == 0, "cancelled sleeper fired");
+            fired.push_back(rank);
+        } catch (const std::system_error& e) {
+            require(rank % 3 != 0 && e.code() == std::errc::operation_canceled, "unexpected sleep cancellation");
+            ++canceled;
+        }
+        if (fired.size() + canceled == count) io.stop();
+    };
+    for (int i = 0; i < count; ++i) {
+        const int rank = i * 31 % count;
+        auto work = sleeper(rank);
+        if (rank % 3) work = pace::detail::task_access::bind(std::move(work), source.token());
+        io.spawn(std::move(work));
+    }
+    // This root runs after every sleeper has suspended. Cancellation erases
+    // interleaved slots while the remaining timers must retain deadline order.
+    auto cancel = [&]() -> pace::task<void> { source.request_cancellation(); co_return; };
+    io.spawn(cancel());
+    io.run();
+    std::vector<int> expected;
+    for (int rank = 0; rank < count; rank += 3) expected.push_back(rank);
+    require(fired == expected, "partial cancellation reordered or lost surviving timers");
+}
+
 void cancellable_callback_timers() {
     pace::io_context::timer_handle survivor;
     std::weak_ptr<int> released;
@@ -1021,6 +1057,7 @@ void run_tests() {
     repeated_sleep_and_wake();
     timer_fairness_with_ready_work();
     cancellable_callback_timers();
+    cancel_sleepers_out_of_order();
     protocol_signals();
     shutdown_exactly_once();
     runtime_thread_modes();
