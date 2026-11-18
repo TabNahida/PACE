@@ -4,9 +4,9 @@
 
 - Use ngtcp2 by default when QUIC or HTTP/3 is enabled. Select the native OpenSSL transport with `--quic_backend=openssl`.
 - Reduce root coroutine scheduling, timer cancellation and Linux socket setup costs. Task-group and HTTP waiters borrow state from their owning coroutine. See the [runtime and TCP measurements](benchmarks/results/runtime-network-2026-11-18/README.md) for component costs and multi-worker throughput.
-
 - Add the optional C++20 named module and ngtcp2 QUIC backend. Drive QUIC deadlines and continuations through the PACE reactor.
 - Reduce routing and cross-thread submission overhead. Publish [QUIC throughput, latency and memory measurements](benchmarks/results/quic-backends-2026-11-18/README.md).
+- Publish [split-process TCP long-connection profiles](benchmarks/results/tcp-long-connections-2026-11-18/README.md) and add worker affinity and pipelining controls to the scaling benchmark.
 
 ## 0.5.0 — 2026-11-03
 

@@ -1,0 +1,13 @@
+workers,connections,mode,side,task_clock_ms,page_faults,waits,events,single_event_waits,multi_event_waits
+4,8,perf-stat,server,10609.39,472,,,,
+4,8,perf-stat,client,11852.39,6574,,,,
+8,8,perf-stat,server,14968.22,508,,,,
+8,8,perf-stat,client,14405.63,6572,,,,
+4,32,perf-stat,server,5287.16,858,,,,
+4,32,perf-stat,client,8124.59,6656,,,,
+8,32,perf-stat,server,7733.16,891,,,,
+8,32,perf-stat,client,8342.17,6652,,,,
+4,8,epoll-counts,server,,,903028,1608021,198023,704999
+8,8,epoll-counts,server,,,1608037,1608029,1608029,0
+4,32,epoll-counts,server,,,495448,1632060,99314,396124
+8,32,epoll-counts,server,,,935934,1632056,499031,436880

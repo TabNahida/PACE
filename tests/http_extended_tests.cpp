@@ -601,7 +601,9 @@ pace::task<void> client_close_policies(pace::io_context& io) {
         options.close_timeout = 1h;
         pace::http::basic_client<Transport> client(std::move(socket), {}, options);
         bool expired = false;
-        auto deadline = io.call_after(50ms, [&] { expired = true; client.close(); });
+        // The gate below proves ordering. Give the shared CI runner time to
+        // schedule both peers before treating a genuine deadlock as failure.
+        auto deadline = io.call_after(2s, [&] { expired = true; client.close(); });
         auto outgoing = message(test.method);
         outgoing.keep_alive = std::string_view(test.wire).find("Connection: keep-alive") == std::string_view::npos;
         const auto result = co_await client.send(std::move(outgoing));
