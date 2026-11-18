@@ -104,5 +104,7 @@ See [raw measurements and reproduction](../benchmarks/results/module-hotpaths-20
   cannot expose this facade's exported using declarations. Module builds now
   reject GCC versions below 16 with a diagnostic. Header builds retain their
   existing compiler requirements. The upstream fix is described in the build guide.
-- These are correctness results. No QUIC throughput or latency improvement is
-  claimed, and the older protocol benchmarks have not been rerun for ngtcp2.
+- The [0.6.0 module checks](https://github.com/TabNahida/PACE/actions/runs/44238306831)
+  cover both QUIC backends using the GCC 16.2 release and Clang 21.
+- The [QUIC transport comparison](../benchmarks/results/quic-backends-2026-11-18/README.md)
+  measures bulk goodput, short-message RTT and peak RSS for both backends and the 0.5.0 scheduler.

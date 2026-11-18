@@ -4,6 +4,7 @@
 #include <array>
 #include <chrono>
 #include <condition_variable>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <mutex>
@@ -26,7 +27,12 @@ struct watchdog {
         }
     }};
     explicit watchdog(const char* name) : scenario(name) {}
-    ~watchdog() { { std::lock_guard lock(mutex); done = true; } changed.notify_one(); thread.join(); }
+    ~watchdog() {
+        { std::lock_guard lock(mutex); done = true; }
+        changed.notify_one();
+        thread.join();
+        if (std::uncaught_exceptions()) std::cerr << "QUIC scenario failed: " << scenario << '\n';
+    }
 };
 struct completion {
     pace::io_context& io;
@@ -328,8 +334,8 @@ void accept_cancellation(const std::filesystem::path& fixtures) {
     io.spawn(pending_accept(listener, canceled)); io.spawn(close_acceptor(listener));
     io.run(); require(canceled, "QUIC accept failed to unwind");
 }
-pace::task<void> recycle_server(pace::quic::listener& listener, completion& done) {
-    auto connection = co_await listener.accept();
+pace::task<void> recycle_server(pace::quic::listener& listener, std::optional<pace::quic::connection>& peer, completion& done) {
+    auto& connection = peer.emplace(co_await listener.accept());
     for (unsigned i = 0; i < 160; ++i) {
         auto stream = co_await connection.accept_stream();
         require(co_await read_to_end(stream) == std::string(48 * 1024, static_cast<char>(i)), "recycled stream data mismatch");
@@ -351,7 +357,11 @@ void recycle_streams(const std::filesystem::path& fixtures) {
     pace::io_context io; configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
     pace::quic::connection client(io, config.client); completion done{io};
-    io.spawn(recycle_server(listener, done)); io.spawn(recycle_client(client, listener.local_endpoint(), done));
+    // The last stream can reach EOF before the peer receives its final ACK.
+    // Keep both transports alive until the two tasks have finished.
+    std::optional<pace::quic::connection> server;
+    io.spawn(recycle_server(listener, server, done));
+    io.spawn(recycle_client(client, listener.local_endpoint(), done));
     io.run(); require(done.count == 2, "stream or connection flow-control credit was not recycled");
 }
 pace::task<void> interop_server(pace::quic::listener& listener) {
