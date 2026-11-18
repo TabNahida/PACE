@@ -13,12 +13,15 @@ pace::http::response module_header_response(pace::http::request);
 int main() {
     static_assert(std::is_same_v<pace::tcp_stream, pace::tcp::stream>);
     static_assert(!std::is_copy_constructible_v<pace::task<int>>);
+    static_assert(std::is_same_v<pace::http1::request, pace::http::request>);
     pace::runtime workers(2);
     workers.stop();
     workers.run();
     return pace::run([](pace::io_context& io) -> pace::task<int> {
         if (&pace::this_context() != &io) throw std::runtime_error("context affinity");
         if (co_await module_header_task(io) != 42) throw std::runtime_error("task ABI");
+        (void)pace::backend_name(io.backend());
+        (void)co_await pace::this_task::cancellation();
         co_await pace::sleep_for(std::chrono::milliseconds(0));
         co_await pace::yield();
         pace::tcp::listener listener(io, {"127.0.0.1", 0});

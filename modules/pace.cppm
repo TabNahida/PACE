@@ -19,11 +19,14 @@ export namespace pace {
     using ::pace::cancellation_token;
     using ::pace::operation_options;
     using ::pace::blocking_options;
+    using ::pace::with_options;
     using ::pace::with_cancellation;
     using ::pace::with_deadline;
     using ::pace::shield;
     using ::pace::write;
     using ::pace::read_exact;
+    using ::pace::io_backend;
+    using ::pace::backend_name;
     using ::pace::io_context;
     using ::pace::runtime;
     using ::pace::run;
@@ -38,6 +41,8 @@ export namespace pace {
     using ::pace::ipv4_endpoint;
     using ::pace::listen_options;
 }
+
+export namespace pace::this_task { using ::pace::this_task::cancellation; }
 
 export namespace pace::tcp {
     using ::pace::tcp::endpoint;
@@ -76,6 +81,8 @@ export namespace pace::http {
     using ::pace::http::router;
 }
 
+export namespace pace { namespace http1 = http; }
+
 #ifdef PACE_HAS_HTTP1
 export namespace pace::http {
     using ::pace::http::limits;
@@ -112,6 +119,8 @@ export namespace pace::http {
 
 #ifdef PACE_HAS_TLS
 export namespace pace::tls {
+    using ::pace::tls::connect;
+    using ::pace::tls::accept;
     using ::pace::tls::role;
     using ::pace::tls::trust_source;
     using ::pace::tls::sni_policy;
@@ -127,6 +136,7 @@ export namespace pace::dns {
     using ::pace::dns::address;
     using ::pace::dns::result;
     using ::pace::dns::options;
+    using ::pace::dns::resolve;
     using ::pace::dns::resolver;
 }
 #endif
@@ -176,6 +186,9 @@ export namespace pace::http3 {
 
 #ifdef PACE_HAS_WEBSOCKET
 export namespace pace::websocket {
+    using ::pace::websocket::upgrade;
+    using ::pace::websocket::accept;
+    using ::pace::websocket::connect;
     using ::pace::websocket::role;
     using ::pace::websocket::message_type;
     using ::pace::websocket::message;
