@@ -12,6 +12,9 @@ concurrency:
 jobs:
   protocols:
     runs-on: ubuntu-24.04
+    container: ${{ matrix.compiler == 'gcc-16' && 'gcc:16.2' || '' }}
+    env:
+      XMAKE_ROOT: y
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -22,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install selected GCC
-        if: startsWith(matrix.compiler, 'gcc-')
+        if: matrix.compiler == 'gcc-15'
         run: |
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update
@@ -31,6 +34,14 @@ jobs:
           sudo apt-get install -y "g++-$version"
           echo "PACE_CC=gcc-$version" >> "$GITHUB_ENV"
           echo "PACE_CXX=g++-$version" >> "$GITHUB_ENV"
+          echo 'PACE_TOOLCHAIN=gcc' >> "$GITHUB_ENV"
+      - name: Select GCC 16.2 release compiler
+        if: matrix.compiler == 'gcc-16'
+        run: |
+          apt-get update
+          apt-get install -y sudo unzip cmake
+          echo 'PACE_CC=gcc' >> "$GITHUB_ENV"
+          echo 'PACE_CXX=g++' >> "$GITHUB_ENV"
           echo 'PACE_TOOLCHAIN=gcc' >> "$GITHUB_ENV"
       - name: Install Clang 21 and matching module scanner
         if: matrix.compiler == 'clang-21'

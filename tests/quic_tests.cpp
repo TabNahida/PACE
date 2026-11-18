@@ -1,4 +1,5 @@
 #include <pace/quic.hpp>
+#include <pace/operation.hpp>
 
 #include <array>
 #include <chrono>
@@ -291,6 +292,23 @@ pace::task<void> pending_accept(pace::quic::listener& listener, bool& canceled) 
     require(canceled && !listener.is_open(), "listener close did not cancel pending accept");
     listener.context().stop();
 }
+pace::task<void> local_accept_deadline(pace::quic::listener& listener) {
+    bool timed_out = false;
+    try {
+        co_await pace::with_deadline(pace::deadline::after(5ms), [&]() { return listener.accept(); });
+    } catch (const std::system_error& error) {
+        timed_out = error.code() == std::errc::timed_out;
+    }
+    require(timed_out && listener.is_open(), "local deadline must unwind only the pending QUIC accept");
+    listener.context().stop();
+}
+void local_cancellation(const std::filesystem::path& fixtures) {
+    pace::io_context io;
+    configurations config(fixtures);
+    pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
+    io.spawn(local_accept_deadline(listener));
+    io.run();
+}
 void accept_cancellation(const std::filesystem::path& fixtures) {
     pace::io_context io; configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server); bool canceled = false;
@@ -378,7 +396,7 @@ int main(int argc, char** argv) {
         closure(fixtures, false); closure(fixtures, true);
         serialization_and_reset(fixtures);
         recycle_streams(fixtures);
-        connection_isolation(fixtures); accept_cancellation(fixtures);
+        connection_isolation(fixtures); accept_cancellation(fixtures); local_cancellation(fixtures);
         std::cout << "QUIC tests passed\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
