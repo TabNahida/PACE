@@ -1,5 +1,5 @@
 set_project("pace")
-set_version("0.6.0")
+set_version("0.6.1")
 set_xmakever("2.9.8")
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_warnings("allextra")
@@ -42,8 +42,14 @@ if has_config("tls") or enable_quic then
     end
 end
 if enable_quic and get_config("quic_backend") == "ngtcp2" then
-    add_requires("ngtcp2 1.26.0", {configs = {openssl = "openssl3"}})
-    add_requireconfs("ngtcp2.openssl3", {version = "3.5.7", override = true})
+    if is_plat("bsd") then
+        includes("xmake/ngtcp2_bsd.lua")
+        add_requires("pace-ngtcp2-bsd 1.26.0", {alias = "ngtcp2", system = false, configs = {openssl = "openssl3"}})
+        add_requireconfs("pace-ngtcp2-bsd.openssl3", {version = "3.5.7", override = true})
+    else
+        add_requires("ngtcp2 1.26.0", {configs = {openssl = "openssl3"}})
+        add_requireconfs("ngtcp2.openssl3", {version = "3.5.7", override = true})
+    end
 end
 if has_config("http2") then add_requires("nghttp2 1.70.0") end
 if has_config("dns") then add_requires("c-ares 1.34.8") end
