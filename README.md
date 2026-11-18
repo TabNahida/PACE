@@ -16,7 +16,7 @@
 - **Build only what you use.** A core without third-party runtime dependencies, with optional protocol modules above it.
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="Local Linux TCP echo: PACE leads throughput and p50; Asio leads p95 and p99. Zero-based charts include all three libraries and trial ranges." width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
 </p>
 
 <p align="center"><a href="docs/performance.md">Full benchmark results, methodology &amp; raw data →</a></p>
@@ -34,6 +34,23 @@ Link individual modules, layer aggregates, or `pace` for the enabled stack. HTTP
 
 [Architecture →](docs/architecture.md) · [Build options & integration →](docs/tutorial/01-build.md)
 
+## A direct HTTP client
+
+```cpp
+auto reply = pace::http::get("http://127.0.0.1:8080/health");
+```
+
+One call returns an owned response; no `run` is needed. It blocks this thread,
+with a default 30-second deadline. In a coroutine use
+`co_await pace::http::async_get(url)`. HTTP/2 and HTTP/3 use the same URL names. TCP and UDP offer `exchange` / `async_exchange`.
+Use [structured task groups](docs/tutorial/12-structured-concurrency.md) to join
+concurrent work and share one cancellation token and deadline.
+
+[Write your first client →](docs/tutorial/00-quick-start.md) ·
+[Signatures and migration from 0.3.1 →](docs/reference/direct-clients.md)
+
+These client APIs require PACE 0.4.0 or newer.
+
 ## A small HTTP server
 
 ```cpp
@@ -41,14 +58,27 @@ Link individual modules, layer aggregates, or `pace` for the enabled stack. HTTP
 
 int main() {
     pace::http::app app;
-    app.get("/", [] { return pace::http::text("Hello, PACE!\n"); });
+    app.get("/health", [] { return pace::http::text("ok\n"); });
     app.run(8080);
 }
 ```
 
-Link with `add_deps("pace_http1")`. [Write this server step by step →](docs/tutorial/00-quick-start.md)
+Link with `add_deps("pace_http1")`. [Write the client and server step by step →](docs/tutorial/00-quick-start.md)
 
 Continue step by step: [TCP](docs/tutorial/03-tcp.md) · [UDP](docs/tutorial/07-udp.md) · [DNS](docs/tutorial/08-dns-tls.md) · [QUIC](docs/tutorial/11-quic-http3.md) · [HTTP/3](docs/tutorial/11-quic-http3.md) · [WebSocket](docs/tutorial/09-websocket.md)
+
+## Files and reverse proxies
+
+```cpp
+app.mount("/assets", "./public")
+   .proxy("/api", {"http://127.0.0.1:9000", "http://127.0.0.1:9001"});
+app.run_workers(4, {"0.0.0.0", 8080});
+```
+
+Optional bounded caches, per-worker connection pools and round-robin or
+least-connections balancing. Available since PACE 0.5.0.
+[Walk through a gateway →](docs/tutorial/13-gateway.md) ·
+[nginx comparison →](docs/performance.md#http-gateways--pace-and-nginx) · [I/O backends →](docs/reference/io-backends.md)
 
 ## Get started
 

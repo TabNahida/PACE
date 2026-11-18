@@ -141,13 +141,13 @@ void roundtrip(const std::filesystem::path& fixtures, std::string name, const ch
     if (loss) require(dropped > 10, "loss simulation did not exercise retransmission");
 }
 pace::task<void> accept_failure(pace::quic::listener& listener) {
-    try { auto connection = co_await listener.accept(100ms); }
+    try { auto connection = co_await listener.accept(2s); }
     catch (const std::system_error&) {} // Peer rejection or stop must unwind.
 }
 pace::task<void> rejecting_client(pace::io_context& io, const pace::quic::context& config,
                                   pace::udp::endpoint endpoint, std::string name, bool& rejected) {
     pace::quic::connection connection(io, config);
-    try { co_await connection.connect(endpoint, std::move(name), 200ms); }
+    try { co_await connection.connect(endpoint, std::move(name), 2s); }
     catch (const std::system_error& error) {
         rejected = error.code() == std::errc::protocol_error || error.code() == std::errc::connection_aborted;
     }

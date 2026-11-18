@@ -1,5 +1,7 @@
 # QUIC transport
 
+Short forms and owning helpers: [component conveniences](component-conveniences.md).
+
 Enable `--quic=y` and include `<pace/quic.hpp>`. Select the transport with
 `--quic_backend=openssl` (default) or `--quic_backend=ngtcp2`. Both implement the
 same QUIC v1 / TLS 1.3 API and export `PACE_HAS_QUIC`; the ngtcp2 build also exports

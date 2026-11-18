@@ -1,6 +1,7 @@
 #pragma once
 #include <pace/io_context.hpp>
 #include <pace/task.hpp>
+#include <pace/this_context.hpp>
 #ifdef PACE_HAS_DNS
 #include <chrono>
 #include <memory>
@@ -50,5 +51,14 @@ private:
     static task<result> resolve_impl(std::shared_ptr<implementation> state,
                                     std::string hostname, family requested);
 };
+// One-shot resolver: hostname, configuration and resolver are owned by the task.
+inline task<result> resolve(io_context& io, std::string hostname,
+                            family requested = family::any, options configuration = {}) {
+    resolver lookup(io, std::move(configuration));
+    co_return co_await lookup.resolve(std::move(hostname), requested);
+}
+inline task<result> resolve(std::string hostname, family requested = family::any, options configuration = {}) {
+    co_return co_await resolve(this_context(), std::move(hostname), requested, std::move(configuration));
+}
 } // namespace pace::dns
 #endif

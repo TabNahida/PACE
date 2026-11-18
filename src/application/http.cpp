@@ -1,3 +1,4 @@
+#include <pace/detail/serve_group.hpp>
 #include <pace/http.hpp>
 
 #include <algorithm>
@@ -54,6 +55,10 @@ std::string_view reason(unsigned status) noexcept {
     case 205: return "Reset Content";
     case 301: return "Moved Permanently";
     case 302: return "Found";
+    case 206: return "Partial Content";
+    case 416: return "Range Not Satisfiable";
+    case 502: return "Bad Gateway";
+    case 504: return "Gateway Timeout";
     case 304: return "Not Modified";
     case 400: return "Bad Request";
     case 401: return "Unauthorized";
@@ -88,17 +93,18 @@ bool forbidden_trailer(std::string_view name) {
                        [&](auto value) { return equal_ci(name, value); });
 }
 
-std::vector<std::string> token_list(std::string_view value) {
-    std::vector<std::string> result;
+template<class Visit>
+void visit_tokens(std::string_view value, Visit&& visit) {
     for (;;) {
         const auto comma = value.find(',');
         auto token = trim(value.substr(0, comma));
         if (!valid_token(token)) throw parse_failure{400};
-        result.emplace_back(token);
-        if (comma == std::string_view::npos) return result;
+        visit(token);
+        if (comma == std::string_view::npos) return;
         value.remove_prefix(comma + 1);
     }
 }
+
 
 header_field parse_field(std::string_view line) {
     const auto colon = line.find(':');
@@ -111,6 +117,8 @@ header_field parse_field(std::string_view line) {
 
 std::vector<header_field> parse_fields(std::string_view text, std::size_t maximum) {
     std::vector<header_field> fields;
+    // Count delimiters once instead of repeatedly growing and moving owned fields.
+    fields.reserve(std::min(maximum, static_cast<std::size_t>(std::count(text.begin(), text.end(), '\n'))));
     while (!text.empty()) {
         const auto end = text.find("\r\n");
         if (end == std::string_view::npos || end == 0) throw parse_failure{400};
@@ -138,8 +146,10 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
         } else if (equal_ci(name, "transfer-encoding")) {
             if (has_transfer) throw parse_failure{400};
             has_transfer = true;
-            const auto codings = token_list(value);
-            if (codings.size() != 1 || !equal_ci(codings.front(), "chunked")) {
+            std::size_t codings = 0;
+            bool chunked = false;
+            visit_tokens(value, [&](std::string_view token) { ++codings; chunked = equal_ci(token, "chunked"); });
+            if (codings != 1 || !chunked) {
                 // Ambiguous framing still takes precedence over unsupported coding.
                 for (const auto& candidate : fields)
                     if (equal_ci(candidate.name, "content-length")) throw parse_failure{400};
@@ -151,16 +161,16 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
                 throw parse_failure{400};
             host = true;
         } else if (equal_ci(name, "connection")) {
-            for (auto& token : token_list(value)) {
+            visit_tokens(value, [&](std::string_view token) {
                 if (equal_ci(token, "content-length") || equal_ci(token, "transfer-encoding") ||
                     equal_ci(token, "host") || equal_ci(token, "trailer")) throw parse_failure{400};
                 close |= equal_ci(token, "close");
                 persistent |= equal_ci(token, "keep-alive");
                 if (request_message && equal_ci(token, "upgrade")) throw parse_failure{501};
-                result.connection_fields.push_back(std::move(token));
-            }
+                result.connection_fields.emplace_back(token);
+            });
         } else if (equal_ci(name, "trailer")) {
-            for (auto& token : token_list(value)) declared_trailers.push_back(std::move(token));
+            visit_tokens(value, [&](std::string_view token) { declared_trailers.emplace_back(token); });
         } else if (request_message && equal_ci(name, "expect")) {
             throw parse_failure{417};
         } else if (request_message && equal_ci(name, "upgrade")) {
@@ -181,7 +191,7 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
 template<class Transport>
 task<std::optional<std::string>> read_head(Transport& stream, std::string& pending,
                                            limits bounds, bool* head_request = nullptr) {
-    std::array<char, 8192> buffer{};
+    std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
     for (;;) {
         if (head_request) *head_request = pending.starts_with("HEAD ");
         const auto end = pending.find("\r\n\r\n");
@@ -204,7 +214,7 @@ task<std::optional<std::string>> read_head(Transport& stream, std::string& pendi
 
 template<class Transport>
 task<void> ensure_bytes(Transport& stream, std::string& pending, std::size_t size) {
-    std::array<char, 8192> buffer{};
+    std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
     while (pending.size() < size) {
         const auto wanted = std::min(buffer.size(), size - pending.size());
         const auto count = co_await stream.read_some(std::span<char>(buffer.data(), wanted));
@@ -215,7 +225,7 @@ task<void> ensure_bytes(Transport& stream, std::string& pending, std::size_t siz
 
 template<class Transport>
 task<std::string> read_line(Transport& stream, std::string& pending, std::size_t maximum) {
-    std::array<char, 1024> buffer{};
+    std::array<char, 1024> buffer;
     for (;;) {
         const auto end = pending.find("\r\n");
         if (end != std::string::npos) {
@@ -284,13 +294,28 @@ std::size_t chunk_size(std::string_view line) {
     return size;
 }
 
+// Consume an already buffered fixed-length body without constructing a lazy
+// reader task. Keep surplus bytes for the next pipelined message.
+bool consume_buffered_body(std::string& pending, const framing& frame,
+                           limits bounds, std::string& body) {
+    if (frame.chunked) return false;
+    const auto length = frame.length.value_or(0);
+    if (length > bounds.max_body_bytes) throw parse_failure{413};
+    if (pending.size() < length) return false;
+    body.assign(pending.data(), length);
+    pending.erase(0, length);
+    return true;
+}
+
 template<class Transport>
 task<void> read_body(Transport& stream, std::string& pending, const framing& frame,
                      limits bounds, std::string& body, std::vector<header_field>& trailers) {
     if (!frame.chunked) {
         const auto length = frame.length.value_or(0);
         if (length > bounds.max_body_bytes) throw parse_failure{413};
-        co_await ensure_bytes(stream, pending, length);
+        // A complete body commonly arrived together with its headers. Avoid
+        // allocating the 8 KiB read coroutine when no socket read is needed.
+        if (pending.size() < length) co_await ensure_bytes(stream, pending, length);
         body.assign(pending.data(), length);
         pending.erase(0, length);
         co_return;
@@ -383,7 +408,7 @@ std::string encode_chunks(std::string_view body, const std::vector<header_field>
         result += "\r\n"; result += body; result += "\r\n";
     }
     result += "0\r\n";
-    for (const auto& field : trailers) result += field.name + ": " + field.value + "\r\n";
+    for (const auto& field : trailers) result.append(field.name).append(": ").append(field.value).append("\r\n");
     result += "\r\n";
     return result;
 }
@@ -401,19 +426,27 @@ std::string encode_response(const response& result, bool keep_alive, bool head_r
         throw std::invalid_argument("trailers require an HTTP/1.1 chunked body");
     const bool chunked = result.chunked && !no_body && !http10;
     const auto declared = trailer_declaration(result.trailers);
-    std::string output = "HTTP/1.1 " + std::to_string(result.status) + " " + std::string(reason(result.status)) + "\r\n";
+    std::string output;
+    std::size_t capacity = 192 + result.content_type.size();
+    for (const auto& field : result.headers) capacity += field.name.size() + field.value.size() + 4;
+    if (!streamed_length && !head_request && !no_body) capacity += result.body.size();
+    output.reserve(capacity);
+    output.append("HTTP/1.1 ").append(std::to_string(result.status)).append(" ").append(reason(result.status)).append("\r\n");
     if (chunked) output += "Transfer-Encoding: chunked\r\n" + (head_request ? std::string{} : declared);
-    else if (!omit_length) output += "Content-Length: " + std::to_string(result.status == 205 ? 0 : streamed_length.value_or(result.body.size())) + "\r\n";
+    else if (!omit_length) output += "Content-Length: " + std::to_string(result.status == 205 ? 0 : streamed_length.value_or(head_request ? result.representation_length.value_or(result.body.size()) : result.body.size())) + "\r\n";
     if (!result.content_type.empty()) output += "Content-Type: " + result.content_type + "\r\n";
     output += keep_alive ? "Connection: keep-alive\r\n" : "Connection: close\r\n";
     for (const auto& field : result.headers) {
         validate_output_field(field);
         if (managed_field(field.name) || equal_ci(field.name, "content-type"))
             throw std::invalid_argument("HTTP framing and content-type headers are managed by PACE");
-        output += field.name + ": " + field.value + "\r\n";
+        output.append(field.name).append(": ").append(field.value).append("\r\n");
     }
     output += "\r\n";
-    if (!streamed_length && !head_request && !no_body) output += chunked ? encode_chunks(result.body, result.trailers) : result.body;
+    if (!streamed_length && !head_request && !no_body) {
+        if (chunked) output += encode_chunks(result.body, result.trailers);
+        else output += result.body;
+    }
     return output;
 }
 
@@ -425,7 +458,11 @@ std::string encode_request(const request& outgoing) {
     if ((!outgoing.trailers.empty() && !outgoing.chunked) || (outgoing.chunked && version != "HTTP/1.1"))
         throw std::invalid_argument("trailers/chunks require HTTP/1.1 chunked framing");
     bool host = false;
-    std::string result = outgoing.method + " " + outgoing.target + " " + std::string(version) + "\r\n";
+    std::string result;
+    std::size_t capacity = 128 + outgoing.method.size() + outgoing.target.size() + outgoing.body.size();
+    for (const auto& field : outgoing.headers) capacity += field.name.size() + field.value.size() + 4;
+    result.reserve(capacity);
+    result.append(outgoing.method).append(" ").append(outgoing.target).append(" ").append(version).append("\r\n");
     for (const auto& field : outgoing.headers) {
         validate_output_field(field);
         if (managed_field(field.name) || equal_ci(field.name, "expect") || equal_ci(field.name, "upgrade"))
@@ -435,14 +472,14 @@ std::string encode_request(const request& outgoing) {
                 throw std::invalid_argument("invalid HTTP Host");
             host = true;
         }
-        result += field.name + ": " + field.value + "\r\n";
+        result.append(field.name).append(": ").append(field.value).append("\r\n");
     }
     if (!host && version == "HTTP/1.1") throw std::invalid_argument("HTTP/1.1 client requires Host");
     result += outgoing.keep_alive ? "Connection: keep-alive\r\n" : "Connection: close\r\n";
     if (outgoing.chunked) result += "Transfer-Encoding: chunked\r\n" + trailer_declaration(outgoing.trailers);
     else result += "Content-Length: " + std::to_string(outgoing.body.size()) + "\r\n";
     result += "\r\n";
-    result += outgoing.chunked ? encode_chunks(outgoing.body, outgoing.trailers) : outgoing.body;
+    if (outgoing.chunked) result += encode_chunks(outgoing.body, outgoing.trailers); else result += outgoing.body;
     return result;
 }
 
@@ -473,13 +510,14 @@ task<response> read_response(Transport& stream, std::string& pending, limits bou
         if (result.status == 204 && (frame.length || frame.chunked)) throw parse_failure{400};
         if (method == "HEAD" || result.status == 204 || result.status == 304) co_return result;
         if (frame.chunked || frame.length) {
-            co_await read_body(stream, pending, frame, bounds, result.body, result.trailers);
+            if (!consume_buffered_body(pending, frame, bounds, result.body))
+                co_await read_body(stream, pending, frame, bounds, result.body, result.trailers);
         } else {
             // An unframed response is delimited by EOF and can never be reused.
             result.close = true;
             if (pending.size() > bounds.max_body_bytes) throw parse_failure{413};
             result.body = std::move(pending); pending.clear();
-            std::array<char, 8192> buffer{};
+            std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
             for (;;) {
                 const auto count = co_await stream.read_some(buffer);
                 if (!count) break;
@@ -625,7 +663,8 @@ task<void> process_connection(Transport& stream, const Handler& handle, const se
                 }
             }
             if (!rejected && !error_status) {
-                co_await read_body(stream, pending, incoming->frame, selected_bounds, message.body, message.trailers);
+                if (!consume_buffered_body(pending, incoming->frame, selected_bounds, message.body))
+                    co_await read_body(stream, pending, incoming->frame, selected_bounds, message.body, message.trailers);
                 deadline.check();
             }
         } catch (const parse_failure& error) { error_status = error.status; }
@@ -745,13 +784,15 @@ task<void> serve(io_context& context, tcp::endpoint endpoint, handler handle, li
 }
 
 task<void> serve(tcp::listener& listener, handler handle, limits bounds) {
-    for (;;) {
-        try { listener.context().spawn(serve_connection(co_await listener.accept(), handle, bounds)); }
-        catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
-            throw;
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        for (;;) {
+            try { (void)group.spawn(serve_connection(co_await listener.accept(), handle, bounds)); }
+            catch (const std::system_error& error) {
+                if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+                throw;
+            }
         }
-    }
+    });
 }
 
 task<void> serve_connection(tcp::stream stream, server_handler handle, server_options options) {
@@ -763,17 +804,19 @@ task<void> serve_connection(tcp::stream stream, server_handler handle, server_op
 }
 
 task<void> serve(tcp::listener& listener, server_handler handle, server_options options) {
-    validate_options(options);
-    for (;;) {
-        try { listener.context().spawn(serve_connection(co_await listener.accept(), handle, options)); }
-        catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
-            throw;
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        validate_options(options);
+        for (;;) {
+            try { (void)group.spawn(serve_connection(co_await listener.accept(), handle, options)); }
+            catch (const std::system_error& error) {
+                if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+                throw;
+            }
         }
-    }
+    });
 }
 
-task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoing, limits bounds, client_options options) {
+task<response> async_fetch(io_context& context, tcp::endpoint endpoint, request outgoing, limits bounds, client_options options) {
     validate_client_options(options);
     default_host(outgoing, endpoint.address, endpoint.port, 80);
     outgoing.keep_alive = false;
@@ -783,9 +826,9 @@ task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoi
     co_return co_await connection.send(std::move(outgoing));
 }
 
-task<response> get(io_context& context, tcp::endpoint endpoint, std::string target, limits bounds, client_options options) {
+task<response> async_get(io_context& context, tcp::endpoint endpoint, std::string target, limits bounds, client_options options) {
     request outgoing{.method = "GET", .target = std::move(target), .version = "HTTP/1.1", .body = {}};
-    co_return co_await fetch(context, std::move(endpoint), std::move(outgoing), bounds, options);
+    co_return co_await async_fetch(context, std::move(endpoint), std::move(outgoing), bounds, options);
 }
 
 #ifdef PACE_HAS_TLS
@@ -825,32 +868,36 @@ task<void> handshake_and_serve(tls::stream stream, server_handler handle, server
 }
 
 task<void> serve(tcp::listener& listener, const tls::context& configuration, handler handle, limits bounds) {
-    for (;;) {
-        try {
-            tls::stream stream(co_await listener.accept(), configuration);
-            listener.context().spawn(handshake_and_serve(std::move(stream), handle, bounds));
-        } catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
-            throw;
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        for (;;) {
+            try {
+                tls::stream stream(co_await listener.accept(), configuration);
+                (void)group.spawn(handshake_and_serve(std::move(stream), handle, bounds));
+            } catch (const std::system_error& error) {
+                if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+                throw;
+            }
         }
-    }
+    });
 }
 
 task<void> serve(tcp::listener& listener, const tls::context& configuration,
                  server_handler handle, server_options options) {
-    validate_options(options);
-    for (;;) {
-        try {
-            tls::stream stream(co_await listener.accept(), configuration);
-            listener.context().spawn(handshake_and_serve(std::move(stream), handle, options));
-        } catch (const std::system_error& error) {
-            if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
-            throw;
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        validate_options(options);
+        for (;;) {
+            try {
+                tls::stream stream(co_await listener.accept(), configuration);
+                (void)group.spawn(handshake_and_serve(std::move(stream), handle, options));
+            } catch (const std::system_error& error) {
+                if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
+                throw;
+            }
         }
-    }
+    });
 }
 
-task<response> fetch(io_context& context, const tls::context& configuration,
+task<response> async_fetch(io_context& context, const tls::context& configuration,
                      tcp::endpoint endpoint, std::string peer_name, request outgoing, limits bounds, client_options options) {
     validate_client_options(options);
     default_host(outgoing, peer_name, endpoint.port, 443);
@@ -861,10 +908,10 @@ task<response> fetch(io_context& context, const tls::context& configuration,
     co_return co_await connection.send(std::move(outgoing));
 }
 
-task<response> get(io_context& context, const tls::context& configuration,
+task<response> async_get(io_context& context, const tls::context& configuration,
                    tcp::endpoint endpoint, std::string peer_name, std::string target, limits bounds, client_options options) {
     request outgoing{.method = "GET", .target = std::move(target), .version = "HTTP/1.1", .body = {}};
-    co_return co_await fetch(context, configuration, std::move(endpoint), std::move(peer_name), std::move(outgoing), bounds, options);
+    co_return co_await async_fetch(context, configuration, std::move(endpoint), std::move(peer_name), std::move(outgoing), bounds, options);
 }
 #endif
 } // namespace pace::http

@@ -1,0 +1,61 @@
+diff --git a/src/application/http_services.cpp b/src/application/http_services.cpp
+index e44f24f..e52607d 100644
+--- a/src/application/http_services.cpp
++++ b/src/application/http_services.cpp
+@@ -95,6 +95,19 @@ struct string_hash {
+     using is_transparent = void;
+     std::size_t operator()(std::string_view s) const noexcept { return std::hash<std::string_view>{}(s); }
+ };
++// Preserve lazy-task ownership while keeping per-request refcount writes local
++// to the executing reactor. The local control block pins the original owner once.
++// Tasks may still outlive the context or be transferred; shared_ptr remains atomic.
++template<class T>
++std::shared_ptr<T> reactor_owner(const std::shared_ptr<T>& owner) {
++    auto* io = io_context::current();
++    if (!io) return owner;
++    auto* local = static_cast<std::shared_ptr<T>*>(io->find_local_state(owner.get()));
++    if (!local) local = static_cast<std::shared_ptr<T>*>(io->local_state(owner, [&] {
++        return std::make_shared<std::shared_ptr<T>>(owner.get(), [keep = owner](T*) {});
++    }).get());
++    return *local;
++}
+ std::size_t cache_cost(std::string_view key, const response& value) {
+     std::size_t bytes = sizeof(response) + 192 + key.size() * 2 + value.body.capacity() + value.content_type.capacity() + value.version.capacity();
+     for (const auto& f : value.headers) bytes += sizeof(f) + f.name.capacity() + f.value.capacity();
+@@ -497,7 +510,7 @@ struct static_files::implementation {
+ };
+ static_files::static_files(std::string prefix, std::filesystem::path directory, static_options options)
+     : impl_(std::make_shared<implementation>(std::move(prefix), std::move(directory), std::move(options))) {}
+-task<response> static_files::operator()(request incoming) const { return implementation::serve(impl_, std::move(incoming)); }
++task<response> static_files::operator()(request incoming) const { return implementation::serve(reactor_owner(impl_), std::move(incoming)); }
+ void static_files::clear_cache() const { impl_->cache.clear(); }
+ cache_statistics static_files::cache_stats() const { return impl_->cache.statistics(); }
+ 
+@@ -613,6 +626,7 @@ struct reverse_proxy::implementation {
+     std::string prefix;
+     proxy_options options;
+     std::vector<destination> upstreams;
++    std::shared_ptr<const void> pool_key = std::make_shared<char>();
+     response_cache cache;
+     implementation(std::string p, std::vector<std::string> urls, proxy_options o)
+         : prefix(prefix_path(std::move(p))), options(o), cache(o.cache) {
+@@ -687,8 +701,8 @@ struct reverse_proxy::implementation {
+             }
+         }
+         auto& io = this_context();
+-        auto* worker = static_cast<worker_state*>(io.find_local_state(self.get()));
+-        if (!worker) worker = static_cast<worker_state*>(io.local_state(self, [&] {
++        auto* worker = static_cast<worker_state*>(io.find_local_state(self->pool_key.get()));
++        if (!worker) worker = static_cast<worker_state*>(io.local_state(self->pool_key, [&] {
+             return std::make_shared<worker_state>(self->upstreams.size());
+         }).get());
+         std::size_t chosen = self->upstreams.size();
+@@ -748,7 +762,7 @@ struct reverse_proxy::implementation {
+ };
+ reverse_proxy::reverse_proxy(std::string prefix, std::vector<std::string> upstreams, proxy_options options)
+     : impl_(std::make_shared<implementation>(std::move(prefix), std::move(upstreams), options)) {}
+-task<response> reverse_proxy::operator()(request incoming) const { return implementation::serve(impl_, std::move(incoming)); }
++task<response> reverse_proxy::operator()(request incoming) const { return implementation::serve(reactor_owner(impl_), std::move(incoming)); }
+ void reverse_proxy::clear_cache() const { impl_->cache.clear(); }
+ cache_statistics reverse_proxy::cache_stats() const { return impl_->cache.statistics(); }
+ void app::run_workers(std::size_t workers, tcp::endpoint endpoint, limits bounds) const {

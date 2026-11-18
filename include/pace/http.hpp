@@ -2,6 +2,8 @@
 
 #include <pace/http_types.hpp>
 #include <pace/http_router.hpp>
+#include <pace/http_services.hpp>
+#include <pace/runtime.hpp>
 #include <pace/tcp.hpp>
 #include <pace/run.hpp>
 #ifdef PACE_HAS_TLS
@@ -150,24 +152,44 @@ extern template class basic_client<tcp::stream>;
 
 // One-shot helpers: connect, exchange one message, close. No DNS, redirects,
 // retries or decompression. A missing Host is supplied from the endpoint.
-task<response> fetch(io_context& context, tcp::endpoint endpoint, request outgoing,
+task<response> async_fetch(io_context& context, tcp::endpoint endpoint, request outgoing,
                      limits bounds = {}, client_options options = {});
-task<response> get(io_context& context, tcp::endpoint endpoint, std::string target = "/",
+task<response> async_get(io_context& context, tcp::endpoint endpoint, std::string target = "/",
                    limits bounds = {}, client_options options = {});
 
 // Absolute http(s) URLs. Hostname URLs require DNS; https requires TLS. Numeric
 // HTTP works with the default build. URL parsing/DNS/connection happen lazily.
 // No redirects, retries of requests, proxy, cookies or decompression. Fragments
 // are omitted; userinfo, spaces, non-ASCII hosts and IPv6 zone IDs are rejected.
-task<response> fetch(io_context& context, std::string url, request outgoing,
+task<response> async_fetch(io_context& context, std::string url, request outgoing,
                      limits bounds = {}, client_options options = {});
-task<response> get(io_context& context, std::string url, limits bounds = {}, client_options options = {});
-task<response> post(io_context& context, std::string url, std::string body,
+task<response> async_get(io_context& context, std::string url, limits bounds = {}, client_options options = {});
+task<response> async_post(io_context& context, std::string url, std::string body,
                     std::string content_type = "application/octet-stream", limits bounds = {}, client_options options = {});
-task<response> fetch(std::string url, request outgoing, limits bounds = {}, client_options options = {});
-task<response> get(std::string url, limits bounds = {}, client_options options = {});
-task<response> post(std::string url, std::string body,
+task<response> async_fetch(std::string url, request outgoing, limits bounds = {}, client_options options = {});
+task<response> async_get(std::string url, limits bounds = {}, client_options options = {});
+task<response> async_post(std::string url, std::string body,
                     std::string content_type = "application/octet-stream", limits bounds = {}, client_options options = {});
+
+// Blocking URL clients: return an owned response on this thread. No run() needed.
+// Reject use from a running PACE context; use async_get/async_post/async_fetch there.
+inline response fetch(std::string url, request outgoing, blocking_options wait = {},
+        limits bounds = {}, client_options options = {}) {
+    return pace::detail::blocking_call([&](io_context& io) {
+        return async_fetch(io, std::move(url), std::move(outgoing), bounds, options);
+    }, wait);
+}
+inline response get(std::string url, blocking_options wait = {}, limits bounds = {}, client_options options = {}) {
+    return pace::detail::blocking_call([&](io_context& io) {
+        return async_get(io, std::move(url), bounds, options);
+    }, wait);
+}
+inline response post(std::string url, std::string body, std::string content_type = "application/octet-stream",
+        blocking_options wait = {}, limits bounds = {}, client_options options = {}) {
+    return pace::detail::blocking_call([&](io_context& io) {
+        return async_post(io, std::move(url), std::move(body), std::move(content_type), bounds, options);
+    }, wait);
+}
 
 // Small HTTP/1 application. configure -> serve on an existing loop, or run on
 // this thread. serve() snapshots routes immediately and does not borrow *this.
@@ -185,6 +207,24 @@ public:
     template<class Function> app& post(std::string path, Function&& function) {
         return route("POST", std::move(path), std::forward<Function>(function));
     }
+    app& mount(std::string prefix, std::filesystem::path directory, static_options options = {}) {
+        auto service = static_files(prefix, std::move(directory), std::move(options));
+        routes_.mount(std::move(prefix), std::move(service));
+        return *this;
+    }
+    app& proxy(std::string prefix, std::vector<std::string> upstreams, proxy_options options = {}) {
+        auto service = reverse_proxy(prefix, std::move(upstreams), std::move(options));
+        routes_.mount(std::move(prefix), std::move(service));
+        return *this;
+    }
+    app& proxy(std::string prefix, std::initializer_list<std::string> upstreams, proxy_options options = {}) {
+        return proxy(std::move(prefix), std::vector<std::string>(upstreams), std::move(options));
+    }
+    app& proxy(std::string prefix, std::string upstream, proxy_options options = {}) {
+        return proxy(std::move(prefix), std::vector<std::string>{std::move(upstream)}, std::move(options));
+    }
+    // Bind one listener per worker (SO_REUSEPORT); run/join on caller + workers.
+    void run_workers(std::size_t workers, tcp::endpoint endpoint, limits bounds = {}) const;
     task<void> serve(io_context& io, tcp::endpoint endpoint, limits bounds = {}) const {
         return http::serve(io, std::move(endpoint), routes_, bounds);
     }
@@ -203,10 +243,22 @@ using secure_client = basic_client<tls::stream>;
 extern template class basic_client<tls::stream>;
 // Custom trust/ALPN; configuration must outlive the lazy task. URL still sets
 // the certificate name and Host, even when DNS selects a numeric address.
-task<response> fetch(io_context& context, const tls::context& configuration,
+task<response> async_fetch(io_context& context, const tls::context& configuration,
                      std::string url, request outgoing, limits bounds = {}, client_options options = {});
-task<response> get(io_context& context, const tls::context& configuration,
+task<response> async_get(io_context& context, const tls::context& configuration,
                    std::string url, limits bounds = {}, client_options options = {});
+inline response fetch(const tls::context& configuration, std::string url, request outgoing,
+        blocking_options wait = {}, limits bounds = {}, client_options options = {}) {
+    return pace::detail::blocking_call([&](io_context& io) {
+        return async_fetch(io, configuration, std::move(url), std::move(outgoing), bounds, options);
+    }, wait);
+}
+inline response get(const tls::context& configuration, std::string url,
+        blocking_options wait = {}, limits bounds = {}, client_options options = {}) {
+    return pace::detail::blocking_call([&](io_context& io) {
+        return async_get(io, configuration, std::move(url), bounds, options);
+    }, wait);
+}
 task<void> serve_connection(tls::stream stream, handler handle, limits bounds = {});
 // TLS configuration and listener must outlive the accept task. Each accepted
 // connection performs its handshake independently, before parsing HTTP.
@@ -214,10 +266,10 @@ task<void> serve(tcp::listener& listener, const tls::context& configuration, han
 task<void> serve_connection(tls::stream stream, server_handler handle, server_options options = {});
 task<void> serve(tcp::listener& listener, const tls::context& configuration,
                  server_handler handle, server_options options = {});
-task<response> fetch(io_context& context, const tls::context& configuration,
+task<response> async_fetch(io_context& context, const tls::context& configuration,
                      tcp::endpoint endpoint, std::string peer_name, request outgoing,
                      limits bounds = {}, client_options options = {});
-task<response> get(io_context& context, const tls::context& configuration,
+task<response> async_get(io_context& context, const tls::context& configuration,
                    tcp::endpoint endpoint, std::string peer_name, std::string target = "/",
                    limits bounds = {}, client_options options = {});
 #endif

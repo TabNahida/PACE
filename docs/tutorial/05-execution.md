@@ -143,21 +143,8 @@ Changing `runtime(1)` to `runtime(8)` does not make a blocking operation on cont
 zero parallel within that context. It only creates other independent reactors.
 Neither `co_await io.yield()` nor awaiting a child task offloads a computation.
 
-## Tune with a declared workload
-
-Choose worker counts by measuring the workload that matters, leaving CPU capacity
-for clients, the kernel and any blocking workers. Keep payloads, connection counts,
-compiler options and hardware placement consistent. The runtime provides neither
-CPU affinity nor an adaptive pool. A count equal to logical CPUs is not evidence
-of maximum throughput.
-
-For inbound TCP/HTTP on platforms supporting reuse-port, the existing
-[`echo_server`](../../examples/echo_server.cpp) and
-[`http_server`](../../examples/http_server.cpp) examples create a listener per
-context on the same port. The OS distributes newly accepted connections. Windows
-does not currently support that strategy in PACE; those examples use one worker
-there. Multiple contexts with separate ports or outbound connections are still
-possible. Never move an active socket to another context as a balancing shortcut.
+Worker counts, reuse-port listeners and measurement guidance are in the
+[reference tuning guide](../reference/protocol-tuning.md#worker-placement).
 
 Reference: [`runtime`](../reference/runtime.md), [`io_context`](../reference/io-context.md).
 Next: [orderly shutdown](06-shutdown.md).

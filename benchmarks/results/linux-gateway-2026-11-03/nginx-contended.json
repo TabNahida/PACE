@@ -1,0 +1,3630 @@
+{
+  "schema": 1,
+  "environment": {
+    "platform": "Linux-6.18.40.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "cpu": "x86_64",
+    "cpuinfo": "processor\t: 0\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 0\ncpu cores\t: 24\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 1\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 1\ncpu cores\t: 24\napicid\t\t: 1\ninitial apicid\t: 1\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 2\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 2\ncpu cores\t: 24\napicid\t\t: 2\ninitial apicid\t: 2\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 3\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 3\ncpu cores\t: 24\napicid\t\t: 3\ninitial apicid\t: 3\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 4\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 4\ncpu cores\t: 24\napicid\t\t: 4\ninitial apicid\t: 4\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 5\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 5\ncpu cores\t: 24\napicid\t\t: 5\ninitial apicid\t: 5\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 6\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 6\ncpu cores\t: 24\napicid\t\t: 6\ninitial apicid\t: 6\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 7\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 7\ncpu cores\t: 24\napicid\t\t: 7\ninitial apicid\t: 7\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 8\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 8\ncpu cores\t: 24\napicid\t\t: 8\ninitial apicid\t: 8\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 9\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 9\ncpu cores\t: 24\napicid\t\t: 9\ninitial apicid\t: 9\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 10\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 10\ncpu cores\t: 24\napicid\t\t: 10\ninitial apicid\t: 10\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 11\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 11\ncpu cores\t: 24\napicid\t\t: 11\ninitial apicid\t: 11\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 12\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 12\ncpu cores\t: 24\napicid\t\t: 12\ninitial apicid\t: 12\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 13\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 13\ncpu cores\t: 24\napicid\t\t: 13\ninitial apicid\t: 13\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 14\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 14\ncpu cores\t: 24\napicid\t\t: 14\ninitial apicid\t: 14\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 15\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 15\ncpu cores\t: 24\napicid\t\t: 15\ninitial apicid\t: 15\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 16\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 16\ncpu cores\t: 24\napicid\t\t: 16\ninitial apicid\t: 16\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 17\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 17\ncpu cores\t: 24\napicid\t\t: 17\ninitial apicid\t: 17\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 18\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 18\ncpu cores\t: 24\napicid\t\t: 18\ninitial apicid\t: 18\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 19\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 19\ncpu cores\t: 24\napicid\t\t: 19\ninitial apicid\t: 19\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 20\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 20\ncpu cores\t: 24\napicid\t\t: 20\ninitial apicid\t: 20\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 21\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 21\ncpu cores\t: 24\napicid\t\t: 21\ninitial apicid\t: 21\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 22\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 22\ncpu cores\t: 24\napicid\t\t: 22\ninitial apicid\t: 22\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\nprocessor\t: 23\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 198\nmodel name\t: Intel(R) Core(TM) Ultra 7 270K Plus\nstepping\t: 2\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3686.400\ncache size\t: 36864 KB\nphysical id\t: 0\nsiblings\t: 24\ncore id\t\t: 23\ncpu cores\t: 24\napicid\t\t: 23\ninitial apicid\t: 23\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nvmx flags\t: vnmi invvpid ept_x_only ept_ad ept_1gb tsc_offset vtpr ept vpid unrestricted_guest ept_mode_based_exec tsc_scaling usr_wait_pause\nbugs\t\t: spectre_v1 spectre_v2 spec_store_bypass swapgs retbleed eibrs_pbrsb bhi spectre_v2_user\nbogomips\t: 7372.80\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 46 bits physical, 48 bits virtual\npower management:\n\n",
+    "nginx": "nginx version: nginx/1.30.6\nbuilt by gcc 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1) \nconfigure arguments: --prefix=/tmp/pace-nginx --without-http_rewrite_module --without-http_gzip_module --with-threads\n",
+    "source_commit": "6c4f62c04c0dbf1fd1d014361b2890c8ef867cfe",
+    "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+    "source_sha256": {
+      "src/application/http.cpp": "679cd12ea0d3190c0cf9edcafc8d69758073613dfe283c6dcc44bfb363a86ee2",
+      "src/application/http2.cpp": "316a5a67218ccc759a48e7173f8d2ba45a0a80b27e574ee1c89471152d10d7e8",
+      "src/application/http2_url.cpp": "02e4a69fc4da17dcfde9a93c4c42169043b9e147c177a6393f7a2940bea1f983",
+      "src/application/http3.cpp": "36b8c3283d749aebb0e15a6aba6d8f97c57c524e753cdf8adb8b92becb4d568b",
+      "src/application/http3_url.cpp": "b098a03f7a45454c41246a072e2722b6d580674ca5ed2f0273d3defd81cf671c",
+      "src/application/http_services.cpp": "f5e0edb51a0eb6f526b5d77715dd27eeb7bd30bad36798c61d0522f2702a1cf5",
+      "src/application/http_url.cpp": "ff5c51f203912011b19bb8c1b11e89be98b4a3dc0584ba8659a92c1434a9e343",
+      "src/application/websocket.cpp": "0fe5ed3bcff3082f78e9abf4888004f90b1605f6df014198cf469a4abbb85a9c",
+      "src/extensions/dns.cpp": "186cfd90f3c62d165ebd611d22d27ba48a4275532c43feff601386667cc92e6b",
+      "src/extensions/quic.cpp": "39c6c416123d4df6ab1a9d1524c159c7fe7289cfb8e655599ff13360214e2f40",
+      "src/extensions/tls.cpp": "e5ea467da2114138d9fc1bb9aa9d4f92385df22c8fb363be052c73a084f324ab",
+      "src/networking/net.cpp": "100790e3b5fde2018c3ca020dc0e2cffc4623ea3d4ae280392745b5c48778125",
+      "src/networking/udp.cpp": "be4eda27535c6011f884363deadcb6b3e7fcc2685cb7dd63a029d2a40f9bd923",
+      "src/runtime/cancellation.cpp": "7b7bf74fc4b09c7b821eda9a97c4c490554db26e80416bca520d0b2d07d11bf2",
+      "src/runtime/io_context.cpp": "60a408510fa807dc64eb9731e60acdad8f0452dea43690a8b2a1f0ea244cbfc9",
+      "src/runtime/poller.cpp": "ee8c2c64d595049036c16828cce213d4c04ab3e6471f70451cf8d27b8aa3322b",
+      "src/runtime/poller_backend.hpp": "4bb48602e711b642a58055692247e338c5d7b4aa09b8976d08b2cb36a73c9cf5",
+      "src/runtime/poller_iocp.cpp": "7964dccac00677004d5496198ce7bf695712a2dbe77cd8e4b31ffcc0277f675e",
+      "src/runtime/poller_native.cpp": "bd7ea4a9b3161b9ea18b7110c49e3441743880ee19413543f561ce6efd2c0c3a",
+      "src/runtime/poller_uring.cpp": "1b7ff714897ce393c5afadc54e0c3d51cd8de9616c8958e787a6992a04f91cb5",
+      "src/runtime/runtime.cpp": "583c6f271b3f4cc9bfde3a5a57ff79f06762ca6dd6262d60c4d17a93b0860f52",
+      "include/pace/application.hpp": "46036920d65abbfa14b3001f59ea0953e0230491458e82c9982d1385f0a84601",
+      "include/pace/blocking.hpp": "ea13542aa3565449dc0da3700a641c13fee2f41aee1900f1c355659285a94022",
+      "include/pace/cancellation.hpp": "24fba3ba4e707332e93e8c9468332e7a1941f71bc38a05bee447205c0e89dda9",
+      "include/pace/detail/http_dispatch.hpp": "98f1b61428e4c306f1b9714bc1ed2ec4b0a8e31e20ae1050949ca7ed7dccf76b",
+      "include/pace/detail/http_url.hpp": "d5dc3ffb601d155c9b6a5a3b3117682ba84920fbf3aba4a8eb590e7479e3bfdd",
+      "include/pace/detail/poller.hpp": "9847cc46f9bb83017ed49cd928a95f37534756c9060efc0ac2422fafbdea8772",
+      "include/pace/detail/profiling.hpp": "8296366efdaf1c39f5fc61372836880dc6cb4271dafd53b4de5206c528b85fc0",
+      "include/pace/detail/protocol_driver.hpp": "39cc6a74cde65e14d75c664f7a2f60c5fd34a2bd102cd3d04d20965d342e0f44",
+      "include/pace/detail/serve_group.hpp": "ee797730f47201b13f076794af4efe0df1385f591af934c04730c529d9b0def8",
+      "include/pace/detail/socket_address.hpp": "aac9f8f59cbb31b64760656247304cfc64e13321b460cef8879ba2a49d756c74",
+      "include/pace/dns.hpp": "e0714cffcd2df5b28c9a82d78dae09893073712e3ea467fce256f9c43b4be4d9",
+      "include/pace/extensions.hpp": "e7b6c803b077232380fdfa10b1a10656a27f68e736f17f08d408df19df0ec2c1",
+      "include/pace/http.hpp": "60f023c968d279ac26e9d9a606feef19365dd883942c757af638316d9622de00",
+      "include/pace/http2.hpp": "80201908a928edb55e3c86310a33f9f58669f125dde5fa415d8ad32d0ac73ffc",
+      "include/pace/http3.hpp": "edb74f4ee83a73eef554ea9364c65515f172dd135c57f085b5d3234f750e89bc",
+      "include/pace/http_router.hpp": "16fc9e65f3fdafa294d88c912ddf465756617f9467ff9a50f47544031b70fe00",
+      "include/pace/http_services.hpp": "c2b069064fe19a0404ce2c31e11eec8ee2d986fe24bf87a162bf06fa9b0164e2",
+      "include/pace/http_types.hpp": "5cf86ab6898708b7f4f369396b7095d6b151729195cdad357963bdc083b76850",
+      "include/pace/io_backend.hpp": "7c7d95687ef22a1468a56e990a4d18973fec78bb464ffdfae84a1b1885f4009e",
+      "include/pace/io_context.hpp": "d55bd973e43b22b03166c07c5bd9be075a084f69ddf35dddf866eeb41096e3e2",
+      "include/pace/ip.hpp": "cd562fc37d9edab5e4582ebdcc90690b58c4f8dcc1a5b63800cdfc9b21048cd8",
+      "include/pace/net.hpp": "bcf33f0b76222f8b98eaa83416c0686194558bd7909754b9ea9e113a8352ea67",
+      "include/pace/networking.hpp": "fcf8f4d1dd046d5bcde05c17e36b62ec63409bb81b892899b442c936f1568c4c",
+      "include/pace/operation.hpp": "e9801127256cc34240c3856976d100f567e193e5b6905754886bc62cce4a0308",
+      "include/pace/pace.hpp": "9ed639af9acc892ea85086a877fdf5067a1cdb3819100dd293dcbae4d5cdeb0e",
+      "include/pace/platform.hpp": "7aa182d1635d51ea0706d2828ff8375ee41afe5480c1aa59ad0f317a6e1a906f",
+      "include/pace/quic.hpp": "9ea1ec0d02164cf9f4c2dacf202a676f0e830e87c9c91655b30096eec508473a",
+      "include/pace/run.hpp": "c8b07463c73a4620beb03a4126f36c338500fe96de3c40eeff26a0aada5eb47e",
+      "include/pace/runtime.hpp": "88dfea3afd2095381020031aad9e2a34ca1a953e181fc20afa7590af49ad2742",
+      "include/pace/stream_io.hpp": "0e6c4b66b2ccd0d6c3e05891f2e8c8a7f54ed371506d21d6cdf9e74b1472d386",
+      "include/pace/task.hpp": "6ac86fd5c8ab4d6f2dbb2f3de0e809848499466195daf30119bd962bca12ad4f",
+      "include/pace/task_group.hpp": "dbbc9f40f77e3a4548098d79ba12a4aa8455c1f508ed09a0c6d6bb5f44e31ba1",
+      "include/pace/tcp.hpp": "4d836b210c28eb3542bb1657bd975dd707a28068ad16884df6e1c87c279432ec",
+      "include/pace/this_context.hpp": "685a3e2d9f9f01623e701188e2b776314408cc22963df3645542a1bb93a34c26",
+      "include/pace/tls.hpp": "880e8296bc322a6af1afe32fc4244bf46faff47b47a457a2645205352c516b24",
+      "include/pace/udp.hpp": "332dada04359cf4f17c01d86c71e638f3c5af2f533e312cb543d0d68a1b6c0aa",
+      "include/pace/websocket.hpp": "b11b3082d5a2d24c0cd342d2dcdc6370194d9a486625e9614208f9968e2847db",
+      "benchmarks/components_bench.cpp": "0945c28eebd6c89dfd1cde8e66d6d7a2b0e6c0c85efe7bf7a5b8a93d7f6ddb2d",
+      "benchmarks/echo_bench.cpp": "46afba1b413048192541d0ce87ffe11b1cef16cb192caecf9ea906ca6ec16228",
+      "benchmarks/http_close.cpp": "c6cd155d2d78d180358c7cfb4b5031c16ec515f4344bb548a3e73dbb5ffb5f53",
+      "benchmarks/http_gateway.cpp": "eca8996e919cf2a8ea1ebdcd98d8cda6ae3ada55a17fd5516de14c8bacd7c707",
+      "benchmarks/http_load.cpp": "688813f9553500940edbeb5c5379451623fe402712b364b6269a59d37d3727d0",
+      "benchmarks/protocol_multiplex.cpp": "ae1e39d86a76dc3059face3869ef8c8a6a0a3368f99abbdf2ba4b62b02ce0845",
+      "benchmarks/results/http-close-linux-2026-10-23/before-nagle-default-probe.cpp": "2e3565bf0dbe15b9b3170116b9b506215e58363bed66bc2bc8bc749285dea17f",
+      "benchmarks/scaling_bench.cpp": "2590ea58957758e8743c95cb434bc58d2eb88028cb8398916779e6a206ffd18d",
+      "benchmarks/websocket_bench.cpp": "b373568d767cd64c6d0cf849a0920b41545cedd4505290f2ebfea7be734bf16d",
+      "xmake/benchmarks.lua": "d2e9b6bfbbaf966c60b1185f51a7b617c066441805c89721b4e16050f140c36c",
+      "xmake/examples.lua": "cbf6cea31c8ea25ef850884cd3237f66dc6bcc1d09ae6204172cd9819c041d1f",
+      "xmake/openssl_arm64.lua": "dddc967fc720479cc29caac9ab944311cb2784616d74950e3fe1ac443798bbd8",
+      "xmake/tests.lua": "6c655ebaf466302d8e8b53dc90e3f3042729841993bbe2fe266523c27fc378d4"
+    },
+    "runner_sha256": "d7e7bc110aeee09d04935b9e3b6cc6ade09017883e2c3df2fe875e13ff36c0d5",
+    "binary_sha256": {
+      "pace": "aaaa09aa0102d01c47e2606cc9698835016ebc47a7727de81fdf835078698d3c",
+      "nginx": "5220bb58d2d75b69342f7f3722264a67b7abad7da46c9d30e22acff6774f081e",
+      "load": "f3ce8f3cfab9c94b569e9410d26ab588f0668e78c4cab61c7e2b95cc0ec64ff6"
+    }
+  },
+  "workload": {
+    "pace": "/tmp/pace-gateway-release/linux/x86_64/release/pace_http_gateway",
+    "nginx": "/tmp/nginx-1.30.6/objs/nginx",
+    "load": "/tmp/pace-gateway-release/linux/x86_64/release/pace_http_load",
+    "baseline": null,
+    "output": "benchmarks/results/linux-gateway-2026-11-03/nginx.json",
+    "connections": 32,
+    "iterations": 5000,
+    "warmup": 200,
+    "bytes": 4096,
+    "repeats": 5,
+    "workers": "1,4",
+    "backends": "epoll,io_uring,nginx",
+    "scenarios": "static,static_cached,proxy,proxy_cached",
+    "timeout": 120
+  },
+  "trials": [
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.91101,
+      "requests_per_second": 32579.8,
+      "p50_us": 851.24,
+      "p95_us": 1954.18,
+      "p99_us": 3440.35,
+      "client_cpu_seconds": 1.6621,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.8699999999999997,
+      "server_process_high_water_rss_bytes": 4808704,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.75406,
+      "requests_per_second": 33655.5,
+      "p50_us": 852.186,
+      "p95_us": 1910.02,
+      "p99_us": 3498.43,
+      "client_cpu_seconds": 1.60272,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.76,
+      "server_process_high_water_rss_bytes": 4866048,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.67426,
+      "requests_per_second": 59829.5,
+      "p50_us": 412.13,
+      "p95_us": 1222.94,
+      "p99_us": 2398.2,
+      "client_cpu_seconds": 1.54522,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-9fky0wfc/nginx.pid;\nerror_log /tmp/pace-gateway-bench-9fky0wfc/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-9fky0wfc/body;\n    proxy_temp_path /tmp/pace-gateway-bench-9fky0wfc/proxy_temp;\n    server { listen 127.0.0.1:56247 reuseport; location / { root /tmp/pace-gateway-bench-9fky0wfc/public; } }\n}\n",
+      "server_cpu_seconds": 2.1,
+      "server_process_high_water_rss_bytes": 7962624,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 5.21139,
+      "requests_per_second": 30702,
+      "p50_us": 880.22,
+      "p95_us": 2285.03,
+      "p99_us": 4209.67,
+      "client_cpu_seconds": 1.68628,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.14,
+      "server_process_high_water_rss_bytes": 4829184,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.51153,
+      "requests_per_second": 63706.1,
+      "p50_us": 389.617,
+      "p95_us": 1107.91,
+      "p99_us": 2076.18,
+      "client_cpu_seconds": 1.4146,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-f7td9uk_/nginx.pid;\nerror_log /tmp/pace-gateway-bench-f7td9uk_/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-f7td9uk_/body;\n    proxy_temp_path /tmp/pace-gateway-bench-f7td9uk_/proxy_temp;\n    server { listen 127.0.0.1:57357 reuseport; location / { root /tmp/pace-gateway-bench-f7td9uk_/public; } }\n}\n",
+      "server_cpu_seconds": 1.91,
+      "server_process_high_water_rss_bytes": 7962624,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.54262,
+      "requests_per_second": 35222,
+      "p50_us": 806.586,
+      "p95_us": 1794.22,
+      "p99_us": 3076.39,
+      "client_cpu_seconds": 1.4715,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.65,
+      "server_process_high_water_rss_bytes": 4771840,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.53678,
+      "requests_per_second": 63072.1,
+      "p50_us": 384.515,
+      "p95_us": 1155.47,
+      "p99_us": 2021.47,
+      "client_cpu_seconds": 1.31159,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-4z73vm35/nginx.pid;\nerror_log /tmp/pace-gateway-bench-4z73vm35/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-4z73vm35/body;\n    proxy_temp_path /tmp/pace-gateway-bench-4z73vm35/proxy_temp;\n    server { listen 127.0.0.1:48453 reuseport; location / { root /tmp/pace-gateway-bench-4z73vm35/public; } }\n}\n",
+      "server_cpu_seconds": 1.75,
+      "server_process_high_water_rss_bytes": 7966720,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.89244,
+      "requests_per_second": 32703.5,
+      "p50_us": 844.404,
+      "p95_us": 2123.6,
+      "p99_us": 3576.39,
+      "client_cpu_seconds": 1.5375,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.72,
+      "server_process_high_water_rss_bytes": 4771840,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 5.06719,
+      "requests_per_second": 31575.7,
+      "p50_us": 860.921,
+      "p95_us": 2139.38,
+      "p99_us": 3774.52,
+      "client_cpu_seconds": 1.67449,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.25,
+      "server_process_high_water_rss_bytes": 4874240,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.49442,
+      "requests_per_second": 35599.7,
+      "p50_us": 836.669,
+      "p95_us": 1711.29,
+      "p99_us": 2864.05,
+      "client_cpu_seconds": 1.4579,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.57,
+      "server_process_high_water_rss_bytes": 4767744,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 5.33269,
+      "requests_per_second": 30003.6,
+      "p50_us": 904.311,
+      "p95_us": 2287.79,
+      "p99_us": 4172.8,
+      "client_cpu_seconds": 1.66562,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.15,
+      "server_process_high_water_rss_bytes": 4816896,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.83278,
+      "requests_per_second": 56481.7,
+      "p50_us": 436.961,
+      "p95_us": 1267.29,
+      "p99_us": 2464.16,
+      "client_cpu_seconds": 1.39259,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-fl9tvpft/nginx.pid;\nerror_log /tmp/pace-gateway-bench-fl9tvpft/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-fl9tvpft/body;\n    proxy_temp_path /tmp/pace-gateway-bench-fl9tvpft/proxy_temp;\n    server { listen 127.0.0.1:44589 reuseport; location / { root /tmp/pace-gateway-bench-fl9tvpft/public; } }\n}\n",
+      "server_cpu_seconds": 1.91,
+      "server_process_high_water_rss_bytes": 7933952,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.90047,
+      "requests_per_second": 32649.9,
+      "p50_us": 866.931,
+      "p95_us": 2017.24,
+      "p99_us": 3654.36,
+      "client_cpu_seconds": 1.54948,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.9699999999999998,
+      "server_process_high_water_rss_bytes": 4861952,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.48305,
+      "requests_per_second": 64436.9,
+      "p50_us": 346.24,
+      "p95_us": 1268.8,
+      "p99_us": 2288.89,
+      "client_cpu_seconds": 1.38631,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-ohu6qapj/nginx.pid;\nerror_log /tmp/pace-gateway-bench-ohu6qapj/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-ohu6qapj/body;\n    proxy_temp_path /tmp/pace-gateway-bench-ohu6qapj/proxy_temp;\n    server { listen 127.0.0.1:46611 reuseport; location / { root /tmp/pace-gateway-bench-ohu6qapj/public; } }\n}\n",
+      "server_cpu_seconds": 1.89,
+      "server_process_high_water_rss_bytes": 7942144,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.5447,
+      "requests_per_second": 35205.9,
+      "p50_us": 833.33,
+      "p95_us": 1767.58,
+      "p99_us": 3275.24,
+      "client_cpu_seconds": 1.36822,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.39,
+      "server_process_high_water_rss_bytes": 4804608,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.06689,
+      "requests_per_second": 52170.1,
+      "p50_us": 338.816,
+      "p95_us": 1717.32,
+      "p99_us": 3996.03,
+      "client_cpu_seconds": 1.45491,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.37,
+      "server_process_high_water_rss_bytes": 5066752,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.37319,
+      "requests_per_second": 67419.8,
+      "p50_us": 279.377,
+      "p95_us": 1121.74,
+      "p99_us": 2695.73,
+      "client_cpu_seconds": 1.28029,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.159999999999999,
+      "server_process_high_water_rss_bytes": 5197824,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.04609,
+      "requests_per_second": 78197.8,
+      "p50_us": 319.982,
+      "p95_us": 871.968,
+      "p99_us": 1869.76,
+      "client_cpu_seconds": 1.19493,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-fkasfi5a/nginx.pid;\nerror_log /tmp/pace-gateway-bench-fkasfi5a/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-fkasfi5a/body;\n    proxy_temp_path /tmp/pace-gateway-bench-fkasfi5a/proxy_temp;\n    server { listen 127.0.0.1:52259 reuseport; location / { root /tmp/pace-gateway-bench-fkasfi5a/public; } }\n}\n",
+      "server_cpu_seconds": 2.0500000000000003,
+      "server_process_high_water_rss_bytes": 23511040,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.32828,
+      "requests_per_second": 68720.2,
+      "p50_us": 257.692,
+      "p95_us": 1229.07,
+      "p99_us": 3683.59,
+      "client_cpu_seconds": 1.29577,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.4,
+      "server_process_high_water_rss_bytes": 5165056,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.35718,
+      "requests_per_second": 67877.8,
+      "p50_us": 328.499,
+      "p95_us": 1152.77,
+      "p99_us": 2776.66,
+      "client_cpu_seconds": 1.35273,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-7kuvekyu/nginx.pid;\nerror_log /tmp/pace-gateway-bench-7kuvekyu/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-7kuvekyu/body;\n    proxy_temp_path /tmp/pace-gateway-bench-7kuvekyu/proxy_temp;\n    server { listen 127.0.0.1:39247 reuseport; location / { root /tmp/pace-gateway-bench-7kuvekyu/public; } }\n}\n",
+      "server_cpu_seconds": 2.2800000000000002,
+      "server_process_high_water_rss_bytes": 23334912,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.49799,
+      "requests_per_second": 64051.5,
+      "p50_us": 281.988,
+      "p95_us": 1238.32,
+      "p99_us": 3016.34,
+      "client_cpu_seconds": 1.19451,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.0200000000000005,
+      "server_process_high_water_rss_bytes": 5042176,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.96348,
+      "requests_per_second": 81488.2,
+      "p50_us": 293.484,
+      "p95_us": 924.932,
+      "p99_us": 2105.41,
+      "client_cpu_seconds": 1.22747,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-xvr86hba/nginx.pid;\nerror_log /tmp/pace-gateway-bench-xvr86hba/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-xvr86hba/body;\n    proxy_temp_path /tmp/pace-gateway-bench-xvr86hba/proxy_temp;\n    server { listen 127.0.0.1:41265 reuseport; location / { root /tmp/pace-gateway-bench-xvr86hba/public; } }\n}\n",
+      "server_cpu_seconds": 2.14,
+      "server_process_high_water_rss_bytes": 23339008,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.19635,
+      "requests_per_second": 72848,
+      "p50_us": 273.483,
+      "p95_us": 1035.86,
+      "p99_us": 2520.5,
+      "client_cpu_seconds": 1.09583,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.71,
+      "server_process_high_water_rss_bytes": 5070848,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.79867,
+      "requests_per_second": 57170.1,
+      "p50_us": 235.101,
+      "p95_us": 1844.31,
+      "p99_us": 4390.15,
+      "client_cpu_seconds": 1.5123,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.2,
+      "server_process_high_water_rss_bytes": 5132288,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.2321,
+      "requests_per_second": 71681.4,
+      "p50_us": 333.661,
+      "p95_us": 1022.81,
+      "p99_us": 1955.54,
+      "client_cpu_seconds": 1.01874,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.46,
+      "server_process_high_water_rss_bytes": 5058560,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.15225,
+      "requests_per_second": 74340.9,
+      "p50_us": 235.251,
+      "p95_us": 1228.98,
+      "p99_us": 3136.05,
+      "client_cpu_seconds": 1.29462,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.05,
+      "server_process_high_water_rss_bytes": 5210112,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.48644,
+      "requests_per_second": 64349.1,
+      "p50_us": 385.925,
+      "p95_us": 1141.13,
+      "p99_us": 2329.03,
+      "client_cpu_seconds": 1.25642,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-ygcajlzb/nginx.pid;\nerror_log /tmp/pace-gateway-bench-ygcajlzb/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-ygcajlzb/body;\n    proxy_temp_path /tmp/pace-gateway-bench-ygcajlzb/proxy_temp;\n    server { listen 127.0.0.1:57165 reuseport; location / { root /tmp/pace-gateway-bench-ygcajlzb/public; } }\n}\n",
+      "server_cpu_seconds": 2.01,
+      "server_process_high_water_rss_bytes": 23400448,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.39109,
+      "requests_per_second": 66915,
+      "p50_us": 286.41,
+      "p95_us": 1052.81,
+      "p99_us": 2626.29,
+      "client_cpu_seconds": 1.26693,
+      "backend": "io_uring",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 4.09,
+      "server_process_high_water_rss_bytes": 5201920,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.54672,
+      "requests_per_second": 62825.9,
+      "p50_us": 409.45,
+      "p95_us": 1032.33,
+      "p99_us": 2021.64,
+      "client_cpu_seconds": 1.1025,
+      "backend": "nginx",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-bz1yai9d/nginx.pid;\nerror_log /tmp/pace-gateway-bench-bz1yai9d/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-bz1yai9d/body;\n    proxy_temp_path /tmp/pace-gateway-bench-bz1yai9d/proxy_temp;\n    server { listen 127.0.0.1:53911 reuseport; location / { root /tmp/pace-gateway-bench-bz1yai9d/public; } }\n}\n",
+      "server_cpu_seconds": 1.8599999999999999,
+      "server_process_high_water_rss_bytes": 23531520,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.27217,
+      "requests_per_second": 70417.3,
+      "p50_us": 324.284,
+      "p95_us": 983.868,
+      "p99_us": 2154.85,
+      "client_cpu_seconds": 1.05528,
+      "backend": "epoll",
+      "scenario": "static",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 3.63,
+      "server_process_high_water_rss_bytes": 5050368,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.55246,
+      "requests_per_second": 62684.5,
+      "p50_us": 433.835,
+      "p95_us": 1142.61,
+      "p99_us": 2473.45,
+      "client_cpu_seconds": 1.13006,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 1.72,
+      "server_process_high_water_rss_bytes": 4911104,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.83848,
+      "requests_per_second": 56368.1,
+      "p50_us": 473.61,
+      "p95_us": 1344.09,
+      "p99_us": 2623.7,
+      "client_cpu_seconds": 1.31173,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.04,
+      "server_process_high_water_rss_bytes": 4960256,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.83417,
+      "requests_per_second": 87232.9,
+      "p50_us": 291.358,
+      "p95_us": 733.167,
+      "p99_us": 1357.47,
+      "client_cpu_seconds": 1.23992,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-j38c5kvx/nginx.pid;\nerror_log /tmp/pace-gateway-bench-j38c5kvx/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-j38c5kvx/body;\n    proxy_temp_path /tmp/pace-gateway-bench-j38c5kvx/proxy_temp;\n    server { listen 127.0.0.1:59751 reuseport; location / { root /tmp/pace-gateway-bench-j38c5kvx/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.46,
+      "server_process_high_water_rss_bytes": 7974912,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.54952,
+      "requests_per_second": 62757,
+      "p50_us": 456.488,
+      "p95_us": 1007.98,
+      "p99_us": 1787.27,
+      "client_cpu_seconds": 1.22134,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.02,
+      "server_process_high_water_rss_bytes": 4902912,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.32729,
+      "requests_per_second": 68749.4,
+      "p50_us": 337.717,
+      "p95_us": 1165.01,
+      "p99_us": 2599.47,
+      "client_cpu_seconds": 1.36288,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-_u7ckzkx/nginx.pid;\nerror_log /tmp/pace-gateway-bench-_u7ckzkx/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-_u7ckzkx/body;\n    proxy_temp_path /tmp/pace-gateway-bench-_u7ckzkx/proxy_temp;\n    server { listen 127.0.0.1:34783 reuseport; location / { root /tmp/pace-gateway-bench-_u7ckzkx/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.5899999999999999,
+      "server_process_high_water_rss_bytes": 7933952,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.4952,
+      "requests_per_second": 64123.1,
+      "p50_us": 418.528,
+      "p95_us": 1111.33,
+      "p99_us": 2096.13,
+      "client_cpu_seconds": 1.18879,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 1.9799999999999998,
+      "server_process_high_water_rss_bytes": 4911104,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.96364,
+      "requests_per_second": 81481.5,
+      "p50_us": 307.151,
+      "p95_us": 803.276,
+      "p99_us": 1542.86,
+      "client_cpu_seconds": 1.27019,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-dgucr9lu/nginx.pid;\nerror_log /tmp/pace-gateway-bench-dgucr9lu/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-dgucr9lu/body;\n    proxy_temp_path /tmp/pace-gateway-bench-dgucr9lu/proxy_temp;\n    server { listen 127.0.0.1:42989 reuseport; location / { root /tmp/pace-gateway-bench-dgucr9lu/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.48,
+      "server_process_high_water_rss_bytes": 7942144,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.33029,
+      "requests_per_second": 68660.9,
+      "p50_us": 442.628,
+      "p95_us": 874.201,
+      "p99_us": 1524.75,
+      "client_cpu_seconds": 1.10108,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 1.67,
+      "server_process_high_water_rss_bytes": 4861952,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.63007,
+      "requests_per_second": 44076.3,
+      "p50_us": 498.863,
+      "p95_us": 2059.4,
+      "p99_us": 5021.8,
+      "client_cpu_seconds": 1.56393,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.5500000000000003,
+      "server_process_high_water_rss_bytes": 4915200,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.40326,
+      "requests_per_second": 66576.2,
+      "p50_us": 412.205,
+      "p95_us": 1054.89,
+      "p99_us": 2027.79,
+      "client_cpu_seconds": 1.13601,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 1.73,
+      "server_process_high_water_rss_bytes": 4849664,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.7496,
+      "requests_per_second": 58190.2,
+      "p50_us": 480.67,
+      "p95_us": 1113.88,
+      "p99_us": 2224.07,
+      "client_cpu_seconds": 1.24435,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.0100000000000002,
+      "server_process_high_water_rss_bytes": 4931584,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.40201,
+      "requests_per_second": 66611,
+      "p50_us": 390.041,
+      "p95_us": 1145.51,
+      "p99_us": 2301.5,
+      "client_cpu_seconds": 1.1747,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-gs9c0f9c/nginx.pid;\nerror_log /tmp/pace-gateway-bench-gs9c0f9c/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-gs9c0f9c/body;\n    proxy_temp_path /tmp/pace-gateway-bench-gs9c0f9c/proxy_temp;\n    server { listen 127.0.0.1:41941 reuseport; location / { root /tmp/pace-gateway-bench-gs9c0f9c/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.45,
+      "server_process_high_water_rss_bytes": 7983104,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.65193,
+      "requests_per_second": 60333.4,
+      "p50_us": 470.779,
+      "p95_us": 1112.49,
+      "p99_us": 2321.74,
+      "client_cpu_seconds": 1.17953,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 1.8,
+      "server_process_high_water_rss_bytes": 4968448,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.04787,
+      "requests_per_second": 78129.9,
+      "p50_us": 301.402,
+      "p95_us": 922.753,
+      "p99_us": 1984.57,
+      "client_cpu_seconds": 1.26036,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-qe17w3d_/nginx.pid;\nerror_log /tmp/pace-gateway-bench-qe17w3d_/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-qe17w3d_/body;\n    proxy_temp_path /tmp/pace-gateway-bench-qe17w3d_/proxy_temp;\n    server { listen 127.0.0.1:40643 reuseport; location / { root /tmp/pace-gateway-bench-qe17w3d_/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.45,
+      "server_process_high_water_rss_bytes": 7921664,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.56703,
+      "requests_per_second": 62328.8,
+      "p50_us": 419.524,
+      "p95_us": 1171.14,
+      "p99_us": 2067.95,
+      "client_cpu_seconds": 1.23284,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "static",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.0700000000000003,
+      "server_process_high_water_rss_bytes": 4902912,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.30925,
+      "requests_per_second": 69286.7,
+      "p50_us": 212.516,
+      "p95_us": 1289.57,
+      "p99_us": 3157.95,
+      "client_cpu_seconds": 1.21342,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.23,
+      "server_process_high_water_rss_bytes": 5099520,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.6984,
+      "requests_per_second": 94206.2,
+      "p50_us": 197.126,
+      "p95_us": 1015.98,
+      "p99_us": 2398.2,
+      "client_cpu_seconds": 1.29432,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.31,
+      "server_process_high_water_rss_bytes": 5246976,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.98765,
+      "requests_per_second": 80497,
+      "p50_us": 328.458,
+      "p95_us": 826.277,
+      "p99_us": 1716.79,
+      "client_cpu_seconds": 1.21276,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-oy84bwta/nginx.pid;\nerror_log /tmp/pace-gateway-bench-oy84bwta/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-oy84bwta/body;\n    proxy_temp_path /tmp/pace-gateway-bench-oy84bwta/proxy_temp;\n    server { listen 127.0.0.1:39973 reuseport; location / { root /tmp/pace-gateway-bench-oy84bwta/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.75,
+      "server_process_high_water_rss_bytes": 23543808,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.6538,
+      "requests_per_second": 96746.9,
+      "p50_us": 181.364,
+      "p95_us": 864.658,
+      "p99_us": 2244.47,
+      "client_cpu_seconds": 1.13704,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.25,
+      "server_process_high_water_rss_bytes": 5255168,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.11213,
+      "requests_per_second": 75753,
+      "p50_us": 339.067,
+      "p95_us": 913.737,
+      "p99_us": 2062.88,
+      "client_cpu_seconds": 1.18922,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-jj2s30gv/nginx.pid;\nerror_log /tmp/pace-gateway-bench-jj2s30gv/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-jj2s30gv/body;\n    proxy_temp_path /tmp/pace-gateway-bench-jj2s30gv/proxy_temp;\n    server { listen 127.0.0.1:57425 reuseport; location / { root /tmp/pace-gateway-bench-jj2s30gv/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.7,
+      "server_process_high_water_rss_bytes": 23326720,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.71811,
+      "requests_per_second": 93125.7,
+      "p50_us": 247.631,
+      "p95_us": 848.79,
+      "p99_us": 1901.84,
+      "client_cpu_seconds": 1.04454,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 1.8499999999999999,
+      "server_process_high_water_rss_bytes": 5144576,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.07201,
+      "requests_per_second": 77219.7,
+      "p50_us": 303.606,
+      "p95_us": 980.683,
+      "p99_us": 2338.44,
+      "client_cpu_seconds": 1.29271,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-7_w_12g_/nginx.pid;\nerror_log /tmp/pace-gateway-bench-7_w_12g_/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-7_w_12g_/body;\n    proxy_temp_path /tmp/pace-gateway-bench-7_w_12g_/proxy_temp;\n    server { listen 127.0.0.1:39447 reuseport; location / { root /tmp/pace-gateway-bench-7_w_12g_/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.79,
+      "server_process_high_water_rss_bytes": 23298048,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.58215,
+      "requests_per_second": 101128,
+      "p50_us": 200.521,
+      "p95_us": 746.118,
+      "p99_us": 2026.2,
+      "client_cpu_seconds": 1.04333,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.14,
+      "server_process_high_water_rss_bytes": 5107712,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.71366,
+      "requests_per_second": 93367.1,
+      "p50_us": 205.939,
+      "p95_us": 740.836,
+      "p99_us": 1782.16,
+      "client_cpu_seconds": 1.17296,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.21,
+      "server_process_high_water_rss_bytes": 5316608,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.94948,
+      "requests_per_second": 82073.4,
+      "p50_us": 258.263,
+      "p95_us": 952.544,
+      "p99_us": 2400.76,
+      "client_cpu_seconds": 1.06995,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 1.95,
+      "server_process_high_water_rss_bytes": 5095424,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.2861,
+      "requests_per_second": 69988.2,
+      "p50_us": 176.549,
+      "p95_us": 1657.17,
+      "p99_us": 3999.42,
+      "client_cpu_seconds": 1.35909,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.55,
+      "server_process_high_water_rss_bytes": 5300224,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.16309,
+      "requests_per_second": 73968.1,
+      "p50_us": 322.827,
+      "p95_us": 972.985,
+      "p99_us": 2411.49,
+      "client_cpu_seconds": 1.15701,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-3ds91kqz/nginx.pid;\nerror_log /tmp/pace-gateway-bench-3ds91kqz/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-3ds91kqz/body;\n    proxy_temp_path /tmp/pace-gateway-bench-3ds91kqz/proxy_temp;\n    server { listen 127.0.0.1:59335 reuseport; location / { root /tmp/pace-gateway-bench-3ds91kqz/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.5899999999999999,
+      "server_process_high_water_rss_bytes": 23552000,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.37485,
+      "requests_per_second": 116377,
+      "p50_us": 185.542,
+      "p95_us": 628.852,
+      "p99_us": 1644.07,
+      "client_cpu_seconds": 1.10734,
+      "backend": "io_uring",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.06,
+      "server_process_high_water_rss_bytes": 5304320,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.94527,
+      "requests_per_second": 82250.6,
+      "p50_us": 327.905,
+      "p95_us": 776.28,
+      "p99_us": 1523.31,
+      "client_cpu_seconds": 1.13218,
+      "backend": "nginx",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-78h9ksej/nginx.pid;\nerror_log /tmp/pace-gateway-bench-78h9ksej/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-78h9ksej/body;\n    proxy_temp_path /tmp/pace-gateway-bench-78h9ksej/proxy_temp;\n    server { listen 127.0.0.1:45295 reuseport; location / { root /tmp/pace-gateway-bench-78h9ksej/public;\n            open_file_cache max=1024 inactive=60s;\n            open_file_cache_valid 60s; } }\n}\n",
+      "server_cpu_seconds": 1.67,
+      "server_process_high_water_rss_bytes": 23339008,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.48267,
+      "requests_per_second": 107913,
+      "p50_us": 184.609,
+      "p95_us": 706.359,
+      "p99_us": 1861.55,
+      "client_cpu_seconds": 1.06803,
+      "backend": "epoll",
+      "scenario": "static_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "static",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 0
+      },
+      "server_cpu_seconds": 2.0500000000000003,
+      "server_process_high_water_rss_bytes": 5152768,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 10.1935,
+      "requests_per_second": 15696.3,
+      "p50_us": 1773.86,
+      "p95_us": 4264.5,
+      "p99_us": 6893.16,
+      "client_cpu_seconds": 1.92304,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 6.93,
+      "server_process_high_water_rss_bytes": 5419008,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 9.05702,
+      "requests_per_second": 17665.9,
+      "p50_us": 1594.96,
+      "p95_us": 3623.44,
+      "p99_us": 5873.59,
+      "client_cpu_seconds": 1.62901,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 5.84,
+      "server_process_high_water_rss_bytes": 5562368,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 6.48271,
+      "requests_per_second": 24681,
+      "p50_us": 1056.46,
+      "p95_us": 3087.86,
+      "p99_us": 5612.32,
+      "client_cpu_seconds": 1.65517,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-wtloqbva/nginx.pid;\nerror_log /tmp/pace-gateway-bench-wtloqbva/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-wtloqbva/body;\n    proxy_temp_path /tmp/pace-gateway-bench-wtloqbva/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:47043 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:47521 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:44537 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.99,
+      "server_process_high_water_rss_bytes": 8409088,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 9.06347,
+      "requests_per_second": 17653.3,
+      "p50_us": 1632.97,
+      "p95_us": 3594.04,
+      "p99_us": 5903.58,
+      "client_cpu_seconds": 1.50365,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 5.680000000000001,
+      "server_process_high_water_rss_bytes": 5603328,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 6.17076,
+      "requests_per_second": 25928.7,
+      "p50_us": 1092.95,
+      "p95_us": 2489.04,
+      "p99_us": 4589.15,
+      "client_cpu_seconds": 1.55999,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-tjqlgq04/nginx.pid;\nerror_log /tmp/pace-gateway-bench-tjqlgq04/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-tjqlgq04/body;\n    proxy_temp_path /tmp/pace-gateway-bench-tjqlgq04/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:57381 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:47787 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:58647 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.7600000000000002,
+      "server_process_high_water_rss_bytes": 8417280,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 10.6764,
+      "requests_per_second": 14986.3,
+      "p50_us": 1765.88,
+      "p95_us": 4883.27,
+      "p99_us": 8528.98,
+      "client_cpu_seconds": 1.89208,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 7.220000000000001,
+      "server_process_high_water_rss_bytes": 5529600,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 8.46225,
+      "requests_per_second": 18907.5,
+      "p50_us": 1172.68,
+      "p95_us": 4373.26,
+      "p99_us": 12588.9,
+      "client_cpu_seconds": 2.08179,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-qdjedw97/nginx.pid;\nerror_log /tmp/pace-gateway-bench-qdjedw97/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-qdjedw97/body;\n    proxy_temp_path /tmp/pace-gateway-bench-qdjedw97/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:58281 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:34823 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:36435 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 5.15,
+      "server_process_high_water_rss_bytes": 8392704,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 12.6459,
+      "requests_per_second": 12652.3,
+      "p50_us": 2035.05,
+      "p95_us": 5858.09,
+      "p99_us": 10231.1,
+      "client_cpu_seconds": 2.14645,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 8.29,
+      "server_process_high_water_rss_bytes": 5529600,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 13.7836,
+      "requests_per_second": 11608,
+      "p50_us": 2277.26,
+      "p95_us": 6236.75,
+      "p99_us": 10193,
+      "client_cpu_seconds": 2.50637,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 9.399999999999999,
+      "server_process_high_water_rss_bytes": 5603328,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 13.9301,
+      "requests_per_second": 11485.9,
+      "p50_us": 2160.73,
+      "p95_us": 7136.84,
+      "p99_us": 13307.7,
+      "client_cpu_seconds": 2.24319,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 8.899999999999999,
+      "server_process_high_water_rss_bytes": 5521408,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 11.0559,
+      "requests_per_second": 14471.9,
+      "p50_us": 1831.62,
+      "p95_us": 5004.97,
+      "p99_us": 8311.99,
+      "client_cpu_seconds": 1.7373,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 7.0,
+      "server_process_high_water_rss_bytes": 5586944,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 8.12935,
+      "requests_per_second": 19681.8,
+      "p50_us": 1234.54,
+      "p95_us": 4354.59,
+      "p99_us": 7707.09,
+      "client_cpu_seconds": 1.90136,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-3zli5yn8/nginx.pid;\nerror_log /tmp/pace-gateway-bench-3zli5yn8/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-3zli5yn8/body;\n    proxy_temp_path /tmp/pace-gateway-bench-3zli5yn8/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:56841 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:38281 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:51317 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 4.949999999999999,
+      "server_process_high_water_rss_bytes": 8404992,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 8.2995,
+      "requests_per_second": 19278.3,
+      "p50_us": 1504.33,
+      "p95_us": 3231.67,
+      "p99_us": 5156.37,
+      "client_cpu_seconds": 1.54789,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 5.55,
+      "server_process_high_water_rss_bytes": 5570560,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 6.58059,
+      "requests_per_second": 24313.9,
+      "p50_us": 1151.61,
+      "p95_us": 2806.37,
+      "p99_us": 4898.48,
+      "client_cpu_seconds": 1.31367,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-3541hz23/nginx.pid;\nerror_log /tmp/pace-gateway-bench-3541hz23/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-3541hz23/body;\n    proxy_temp_path /tmp/pace-gateway-bench-3541hz23/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:38171 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:48873 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:46299 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.9999999999999996,
+      "server_process_high_water_rss_bytes": 8421376,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 10.704,
+      "requests_per_second": 14947.7,
+      "p50_us": 1882.38,
+      "p95_us": 4444.86,
+      "p99_us": 7108.04,
+      "client_cpu_seconds": 1.81275,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 7.16,
+      "server_process_high_water_rss_bytes": 5464064,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.98252,
+      "requests_per_second": 40175.5,
+      "p50_us": 525.738,
+      "p95_us": 2059.61,
+      "p99_us": 4202,
+      "client_cpu_seconds": 1.20965,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 5.26,
+      "server_process_high_water_rss_bytes": 5894144,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.54,
+      "requests_per_second": 35242.3,
+      "p50_us": 504.373,
+      "p95_us": 2659.05,
+      "p99_us": 5126.79,
+      "client_cpu_seconds": 1.37148,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 5.7,
+      "server_process_high_water_rss_bytes": 6049792,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.61808,
+      "requests_per_second": 44222.3,
+      "p50_us": 444.998,
+      "p95_us": 2134.95,
+      "p99_us": 4414.79,
+      "client_cpu_seconds": 1.18847,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-3oa2uevz/nginx.pid;\nerror_log /tmp/pace-gateway-bench-3oa2uevz/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-3oa2uevz/body;\n    proxy_temp_path /tmp/pace-gateway-bench-3oa2uevz/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:54115 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:45593 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:48697 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.65,
+      "server_process_high_water_rss_bytes": 24154112,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.14039,
+      "requests_per_second": 50949.1,
+      "p50_us": 416.527,
+      "p95_us": 1378.72,
+      "p99_us": 3029.42,
+      "client_cpu_seconds": 1.13623,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.4799999999999995,
+      "server_process_high_water_rss_bytes": 5943296,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.12261,
+      "requests_per_second": 51239.2,
+      "p50_us": 417.577,
+      "p95_us": 1591.65,
+      "p99_us": 3485.43,
+      "client_cpu_seconds": 1.07679,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-j5vy22h0/nginx.pid;\nerror_log /tmp/pace-gateway-bench-j5vy22h0/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-j5vy22h0/body;\n    proxy_temp_path /tmp/pace-gateway-bench-j5vy22h0/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:43591 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:40671 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:59949 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.37,
+      "server_process_high_water_rss_bytes": 24072192,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.6177,
+      "requests_per_second": 44227,
+      "p50_us": 491.308,
+      "p95_us": 1689.16,
+      "p99_us": 3160.02,
+      "client_cpu_seconds": 1.1283,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.84,
+      "server_process_high_water_rss_bytes": 5857280,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.88112,
+      "requests_per_second": 55533.9,
+      "p50_us": 403.915,
+      "p95_us": 1457.54,
+      "p99_us": 2908.37,
+      "client_cpu_seconds": 1.03602,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-wyxn9fxh/nginx.pid;\nerror_log /tmp/pace-gateway-bench-wyxn9fxh/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-wyxn9fxh/body;\n    proxy_temp_path /tmp/pace-gateway-bench-wyxn9fxh/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:37305 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:33725 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:52199 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.1799999999999997,
+      "server_process_high_water_rss_bytes": 24133632,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.73461,
+      "requests_per_second": 33793.7,
+      "p50_us": 532.472,
+      "p95_us": 2999.62,
+      "p99_us": 6384.1,
+      "client_cpu_seconds": 1.39099,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 5.9,
+      "server_process_high_water_rss_bytes": 5844992,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.11301,
+      "requests_per_second": 51397.3,
+      "p50_us": 453.89,
+      "p95_us": 1502.81,
+      "p99_us": 3033.76,
+      "client_cpu_seconds": 1.13078,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.55,
+      "server_process_high_water_rss_bytes": 6037504,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.52637,
+      "requests_per_second": 45372.4,
+      "p50_us": 482.558,
+      "p95_us": 1640.39,
+      "p99_us": 3047.55,
+      "client_cpu_seconds": 1.15689,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 5.0200000000000005,
+      "server_process_high_water_rss_bytes": 5861376,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.60825,
+      "requests_per_second": 44342.8,
+      "p50_us": 484.086,
+      "p95_us": 1851.46,
+      "p99_us": 3717.48,
+      "client_cpu_seconds": 1.18056,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.73,
+      "server_process_high_water_rss_bytes": 6021120,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.78889,
+      "requests_per_second": 57370.4,
+      "p50_us": 397.417,
+      "p95_us": 1426.04,
+      "p99_us": 2989.68,
+      "client_cpu_seconds": 1.0642,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-rfnb5v0s/nginx.pid;\nerror_log /tmp/pace-gateway-bench-rfnb5v0s/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-rfnb5v0s/body;\n    proxy_temp_path /tmp/pace-gateway-bench-rfnb5v0s/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:47707 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:49891 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:50755 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.42,
+      "server_process_high_water_rss_bytes": 24109056,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.59249,
+      "requests_per_second": 44537.3,
+      "p50_us": 470.541,
+      "p95_us": 1834.33,
+      "p99_us": 3488.76,
+      "client_cpu_seconds": 1.26942,
+      "backend": "io_uring",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 5.21,
+      "server_process_high_water_rss_bytes": 6037504,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.94583,
+      "requests_per_second": 54314.2,
+      "p50_us": 402.353,
+      "p95_us": 1570.98,
+      "p99_us": 3164.33,
+      "client_cpu_seconds": 1.06284,
+      "backend": "nginx",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-qy2sja02/nginx.pid;\nerror_log /tmp/pace-gateway-bench-qy2sja02/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-qy2sja02/body;\n    proxy_temp_path /tmp/pace-gateway-bench-qy2sja02/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:59601 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:35211 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    server { listen 127.0.0.1:55953 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s; } }\n}\n",
+      "server_cpu_seconds": 3.3200000000000003,
+      "server_process_high_water_rss_bytes": 24084480,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.36794,
+      "requests_per_second": 47506.8,
+      "p50_us": 478.589,
+      "p95_us": 1646.96,
+      "p99_us": 3137.88,
+      "client_cpu_seconds": 1.07412,
+      "backend": "epoll",
+      "scenario": "proxy",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 0,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 4.6499999999999995,
+      "server_process_high_water_rss_bytes": 5898240,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.65036,
+      "requests_per_second": 60369.2,
+      "p50_us": 463.123,
+      "p95_us": 1173.13,
+      "p99_us": 2352.87,
+      "client_cpu_seconds": 1.21064,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 1.8599999999999999,
+      "server_process_high_water_rss_bytes": 5148672,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.71,
+      "requests_per_second": 59040.6,
+      "p50_us": 458.718,
+      "p95_us": 1182.09,
+      "p99_us": 2123.65,
+      "client_cpu_seconds": 1.22616,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.18,
+      "server_process_high_water_rss_bytes": 5332992,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.99123,
+      "requests_per_second": 53489.7,
+      "p50_us": 455.007,
+      "p95_us": 1457.56,
+      "p99_us": 2474.93,
+      "client_cpu_seconds": 1.46385,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-shm02tzn/nginx.pid;\nerror_log /tmp/pace-gateway-bench-shm02tzn/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-shm02tzn/body;\n    proxy_temp_path /tmp/pace-gateway-bench-shm02tzn/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:46111 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:37693 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-shm02tzn/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:36261 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 2.1799999999999997,
+      "server_process_high_water_rss_bytes": 11853824,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.94988,
+      "requests_per_second": 54239.6,
+      "p50_us": 477.958,
+      "p95_us": 1403.35,
+      "p99_us": 2882.66,
+      "client_cpu_seconds": 1.20307,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.1,
+      "server_process_high_water_rss_bytes": 5214208,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.25996,
+      "requests_per_second": 49080.4,
+      "p50_us": 505.214,
+      "p95_us": 1500.37,
+      "p99_us": 2951.49,
+      "client_cpu_seconds": 1.53573,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-e0x5bd5v/nginx.pid;\nerror_log /tmp/pace-gateway-bench-e0x5bd5v/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-e0x5bd5v/body;\n    proxy_temp_path /tmp/pace-gateway-bench-e0x5bd5v/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:46901 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:53443 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-e0x5bd5v/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:34743 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 2.21,
+      "server_process_high_water_rss_bytes": 11853824,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.53239,
+      "requests_per_second": 63181.5,
+      "p50_us": 432.759,
+      "p95_us": 1200.13,
+      "p99_us": 2246.3,
+      "client_cpu_seconds": 1.1969,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 1.8199999999999998,
+      "server_process_high_water_rss_bytes": 5251072,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.77507,
+      "requests_per_second": 42383.3,
+      "p50_us": 561.349,
+      "p95_us": 1936.82,
+      "p99_us": 3895.12,
+      "client_cpu_seconds": 1.70262,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-v_pnj9r6/nginx.pid;\nerror_log /tmp/pace-gateway-bench-v_pnj9r6/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-v_pnj9r6/body;\n    proxy_temp_path /tmp/pace-gateway-bench-v_pnj9r6/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:60447 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:37973 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-v_pnj9r6/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:36037 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 2.54,
+      "server_process_high_water_rss_bytes": 11739136,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.45048,
+      "requests_per_second": 65293.4,
+      "p50_us": 439.112,
+      "p95_us": 1058.68,
+      "p99_us": 2158.09,
+      "client_cpu_seconds": 1.16158,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 1.8199999999999998,
+      "server_process_high_water_rss_bytes": 5144576,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.01184,
+      "requests_per_second": 53123.7,
+      "p50_us": 490.729,
+      "p95_us": 1373.43,
+      "p99_us": 2700.16,
+      "client_cpu_seconds": 1.34156,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.29,
+      "server_process_high_water_rss_bytes": 5349376,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.63118,
+      "requests_per_second": 60809.3,
+      "p50_us": 452.03,
+      "p95_us": 1196.41,
+      "p99_us": 2235.67,
+      "client_cpu_seconds": 1.15387,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 1.8299999999999998,
+      "server_process_high_water_rss_bytes": 4775936,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.04708,
+      "requests_per_second": 52509.4,
+      "p50_us": 504.293,
+      "p95_us": 1345.85,
+      "p99_us": 2604.09,
+      "client_cpu_seconds": 1.33509,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.2600000000000002,
+      "server_process_high_water_rss_bytes": 5349376,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.39367,
+      "requests_per_second": 47146.7,
+      "p50_us": 527.292,
+      "p95_us": 1623.88,
+      "p99_us": 2840.15,
+      "client_cpu_seconds": 1.6257,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-r6ma71z_/nginx.pid;\nerror_log /tmp/pace-gateway-bench-r6ma71z_/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-r6ma71z_/body;\n    proxy_temp_path /tmp/pace-gateway-bench-r6ma71z_/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:45601 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:46017 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-r6ma71z_/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:50017 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 2.44,
+      "server_process_high_water_rss_bytes": 11677696,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 3.68016,
+      "requests_per_second": 43476.3,
+      "p50_us": 509.637,
+      "p95_us": 2044.38,
+      "p99_us": 4680.73,
+      "client_cpu_seconds": 1.4483,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.4099999999999997,
+      "server_process_high_water_rss_bytes": 5279744,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 4.64315,
+      "requests_per_second": 34459.4,
+      "p50_us": 546.427,
+      "p95_us": 2889.42,
+      "p99_us": 6702.78,
+      "client_cpu_seconds": 1.96415,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-u0eeumu3/nginx.pid;\nerror_log /tmp/pace-gateway-bench-u0eeumu3/error.log warn;\nworker_processes 1;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-u0eeumu3/body;\n    proxy_temp_path /tmp/pace-gateway-bench-u0eeumu3/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:60123 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:60053 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-u0eeumu3/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:39983 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 2.9,
+      "server_process_high_water_rss_bytes": 11620352,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.97389,
+      "requests_per_second": 53801.6,
+      "p50_us": 449.978,
+      "p95_us": 1487.04,
+      "p99_us": 3415.47,
+      "client_cpu_seconds": 1.3303,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 1,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.11,
+      "server_process_high_water_rss_bytes": 4956160,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.51433,
+      "requests_per_second": 105657,
+      "p50_us": 155.286,
+      "p95_us": 941.8,
+      "p99_us": 2437.19,
+      "client_cpu_seconds": 1.17059,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.23,
+      "server_process_high_water_rss_bytes": 5259264,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.88544,
+      "requests_per_second": 84860.8,
+      "p50_us": 189.104,
+      "p95_us": 1150.26,
+      "p99_us": 2899.34,
+      "client_cpu_seconds": 1.31179,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.58,
+      "server_process_high_water_rss_bytes": 5443584,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.22578,
+      "requests_per_second": 71885,
+      "p50_us": 234.021,
+      "p95_us": 1318.48,
+      "p99_us": 3787.72,
+      "client_cpu_seconds": 1.48368,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-xk0_mpbs/nginx.pid;\nerror_log /tmp/pace-gateway-bench-xk0_mpbs/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-xk0_mpbs/body;\n    proxy_temp_path /tmp/pace-gateway-bench-xk0_mpbs/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:39339 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:56225 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-xk0_mpbs/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:40077 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 2.65,
+      "server_process_high_water_rss_bytes": 28057600,
+      "trial": 1
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.80552,
+      "requests_per_second": 88617.3,
+      "p50_us": 177.239,
+      "p95_us": 1080.9,
+      "p99_us": 2785.11,
+      "client_cpu_seconds": 1.31308,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.5900000000000003,
+      "server_process_high_water_rss_bytes": 5357568,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.9554,
+      "requests_per_second": 81824.6,
+      "p50_us": 209.263,
+      "p95_us": 1243.51,
+      "p99_us": 2994.16,
+      "client_cpu_seconds": 1.60341,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-f8_c3j4e/nginx.pid;\nerror_log /tmp/pace-gateway-bench-f8_c3j4e/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-f8_c3j4e/body;\n    proxy_temp_path /tmp/pace-gateway-bench-f8_c3j4e/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:43905 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:57995 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-f8_c3j4e/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:54725 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 2.9699999999999998,
+      "server_process_high_water_rss_bytes": 28131328,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.37071,
+      "requests_per_second": 67490.3,
+      "p50_us": 160.246,
+      "p95_us": 1699.89,
+      "p99_us": 4782.13,
+      "client_cpu_seconds": 1.42092,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.6,
+      "server_process_high_water_rss_bytes": 5144576,
+      "trial": 2
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.28463,
+      "requests_per_second": 70033.3,
+      "p50_us": 230.172,
+      "p95_us": 1476.67,
+      "p99_us": 3307.64,
+      "client_cpu_seconds": 1.71567,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-ujtp1_79/nginx.pid;\nerror_log /tmp/pace-gateway-bench-ujtp1_79/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-ujtp1_79/body;\n    proxy_temp_path /tmp/pace-gateway-bench-ujtp1_79/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:44663 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:41507 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-ujtp1_79/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:34137 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 3.03,
+      "server_process_high_water_rss_bytes": 27906048,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.91914,
+      "requests_per_second": 83370.7,
+      "p50_us": 171.221,
+      "p95_us": 1289.72,
+      "p99_us": 3363.48,
+      "client_cpu_seconds": 1.19332,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.27,
+      "server_process_high_water_rss_bytes": 5488640,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.52772,
+      "requests_per_second": 63298.2,
+      "p50_us": 219.608,
+      "p95_us": 1577.87,
+      "p99_us": 4306.89,
+      "client_cpu_seconds": 1.59771,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.9699999999999998,
+      "server_process_high_water_rss_bytes": 5165056,
+      "trial": 3
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.64749,
+      "requests_per_second": 60434.6,
+      "p50_us": 172.513,
+      "p95_us": 1942.65,
+      "p99_us": 4509.01,
+      "client_cpu_seconds": 1.51043,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.84,
+      "server_process_high_water_rss_bytes": 5210112,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.03556,
+      "requests_per_second": 78602.6,
+      "p50_us": 197.779,
+      "p95_us": 1359.04,
+      "p99_us": 3590.31,
+      "client_cpu_seconds": 1.47225,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.68,
+      "server_process_high_water_rss_bytes": 5337088,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.99061,
+      "requests_per_second": 80377.5,
+      "p50_us": 212.84,
+      "p95_us": 1236.08,
+      "p99_us": 3123.99,
+      "client_cpu_seconds": 1.51832,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-7vcalyll/nginx.pid;\nerror_log /tmp/pace-gateway-bench-7vcalyll/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-7vcalyll/body;\n    proxy_temp_path /tmp/pace-gateway-bench-7vcalyll/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:43607 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:49265 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-7vcalyll/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:40321 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 2.75,
+      "server_process_high_water_rss_bytes": 28098560,
+      "trial": 4
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 1.86741,
+      "requests_per_second": 85680.3,
+      "p50_us": 194.979,
+      "p95_us": 885.265,
+      "p99_us": 2673.24,
+      "client_cpu_seconds": 1.35928,
+      "backend": "io_uring",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.81,
+      "server_process_high_water_rss_bytes": 5390336,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.54069,
+      "requests_per_second": 62975.1,
+      "p50_us": 235.937,
+      "p95_us": 1776.47,
+      "p99_us": 4700.2,
+      "client_cpu_seconds": 1.66231,
+      "backend": "nginx",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": "daemon off;\nmaster_process on;\npid /tmp/pace-gateway-bench-edfj8ifj/nginx.pid;\nerror_log /tmp/pace-gateway-bench-edfj8ifj/error.log warn;\nworker_processes 4;\nevents { worker_connections 8192; }\nhttp {\n    access_log off;\n    default_type application/octet-stream;\n    sendfile on;\n    tcp_nodelay on;\n    keepalive_timeout 60;\n    keepalive_requests 10000000;\n    client_body_temp_path /tmp/pace-gateway-bench-edfj8ifj/body;\n    proxy_temp_path /tmp/pace-gateway-bench-edfj8ifj/proxy_temp;\n    upstream origin {\n        server 127.0.0.1:51291 max_fails=1 fail_timeout=1s;\n        server 127.0.0.1:58095 max_fails=1 fail_timeout=1s;\n        keepalive 256;\n    }\n    proxy_cache_path /tmp/pace-gateway-bench-edfj8ifj/cache levels=1:2 keys_zone=responses:8m max_size=64m inactive=60s;\n    server { listen 127.0.0.1:56715 reuseport; location / { proxy_pass http://origin;\n            proxy_http_version 1.1;\n            proxy_set_header Connection \"\";\n            proxy_next_upstream off;\n            proxy_buffering on;\n            proxy_buffers 8 64k;\n            proxy_busy_buffers_size 128k;\n            proxy_max_temp_file_size 0;\n            proxy_connect_timeout 30s;\n            proxy_read_timeout 30s;\n            proxy_cache responses;\n            proxy_cache_valid 200 60s; } }\n}\n",
+      "server_cpu_seconds": 2.98,
+      "server_process_high_water_rss_bytes": 27758592,
+      "trial": 5
+    },
+    {
+      "validated": true,
+      "connections": 32,
+      "completed_requests": 160000,
+      "payload_bytes": 4096,
+      "elapsed_seconds": 2.02122,
+      "requests_per_second": 79160.2,
+      "p50_us": 168.061,
+      "p95_us": 1468.71,
+      "p99_us": 3681.18,
+      "client_cpu_seconds": 1.30062,
+      "backend": "epoll",
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "server_config": {
+        "mode": "proxy",
+        "workers": 4,
+        "cache_bytes": 67108864,
+        "upstreams": 2
+      },
+      "server_cpu_seconds": 2.4099999999999997,
+      "server_process_high_water_rss_bytes": 5009408,
+      "trial": 5
+    }
+  ],
+  "summaries": [
+    {
+      "scenario": "static",
+      "workers": 1,
+      "backend": "epoll",
+      "requests_per_second": {
+        "median": 35205.9,
+        "min": 32579.8,
+        "max": 35599.7
+      },
+      "p50_us": {
+        "median": 836.669,
+        "min": 806.586,
+        "max": 851.24
+      },
+      "p95_us": {
+        "median": 1794.22,
+        "min": 1711.29,
+        "max": 2123.6
+      },
+      "p99_us": {
+        "median": 3275.24,
+        "min": 2864.05,
+        "max": 3576.39
+      },
+      "server_cpu_seconds": {
+        "median": 3.65,
+        "min": 3.39,
+        "max": 3.8699999999999997
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 4771840,
+        "min": 4767744,
+        "max": 4808704
+      }
+    },
+    {
+      "scenario": "static",
+      "workers": 1,
+      "backend": "io_uring",
+      "requests_per_second": {
+        "median": 31575.7,
+        "min": 30003.6,
+        "max": 33655.5
+      },
+      "p50_us": {
+        "median": 866.931,
+        "min": 852.186,
+        "max": 904.311
+      },
+      "p95_us": {
+        "median": 2139.38,
+        "min": 1910.02,
+        "max": 2287.79
+      },
+      "p99_us": {
+        "median": 3774.52,
+        "min": 3498.43,
+        "max": 4209.67
+      },
+      "server_cpu_seconds": {
+        "median": 4.14,
+        "min": 3.76,
+        "max": 4.25
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 4861952,
+        "min": 4816896,
+        "max": 4874240
+      }
+    },
+    {
+      "scenario": "static",
+      "workers": 1,
+      "backend": "nginx",
+      "requests_per_second": {
+        "median": 63072.1,
+        "min": 56481.7,
+        "max": 64436.9
+      },
+      "p50_us": {
+        "median": 389.617,
+        "min": 346.24,
+        "max": 436.961
+      },
+      "p95_us": {
+        "median": 1222.94,
+        "min": 1107.91,
+        "max": 1268.8
+      },
+      "p99_us": {
+        "median": 2288.89,
+        "min": 2021.47,
+        "max": 2464.16
+      },
+      "server_cpu_seconds": {
+        "median": 1.91,
+        "min": 1.75,
+        "max": 2.1
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 7962624,
+        "min": 7933952,
+        "max": 7966720
+      }
+    },
+    {
+      "scenario": "static",
+      "workers": 4,
+      "backend": "epoll",
+      "requests_per_second": {
+        "median": 70417.3,
+        "min": 52170.1,
+        "max": 72848
+      },
+      "p50_us": {
+        "median": 324.284,
+        "min": 273.483,
+        "max": 338.816
+      },
+      "p95_us": {
+        "median": 1035.86,
+        "min": 983.868,
+        "max": 1717.32
+      },
+      "p99_us": {
+        "median": 2520.5,
+        "min": 1955.54,
+        "max": 3996.03
+      },
+      "server_cpu_seconds": {
+        "median": 3.71,
+        "min": 3.46,
+        "max": 4.37
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5058560,
+        "min": 5042176,
+        "max": 5070848
+      }
+    },
+    {
+      "scenario": "static",
+      "workers": 4,
+      "backend": "io_uring",
+      "requests_per_second": {
+        "median": 67419.8,
+        "min": 57170.1,
+        "max": 74340.9
+      },
+      "p50_us": {
+        "median": 257.692,
+        "min": 235.101,
+        "max": 286.41
+      },
+      "p95_us": {
+        "median": 1228.98,
+        "min": 1052.81,
+        "max": 1844.31
+      },
+      "p99_us": {
+        "median": 3136.05,
+        "min": 2626.29,
+        "max": 4390.15
+      },
+      "server_cpu_seconds": {
+        "median": 4.159999999999999,
+        "min": 4.05,
+        "max": 4.4
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5197824,
+        "min": 5132288,
+        "max": 5210112
+      }
+    },
+    {
+      "scenario": "static",
+      "workers": 4,
+      "backend": "nginx",
+      "requests_per_second": {
+        "median": 67877.8,
+        "min": 62825.9,
+        "max": 81488.2
+      },
+      "p50_us": {
+        "median": 328.499,
+        "min": 293.484,
+        "max": 409.45
+      },
+      "p95_us": {
+        "median": 1032.33,
+        "min": 871.968,
+        "max": 1152.77
+      },
+      "p99_us": {
+        "median": 2105.41,
+        "min": 1869.76,
+        "max": 2776.66
+      },
+      "server_cpu_seconds": {
+        "median": 2.0500000000000003,
+        "min": 1.8599999999999999,
+        "max": 2.2800000000000002
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 23400448,
+        "min": 23334912,
+        "max": 23531520
+      }
+    },
+    {
+      "scenario": "static_cached",
+      "workers": 1,
+      "backend": "epoll",
+      "requests_per_second": {
+        "median": 64123.1,
+        "min": 62328.8,
+        "max": 68660.9
+      },
+      "p50_us": {
+        "median": 419.524,
+        "min": 412.205,
+        "max": 442.628
+      },
+      "p95_us": {
+        "median": 1111.33,
+        "min": 874.201,
+        "max": 1171.14
+      },
+      "p99_us": {
+        "median": 2067.95,
+        "min": 1524.75,
+        "max": 2473.45
+      },
+      "server_cpu_seconds": {
+        "median": 1.73,
+        "min": 1.67,
+        "max": 2.0700000000000003
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 4902912,
+        "min": 4849664,
+        "max": 4911104
+      }
+    },
+    {
+      "scenario": "static_cached",
+      "workers": 1,
+      "backend": "io_uring",
+      "requests_per_second": {
+        "median": 58190.2,
+        "min": 44076.3,
+        "max": 62757
+      },
+      "p50_us": {
+        "median": 473.61,
+        "min": 456.488,
+        "max": 498.863
+      },
+      "p95_us": {
+        "median": 1113.88,
+        "min": 1007.98,
+        "max": 2059.4
+      },
+      "p99_us": {
+        "median": 2321.74,
+        "min": 1787.27,
+        "max": 5021.8
+      },
+      "server_cpu_seconds": {
+        "median": 2.02,
+        "min": 1.8,
+        "max": 2.5500000000000003
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 4931584,
+        "min": 4902912,
+        "max": 4968448
+      }
+    },
+    {
+      "scenario": "static_cached",
+      "workers": 1,
+      "backend": "nginx",
+      "requests_per_second": {
+        "median": 78129.9,
+        "min": 66611,
+        "max": 87232.9
+      },
+      "p50_us": {
+        "median": 307.151,
+        "min": 291.358,
+        "max": 390.041
+      },
+      "p95_us": {
+        "median": 922.753,
+        "min": 733.167,
+        "max": 1165.01
+      },
+      "p99_us": {
+        "median": 1984.57,
+        "min": 1357.47,
+        "max": 2599.47
+      },
+      "server_cpu_seconds": {
+        "median": 1.46,
+        "min": 1.45,
+        "max": 1.5899999999999999
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 7942144,
+        "min": 7921664,
+        "max": 7983104
+      }
+    },
+    {
+      "scenario": "static_cached",
+      "workers": 4,
+      "backend": "epoll",
+      "requests_per_second": {
+        "median": 93125.7,
+        "min": 69286.7,
+        "max": 107913
+      },
+      "p50_us": {
+        "median": 212.516,
+        "min": 184.609,
+        "max": 258.263
+      },
+      "p95_us": {
+        "median": 848.79,
+        "min": 706.359,
+        "max": 1289.57
+      },
+      "p99_us": {
+        "median": 2026.2,
+        "min": 1861.55,
+        "max": 3157.95
+      },
+      "server_cpu_seconds": {
+        "median": 2.0500000000000003,
+        "min": 1.8499999999999999,
+        "max": 2.23
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5107712,
+        "min": 5095424,
+        "max": 5152768
+      }
+    },
+    {
+      "scenario": "static_cached",
+      "workers": 4,
+      "backend": "io_uring",
+      "requests_per_second": {
+        "median": 94206.2,
+        "min": 69988.2,
+        "max": 116377
+      },
+      "p50_us": {
+        "median": 185.542,
+        "min": 176.549,
+        "max": 205.939
+      },
+      "p95_us": {
+        "median": 864.658,
+        "min": 628.852,
+        "max": 1657.17
+      },
+      "p99_us": {
+        "median": 2244.47,
+        "min": 1644.07,
+        "max": 3999.42
+      },
+      "server_cpu_seconds": {
+        "median": 2.25,
+        "min": 2.06,
+        "max": 2.55
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5300224,
+        "min": 5246976,
+        "max": 5316608
+      }
+    },
+    {
+      "scenario": "static_cached",
+      "workers": 4,
+      "backend": "nginx",
+      "requests_per_second": {
+        "median": 77219.7,
+        "min": 73968.1,
+        "max": 82250.6
+      },
+      "p50_us": {
+        "median": 327.905,
+        "min": 303.606,
+        "max": 339.067
+      },
+      "p95_us": {
+        "median": 913.737,
+        "min": 776.28,
+        "max": 980.683
+      },
+      "p99_us": {
+        "median": 2062.88,
+        "min": 1523.31,
+        "max": 2411.49
+      },
+      "server_cpu_seconds": {
+        "median": 1.7,
+        "min": 1.5899999999999999,
+        "max": 1.79
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 23339008,
+        "min": 23298048,
+        "max": 23552000
+      }
+    },
+    {
+      "scenario": "proxy",
+      "workers": 1,
+      "backend": "epoll",
+      "requests_per_second": {
+        "median": 14947.7,
+        "min": 11485.9,
+        "max": 15696.3
+      },
+      "p50_us": {
+        "median": 1882.38,
+        "min": 1765.88,
+        "max": 2160.73
+      },
+      "p95_us": {
+        "median": 4883.27,
+        "min": 4264.5,
+        "max": 7136.84
+      },
+      "p99_us": {
+        "median": 8528.98,
+        "min": 6893.16,
+        "max": 13307.7
+      },
+      "server_cpu_seconds": {
+        "median": 7.220000000000001,
+        "min": 6.93,
+        "max": 8.899999999999999
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5521408,
+        "min": 5419008,
+        "max": 5529600
+      }
+    },
+    {
+      "scenario": "proxy",
+      "workers": 1,
+      "backend": "io_uring",
+      "requests_per_second": {
+        "median": 17653.3,
+        "min": 11608,
+        "max": 19278.3
+      },
+      "p50_us": {
+        "median": 1632.97,
+        "min": 1504.33,
+        "max": 2277.26
+      },
+      "p95_us": {
+        "median": 3623.44,
+        "min": 3231.67,
+        "max": 6236.75
+      },
+      "p99_us": {
+        "median": 5903.58,
+        "min": 5156.37,
+        "max": 10193
+      },
+      "server_cpu_seconds": {
+        "median": 5.84,
+        "min": 5.55,
+        "max": 9.399999999999999
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5586944,
+        "min": 5562368,
+        "max": 5603328
+      }
+    },
+    {
+      "scenario": "proxy",
+      "workers": 1,
+      "backend": "nginx",
+      "requests_per_second": {
+        "median": 24313.9,
+        "min": 18907.5,
+        "max": 25928.7
+      },
+      "p50_us": {
+        "median": 1151.61,
+        "min": 1056.46,
+        "max": 1234.54
+      },
+      "p95_us": {
+        "median": 3087.86,
+        "min": 2489.04,
+        "max": 4373.26
+      },
+      "p99_us": {
+        "median": 5612.32,
+        "min": 4589.15,
+        "max": 12588.9
+      },
+      "server_cpu_seconds": {
+        "median": 3.9999999999999996,
+        "min": 3.7600000000000002,
+        "max": 5.15
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 8409088,
+        "min": 8392704,
+        "max": 8421376
+      }
+    },
+    {
+      "scenario": "proxy",
+      "workers": 4,
+      "backend": "epoll",
+      "requests_per_second": {
+        "median": 44227,
+        "min": 33793.7,
+        "max": 47506.8
+      },
+      "p50_us": {
+        "median": 491.308,
+        "min": 478.589,
+        "max": 532.472
+      },
+      "p95_us": {
+        "median": 1689.16,
+        "min": 1640.39,
+        "max": 2999.62
+      },
+      "p99_us": {
+        "median": 3160.02,
+        "min": 3047.55,
+        "max": 6384.1
+      },
+      "server_cpu_seconds": {
+        "median": 5.0200000000000005,
+        "min": 4.6499999999999995,
+        "max": 5.9
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5861376,
+        "min": 5844992,
+        "max": 5898240
+      }
+    },
+    {
+      "scenario": "proxy",
+      "workers": 4,
+      "backend": "io_uring",
+      "requests_per_second": {
+        "median": 44537.3,
+        "min": 35242.3,
+        "max": 51397.3
+      },
+      "p50_us": {
+        "median": 470.541,
+        "min": 416.527,
+        "max": 504.373
+      },
+      "p95_us": {
+        "median": 1834.33,
+        "min": 1378.72,
+        "max": 2659.05
+      },
+      "p99_us": {
+        "median": 3488.76,
+        "min": 3029.42,
+        "max": 5126.79
+      },
+      "server_cpu_seconds": {
+        "median": 4.73,
+        "min": 4.4799999999999995,
+        "max": 5.7
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 6037504,
+        "min": 5943296,
+        "max": 6049792
+      }
+    },
+    {
+      "scenario": "proxy",
+      "workers": 4,
+      "backend": "nginx",
+      "requests_per_second": {
+        "median": 54314.2,
+        "min": 44222.3,
+        "max": 57370.4
+      },
+      "p50_us": {
+        "median": 403.915,
+        "min": 397.417,
+        "max": 444.998
+      },
+      "p95_us": {
+        "median": 1570.98,
+        "min": 1426.04,
+        "max": 2134.95
+      },
+      "p99_us": {
+        "median": 3164.33,
+        "min": 2908.37,
+        "max": 4414.79
+      },
+      "server_cpu_seconds": {
+        "median": 3.37,
+        "min": 3.1799999999999997,
+        "max": 3.65
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 24109056,
+        "min": 24072192,
+        "max": 24154112
+      }
+    },
+    {
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "backend": "epoll",
+      "requests_per_second": {
+        "median": 60809.3,
+        "min": 53801.6,
+        "max": 65293.4
+      },
+      "p50_us": {
+        "median": 449.978,
+        "min": 432.759,
+        "max": 463.123
+      },
+      "p95_us": {
+        "median": 1196.41,
+        "min": 1058.68,
+        "max": 1487.04
+      },
+      "p99_us": {
+        "median": 2246.3,
+        "min": 2158.09,
+        "max": 3415.47
+      },
+      "server_cpu_seconds": {
+        "median": 1.8299999999999998,
+        "min": 1.8199999999999998,
+        "max": 2.11
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5144576,
+        "min": 4775936,
+        "max": 5251072
+      }
+    },
+    {
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "backend": "io_uring",
+      "requests_per_second": {
+        "median": 53123.7,
+        "min": 43476.3,
+        "max": 59040.6
+      },
+      "p50_us": {
+        "median": 490.729,
+        "min": 458.718,
+        "max": 509.637
+      },
+      "p95_us": {
+        "median": 1373.43,
+        "min": 1182.09,
+        "max": 2044.38
+      },
+      "p99_us": {
+        "median": 2700.16,
+        "min": 2123.65,
+        "max": 4680.73
+      },
+      "server_cpu_seconds": {
+        "median": 2.2600000000000002,
+        "min": 2.1,
+        "max": 2.4099999999999997
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5332992,
+        "min": 5214208,
+        "max": 5349376
+      }
+    },
+    {
+      "scenario": "proxy_cached",
+      "workers": 1,
+      "backend": "nginx",
+      "requests_per_second": {
+        "median": 47146.7,
+        "min": 34459.4,
+        "max": 53489.7
+      },
+      "p50_us": {
+        "median": 527.292,
+        "min": 455.007,
+        "max": 561.349
+      },
+      "p95_us": {
+        "median": 1623.88,
+        "min": 1457.56,
+        "max": 2889.42
+      },
+      "p99_us": {
+        "median": 2951.49,
+        "min": 2474.93,
+        "max": 6702.78
+      },
+      "server_cpu_seconds": {
+        "median": 2.44,
+        "min": 2.1799999999999997,
+        "max": 2.9
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 11739136,
+        "min": 11620352,
+        "max": 11853824
+      }
+    },
+    {
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "backend": "epoll",
+      "requests_per_second": {
+        "median": 79160.2,
+        "min": 60434.6,
+        "max": 105657
+      },
+      "p50_us": {
+        "median": 168.061,
+        "min": 155.286,
+        "max": 172.513
+      },
+      "p95_us": {
+        "median": 1468.71,
+        "min": 941.8,
+        "max": 1942.65
+      },
+      "p99_us": {
+        "median": 3681.18,
+        "min": 2437.19,
+        "max": 4782.13
+      },
+      "server_cpu_seconds": {
+        "median": 2.4099999999999997,
+        "min": 2.23,
+        "max": 2.84
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5210112,
+        "min": 5009408,
+        "max": 5488640
+      }
+    },
+    {
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "backend": "io_uring",
+      "requests_per_second": {
+        "median": 84860.8,
+        "min": 63298.2,
+        "max": 88617.3
+      },
+      "p50_us": {
+        "median": 194.979,
+        "min": 177.239,
+        "max": 219.608
+      },
+      "p95_us": {
+        "median": 1150.26,
+        "min": 885.265,
+        "max": 1577.87
+      },
+      "p99_us": {
+        "median": 2899.34,
+        "min": 2673.24,
+        "max": 4306.89
+      },
+      "server_cpu_seconds": {
+        "median": 2.68,
+        "min": 2.58,
+        "max": 2.9699999999999998
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 5357568,
+        "min": 5165056,
+        "max": 5443584
+      }
+    },
+    {
+      "scenario": "proxy_cached",
+      "workers": 4,
+      "backend": "nginx",
+      "requests_per_second": {
+        "median": 71885,
+        "min": 62975.1,
+        "max": 81824.6
+      },
+      "p50_us": {
+        "median": 230.172,
+        "min": 209.263,
+        "max": 235.937
+      },
+      "p95_us": {
+        "median": 1318.48,
+        "min": 1236.08,
+        "max": 1776.47
+      },
+      "p99_us": {
+        "median": 3307.64,
+        "min": 2994.16,
+        "max": 4700.2
+      },
+      "server_cpu_seconds": {
+        "median": 2.9699999999999998,
+        "min": 2.65,
+        "max": 3.03
+      },
+      "server_process_high_water_rss_bytes": {
+        "median": 28057600,
+        "min": 27758592,
+        "max": 28131328
+      }
+    }
+  ]
+}

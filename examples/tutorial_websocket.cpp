@@ -22,9 +22,9 @@ pace::task<void> deadline(pace::io_context& io) {
 pace::task<void> echo(pace::tcp::stream transport) {
     try {
         transport.set_no_delay();
-        pace::websocket::stream socket(std::move(transport), pace::websocket::role::server);
-        // Applications may additionally check Origin and authentication here.
-        co_await socket.accept({"echo"}, [](const auto& request) { return request.target == "/echo"; });
+        std::vector<std::string> protocols{"echo"};
+        auto socket = co_await pace::websocket::accept(std::move(transport), std::move(protocols),
+            [](const auto& request) { return request.target == "/echo"; });
         while (auto message = co_await socket.receive())
             co_await socket.send(std::move(*message));
     } catch (const std::system_error&) {
@@ -41,17 +41,14 @@ pace::task<void> serve(pace::tcp::listener& listener) {
     }
 }
 pace::task<void> client(pace::io_context& io, pace::tcp::endpoint endpoint) {
-    pace::tcp::stream transport(io);
-    co_await transport.connect(std::move(endpoint));
-    transport.set_no_delay();
-    pace::websocket::stream socket(std::move(transport), pace::websocket::role::client);
-    co_await socket.handshake("localhost", "/echo", {"echo"});
+    std::vector<std::string> protocols{"echo"};
+    auto socket = co_await pace::websocket::connect(io, std::move(endpoint), "localhost", "/echo", std::move(protocols));
     co_await socket.ping("hello");
     co_await socket.send_text("Hello from PACE", 4); // Continuation frames are assembled by receive().
     const auto response = co_await socket.receive();
     if (!response || response->type != pace::websocket::message_type::text || response->data != "Hello from PACE")
         throw std::runtime_error("WebSocket echo mismatch");
-    if (!(co_await socket.close_gracefully(1000, "finished")))
+    if (!(co_await socket.close_gracefully(1000, "finished", std::chrono::seconds(2))))
         throw std::runtime_error("WebSocket peer did not complete closing handshake");
     std::cout << "WebSocket echo verified: " << response->data << '\n';
     io.stop();

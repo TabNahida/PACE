@@ -1,39 +1,22 @@
-# 3. 从 TCP 连接到完整消息
+# 3. 一次调用完成 TCP 请求
 
-[English](03-tcp.md) · [上一章：任务](02-tasks-timers.zh-CN.md) · [下一章：HTTP](04-http.zh-CN.md)
+[English](03-tcp.md) · [学习路线](README.zh-CN.md) · [下一章：HTTP](04-http.zh-CN.md)
 
-目标是写一个回显服务器，再写一个能验证完整回复的客户端。沿用第一章的工程，
-应用依赖改为 `pace_net`。先用数字地址 `127.0.0.1`，域名解析留到第八章。
+使用 PACE 0.4.0 或更新版本和第一章的源码构建方式，链接 `pace_net`。
+本章约定请求四字节、回复四字节，使用数字回环地址。
 
-## 第一步：把一个连接交给一个任务
+## 1. 先写客户端
 
-新建 `tcp_server.cpp`：
+保存为 `tcp_client.cpp`：
 
 ```cpp
 #include <pace/tcp.hpp>
-#include <array>
 #include <iostream>
-
-pace::task<void> echo(pace::tcp::stream socket) {
-    try {
-        std::array<char, 4096> buffer{};
-        while (const auto count = co_await socket.read_some(buffer))
-            co_await socket.write_all(std::string_view(buffer.data(), count));
-    } catch (const std::system_error& error) {
-        std::cerr << "connection: " << error.what() << '\n';
-    }
-}
-
-pace::task<void> accept_clients(pace::tcp::listener& listener) {
-    for (;;) listener.context().spawn(echo(co_await listener.accept()));
-}
 
 int main() {
     try {
-        pace::io_context io;
-        pace::tcp::listener listener(io, {"127.0.0.1", 9090});
-        io.spawn(accept_clients(listener));
-        io.run();
+        auto reply = pace::tcp::exchange({"127.0.0.1", 9090}, "ping", 4);
+        std::cout << reply << '\n';
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
@@ -41,46 +24,36 @@ int main() {
 }
 ```
 
-`listener` 构造时立即绑定端口，`accept` 等待一个连接。
-拿到连接后，`spawn` 把 socket 按值转交给 `echo`，接收循环便能继续等待下一个客户端。
-socket 由连接任务持有；listener 则在 `main` 中，一直活到 `io.run()` 返回。
+`exchange` 完成连接、写入完整请求、读取恰好四字节回复和关闭，直接返回自己持有数据的字符串。
+调用会阻塞当前线程，默认总超时 30 秒；不需要 `run` 或协程。
+要改为两秒，包含 `<chrono>`，把 `{.timeout = std::chrono::seconds(2)}` 作为第四个参数。
 
-读取结果是字节数，不是以零结尾的字符串。非空缓冲区读到零表示 EOF。
-写入使用数组的一段 view，但要等 `write_all` 完成后才复用数组，所以等待期间数据有效。
-连接异常在自己的任务内处理，不必让整个服务退出。
-这个入门程序的 Ctrl-C 使用系统默认终止行为；第六章再补协作式关闭。
+TCP 保留字节顺序，**不保留消息边界**。这里的 `4` 是约定的回复长度，不是“最大包大小”。
+PACE 自动处理短读；提前遇到 EOF 会抛异常。两端必须使用同样的消息分帧规则。
 
-## 第二步：客户端先约定消息长度
+## 2. 准备四字节回显服务端
 
-新建 `tcp_client.cpp`：
+保存为 `tcp_server.cpp`：
 
 ```cpp
 #include <pace/run.hpp>
 #include <pace/tcp.hpp>
 #include <iostream>
-#include <span>
-#include <string>
 
-pace::task<std::string> exchange(pace::io_context& io) {
-    pace::tcp::stream socket(io);
-    co_await socket.connect({"127.0.0.1", 9090});
-    const std::string message = "Hello from PACE";
-    co_await socket.write_all(message);
-    std::string reply(message.size(), '\0');
-    std::size_t received = 0;
-    while (received != reply.size()) {
-        const auto n = co_await socket.read_some(
-            std::span<char>(reply.data() + received, reply.size() - received));
-        if (n == 0) throw std::runtime_error("EOF before the complete reply");
-        received += n;
+pace::task<void> echo(pace::tcp::stream socket) {
+    try {
+        auto message = co_await pace::read_exact(socket, 4);
+        co_await pace::write(socket, std::move(message));
+    } catch (const std::system_error& error) {
+        std::cerr << "connection: " << error.what() << '\n';
     }
-    if (reply != message) throw std::runtime_error("echo mismatch");
-    co_await socket.close_gracefully();
-    co_return reply;
 }
-
+pace::task<void> serve() {
+    auto listener = pace::tcp::listen({"127.0.0.1", 9090});
+    for (;;) pace::this_context().spawn(echo(co_await listener.accept()));
+}
 int main() {
-    try { std::cout << pace::run(exchange) << '\n'; }
+    try { pace::run(serve); }
     catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
@@ -88,20 +61,16 @@ int main() {
 }
 ```
 
-这里故意保留接收循环：TCP 只有有序字节流，没有“一次 write 对应一次 read”的保证。
-本例知道发出消息的长度，所以累计到同样长度再检查。真实协议需要长度前缀、
-分隔符或其他分帧规则；即使本机一次 read 恰好读完，也不能依赖这个结果。
+`listen` 在运行中的 context 上绑定地址，`accept` 返回一条连接，`spawn` 将连接交给独立的
+`echo` 任务，监听循环继续接收其他客户端。协程持有连接并处理连接错误。
+服务端需要持续处理事件，因此使用 `run`；一次性客户端直接调用即可。
 
-字符串和 socket 都在当前协程帧里，等待期间保持有效。
-`close_gracefully` 先关闭发送方向，再进行有界 drain，最后关闭连接。
-它不证明对方业务已经处理完消息。完成关闭后返回字符串，`pace::run` 才停止临时上下文。
+## 3. 构建并验证
 
-## 第三步：分别运行，核对输出
-
-在应用的 xmake.lua 中添加：
+在第一章的 xmake.lua 中添加：
 
 ```lua
-for _, name in ipairs({"tcp_server", "tcp_client"}) do
+for _, name in ipairs({"tcp_client", "tcp_server"}) do
     target(name)
         set_kind("binary")
         add_files(name .. ".cpp")
@@ -109,21 +78,32 @@ for _, name in ipairs({"tcp_server", "tcp_client"}) do
 end
 ```
 
-执行 `xmake -y tcp_server tcp_client`。一个终端运行 `xmake run tcp_server`，
-另一个运行 `xmake run tcp_client`，应看到 `Hello from PACE`。
-再运行一次客户端，确认服务器还在接收连接。最后用 Ctrl-C 停止服务器。
+执行 `xmake -y tcp_client tcp_server`。在一个终端运行 `xmake run tcp_server`，
+另一个终端运行 `xmake run tcp_client`，应输出 `ping` 后退出。再运行客户端仍能得到回复。
+用 Ctrl-C 结束服务端。试着把两端长度改为六字节，内容改为 `hello!`；只改一端会破坏协议。
 
-也可以在 PACE 仓库根运行 `xmake run tutorial_tcp`：配套练习使用临时端口，
-在同一进程内自动验证两端并退出。先理解上述步骤，再读[完整练习](../../examples/tutorial_tcp.cpp)
-里的命令行选项和信号关闭逻辑。
+## 4. 需要异步组合时
 
-## 第四步：改变一个条件再观察
+在运行中的协程里，一次交换仍然只需一行：
 
-两端一起改成 `::1` 可测试 IPv6；listener 端口设为零并读取 `local_endpoint()`
-可让系统选测试端口。绑定 `0.0.0.0` 或 `::` 才会监听外部接口；IPv6 默认仅接收 IPv6。
+```cpp
+auto reply = co_await pace::tcp::async_exchange({"127.0.0.1", 9090}, "ping", 4);
+```
 
-一个 stream 可同时有一个读和一个写，不能有两个读或两个写。
-关闭 socket 会取消等待，但不会等等待它的协程退栈；先销毁 C++ 对象再恢复成员协程
-仍然是错误的。第六章会明确说明关闭、取消、等待返回、销毁之间的顺序。
+需要在同一连接上做多次操作时，再自己保留 socket：
 
-[完整 TCP 参考](../reference/tcp.md)
+```cpp
+auto socket = co_await pace::tcp::connect({"127.0.0.1", 9090});
+co_await pace::write(socket, "ping");
+auto reply = co_await pace::read_exact(socket, 4);
+co_await socket.close_gracefully();
+```
+
+`pace::write` 在挂起期间持有字符串，`read_exact` 返回独立字符串，默认分配上限为 1 MiB。
+socket 不能超出所属 context 的生命周期。异步助手不会自动增加直接客户端的总超时。
+
+[直接客户端的限制与错误](../reference/direct-clients.zh-CN.md) ·
+[缓冲区、IPv6 与并发](../reference/component-conveniences.zh-CN.md) ·
+[调优](../reference/protocol-tuning.zh-CN.md) · [关闭](06-shutdown.zh-CN.md)
+
+仓库中的 `xmake run tutorial_tcp` 是可以独立运行的异步回显练习。

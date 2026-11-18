@@ -1,52 +1,103 @@
-# 7. 发送和接收一个 UDP 数据报
+# 7. 一次调用完成 UDP 收发
 
-[English](07-udp.md) · [上一章：关闭](06-shutdown.zh-CN.md) · [下一章：DNS/TLS](08-dns-tls.zh-CN.md)
+[English](07-udp.md) · [学习路线](README.zh-CN.md) · [下一章：DNS/TLS](08-dns-tls.zh-CN.md)
 
-TCP 章节要自己累计一条消息的字节。UDP 保留每次发送的数据报边界，
-但不提供 TCP 那样的可靠有序传输。本章在本机发送一个数据报并打印它。
-依赖 `pace_net`，完整程序如下：
+使用 PACE 0.4.0 或更新版本和第一章的源码构建方式，链接 `pace_net`。
+UDP 保留数据报边界，但不保证送达或顺序。
+
+## 1. 先写直接客户端
+
+保存为 `udp_client.cpp`：
 
 ```cpp
 #include <pace/udp.hpp>
-#include <pace/run.hpp>
-#include <array>
 #include <iostream>
 
-pace::task<void> hello(pace::io_context& io) {
-    pace::udp::socket receiver(io, {"127.0.0.1", 0});
-    pace::udp::socket sender(io);
-    co_await sender.send_to("Hello, UDP!", receiver.local_endpoint());
-    std::array<char, 256> buffer{};
-    auto packet = co_await receiver.receive_from(buffer);
-    if (packet.truncated || std::string_view(buffer.data(), packet.size) != "Hello, UDP!")
-        throw std::runtime_error("UDP message mismatch or truncation");
-    std::cout << std::string_view(buffer.data(), packet.size) << '\n';
-}
 int main() {
-    try { pace::run(hello); }
-    catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
+    try {
+        auto packet = pace::udp::exchange({"127.0.0.1", 9091}, "Hello, UDP!");
+        if (packet.truncated) throw std::runtime_error("UDP reply truncated");
+        std::cout << packet.data << '\n';
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
 }
 ```
 
-## 第一步：先让接收端有一个地址
+`exchange` 发送一个请求，返回来自该数字地址和端口的第一个回复。调用会阻塞当前线程，
+默认总超时 30 秒，不需要配置事件循环。若要改为两秒，包含 `<chrono>`，
+将 `{.timeout = std::chrono::seconds(2)}` 作为第三个参数。
 
-构造 receiver 时指定回环地址和零端口，让系统分配可用端口，
-再通过 `local_endpoint()` 取得真实地址。sender 可以不先 bind，发送时由系统选择本地端点。
-两个 socket 都在入口协程内，入口返回前已经没有挂起的成员操作。
+结果持有 `data`，并提供 `sender` 和 `truncated`。解析前检查截断标记：超过接收容量的字节
+已经丢失。空 `data` 是合法的零长度数据报，不是 EOF。请求不会自动重试。
 
-## 第二步：按一个数据报来接收
+## 2. 准备 UDP 回显服务
 
-`send_to` 每次指定目的地址。`receive_from` 返回数据大小和来源端点，
-回复时使用 `packet.sender`。注意 UDP 的零长度消息是有效消息，不是 EOF。
-缓冲区要覆盖协议允许的最大数据报；如果 `packet.truncated` 为 true，说明缓冲区太小，报文剩余部分已被丢弃。
-应拒绝这条不完整消息，不能把收到的前半段当成完整内容。
+保存为 `udp_server.cpp`：
 
-## 第三步：核对结果，再增加交互
+```cpp
+#include <pace/udp.hpp>
+#include <iostream>
 
-构建运行 `my_application`，应输出 `Hello, UDP!` 并退出。
-PACE 根目录的 `xmake run tutorial_udp` 是同一思路的配套练习。
-可以先改消息长度，核对返回 size，再让 receiver 回复 `packet.sender`，最后由 sender 接收。
+pace::task<void> serve() {
+    auto socket = pace::udp::bind({"127.0.0.1", 9091});
+    for (;;) {
+        auto packet = co_await socket.receive();
+        if (!packet.truncated)
+            co_await socket.send(std::move(packet.data), packet.sender);
+    }
+}
+int main() {
+    try { pace::run(serve); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
 
-发送缓冲区要活到发送完成；同一 socket 不要并行发起两个 send 或两个 receive。
-丢包、乱序、重试和消息身份由应用协议处理；需要可靠的多路流时看后面的 QUIC 章节。
-[UDP 参考](../reference/udp.md)
+`bind` 在当前 context 上创建并绑定 socket，`receive` 等待一个数据报，`send` 向它的来源回复。
+本服务端丢弃截断的数据报。socket 在所有操作完成前保持存活，`run` 驱动持续运行的服务端。
+
+## 3. 构建并验证
+
+在第一章的 xmake.lua 中添加：
+
+```lua
+for _, name in ipairs({"udp_client", "udp_server"}) do
+    target(name)
+        set_kind("binary")
+        add_files(name .. ".cpp")
+        add_deps("pace_net")
+end
+```
+
+执行 `xmake -y udp_client udp_server`，然后运行 `xmake run udp_server`。
+另开终端执行 `xmake run udp_client`，应输出 `Hello, UDP!`。试着修改消息再运行。
+用 Ctrl-C 停止服务端。停止服务端后再运行客户端，可以观察错误或超时；具体取决于系统
+如何报告目标不可达。
+
+## 4. 只发送，或组合异步操作
+
+对于不需要回复的服务：
+
+```cpp
+auto sent = pace::udp::send({"127.0.0.1", 9091}, "notification");
+```
+
+返回值是本地 socket 接受的字节数，不代表对端已经收到。每次直接调用都使用新的 socket。
+协程里的异步请求写法为：
+
+```cpp
+auto packet = co_await pace::udp::async_exchange({"127.0.0.1", 9091}, "hello");
+```
+
+异步版本不附加总超时。要复用 socket，或接受其他地址的回复，再像服务端一样在协程里使用
+`udp::open()` / `udp::bind()`、`socket.send` 和 `socket.receive`。
+
+[来源过滤、超时与错误](../reference/direct-clients.zh-CN.md) ·
+[容量与所有权](../reference/component-conveniences.zh-CN.md) ·
+[缓冲区复用与调优](../reference/protocol-tuning.zh-CN.md)
+
+仓库内的 `xmake run tutorial_udp` 是一个独立的本地异步练习。

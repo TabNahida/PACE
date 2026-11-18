@@ -1,6 +1,10 @@
 # API 中文索引与关键约定
 
-[0.3.0 convenience APIs: app, URL client, TCP, context](convenience.md)
+[直接客户端与 HTTP 命名迁移](direct-clients.zh-CN.md)
+
+[组件便捷接口（0.3.1）](component-conveniences.zh-CN.md) · [协议调优](protocol-tuning.zh-CN.md) · [HTTP 进阶](http-recipes.zh-CN.md) · [构建选项](build-configuration.md)
+
+[应用便捷接口：app、异步 URL 客户端、TCP、context](convenience.md)
 
 常用便利入口：[pace::run](run.md) · [HTTP 路由与普通处理器](http-router.md) · [逐步教程](../tutorial/README.zh-CN.md)
 
@@ -9,18 +13,20 @@
 
 | 功能 | 公开接口 | 参考 |
 |---|---|---|
+| 结构化并发 | with_task_group、join_handle、局部取消与 deadline | [并发契约](structured-concurrency.zh-CN.md) |
+| 统一 HTTP 客户端 | HTTP/1、2、3 的 get/post/fetch 与 async_ 形式 | [客户端](http-clients.zh-CN.md) |
 | DNS 扩展 | `dns::resolver`、A/AAAA/CNAME、超时、取消 | [DNS](dns.md) |
 | QUIC 扩展 | `quic::context/listener/connection/stream`、TLS 1.3、多路流 | [QUIC](quic.md) |
-| HTTP/3 应用协议 | `http3::exchange/serve_connection/serve`、nghttp3/QPACK | [HTTP/3](http3.md) |
+| HTTP/3 应用协议 | `http3::async_exchange/serve_connection/serve`、nghttp3/QPACK | [HTTP/3](http3.md) |
 | 协程任务 | `task<T>`、`task<void>`、移动、`release`、右值 `co_await`、promise/awaiter 协议 | [task](task.md) |
 | 提交与运行 | `io_context::spawn/post/run/stop/stopped/current` | [io_context](io-context.md) |
 | 等待与取消 | `wait_readable/wait_writable/cancel/sleep_for/yield` 及 awaiter 类型 | [io_context](io-context.md) |
 | 工作线程 | `runtime(workers)`、`size/context/run/run_on_current_thread/stop` | [runtime](runtime.md) |
 | TCP | `tcp::endpoint/listen_options/stream/listener` | [TCP](tcp.md) |
 | UDP | `udp::endpoint/datagram/socket`、`send_to/receive_from` | [UDP](udp.md) |
-| HTTP/HTTPS | 消息与限额、`handler/serve/serve_connection`、`client/secure_client`、`get/fetch`、协议异常 | [HTTP](http.md) |
+| HTTP/HTTPS | 消息与限额、`handler/serve/serve_connection`、`client/secure_client`、`get/post/fetch`、`async_get/async_post/async_fetch`、协议异常 | [HTTP](http.md) |
 | TLS | `tls::context/stream`、证书验证、握手、ALPN、加密读写与关闭 | [TLS](tls.md) |
-| HTTP/2 | `http2::limits/exchange/serve/serve_connection`，有界批量请求 | [HTTP/2](http2.md) |
+| HTTP/2 | `http2::limits/async_exchange/serve/serve_connection`，有界批量请求 | [HTTP/2](http2.md) |
 | WebSocket | 握手、消息、控制帧与可选加密传输 | [WebSocket](websocket.md) |
 | 平台与兼容 | `native_socket_type/invalid_socket`、旧 TCP 名称、公共头文件 | [平台与兼容](platform.md) |
 
@@ -73,8 +79,8 @@ TLS 的关闭会交换 `close_notify`，WebSocket 的关闭会交换关闭帧；
 HTTP 提供 HTTP/1.0、HTTP/1.1 客户端与服务端，支持 Content-Length、chunked、trailer 和持久连接。
 默认请求头上限 16 KiB、请求体上限 1 MiB、每连接最多 1000 个请求。
 响应的 Content-Length、Connection、Content-Type 等由库管理。
-启用 `--tls=y` 后，同样的 `get/fetch/serve` 接口有 HTTPS 重载，默认校验证书链和主机名。
-`http::get(io, endpoint, "/health")` 可以完成一次请求；`http::client` 支持顺序复用连接。
+启用 `--tls=y` 后，同样的 `get/fetch` 直接接口和 `async_get/async_fetch/serve` 异步接口有 HTTPS 重载，默认校验证书链和主机名。
+`http::async_get(io, endpoint, "/health")` 可以完成一次请求；`http::client` 支持顺序复用连接。
 HTTP/1.1 服务端收到任何 `Expect`（包括 `100-continue`）都会返回 417。客户端
 拒绝自行设置 `Expect`，直接发送完整请求，然后可跳过数量受限的 100/103 等中间
 响应，继续读取最终响应；这不包含“先发请求头，等 100 许可后再发送 body”的握手。
@@ -90,3 +96,6 @@ HTTP/2 与 WebSocket 使用独立接口；本 HTTP/1.1 接口不提供 CONNECT�
 要让已有响应尽量完成，应先停止接收新连接、等待应用跟踪的连接退出，
 再到达宽限期后停止 context。最后等 run 返回或 join 运行线程，
 销毁 socket/listener，再销毁 context。参见[关闭教程](../tutorial/06-shutdown.md)。
+
+- [HTTP 网关服务](http-gateway.zh-CN.md)：目录挂载、反向代理、缓存、负载均衡。
+- [I/O 后端](io-backends.md)：选择方式、默认值与能力边界。

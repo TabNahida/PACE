@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pace/cancellation.hpp>
 #include <coroutine>
 #include <exception>
 #include <optional>
@@ -10,7 +11,10 @@
 namespace pace {
 
 namespace detail {
+struct task_access;
 struct promise_base {
+    cancellation_token cancellation;
+    bool cancellation_bound = false;
     std::coroutine_handle<> continuation = std::noop_coroutine();
     std::exception_ptr exception;
     std::coroutine_handle<> completed_next{};
@@ -59,18 +63,27 @@ public:
         awaiter(awaiter&& other) noexcept : handle(std::exchange(other.handle, {})) {}
         ~awaiter() { if (handle) handle.destroy(); }
         bool await_ready() const noexcept { return !handle || handle.done(); }
-        std::coroutine_handle<> await_suspend(std::coroutine_handle<> parent) noexcept {
+        template<class P>
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<P> parent) {
+            auto& promise = handle.promise();
+            if (!promise.cancellation_bound) {
+                if constexpr (requires { parent.promise().cancellation; })
+                    promise.cancellation = parent.promise().cancellation;
+            }
+            promise.cancellation.throw_if_cancelled();
             handle.promise().continuation = parent;
             return handle;
         }
         T await_resume() {
             if (!handle) throw std::logic_error("cannot await an empty task");
             if (handle.promise().exception) std::rethrow_exception(handle.promise().exception);
+            handle.promise().cancellation.throw_if_cancelled();
             return std::move(*handle.promise().value);
         }
     };
     awaiter operator co_await() && noexcept { return awaiter{release()}; }
 private:
+    friend struct detail::task_access;
     explicit task(handle_type handle) noexcept : handle_(handle) {}
     handle_type handle_{};
 };
@@ -98,19 +111,51 @@ public:
         awaiter(awaiter&& other) noexcept : handle(std::exchange(other.handle, {})) {}
         ~awaiter() { if (handle) handle.destroy(); }
         bool await_ready() const noexcept { return !handle || handle.done(); }
-        std::coroutine_handle<> await_suspend(std::coroutine_handle<> parent) noexcept {
+        template<class P>
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<P> parent) {
+            auto& promise = handle.promise();
+            if (!promise.cancellation_bound) {
+                if constexpr (requires { parent.promise().cancellation; })
+                    promise.cancellation = parent.promise().cancellation;
+            }
+            promise.cancellation.throw_if_cancelled();
             handle.promise().continuation = parent;
             return handle;
         }
         void await_resume() {
             if (!handle) throw std::logic_error("cannot await an empty task");
             if (handle.promise().exception) std::rethrow_exception(handle.promise().exception);
+            handle.promise().cancellation.throw_if_cancelled();
         }
     };
     awaiter operator co_await() && noexcept { return awaiter{release()}; }
 private:
+    friend struct detail::task_access;
     explicit task(handle_type handle) noexcept : handle_(handle) {}
     handle_type handle_{};
 };
 
+namespace detail {
+struct task_access {
+    template<class T> static task<T> bind(task<T> work, cancellation_token token) {
+        if (work.handle_) {
+            work.handle_.promise().cancellation = std::move(token);
+            work.handle_.promise().cancellation_bound = true;
+        }
+        return work;
+    }
+};
+}
+namespace this_task {
+struct cancellation_awaiter {
+    pace::cancellation_token value;
+    bool await_ready() const noexcept { return false; }
+    template<class P> bool await_suspend(std::coroutine_handle<P> h) noexcept {
+        if constexpr (requires { h.promise().cancellation; }) value = h.promise().cancellation;
+        return false;
+    }
+    pace::cancellation_token await_resume() const noexcept { return value; }
+};
+inline cancellation_awaiter cancellation() noexcept { return {}; }
+}
 } // namespace pace

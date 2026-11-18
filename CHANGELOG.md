@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.6.0 — 2026-11-18
+
+- Add the optional C++20 named module and ngtcp2 QUIC backend. Drive QUIC deadlines and continuations through the PACE reactor.
+- Reduce routing and cross-thread submission overhead. Publish [QUIC throughput, latency and memory measurements](benchmarks/results/quic-backends-2026-11-18/README.md).
+
+## 0.5.0 — 2026-11-03
+
+- Reduce HTTP/1 header allocation and bypass body-reader coroutines for complete buffered messages; preserve framing, body limits, pipelining and cancellation.
+- Speed up static content validators (portable XXH64), file traversal, date formatting and HTTP/1 encoding; remove redundant body copies, buffer clearing and a proxy coroutine wrapper.
+- Add reactor-local single-snapshot cache reads with mutation/TTL invalidation, isolated reader counters and borrowed context-service lookup to reduce hot-key contention and reference-count traffic.
+
+- Add HTTP directory mounts, bounded static responses, validators and byte ranges.
+- Add reverse proxies with per-reactor keep-alive pools, round-robin/least-connections balancing, deadlines and bounded shared response caching.
+- Add sharded CLOCK caches and dense generation-checked reactor descriptor slots.
+- Add selectable Linux io_uring and Windows IOCP socket-notification backends; retain native fallbacks.
+- Add bilingual gateway tutorials, backend reference and reproducible local Linux nginx comparisons. Restore the README PACE/Asio/libuv comparison and publish a full report linking both library and nginx gateway measurements, including regressions.
+
+## 0.4.0 — 2026-10-28
+
+- Add structured task groups with owned factories, result handles, scope-owned resources and cancel-then-join error propagation; children cannot outlive the boundary.
+- Add local cancellation sources/tokens, inherited task cancellation, shared monotonic deadlines and bounded cleanup shielding across runtime waits, DNS, QUIC and HTTP.
+- Unify HTTP/1, HTTP/2 and HTTP/3 URL get/post/fetch and async_ forms; add http1 as an alias for http. **Breaking:** HTTP/2 and HTTP/3 transport get/exchange become async_get/async_exchange.
+- **Lifetime change:** HTTP serve joins accepted connections on listener closure; HTTP/2 and HTTP/3 connections cancel and join active handlers before exiting.
+- Add bilingual structured concurrency tutorials, complete concurrency contracts and unified-client migration guidance.
+
+- Make HTTP URL `get`, `post` and `fetch` return responses directly without `pace::run`. **Breaking:** all former HTTP free-function coroutine overloads are now `async_get`, `async_post` and `async_fetch`; arguments stay unchanged.
+- Add direct TCP/UDP `exchange`, async alternatives and send-only `udp::send`. Direct calls own their context on the calling thread, enforce a default cooperative 30-second total deadline and reject use inside a running PACE context.
+- Teach the shortest direct clients first in English and Chinese; document exact contracts, tuning and the 0.3.1 migration in reference.
+
+## 0.3.1 — 2026-10-28
+
+- Add current-context TCP/QUIC listeners and UDP open/bind helpers, owned UDP packets, and shared owned write / exact-read helpers for TCP, TLS and QUIC.
+- Add one-shot DNS lookup, verified TLS/QUIC connection helpers, WebSocket connect/upgrade/accept, and single-response HTTP/2 and HTTP/3 GET helpers.
+- Teach the component helpers in English and Chinese with complete TCP, UDP, WebSocket, HTTP/2 and HTTP/3 programs; move HTTP recipes, build configuration and protocol tuning to reference.
+
 ## 0.3.0 — 2026-10-28
 
 - Add no-argument and direct-task entry forms, current-context timers/yield, connected TCP streams and bounded exact reads.

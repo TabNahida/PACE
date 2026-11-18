@@ -11,7 +11,7 @@ namespace pace {
 // Sharded reactors: tasks never migrate after being assigned to a context.
 class runtime {
 public:
-    explicit runtime(std::size_t workers = std::max(1u, std::thread::hardware_concurrency()));
+    explicit runtime(std::size_t workers = std::max(1u, std::thread::hardware_concurrency()), io_backend backend = io_backend::automatic);
     ~runtime();
     runtime(const runtime&) = delete;
     runtime& operator=(const runtime&) = delete;

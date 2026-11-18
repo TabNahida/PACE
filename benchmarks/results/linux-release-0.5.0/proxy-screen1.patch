@@ -1,0 +1,37 @@
+--- a/src/application/http.cpp
++++ b/src/application/http.cpp
+@@ -116,6 +116,8 @@
+ 
+ std::vector<header_field> parse_fields(std::string_view text, std::size_t maximum) {
+     std::vector<header_field> fields;
++    // Count delimiters once instead of repeatedly growing and moving owned fields.
++    fields.reserve(std::min(maximum, static_cast<std::size_t>(std::count(text.begin(), text.end(), '\n'))));
+     while (!text.empty()) {
+         const auto end = text.find("\r\n");
+         if (end == std::string_view::npos || end == 0) throw parse_failure{400};
+@@ -295,7 +297,9 @@
+     if (!frame.chunked) {
+         const auto length = frame.length.value_or(0);
+         if (length > bounds.max_body_bytes) throw parse_failure{413};
+-        co_await ensure_bytes(stream, pending, length);
++        // A complete body commonly arrived together with its headers. Avoid
++        // allocating the 8 KiB read coroutine when no socket read is needed.
++        if (pending.size() < length) co_await ensure_bytes(stream, pending, length);
+         body.assign(pending.data(), length);
+         pending.erase(0, length);
+         co_return;
+--- a/src/application/http_services.cpp
++++ b/src/application/http_services.cpp
+@@ -592,9 +592,9 @@
+         }
+         task<response> send(request req) {
+ #ifdef PACE_HAS_TLS
+-            if (secure) co_return co_await secure->send(std::move(req));
+-#endif
+-            co_return co_await plain->send(std::move(req));
++            if (secure) return secure->send(std::move(req));
++#endif
++            return plain->send(std::move(req));
+         }
+     };
+     struct upstream_state {

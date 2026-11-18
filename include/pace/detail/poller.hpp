@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pace/platform.hpp>
+#include <pace/io_backend.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -28,13 +29,16 @@ public:
 #endif
     // Persistent level-triggered subscriptions are an internal Linux reactor
     // mode. The default retains the one-shot contract for standalone callers.
-    explicit poller(bool persistent = false);
+    explicit poller(bool persistent = false, io_backend selected = io_backend::automatic);
+    bool persistent() const noexcept;
+    io_backend backend() const noexcept;
     ~poller();
     poller(const poller&) = delete;
     poller& operator=(const poller&) = delete;
 
     void update(native_socket_type fd, bool readable, bool writable, std::uint64_t token);
     void remove(native_socket_type fd) noexcept;
+    void forget(native_socket_type fd) noexcept; // Owner is about to close the native socket.
     std::size_t wait(std::span<poll_event> events, int timeout_ms);
     void wake() noexcept;
 

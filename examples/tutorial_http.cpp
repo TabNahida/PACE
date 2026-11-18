@@ -35,10 +35,10 @@ pace::http::router make_routes(pace::io_context& io) {
 }
 
 pace::task<void> check_response(pace::io_context& io, pace::tcp::endpoint endpoint) {
-    const auto response = co_await pace::http::get(io, endpoint, "/health?probe=1");
+    const auto response = co_await pace::http::async_get(io, endpoint, "/health?probe=1");
     if (response.status != 200 || response.body != "ok\n")
         throw std::runtime_error("HTTP response mismatch");
-    const auto delayed = co_await pace::http::get(io, endpoint, "/slow");
+    const auto delayed = co_await pace::http::async_get(io, endpoint, "/slow");
     if (delayed.body != "done\n") throw std::runtime_error("async route mismatch");
     std::cout << "HTTP /health and /slow verified\n";
     io.stop();

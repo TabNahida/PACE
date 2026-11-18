@@ -62,10 +62,11 @@ handler make_handler(Function&& function) {
 // Configure before serving. Copies share a table until registration detaches
 // it; stateful callable instances stay shared. Synchronize state shared across workers.
 class router {
-    struct route { std::string method, path; handler handle; };
+    struct route { std::string method, path; handler handle; bool prefix = false; };
     // HTTP servers copy their handler per connection. Share the read-only table
     // there instead of allocating/copying every route string on each accept.
     std::shared_ptr<std::vector<route>> routes_ = std::make_shared<std::vector<route>>();
+    std::shared_ptr<std::vector<route>> mounts_;
     // Group paths in sorted order, retaining registration order within a path
     // for Allow. Registration is cold; requests perform one binary search.
     static auto first_path(const std::vector<route>& routes, std::string_view path) {
@@ -103,6 +104,20 @@ public:
     template<class Function> router& post(std::string path, Function&& function) {
         return add("POST", std::move(path), std::forward<Function>(function));
     }
+    // Exact routes take priority; otherwise select the longest segment prefix.
+    template<class Function> router& mount(std::string prefix, Function&& function) {
+        if (prefix.empty() || prefix.front() != '/' || prefix.find_first_of("?#\\") != prefix.npos)
+            throw std::invalid_argument("invalid mount prefix");
+        for (unsigned char c : prefix) if (c <= 32 || c == 127) throw std::invalid_argument("invalid mount prefix");
+        while (prefix.size() > 1 && prefix.back() == '/') prefix.pop_back();
+        if (!routes_) routes_ = std::make_shared<std::vector<route>>();
+        if (!mounts_) mounts_ = std::make_shared<std::vector<route>>();
+        for (const auto& entry : *mounts_)
+            if (entry.prefix && entry.path == prefix) throw std::invalid_argument("duplicate mount");
+        if (mounts_.use_count() != 1) mounts_ = std::make_shared<std::vector<route>>(*mounts_);
+        mounts_->push_back({{}, std::move(prefix), make_handler(std::forward<Function>(function)), true});
+        return *this;
+    }
     task<response> operator()(request incoming) const {
         if (!routes_) return detail::immediate_response({.status = 404, .body = "Not Found\n"});
         const auto path = std::string_view(incoming.target).substr(0, incoming.target.find('?'));
@@ -117,6 +132,14 @@ public:
             if (entry.method == "HEAD") has_head = true;
         }
         if (incoming.method == "HEAD" && get_fallback) return (*get_fallback)(std::move(incoming));
+        if (first == last && mounts_) {
+            const route* match = nullptr;
+            for (const auto& entry : *mounts_) {
+                if (path.starts_with(entry.path) && (entry.path == "/" || path.size() == entry.path.size() || path[entry.path.size()] == '/') &&
+                    (!match || entry.path.size() > match->path.size())) match = &entry;
+            }
+            if (match) return match->handle(std::move(incoming));
+        }
         if (first == last) return detail::immediate_response({.status = 404, .body = "Not Found\n"});
         std::string allow;
         for (auto it = first; it != last; ++it) {

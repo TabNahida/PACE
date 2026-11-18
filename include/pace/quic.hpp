@@ -1,6 +1,7 @@
 #pragma once
 #ifdef PACE_HAS_QUIC
 #include <pace/udp.hpp>
+#include <pace/stream_io.hpp>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -93,5 +94,25 @@ public:
 private:
     std::shared_ptr<detail::engine> state_;
 };
+// Bind immediately and retain the shared server configuration.
+inline listener listen(io_context& io, udp::endpoint local, const quic::context& configuration) {
+    return listener(io, std::move(local), configuration);
+}
+inline listener listen(udp::endpoint local, const quic::context& configuration) {
+    return listen(this_context(), std::move(local), configuration);
+}
+// Copying the lightweight configuration retains its shared state in this task.
+// ALPN and certificate identity remain explicit; no protocol is chosen for you.
+inline task<connection> connect(io_context& io, quic::context configuration,
+        udp::endpoint peer, std::string expected_name,
+        std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
+    connection result(io, configuration);
+    co_await result.connect(std::move(peer), std::move(expected_name), timeout);
+    co_return result;
+}
+inline task<connection> connect(quic::context configuration, udp::endpoint peer, std::string expected_name,
+        std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
+    co_return co_await connect(this_context(), std::move(configuration), std::move(peer), std::move(expected_name), timeout);
+}
 } // namespace pace::quic
 #endif

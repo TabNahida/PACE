@@ -1,5 +1,5 @@
 set_project("pace")
-set_version("0.3.0")
+set_version("0.6.0")
 set_xmakever("2.9.8")
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_warnings("allextra")
@@ -7,6 +7,7 @@ set_warnings("allextra")
 option("cxxstandard", {default = "cxx20", values = {"cxx20", "cxx23", "cxxlatest"}, description = "C++ language standard (C++20 or newer)"})
 option("modules", {default = false, showmenu = true, description = "Build the optional C++20 named module (import pace)"})
 option("sanitizers", {default = false, description = "Enable AddressSanitizer and UndefinedBehaviorSanitizer"})
+option("uring", {default = false, showmenu = true, description = "Build the optional Linux io_uring readiness backend (liburing)"})
 option("profiling", {default = false, description = "Enable intrusive per-thread stage timings (diagnostics only)"})
 option("http1", {default = true, showmenu = true, description = "Enable the HTTP/1.0 and HTTP/1.1 application module"})
 option("websocket", {default = true, showmenu = true, description = "Enable the WebSocket application module"})
@@ -17,6 +18,8 @@ option("quic_backend", {default = "openssl", values = {"openssl", "ngtcp2"}, sho
 option("http2", {default = false, showmenu = true, description = "Enable HTTP/2 with nghttp2 (enable tls for HTTPS)"})
 option("http3", {default = false, showmenu = true, description = "Enable HTTP/3 with nghttp3 and QUIC"})
 set_languages(get_config("cxxstandard") or "cxx20")
+
+if has_config("uring") and is_plat("linux") then add_requires("liburing 2.12") end
 
 local enable_quic = has_config("quic") or has_config("http3")
 if enable_quic and is_plat("windows", "mingw") then
@@ -55,6 +58,10 @@ end
 target("pace_runtime")
     set_kind("static")
     add_files("src/runtime/*.cpp")
+    if has_config("uring") and is_plat("linux") then
+        add_packages("liburing", {public = true})
+        add_defines("PACE_HAS_IO_URING", {public = true})
+    end
     add_headerfiles("include/(pace/**.hpp)")
     add_includedirs("include", {public = true})
     if has_config("profiling") then add_defines("PACE_ENABLE_PROFILING", {public = true}) end
@@ -88,6 +95,10 @@ local function protocol_target(name, layer, package_name, feature, dependencies)
         else
             add_files("src/" .. layer .. "/" .. name .. ".cpp")
         end
+        if name == "http2" or name == "http3" then
+            add_files("src/application/" .. name .. "_url.cpp")
+            if has_config("dns") then add_deps("pace_dns", {public = true}) end
+        end
         add_deps("pace_net", {public = true})
         for _, dep in ipairs(dependencies or {}) do add_deps(dep, {public = true}) end
         if package_name then add_packages(package_name, {public = true}) end
@@ -103,7 +114,7 @@ local tls_dependency = has_config("tls") and {"pace_tls"} or {}
 if has_config("http1") then
     target("pace_http1")
         set_kind("static")
-        add_files("src/application/http.cpp", "src/application/http_url.cpp")
+        add_files("src/application/http.cpp", "src/application/http_url.cpp", "src/application/http_services.cpp")
         add_deps("pace_net", {public = true})
         for _, dep in ipairs(tls_dependency) do add_deps(dep, {public = true}) end
         if has_config("dns") then add_deps("pace_dns", {public = true}) end

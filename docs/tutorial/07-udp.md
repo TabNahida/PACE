@@ -1,54 +1,107 @@
-# 7. Send and receive a UDP datagram
+# 7. Exchange a UDP packet with one call
 
-[中文](07-udp.zh-CN.md) · [Previous: shutdown](06-shutdown.md) · [Next: DNS and TLS](08-dns-tls.md)
+[中文](07-udp.zh-CN.md) · [Learning path](README.md) · [Next: DNS/TLS](08-dns-tls.md)
 
-TCP required accumulating bytes until a message was complete. UDP gives each send
-its own datagram boundary, without TCP's reliability or ordering. This chapter
-sends one loopback datagram and prints it. Link `pace_net` and write:
+Use PACE 0.4.0 or newer with chapter 1's source setup and link `pace_net`. UDP preserves datagram boundaries,
+but does not promise delivery or ordering.
+
+## 1. Write a direct client
+
+Save this as `udp_client.cpp`:
 
 ```cpp
 #include <pace/udp.hpp>
-#include <pace/run.hpp>
-#include <array>
 #include <iostream>
 
-pace::task<void> hello(pace::io_context& io) {
-    pace::udp::socket receiver(io, {"127.0.0.1", 0});
-    pace::udp::socket sender(io);
-    co_await sender.send_to("Hello, UDP!", receiver.local_endpoint());
-    std::array<char, 256> buffer{};
-    auto packet = co_await receiver.receive_from(buffer);
-    if (packet.truncated || std::string_view(buffer.data(), packet.size) != "Hello, UDP!")
-        throw std::runtime_error("UDP message mismatch or truncation");
-    std::cout << std::string_view(buffer.data(), packet.size) << '\n';
-}
 int main() {
-    try { pace::run(hello); }
-    catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
+    try {
+        auto packet = pace::udp::exchange({"127.0.0.1", 9091}, "Hello, UDP!");
+        if (packet.truncated) throw std::runtime_error("UDP reply truncated");
+        std::cout << packet.data << '\n';
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
 }
 ```
 
-## 1. Bind the receiving socket
+`exchange` sends one request and returns the first reply from that numeric endpoint.
+It blocks this thread and defaults to a 30-second total timeout. No event-loop setup
+is needed. For two seconds, include `<chrono>` and pass
+`{.timeout = std::chrono::seconds(2)}` as the third argument.
 
-`receiver(io, {"127.0.0.1", 0})` asks the OS for an available port. Read the assigned
-endpoint with `local_endpoint()`. The sender can start unbound; its send path
-selects a local address/port. Both sockets are local to the entry and have no
-outstanding member calls when that entry returns.
+The result owns `data` and reports `sender` and `truncated`. Check truncation before
+interpreting the message: bytes beyond the receive capacity are lost. An empty
+`data` is a valid zero-length datagram, not EOF. There are no automatic retries.
 
-## 2. Send one message and retain its boundary
+## 2. Supply a UDP echo service
 
-`send_to` takes the destination for this datagram. `receive_from` fills your buffer
-and returns its size and source endpoint, so a reply can use `packet.sender`.
-Unlike the TCP loop, a zero-length UDP message is valid; do not treat it as EOF.
-Choose a buffer that fits your protocol's maximum message. If `packet.truncated` is true, the buffer was too small: the remaining bytes
-of that datagram were discarded. Reject the incomplete message instead of
-treating the copied prefix as a complete payload.
+Save this as `udp_server.cpp`:
 
-## 3. Verify before adding a second peer
+```cpp
+#include <pace/udp.hpp>
+#include <iostream>
 
-Build/run `my_application`; expect `Hello, UDP!` and process exit. The repository
-companion is `xmake run tutorial_udp`. Next, change the message and verify the exact
-returned size, or reply to `packet.sender` before awaiting a receive on the sender.
-Keep the send buffer alive until `send_to` completes and do not overlap two sends
-or two receives on one socket. UDP delivery, order, retries and message identity
-are responsibilities of the application protocol. See [UDP reference](../reference/udp.md).
+pace::task<void> serve() {
+    auto socket = pace::udp::bind({"127.0.0.1", 9091});
+    for (;;) {
+        auto packet = co_await socket.receive();
+        if (!packet.truncated)
+            co_await socket.send(std::move(packet.data), packet.sender);
+    }
+}
+int main() {
+    try { pace::run(serve); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+`bind` creates a socket on the current context. `receive` waits for one packet;
+`send` replies to its source. This server discards incomplete packets. The socket
+stays alive while its operations run. `run` drives the long-running server.
+
+## 3. Build and try it
+
+Add these targets to chapter 1's xmake.lua:
+
+```lua
+for _, name in ipairs({"udp_client", "udp_server"}) do
+    target(name)
+        set_kind("binary")
+        add_files(name .. ".cpp")
+        add_deps("pace_net")
+end
+```
+
+Run `xmake -y udp_client udp_server`, then `xmake run udp_server`. In another
+terminal run `xmake run udp_client`; expect `Hello, UDP!`. Try another string.
+Stop the server with Ctrl-C. Stop it before running the client to observe an error
+or timeout instead of a reply, depending on how the OS reports an unreachable peer.
+
+## 4. Send only, or compose async work
+
+For a service that expects no reply:
+
+```cpp
+auto sent = pace::udp::send({"127.0.0.1", 9091}, "notification");
+```
+
+This returns the byte count accepted by the local socket, not a delivery receipt.
+Each direct call owns a fresh socket. For an async request inside a coroutine:
+
+```cpp
+auto packet = co_await pace::udp::async_exchange({"127.0.0.1", 9091}, "hello");
+```
+
+The async form has no added total deadline. To reuse a socket or accept replies
+from other addresses, use `udp::open()` / `udp::bind()`, `socket.send` and
+`socket.receive` inside your coroutine, as the server does.
+
+[Filtering, deadlines and errors](../reference/direct-clients.md) ·
+[Capacity and ownership](../reference/component-conveniences.md#udp) ·
+[Reusable buffers and tuning](../reference/protocol-tuning.md#tcp-and-udp)
+
+The repository's `xmake run tutorial_udp` runs an independent local async exercise.

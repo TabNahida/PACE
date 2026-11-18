@@ -15,26 +15,20 @@ struct completion {
 
 pace::task<void> server(pace::tcp::listener& listener, const pace::tls::context& config,
                         completion& done) {
-    pace::tls::stream connection(co_await listener.accept(), config);
-    co_await connection.handshake();
-    co_await connection.write_all("Hello over verified TLS!\n");
+    auto connection = co_await pace::tls::accept(co_await listener.accept(), config);
+    co_await pace::write(connection, "Hello over verified TLS!\n");
     co_await connection.shutdown();
     done.finish();
 }
 
 pace::task<void> client(pace::io_context& io, const pace::tls::context& config,
                         pace::tcp::endpoint endpoint, completion& done) {
-    pace::tls::stream connection(io, config);
-    // The network address and the certificate identity are separate parameters.
-    co_await connection.connect(std::move(endpoint), "localhost");
+    auto connection = co_await pace::tls::connect(io, config, std::move(endpoint), "localhost");
     if (connection.selected_protocol() != "pace-demo")
         throw std::runtime_error("unexpected negotiated protocol");
-    std::string received;
-    std::array<char, 128> buffer{};
-    while (const auto count = co_await connection.read_some(buffer)) {
-        received.append(buffer.data(), count);
-        if (received.size() > 128) throw std::runtime_error("unexpected TLS response size");
-    }
+    auto received = co_await pace::read_exact(connection, std::string_view("Hello over verified TLS!\n").size());
+    std::array<char, 1> end{};
+    if (co_await connection.read_some(end) != 0) throw std::runtime_error("extra TLS response bytes");
     if (received != "Hello over verified TLS!\n") throw std::runtime_error("TLS payload mismatch");
     // read_some returned authenticated close_notify, not bare TCP EOF.
     co_await connection.shutdown();

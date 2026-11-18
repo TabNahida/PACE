@@ -55,7 +55,7 @@ struct lookup : std::enable_shared_from_this<lookup> {
         cleaning = true;
         for (auto& [fd, state] : sockets) {
             state->alive = false;
-            io.cancel(static_cast<native_socket_type>(fd));
+            io.release_socket(static_cast<native_socket_type>(fd));
         }
         if (channel) { auto* old = std::exchange(channel, nullptr); ares_destroy(old); }
         sockets.clear();
@@ -81,7 +81,8 @@ struct lookup : std::enable_shared_from_this<lookup> {
             if (!read && !write) {
                 if (found != self.sockets.end()) {
                     found->second->alive = false;
-                    self.io.cancel(static_cast<native_socket_type>(fd));
+                    // c-ares emits NONE immediately before closing this socket.
+                    self.io.release_socket(static_cast<native_socket_type>(fd));
                     self.sockets.erase(found);
                 }
                 return;
@@ -195,8 +196,17 @@ struct lookup : std::enable_shared_from_this<lookup> {
     }
     struct completion {
         lookup& state;
+        io_context::cancellation_handle registration{};
         bool await_ready() const noexcept { return state.done; }
-        void await_suspend(std::coroutine_handle<> continuation) noexcept { state.continuation = continuation; }
+        template<class P> void await_suspend(std::coroutine_handle<P> continuation) {
+            if constexpr (requires { continuation.promise().cancellation; }) {
+                registration = state.io.on_cancel(continuation.promise().cancellation,
+                    [owner = state.shared_from_this()](std::error_code error) {
+                        owner->cancel(error == std::errc::timed_out ? std::errc::timed_out : std::errc::operation_canceled);
+                    });
+            }
+            state.continuation = continuation;
+        }
         void await_resume() const noexcept {}
     };
 };

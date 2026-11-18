@@ -1,3 +1,4 @@
+#include <pace/detail/serve_group.hpp>
 #include <pace/http2.hpp>
 #include <pace/detail/http_dispatch.hpp>
 #include <pace/detail/protocol_driver.hpp>
@@ -459,7 +460,8 @@ template<class Stream> task<std::vector<http::response>> exchange_impl(Stream tr
 }
 template<class Stream> task<void> serve_impl(Stream transport,http::handler handle,limits bounds) {
     session state(true,bounds);
-    auto dispatch = std::make_shared<detail::http_dispatch>(transport.context(), std::move(handle));
+    auto dispatch = std::make_shared<detail::http_dispatch>(transport.context(), std::move(handle), co_await this_task::cancellation());
+    std::exception_ptr failure;
     try {
         {
             auto driver = driver_for(transport);
@@ -510,27 +512,32 @@ template<class Stream> task<void> serve_impl(Stream transport,http::handler hand
             }
         }
         co_await transport.close_gracefully();
-    } catch (...) { dispatch->close(); transport.close(); throw; }
+    } catch (...) { dispatch->close(); transport.close(); failure = std::current_exception(); }
+    dispatch->close();
+    co_await dispatch->drain();
+    if (failure) std::rethrow_exception(failure);
 }
 template<class Stream> task<void> isolated(Stream stream,http::handler handle,limits bounds) {
     try { co_await serve_impl(std::move(stream),std::move(handle),bounds); }
     catch (const std::exception&) { /* One malformed/closed peer must not stop other connections. */ }
 }
 } // namespace
-task<std::vector<http::response>> exchange(tcp::stream transport,std::string authority,std::vector<http::request> requests,limits bounds) {
+task<std::vector<http::response>> async_exchange(tcp::stream transport,std::string authority,std::vector<http::request> requests,limits bounds) {
     return exchange_impl(std::move(transport),std::move(authority),std::move(requests),bounds,"http");
 }
 task<void> serve_connection(tcp::stream transport,http::handler handle,limits bounds) {
     return serve_impl(std::move(transport),std::move(handle),bounds);
 }
 task<void> serve(tcp::listener& listener,http::handler handle,limits bounds) {
-    try { for (;;) listener.context().spawn(isolated(co_await listener.accept(),handle,bounds)); }
-    catch (const std::system_error& error) {
-        if (error.code() != std::errc::operation_canceled && error.code() != std::errc::bad_file_descriptor) throw;
-    }
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        try { for (;;) (void)group.spawn(isolated(co_await listener.accept(),handle,bounds)); }
+        catch (const std::system_error& error) {
+            if (error.code() != std::errc::operation_canceled && error.code() != std::errc::bad_file_descriptor) throw;
+        }
+    });
 }
 #ifdef PACE_HAS_TLS
-task<std::vector<http::response>> exchange(tls::stream transport,std::string authority,std::vector<http::request> requests,limits bounds) {
+task<std::vector<http::response>> async_exchange(tls::stream transport,std::string authority,std::vector<http::request> requests,limits bounds) {
     if (transport.selected_protocol()!="h2") throw std::runtime_error("HTTP/2 requires negotiated ALPN h2");
     return exchange_impl(std::move(transport),std::move(authority),std::move(requests),bounds,"https");
 }
@@ -545,10 +552,12 @@ task<void> secure_connection(tls::stream transport,http::handler handle,limits b
 }
 }
 task<void> serve(tcp::listener& listener,const tls::context& configuration,http::handler handle,limits bounds) {
-    try { for (;;) listener.context().spawn(secure_connection(tls::stream(co_await listener.accept(),configuration),handle,bounds)); }
-    catch (const std::system_error& error) {
-        if (error.code() != std::errc::operation_canceled && error.code() != std::errc::bad_file_descriptor) throw;
-    }
+    co_await pace::detail::serve_group([&](task_group& group) -> task<void> {
+        try { for (;;) (void)group.spawn(secure_connection(tls::stream(co_await listener.accept(),configuration),handle,bounds)); }
+        catch (const std::system_error& error) {
+            if (error.code() != std::errc::operation_canceled && error.code() != std::errc::bad_file_descriptor) throw;
+        }
+    });
 }
 #endif
 } // namespace pace::http2

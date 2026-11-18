@@ -8,6 +8,13 @@ if has_config("benchmarks") then add_requires("asio 1.34.2", "libuv 1.52.1") end
 -- Paths stay anchored to PACE when included by another project.
 local pace_root = path.directory(os.scriptdir())
 if has_config("protocol_benchmarks") then
+    if is_plat("linux") and (has_config("quic") or has_config("http3")) then
+        target("pace_quic_transport")
+            set_kind("binary")
+            add_files(path.join(pace_root, "benchmarks/quic_transport.cpp"))
+            add_deps("pace_quic")
+        target_end()
+    end
     if has_config("http2") or has_config("http3") then
         target("pace_protocol_multiplex")
             set_kind("binary")
@@ -18,6 +25,22 @@ if has_config("protocol_benchmarks") then
         target_end()
     end
     if has_config("http1") then
+        target("pace_gateway_components")
+            set_kind("binary")
+            add_files(path.join(pace_root, "benchmarks/gateway_components.cpp"))
+            add_deps("pace_http1")
+        target_end()
+        target("pace_http_gateway")
+            set_kind("binary")
+            add_files(path.join(pace_root, "benchmarks/http_gateway.cpp"))
+            add_deps("pace_http1")
+        target_end()
+        if is_plat("linux") then
+            target("pace_http_load")
+                set_kind("binary")
+                add_files(path.join(pace_root, "benchmarks/http_load.cpp"))
+            target_end()
+        end
         target("pace_http_close_probe")
             set_kind("binary")
             add_files(path.join(pace_root, "benchmarks/http_close.cpp"))

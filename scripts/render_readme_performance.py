@@ -18,7 +18,7 @@ from run_benchmarks import summarize, validate_record
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "benchmarks/results/linux-optimization-2026-10-22/final-c32-b64-session1.json"
+SOURCE = ROOT / "benchmarks/results/linux-release-0.5.0/tcp/report.json"
 BACKENDS = ("pace", "asio", "libuv")
 LABELS = {"pace": "PACE", "asio": "Asio", "libuv": "libuv"}
 COLORS = {"pace": "#70DFC3", "asio": "#A9AEF7", "libuv": "#8D9DB7"}

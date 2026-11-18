@@ -16,7 +16,7 @@
 - **只构建需要的模块。** 核心没有第三方运行时依赖，协议模块按需启用。
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="本地 Linux TCP echo：PACE 的吞吐和 p50 领先，Asio 的 p95 与 p99 领先。三库柱状图均从零开始，展示各轮范围。" width="100%"></a>
+  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
 </p>
 
 <p align="center"><a href="docs/performance.md">完整性能数据、测试方法与原始记录 →</a></p>
@@ -34,6 +34,23 @@
 
 [架构设计 →](docs/architecture.md) · [构建选项与项目集成 →](docs/tutorial/01-build.md)
 
+[结构化任务组](docs/tutorial/12-structured-concurrency.zh-CN.md)让并发子任务自动汇合，
+共享局部取消与 deadline；HTTP/1、2、3 使用[统一 URL 接口](docs/reference/http-clients.zh-CN.md)。
+
+## 直接获取 HTTP 响应
+
+```cpp
+auto reply = pace::http::get("http://127.0.0.1:8080/health");
+```
+
+一次调用直接返回响应，不需要 `run`，阻塞当前线程，默认总超时 30 秒。
+协程里使用 `co_await pace::http::async_get(url)`。TCP、UDP 也提供 `exchange` / `async_exchange`。
+
+[从第一个客户端开始 →](docs/tutorial/00-quick-start.zh-CN.md) ·
+[接口与 0.3.1 迁移说明 →](docs/reference/direct-clients.zh-CN.md)
+
+这些客户端接口需要 PACE 0.4.0 或更新版本。
+
 ## 一个小型 HTTP 服务
 
 ```cpp
@@ -41,7 +58,7 @@
 
 int main() {
     pace::http::app app;
-    app.get("/", [] { return pace::http::text("Hello, PACE!\n"); });
+    app.get("/health", [] { return pace::http::text("ok\n"); });
     app.run(8080);
 }
 ```
@@ -75,6 +92,18 @@ xmake -y
 只需要 Socket 时，通过 `--http1=n --websocket=n` 关闭默认应用协议。依赖与各模块目标见[构建指南](docs/tutorial/01-build.md)。
 
 </details>
+
+## 静态文件与反向代理
+
+```cpp
+app.mount("/assets", "./public")
+   .proxy("/api", {"http://127.0.0.1:9000", "http://127.0.0.1:9001"});
+app.run_workers(4, {"0.0.0.0", 8080});
+```
+
+按需配置有界缓存、每 worker 连接池、轮询或最少连接数分配。适用于 PACE 0.5.0 或更新版本。
+[一步步搭建网关 →](docs/tutorial/13-gateway.zh-CN.md) ·
+[nginx 性能对照 →](docs/performance.md#http-gateways--pace-and-nginx) · [I/O 后端 →](docs/reference/io-backends.md)
 
 ## 继续探索
 

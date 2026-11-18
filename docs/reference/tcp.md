@@ -1,5 +1,9 @@
 # `pace::tcp`
 
+For one-call `exchange` / `async_exchange` clients, see [direct clients](direct-clients.md).
+
+Short forms and owning helpers: [component conveniences](component-conveniences.md).
+
 [0.3.0 convenience additions](convenience.md)
 
 Include `<pace/tcp.hpp>`. TCP sockets are nonblocking, move-only and tied to an

@@ -11,6 +11,37 @@
 namespace {
 using namespace std::chrono_literals;
 void require(bool value, const char* what) { if (!value) throw std::runtime_error(what); }
+pace::task<void> owned_packets(pace::io_context& io) {
+    auto receiver = pace::udp::bind({"127.0.0.1", 0});
+    auto sender = pace::udp::open(io);
+    auto pending = sender.send(std::string("a\0b", 3), receiver.local_endpoint());
+    co_await io.yield();
+    require((co_await std::move(pending)) == 3, "owned UDP lazy send");
+    auto packet = co_await receiver.receive(3);
+    require(packet.data == std::string("a\0b", 3) && !packet.truncated &&
+            packet.sender.port == sender.local_endpoint().port, "owned UDP packet/source");
+    co_await receiver.send("reply", packet.sender);
+    require((co_await sender.receive()).data == "reply", "owned UDP reply");
+    co_await sender.send("", receiver.local_endpoint());
+    auto empty = co_await receiver.receive();
+    require(empty.data.empty() && !empty.truncated, "empty UDP packet is not EOF");
+    co_await sender.send("123456", receiver.local_endpoint());
+    auto cut = co_await receiver.receive(3);
+    require(cut.data == "123" && cut.truncated, "owned UDP truncation flag");
+    for (auto capacity : {std::size_t{0}, std::size_t{65537}}) {
+        bool rejected = false;
+        try { (void)co_await receiver.receive(capacity); }
+        catch (const std::logic_error&) { rejected = true; }
+        require(rejected, "owned receive invalid allocation bound");
+    }
+    auto timeout = io.call_after(1ms, [&] { receiver.close(); });
+    bool canceled = false;
+    try { (void)co_await receiver.receive(); }
+    catch (const std::system_error& error) { canceled = error.code() == std::errc::operation_canceled; }
+    require(canceled, "owned receive lost cancellation");
+    io.stop();
+}
+
 pace::task<void> roundtrip(pace::io_context& io) {
     pace::udp::socket receiver(io, {"127.0.0.1", 0}), sender(io, {"127.0.0.1", 0});
     auto destination = receiver.local_endpoint();
@@ -190,6 +221,7 @@ void run(pace::io_context& io) {
 }
 int main() {
     try {
+        { pace::io_context io; io.spawn(owned_packets(io)); run(io); }
         { pace::io_context io; io.spawn(roundtrip(io)); run(io); }
         { pace::io_context io; io.spawn(ipv6_roundtrip(io)); run(io); }
         { pace::io_context io; io.spawn(ipv6_wildcards(io)); run(io); }

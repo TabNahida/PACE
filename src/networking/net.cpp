@@ -133,7 +133,7 @@ task<void> stream::connect(endpoint endpoint) {
             if (no_delay_ && set_option(replacement, IPPROTO_TCP, TCP_NODELAY, 1) < 0)
                 socket_error("setsockopt(TCP_NODELAY)");
         } catch (...) { close_socket(replacement); throw; }
-        context_->cancel(fd_);
+        context_->release_socket(fd_);
         close_socket(std::exchange(fd_, replacement));
         family_ = address.family();
     }
@@ -279,7 +279,7 @@ task<void> stream::close_gracefully(std::chrono::milliseconds timeout, std::size
 
 void stream::close() noexcept {
     if (fd_ != invalid_socket) {
-        context_->cancel(fd_);
+        context_->release_socket(fd_);
         close_socket(std::exchange(fd_, invalid_socket));
     }
 }
@@ -368,7 +368,7 @@ endpoint listener::local_endpoint() const {
 
 void listener::close() noexcept {
     if (fd_ != invalid_socket) {
-        context_->cancel(fd_);
+        context_->release_socket(fd_);
         close_socket(std::exchange(fd_, invalid_socket));
     }
 }

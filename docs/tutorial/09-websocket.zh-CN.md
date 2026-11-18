@@ -1,63 +1,86 @@
-# 9. 完成 WebSocket 升级，再收发消息
+# 9. 连接并交换 WebSocket 消息
 
 [English](09-websocket.md) · [上一章：DNS/TLS](08-dns-tls.zh-CN.md) · [下一章：HTTP/2](10-http2.zh-CN.md)
 
-沿用第三章的 accept 循环，把每个连接的字节回显换成 WebSocket 升级和消息回显。
-配置 `--websocket=y`，依赖 `pace_websocket`，包含 `<pace/websocket.hpp>`。
+使用当前 checkout，启用 `--websocket=y`，依赖 `pace_websocket`。
+沿用第三章的两个 target 写法，文件与目标分别命名为 `ws_server`、`ws_client`。
+本练习只接收**一个连接**，完成后两端退出。
 
-## 第一步：在连接任务内接受升级
+## 第一步：接受升级
 
-接受到的 TCP stream 名为 transport，在连接协程中写：
-
-```cpp
-pace::websocket::stream socket(std::move(transport), pace::websocket::role::server);
-co_await socket.accept({"echo"}, [](const auto& request) {
-    return request.target == "/echo";
-});
-while (auto message = co_await socket.receive())
-    co_await socket.send(std::move(*message));
-```
-
-角色决定握手和帧处理行为。回调在接受升级前检查路径；业务可在此检查 Origin 和认证。
-receive 返回重组后的完整消息，不是某次 TCP read 或某个 continuation frame。
-空 optional 表示关闭；正文为空仍可能是一条有效消息。
-
-按第三章把网络异常限制在单个连接，另外捕获 `websocket::protocol_error` 处理
-错误升级和非法帧，不要因此让整个 accept 循环退出。
-
-## 第二步：客户端握手、发送、核对
-
-客户端先完成 TCP connect，再写：
+编写 ws_server.cpp：
 
 ```cpp
-pace::websocket::stream socket(std::move(transport), pace::websocket::role::client);
-co_await socket.handshake("localhost", "/echo", {"echo"});
-co_await socket.send_text("Hello from PACE", 4);
-const auto reply = co_await socket.receive();
-if (!reply || reply->data != "Hello from PACE")
-    throw std::runtime_error("WebSocket echo mismatch");
-const bool closed = co_await socket.close_gracefully(1000, "finished");
+#include <pace/websocket.hpp>
+#include <pace/run.hpp>
+#include <iostream>
+
+pace::task<void> serve() {
+    auto listener = pace::tcp::listen({"127.0.0.1", 9092});
+    std::vector<std::string> protocols{"echo"};
+    auto socket = co_await pace::websocket::accept(
+        co_await listener.accept(), std::move(protocols), [](const auto& request) {
+            return request.target == "/echo";
+        });
+    while (auto message = co_await socket.receive())
+        co_await socket.send(std::move(*message));
+}
+int main() {
+    try { pace::run(serve); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
 ```
 
-这里的 4 让消息分成较小的帧，receive 会重新组装。
-closed 表示关闭握手是否在预算内完成；先完成这一步再 stop。
-WebSocket 关闭握手和底层 TCP EOF 不是同一件事。
+`websocket::accept` 接管 TCP stream 并完成服务端握手。
+回调允许 `/echo`；可以在这里增加业务需要的 Origin 或身份检查。
+`receive` 返回重组后的完整消息。空 optional 表示收到关闭握手，空正文仍然是消息。
+循环持续回显，直到客户端关闭。
 
-此 API 对同一个 WebSocket stream 只允许一个活动异步操作，收、发、控制帧、关闭
-都算在内。不能直接照搬 TCP 的“一读一写并行”做法启动两个独立读写任务。
+## 第二步：连接并发送
 
-## 第三步：运行完整流程，再改一个条件
+编写 ws_client.cpp：
 
-在 PACE 根目录运行：
+```cpp
+#include <pace/websocket.hpp>
+#include <pace/run.hpp>
+#include <iostream>
 
-```sh
-xmake f --websocket=y --examples=y -y
-xmake -y tutorial_websocket
-xmake run tutorial_websocket
+pace::task<void> exchange() {
+    std::vector<std::string> protocols{"echo"};
+    auto socket = co_await pace::websocket::connect(
+        {"127.0.0.1", 9092}, "localhost:9092", "/echo", std::move(protocols));
+    co_await socket.send_text("Hello from PACE");
+    const auto reply = co_await socket.receive();
+    if (!reply || reply->data != "Hello from PACE")
+        throw std::runtime_error("WebSocket echo mismatch");
+    std::cout << reply->data << '\n';
+    if (!co_await socket.close_gracefully())
+        throw std::runtime_error("WebSocket close timed out");
+}
+int main() {
+    try { pace::run(exchange); }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
 ```
 
-应输出 `WebSocket echo verified: Hello from PACE`。
-[配套源码](../../examples/tutorial_websocket.cpp)把上述两个任务接到第三章的监听和控制结构。
-想分进程观察，可在两个终端分别运行 `tutorial_websocket serve` 和 `tutorial_websocket client`。
-在副本里改变允许升级的路径，确认错误路径会被拒绝；恢复后再尝试更大的分片消息。
-安全 WebSocket 复用第八章的 TLS 配置，类型与限制见[参考](../reference/websocket.md)。
+`connect` 一次完成 TCP 连接和 WebSocket 握手。数字 endpoint 决定连接地址，
+`localhost:9092` 是 HTTP Host，双方都声明 `echo` 子协议。
+依次 await 发送、接收、关闭：同一个 WebSocket stream 只允许**一个活动异步操作**。
+
+## 第三步：运行并改变一个条件
+
+构建两个目标，先运行 `xmake run ws_server`，另一个终端运行 `xmake run ws_client`。
+应输出 `Hello from PACE`，两端在关闭握手后退出。再次连接前重新启动服务端。
+把客户端路径改成 `/wrong`，确认升级被拒绝。持续接收多个客户端与协作式信号关闭见
+`xmake run tutorial_websocket serve` 及其[源码](../../examples/tutorial_websocket.cpp)。
+
+增加加密时，用第八章的 `tls::connect` 返回的已验证连接调用 `websocket::upgrade`；
+服务端 `accept` 同样接受 TLS stream。
+[接口签名](../reference/component-conveniences.zh-CN.md#websocket) ·
+[分片、限额与关闭预算](../reference/protocol-tuning.zh-CN.md#websocket)

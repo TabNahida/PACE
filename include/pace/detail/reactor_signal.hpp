@@ -18,6 +18,8 @@ public:
         awaiter* next = nullptr;
         std::coroutine_handle<> continuation{};
         io_context::timer_handle timer;
+        io_context::cancellation_handle registration;
+        std::error_code error;
         bool linked = false;
         awaiter(reactor_signal& owner, clock::time_point until) : signal(owner), deadline(until) {}
         awaiter(const awaiter&) = delete;
@@ -30,7 +32,12 @@ public:
             linked = false;
         }
         bool await_ready() const noexcept { return signal.io_.stopped(); }
-        void await_suspend(std::coroutine_handle<> handle) {
+        template<class P> void await_suspend(std::coroutine_handle<P> handle) {
+            if constexpr (requires { handle.promise().cancellation; }) {
+                registration = signal.io_.on_cancel(handle.promise().cancellation, [this](std::error_code reason) {
+                    error = reason; resume();
+                });
+            }
             continuation = handle;
             next = signal.first_;
             if (next) next->previous = this;
@@ -44,6 +51,7 @@ public:
         void resume() {
             if (!linked) return;
             unlink();
+            registration.cancel();
             timer.cancel();
             // Running reactors queue continuations rather than reentering user
             // code inside a protocol callback. Outside run(), only teardown can
@@ -53,6 +61,7 @@ public:
             else continuation.resume();
         }
         void await_resume() const {
+            if (error) throw std::system_error(error);
             if (signal.io_.stopped())
                 throw std::system_error(std::make_error_code(std::errc::operation_canceled));
         }

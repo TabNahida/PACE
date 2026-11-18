@@ -8,6 +8,7 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <utility>
 
 namespace {
 using namespace std::chrono_literals;
@@ -106,6 +107,25 @@ pace::task<void> tcp_nameserver(pace::tcp::listener& listener, unsigned& queries
     std::string framed; put16(framed, answer.size()); framed += answer;
     co_await socket.write_all(framed);
 }
+// TCP and UDP have independent allocations/reservations. A UDP ephemeral port
+// may be excluded for TCP on Windows. Reserve TCP first, then retain both sockets;
+// retry only fixture port collisions/exclusions, never resolver failures.
+std::pair<pace::tcp::listener, pace::udp::socket> bind_nameservers(pace::io_context& io) {
+    for (unsigned attempt = 0;; ++attempt) {
+        pace::tcp::listener tcp(io, {"127.0.0.1", 0});
+        try {
+            pace::udp::socket udp(io, {"127.0.0.1", tcp.local_endpoint().port});
+            return {std::move(tcp), std::move(udp)};
+        } catch (const std::system_error& error) {
+            bool collision = error.code() == std::errc::address_in_use;
+#ifdef _WIN32
+            collision = collision || (error.code().category() == std::system_category() &&
+                (error.code().value() == WSAEADDRINUSE || error.code().value() == WSAEACCES));
+#endif
+            if (!collision || attempt == 63) throw;
+        }
+    }
+}
 pace::dns::options configuration(const pace::udp::socket& socket) {
     return {.timeout = 150ms, .tries = 1, .servers = "127.0.0.1:" + std::to_string(socket.local_endpoint().port)};
 }
@@ -114,6 +134,14 @@ bool contains(const pace::dns::result& value, pace::dns::family type, std::strin
     return false;
 }
 pace::task<void> checks(pace::io_context& io, pace::dns::options options, unsigned& queries, unsigned& tcp_queries) {
+    auto owned = pace::dns::resolve(std::string("address.pace.test"), pace::dns::family::ipv4, options);
+    co_await io.yield();
+    require(contains(co_await std::move(owned), pace::dns::family::ipv4, "192.0.2.42"), "owned DNS task lifetime");
+    require(contains(co_await pace::dns::resolve(io, "::1"), pace::dns::family::ipv6, "::1"), "one-shot DNS numeric lookup");
+    bool missing = false;
+    try { (void)co_await pace::dns::resolve("missing.pace.test", pace::dns::family::ipv4, options); }
+    catch (const std::system_error& error) { missing = error.code().category() == pace::dns::error_category(); }
+    require(missing, "one-shot DNS error category");
     pace::dns::resolver resolver(io, options);
     auto ipv4 = co_await resolver.resolve("address.pace.test", pace::dns::family::ipv4);
     require(ipv4.addresses.size() == 1 && contains(ipv4, pace::dns::family::ipv4, "192.0.2.42"), "A answer");
@@ -234,8 +262,7 @@ pace::task<void> cancel_tcp_lookup(pace::io_context& io, pace::dns::resolver& re
     io.stop();
 }
 void tcp_cancellation() {
-    pace::io_context io; pace::udp::socket server(io, {"127.0.0.1", 0}); unsigned queries = 0;
-    pace::tcp::listener listener(io, {"127.0.0.1", server.local_endpoint().port});
+    pace::io_context io; auto [listener, server] = bind_nameservers(io); unsigned queries = 0;
     pace::dns::resolver resolver(io, configuration(server));
     bool accepted = false, closed = false, canceled = false;
     io.spawn(nameserver(server, queries)); io.spawn(stalled_tcp_nameserver(listener, accepted, closed));
@@ -247,8 +274,7 @@ void tcp_cancellation() {
 int main() {
     watchdog deadline;
     try {
-        { pace::io_context io; pace::udp::socket server(io, {"127.0.0.1", 0}); unsigned queries = 0, tcp_queries = 0;
-          pace::tcp::listener tcp_server(io, {"127.0.0.1", server.local_endpoint().port});
+        { pace::io_context io; auto [tcp_server, server] = bind_nameservers(io); unsigned queries = 0, tcp_queries = 0;
           io.spawn(tcp_nameserver(tcp_server, tcp_queries));
           io.spawn(nameserver(server, queries)); io.spawn(checks(io, configuration(server), queries, tcp_queries)); io.run(); }
         for (unsigned mode = 0; mode < 3; ++mode) cancellation(mode);

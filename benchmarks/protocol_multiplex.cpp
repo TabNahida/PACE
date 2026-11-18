@@ -90,7 +90,7 @@ pace::task<void> tcp_client(pace::tcp::endpoint endpoint, run_state& state) {
     for (unsigned trial = 0; trial < state.config.batches; ++trial) {
         pace::tcp::stream stream(state.io); stream.set_no_delay(); co_await stream.connect(endpoint);
         auto requests = state.requests(); const auto begin = clock_type::now();
-        const auto replies = co_await pace::http2::exchange(std::move(stream), "localhost", std::move(requests), h2_limits(state.config));
+        const auto replies = co_await pace::http2::async_exchange(std::move(stream), "localhost", std::move(requests), h2_limits(state.config));
         state.record(replies, begin, trial);
     }
     state.io.stop();
@@ -107,7 +107,7 @@ pace::task<void> tls_client(pace::tcp::endpoint endpoint, const pace::tls::conte
     for (unsigned trial = 0; trial < state.config.batches; ++trial) {
         pace::tls::stream stream(state.io, config); stream.set_no_delay(); co_await stream.connect(endpoint, "localhost");
         auto requests = state.requests(); const auto begin = clock_type::now();
-        const auto replies = co_await pace::http2::exchange(std::move(stream), "localhost", std::move(requests), h2_limits(state.config));
+        const auto replies = co_await pace::http2::async_exchange(std::move(stream), "localhost", std::move(requests), h2_limits(state.config));
         state.record(replies, begin, trial);
     }
     state.io.stop();
@@ -121,7 +121,7 @@ pace::task<void> h3_client(pace::udp::endpoint endpoint, const pace::quic::conte
     for (unsigned trial = 0; trial < state.config.batches; ++trial) {
         pace::quic::connection connection(state.io, config); co_await connection.connect(endpoint, "localhost");
         auto requests = state.requests(); const auto begin = clock_type::now();
-        const auto replies = co_await pace::http3::exchange(std::move(connection), "localhost", std::move(requests), bounds);
+        const auto replies = co_await pace::http3::async_exchange(std::move(connection), "localhost", std::move(requests), bounds);
         state.record(replies, begin, trial);
     }
     state.io.stop();

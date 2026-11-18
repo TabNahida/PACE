@@ -39,6 +39,11 @@ int main() {
 定时器 handle 必须保存在变量里，否则临时对象销毁会立即取消回调。
 `canceled` 在任务外面，一直活到 run 返回，所以取消时仍能安全写入。
 
+
+单个操作或一组相关任务优先使用[局部取消与结构化任务组](12-structured-concurrency.zh-CN.md)。
+io.stop 是整个 context 的关闭。原始 listener.close 只取消 accept；HTTP serve 便捷接口
+增加了结构化作用域，会在返回前取消并等待其接受的连接。
+
 ## 第一步：认识取消的错误路径
 
 取消通过 `std::system_error` 报告，错误码是 `operation_canceled`。

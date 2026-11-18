@@ -128,3 +128,7 @@ sources when this matrix was added:
   not already contain it.
 - [QEMU user-mode documentation](https://www.qemu.org/docs/master/user/main.html)
   describes syscall translation and the limits of emulated execution.
+
+## Explicit I/O backend coverage
+
+A Linux native job builds `--uring=y` and runs the full suite with `PACE_IO_BACKEND=io_uring`. Windows x64/ARM64 explicitly select IOCP; x86 selects WSAPoll because the independent SDK probe rejects notification registrations under WoW64. Backend tests verify the selected implementation, queue pressure, cancellation and socket reuse. Gateway tests cover path containment, cache policy, pooling, balancing and deadlines. Remote runners provide correctness results only.

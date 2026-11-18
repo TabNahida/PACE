@@ -6,7 +6,8 @@ the runtime has no work stealing, automatic round-robin submission or CPU pinnin
 
 ```cpp
 explicit runtime(std::size_t workers =
-    std::max(1u, std::thread::hardware_concurrency()));
+    std::max(1u, std::thread::hardware_concurrency()),
+    io_backend backend = io_backend::automatic);
 ~runtime();
 runtime(const runtime&) = delete;
 runtime& operator=(const runtime&) = delete;
