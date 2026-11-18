@@ -476,8 +476,13 @@ task<void> serve(quic::listener& listener, http::handler handle, limits bounds) 
                 if (error.code() == std::errc::operation_canceled || error.code() == std::errc::bad_file_descriptor) co_return;
                 // accept includes the TLS handshake. A failed peer must not stop
                 // the listener, while an actual engine failure must propagate.
-                if (listener.is_open() && (error.code() == std::errc::protocol_error ||
-                    error.code() == std::errc::connection_aborted || error.code() == std::errc::timed_out)) continue;
+                if (error.code() == std::errc::protocol_error || error.code() == std::errc::connection_aborted ||
+                    error.code() == std::errc::timed_out) {
+                    if (listener.is_open()) continue;
+                    // A peer may reject the handshake while another thread stops
+                    // the server. Finish normally after that shutdown request.
+                    if (listener.context().stopped()) co_return;
+                }
                 throw;
             }
         }
