@@ -115,10 +115,5 @@ inline packet exchange(endpoint peer, std::string request, blocking_options opti
         return async_exchange(io, std::move(peer), std::move(request), capacity);
     }, options);
 }
-inline std::size_t send(endpoint peer, std::string message, blocking_options options = {}) {
-    return detail::blocking_call([&](io_context& io) -> task<std::size_t> {
-        auto socket = open(io);
-        co_return co_await socket.send(std::move(message), std::move(peer));
-    }, options);
-}
+std::size_t send(endpoint peer, std::string message, blocking_options options = {});
 } // namespace pace::udp

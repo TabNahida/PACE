@@ -210,4 +210,11 @@ task<packet> async_exchange(io_context& io, endpoint peer, std::string request, 
         co_await io.yield(); // A ready stream of unrelated datagrams must not starve cancellation.
     }
 }
+
+std::size_t send(endpoint peer, std::string message, blocking_options options) {
+    return detail::blocking_call([&](io_context& io) -> task<std::size_t> {
+        auto socket = open(io);
+        co_return co_await socket.send(std::move(message), std::move(peer));
+    }, options);
+}
 } // namespace pace::udp

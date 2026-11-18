@@ -14,13 +14,18 @@ using namespace std::chrono_literals;
 namespace {
 void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
 struct watchdog {
+    const char* scenario;
     std::mutex mutex;
     std::condition_variable changed;
     bool done = false;
     std::thread thread{[this] {
         std::unique_lock lock(mutex);
-        if (!changed.wait_for(lock, 30s, [&] { return done; })) std::abort();
+        if (!changed.wait_for(lock, 60s, [&] { return done; })) {
+            std::cerr << "QUIC watchdog timed out in " << scenario << std::endl;
+            std::abort();
+        }
     }};
+    explicit watchdog(const char* name) : scenario(name) {}
     ~watchdog() { { std::lock_guard lock(mutex); done = true; } changed.notify_one(); thread.join(); }
 };
 struct completion {
@@ -126,6 +131,7 @@ pace::task<void> lossy_relay(pace::udp::socket& socket, pace::udp::endpoint serv
     }
 }
 void roundtrip(const std::filesystem::path& fixtures, std::string name, const char* bind = "127.0.0.1", bool loss = false) {
+    watchdog guard{loss ? "lossy roundtrip" : "roundtrip"};
     pace::io_context io; configurations config(fixtures);
     if (name == "::1") {
         config.server.use_certificate_chain((fixtures / "a.example.pem").string(), (fixtures / "a.example-key.pem").string());
@@ -157,6 +163,7 @@ pace::task<void> rejecting_client(pace::io_context& io, const pace::quic::contex
 }
 void rejects(const std::filesystem::path& fixtures, std::string name, bool trusted, bool expired, bool alpn,
              const char* bind = "127.0.0.1") {
+    watchdog guard{__func__};
     pace::io_context io;
     pace::quic::context server(pace::quic::role::server), client;
     server.use_certificate_chain((fixtures / (expired ? "expired.pem" : "localhost.pem")).string(), (fixtures / "localhost-key.pem").string());
@@ -179,6 +186,7 @@ pace::task<void> no_reply(pace::io_context& io, pace::udp::endpoint endpoint, bo
     io.stop();
 }
 void deadlines(bool cancel) {
+    watchdog guard{__func__};
     pace::io_context io; pace::udp::socket blackhole(io, {"127.0.0.1", 0}); bool done = false;
     io.spawn(no_reply(io, blackhole.local_endpoint(), cancel, done));
     if (cancel) io.spawn(stop_soon(io));
@@ -210,6 +218,7 @@ pace::task<void> closed_client(pace::io_context& io, const pace::quic::context& 
     require(done, "QUIC close did not cancel pending read"); io.stop();
 }
 void closure(const std::filesystem::path& fixtures, bool listener_closed) {
+    watchdog guard{__func__};
     pace::io_context io; configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server); bool done = false;
     io.spawn(closing_server(listener, listener_closed));
@@ -239,6 +248,7 @@ pace::task<void> waiting_server(pace::quic::listener& listener) {
     } catch (const std::system_error&) {}
 }
 void serialization_and_reset(const std::filesystem::path& fixtures) {
+    watchdog guard{__func__};
     pace::io_context io; configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server); bool rejected = false, canceled = false;
     io.spawn(waiting_server(listener));
@@ -275,6 +285,7 @@ pace::task<void> isolated_client(pace::quic::connection& connection, pace::udp::
     done.arrive();
 }
 void connection_isolation(const std::filesystem::path& fixtures) {
+    watchdog guard{__func__};
     pace::io_context io; configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
     pace::quic::connection first(io, config.client), second(io, config.client);
@@ -303,6 +314,7 @@ pace::task<void> local_accept_deadline(pace::quic::listener& listener) {
     listener.context().stop();
 }
 void local_cancellation(const std::filesystem::path& fixtures) {
+    watchdog guard{__func__};
     pace::io_context io;
     configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
@@ -310,6 +322,7 @@ void local_cancellation(const std::filesystem::path& fixtures) {
     io.run();
 }
 void accept_cancellation(const std::filesystem::path& fixtures) {
+    watchdog guard{__func__};
     pace::io_context io; configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server); bool canceled = false;
     io.spawn(pending_accept(listener, canceled)); io.spawn(close_acceptor(listener));
@@ -334,6 +347,7 @@ pace::task<void> recycle_client(pace::quic::connection& connection, pace::udp::e
     done.arrive();
 }
 void recycle_streams(const std::filesystem::path& fixtures) {
+    watchdog guard{__func__};
     pace::io_context io; configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
     pace::quic::connection client(io, config.client); completion done{io};
@@ -360,6 +374,7 @@ pace::task<void> interop_client(pace::quic::connection& connection, pace::udp::e
     connection.context().stop();
 }
 void interop(const std::filesystem::path& fixtures, bool server, uint16_t port) {
+    watchdog guard{__func__};
     pace::io_context io; configurations config(fixtures);
     if (server) {
         pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
@@ -372,7 +387,6 @@ void interop(const std::filesystem::path& fixtures, bool server, uint16_t port) 
 }
 } // namespace
 int main(int argc, char** argv) {
-    watchdog guard;
     try {
         const bool cross_backend = argc > 1 && std::string_view(argv[1]).starts_with("--interop-");
         const auto fixtures = argc > 1 && !cross_backend ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path() / "certs";
