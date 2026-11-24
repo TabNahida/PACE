@@ -107,7 +107,6 @@ struct io_context::implementation {
     std::vector<std::uint32_t> free_descriptors;
     std::size_t descriptor_count = 0;
     std::unordered_map<native_socket_type, std::uint64_t> tokens;
-    std::uint64_t next_token = 0;
     std::vector<std::uint64_t> dirty_descriptors;
     // Cancellation can remove any sleeper, including thousands at once. Keep
     // its slot in the coroutine frame to avoid a scan and heap rebuild.
@@ -165,11 +164,11 @@ struct io_context::implementation {
         return state.fd != invalid_socket && state.token == token ? &state : nullptr;
     }
     std::uint64_t add_descriptor(native_socket_type fd) {
-        if (next_token == UINT32_MAX || descriptors.size() == UINT32_MAX)
-            throw std::overflow_error("descriptor identity exhausted");
         std::uint32_t index;
         if (!free_descriptors.empty()) { index = free_descriptors.back(); free_descriptors.pop_back(); }
         else {
+            if (descriptors.size() == UINT32_MAX)
+                throw std::overflow_error("descriptor slots exhausted");
             if (descriptors.size() == descriptors.capacity()) {
                 const auto capacity = std::max<std::size_t>(16, descriptors.size() * 2);
                 free_descriptors.reserve(capacity);
@@ -178,12 +177,16 @@ struct io_context::implementation {
             index = static_cast<std::uint32_t>(descriptors.size()); descriptors.emplace_back();
         }
         auto& state = descriptors[index];
-        state.fd = fd; state.token = (++next_token << 32) | index; ++descriptor_count;
+        const auto generation = (state.token >> 32) + 1;
+        state.fd = fd; state.token = (generation << 32) | index; ++descriptor_count;
         return state.token;
     }
     void erase_descriptor(std::uint64_t token) noexcept {
         if (auto* state = find_descriptor(token)) {
-            *state = {}; free_descriptors.push_back(static_cast<std::uint32_t>(token)); --descriptor_count;
+            // Retire an exhausted slot so its previous tokens cannot recur.
+            *state = {.token = token};
+            if ((token >> 32) != UINT32_MAX) free_descriptors.push_back(static_cast<std::uint32_t>(token));
+            --descriptor_count;
         }
     }
 
@@ -426,6 +429,10 @@ bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle) {
     profiling::scope timing(profiling::stage::io_arm);
     check_affinity(this);
     if (stopped()) { operation.error = canceled(); return false; }
+    if (operation.fd == invalid_socket) {
+        operation.error = std::make_error_code(std::errc::bad_file_descriptor);
+        return false;
+    }
     auto& p = *impl_;
     auto token_it = p.tokens.find(operation.fd);
     const bool inserted = token_it == p.tokens.end();

@@ -1,0 +1,71 @@
+name: Network performance comparison
+on:
+  push:
+    branches: ['codex/net-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pace-net-perf-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    name: ${{ matrix.platform }} / ${{ matrix.arch }} / ${{ matrix.backend }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: Linux, os: ubuntu-24.04, arch: x86_64, backend: epoll}
+          - {platform: Linux, os: ubuntu-24.04-arm, arch: arm64, backend: epoll}
+          - {platform: Linux, os: ubuntu-24.04, arch: x86_64, backend: io_uring}
+          - {platform: macOS, os: macos-15, arch: arm64, backend: kqueue}
+          - {platform: macOS, os: macos-15-intel, arch: x86_64, backend: kqueue}
+          - {platform: Windows, os: windows-2025, arch: x64, backend: iocp}
+          - {platform: Windows, os: windows-2025, arch: x64, backend: wsapoll}
+          - {platform: Windows, os: windows-11-arm, arch: arm64, backend: iocp}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.0.9'
+      - run: python scripts/compare_net_performance.py --backend ${{ matrix.backend }} --arch ${{ matrix.arch }} --output net-results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: net-performance-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.backend }}
+          path: net-results/
+          if-no-files-found: error
+  freebsd:
+    name: FreeBSD x64 / kqueue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: vmactions/freebsd-vm@v1
+        with:
+          release: '14.3'
+          cache-after-prepare: true
+          prepare: |
+            set -eu
+            pkg install -y python3 git pkgconf gmake cmake ninja curl unzip gsed bash perl5
+            git clone --recursive --depth 1 --branch v3.0.9 https://github.com/xmake-io/xmake.git /tmp/pace-xmake-source
+            (cd /tmp/pace-xmake-source && ./configure && gmake -j4 && gmake install)
+          run: |
+            set -eu
+            export XMAKE_ROOT=y
+            git config --global --add safe.directory "$PWD"
+            python3 scripts/compare_net_performance.py --backend kqueue --output net-results
+      - run: cat net-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: net-performance-freebsd-kqueue
+          path: net-results/
+          if-no-files-found: error

@@ -3,6 +3,8 @@
 #include <pace/detail/socket_address.hpp>
 #ifndef _WIN32
 #include <netinet/tcp.h>
+#else
+#include <windows.h>
 #endif
 
 #include <array>
@@ -18,6 +20,7 @@
 #include <string>
 #include <thread>
 #include <type_traits>
+#include <vector>
 
 static_assert(std::is_same_v<pace::tcp_stream, pace::tcp::stream>);
 static_assert(std::is_same_v<pace::tcp_listener, pace::tcp::listener>);
@@ -71,6 +74,39 @@ pace::task<void> tcp_roundtrip(pace::io_context& context) {
     try { co_await moved.read_some(buffer); }
     catch (const std::system_error& error) { bad_fd = error.code() == std::errc::bad_file_descriptor; }
     require(bad_fd, "closed stream should reject operations");
+}
+
+pace::task<void> accept_burst(pace::io_context& io) {
+    auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+    std::vector<pace::tcp::stream> clients;
+    for (unsigned i = 0; i < 65; ++i)
+        clients.push_back(co_await pace::tcp::connect(io, listener.local_endpoint()));
+    auto dispatched = std::make_shared<bool>(false);
+    io.post([dispatched] { *dispatched = true; });
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        auto accepted = co_await listener.accept();
+        require(accepted.is_open(), "burst accept lost a connection");
+#if defined(_WIN32)
+        for (auto fd : {listener.native_handle(), clients[i].native_handle(), accepted.native_handle()}) {
+            DWORD flags = 0;
+            require(::GetHandleInformation(reinterpret_cast<HANDLE>(fd), &flags) && !(flags & HANDLE_FLAG_INHERIT),
+                    "TCP socket is inheritable");
+        }
+#endif
+    }
+    require(*dispatched, "accept burst did not let the reactor dispatch posted work");
+}
+
+pace::task<void> large_write(pace::io_context& io) {
+    auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+    auto client = co_await pace::tcp::connect(io, listener.local_endpoint());
+    auto peer = co_await listener.accept();
+    const std::string bytes(2 * 1024 * 1024 + 13, 'x');
+    co_await pace::with_task_group([&](pace::task_group& group) -> pace::task<void> {
+        auto written = group.spawn(client.write_all(bytes));
+        require((co_await peer.read_exact(bytes.size(), bytes.size())) == bytes, "large TCP write lost bytes");
+        co_await written;
+    });
 }
 
 pace::task<void> connect_errors(pace::io_context& context) {
@@ -600,6 +636,8 @@ int main() {
         verify_response_framing();
 #endif
         run_test("TCP binary roundtrip and ownership", tcp_roundtrip);
+        run_test("queued accepts yield to the reactor", accept_burst);
+        run_test("large TCP write preserves payload across yields", large_write);
         run_test("easy connect, bounded exact reads, EOF and cancellation", exact_reads);
         run_test("connect and endpoint errors", connect_errors);
         run_test("IPv6 loopback, endpoint inspection and family selection", ipv6_loopback);

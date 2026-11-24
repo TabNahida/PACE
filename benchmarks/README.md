@@ -189,3 +189,11 @@ renderer is `plot_gateway_optimization.py` (add `--all-backends` for io_uring).
 hashing and shared-versus-reactor-local hot-cache copies with 1/2/4/8 workers.
 Those operation rates are diagnostics, not server throughput or hardware cache-miss
 measurements. The complete HTTP matrix remains the end-to-end evidence.
+## Paired network performance on Actions
+
+The [network comparison workflow](../.github/workflows/network-performance.yml)
+runs the same workloads on the branch and its merge base with `main`. Each runner
+alternates the two builds and keeps paired samples for dense and sparse readiness,
+UDP source filtering, and TCP throughput and P99. Compare each pair on the same
+runner. Worker counts and request batching affect different workloads, so compare
+the one- and four-worker and depth-one and depth-eight TCP cases before tuning.

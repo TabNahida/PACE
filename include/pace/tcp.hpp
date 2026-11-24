@@ -115,6 +115,8 @@ private:
     io_context* context_;
     native_socket_type fd_ = invalid_socket;
     address_family family_ = address_family::ipv4;
+    unsigned accept_attempts_ = 0;
+    cancellation_source* accept_backoff_ = nullptr;
 };
 
 // Bind immediately. Current-context form is for a running task/callback.
