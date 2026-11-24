@@ -65,7 +65,7 @@ public:
         catch (...) { pending_.erase(id); throw; }
         io_uring_sqe* sqe;
         try { sqe = entry(); } catch (...) { current_.erase(fd); pending_.erase(id); throw; }
-        io_uring_prep_poll_add(sqe, fd, static_cast<unsigned>((read ? POLLIN : 0) | (write ? POLLOUT : 0) | POLLRDHUP));
+        io_uring_prep_poll_add(sqe, fd, static_cast<unsigned>((read ? POLLIN | POLLRDHUP : 0) | (write ? POLLOUT : 0)));
         io_uring_sqe_set_data64(sqe, id);
     }
     void remove(native_socket_type fd) noexcept override {

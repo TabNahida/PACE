@@ -88,4 +88,9 @@ if has_config("components") then
         add_files(path.join(pace_root, "benchmarks/components_bench.cpp"))
         add_deps("pace_net")
     target_end()
+    target("pace_runtime_hotpaths")
+        set_kind("binary")
+        add_files(path.join(pace_root, "benchmarks/runtime_hotpaths.cpp"))
+        add_deps("pace_net")
+    target_end()
 end

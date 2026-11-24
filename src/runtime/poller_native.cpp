@@ -93,8 +93,8 @@ void native_poller::update(native_socket_type fd, bool readable, bool writable, 
     if (token == wake_token) throw std::invalid_argument("poller token UINT64_MAX is reserved");
     if (!readable && !writable) { remove(fd); return; }
     epoll_event event{};
-    event.events = (impl_->persistent ? 0U : EPOLLONESHOT) | EPOLLRDHUP;
-    if (readable) event.events |= EPOLLIN;
+    event.events = impl_->persistent ? 0U : EPOLLONESHOT;
+    if (readable) event.events |= EPOLLIN | EPOLLRDHUP;
     if (writable) event.events |= EPOLLOUT;
     event.data.u64 = token;
     if (::epoll_ctl(impl_->queue, EPOLL_CTL_MOD, fd, &event) == 0) return;
@@ -221,30 +221,30 @@ std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms) {
         if (errno == EINTR) return 0;
         fail("kevent wait");
     }
-    std::array<native_socket_type, max_batch> descriptors;
+    // Group both filters of the same descriptor before disarming either.
+    auto end = events.begin() + count;
+    if (count > 1) {
+        end = std::remove_if(events.begin(), end, [](const auto& event) { return event.filter == EVFILT_USER; });
+        std::sort(events.begin(), end, [](const auto& left, const auto& right) {
+            return left.ident < right.ident;
+        });
+    } else if (count == 1 && events[0].filter == EVFILT_USER) return 0;
     std::size_t size = 0;
-    for (int i = 0; i < count; ++i) {
-        const auto& event = events[static_cast<std::size_t>(i)];
-        if (event.filter == EVFILT_USER) continue;
-        const auto fd = static_cast<native_socket_type>(event.ident);
-        std::size_t index = 0;
-        while (index < size && descriptors[index] != fd) ++index;
-        if (index == size) {
-            descriptors[size] = fd;
-            output[size++] = {static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(event.udata)),
-                false, false, false};
-        }
-        auto& result = output[index];
-        result.readable |= event.filter == EVFILT_READ;
-        result.writable |= event.filter == EVFILT_WRITE;
-        result.error |= bool(event.flags & EV_ERROR) || ((event.flags & EV_EOF) && event.fflags != 0);
-    }
-    // EV_ONESHOT removed delivered filters already. Disarm only their counterpart.
-    for (std::size_t i = 0; i < size; ++i) {
-        const auto entry = impl_->interests.find(descriptors[i]);
+    for (auto event = events.begin(); event != end;) {
+        const auto fd = static_cast<native_socket_type>(event->ident);
+        auto& result = output[size++];
+        result = {static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(event->udata)), false, false, false};
+        do {
+            result.readable |= event->filter == EVFILT_READ;
+            result.writable |= event->filter == EVFILT_WRITE;
+            result.error |= bool(event->flags & EV_ERROR) || ((event->flags & EV_EOF) && event->fflags != 0);
+            ++event;
+        } while (event != end && event->ident == static_cast<std::uintptr_t>(fd));
+        // EV_ONESHOT removed delivered filters already. Disarm only their counterpart.
+        const auto entry = impl_->interests.find(fd);
         if (entry == impl_->interests.end()) continue;
-        if ((entry->second & 1U) && !output[i].readable) impl_->erase(descriptors[i], EVFILT_READ);
-        if ((entry->second & 2U) && !output[i].writable) impl_->erase(descriptors[i], EVFILT_WRITE);
+        if ((entry->second & 1U) && !result.readable) impl_->erase(fd, EVFILT_READ);
+        if ((entry->second & 2U) && !result.writable) impl_->erase(fd, EVFILT_WRITE);
         entry->second = 0;
     }
     return size;
@@ -340,7 +340,9 @@ std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms) {
         if (::WSAGetLastError() == WSAEINTR) return 0;
         fail("WSAPoll");
     }
+    int ready = count;
     if (impl_->descriptors[0].revents) {
+        --ready;
         std::array<char, 256> bytes{};
         // Bound draining so a producer flood cannot starve coroutine execution.
         for (std::size_t i = 0; i < max_batch; ++i)
@@ -348,13 +350,14 @@ std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms) {
     }
     std::size_t size = 0;
     std::size_t index = 1;
-    while (index < impl_->descriptors.size() && size < output.size()) {
+    while (ready > 0 && index < impl_->descriptors.size() && size < output.size()) {
         const auto events = impl_->descriptors[index].revents;
         if (!events) { ++index; continue; }
         output[size++] = {impl_->tokens[index],
             bool(events & (POLLRDNORM | POLLRDBAND | POLLHUP)),
             bool(events & POLLWRNORM), bool(events & (POLLERR | POLLHUP | POLLNVAL))};
         impl_->erase(index);
+        --ready;
     }
     return size;
 }
