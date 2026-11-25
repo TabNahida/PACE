@@ -116,9 +116,11 @@ struct ciphertext_buffer {
 struct multiplex_buffers { ciphertext_buffer input, output; };
 struct socket_bio {
     tcp::stream& transport;
+    std::string prefix;
+    std::size_t prefix_offset = 0;
     // Allocated only for an internal multiplexed protocol driver. Input stays
     // with the stream so its later public shutdown sees prefetched close_notify.
-    std::unique_ptr<multiplex_buffers> buffers;
+    std::unique_ptr<multiplex_buffers> buffers{};
     bool multiplexing = false, input_eof = false;
 };
 
@@ -128,6 +130,16 @@ int bio_read(BIO* bio, char* bytes, int size) {
     BIO_clear_retry_flags(bio);
     if (!bytes || size <= 0) return 0;
     auto& state = *static_cast<socket_bio*>(BIO_get_data(bio));
+    if (!state.prefix.empty()) {
+        const auto count = std::min<std::size_t>(size, state.prefix.size() - state.prefix_offset);
+        std::memcpy(bytes, state.prefix.data() + state.prefix_offset, count);
+        state.prefix_offset += count;
+        if (state.prefix_offset == state.prefix.size()) {
+            std::string{}.swap(state.prefix);
+            state.prefix_offset = 0;
+        }
+        return static_cast<int>(count);
+    }
     if (state.buffers && state.buffers->input.size()) {
         auto& input = state.buffers->input;
         const auto count = std::min<std::size_t>(size, input.size());
@@ -172,10 +184,16 @@ BIO_METHOD* socket_method() {
             !BIO_meth_set_ctrl(result.get(), [](BIO* bio, int command, long, void*) -> long {
                 const auto* state = static_cast<socket_bio*>(BIO_get_data(bio));
                 if (command == BIO_CTRL_FLUSH) return 1;
-                if (state && state->buffers) {
-                    if (command == BIO_CTRL_PENDING) return static_cast<long>(state->buffers->input.size());
-                    if (command == BIO_CTRL_WPENDING) return static_cast<long>(state->buffers->output.size());
-                    if (command == BIO_CTRL_EOF) return state->input_eof && !state->buffers->input.size();
+                if (state) {
+                    const auto prefix = state->prefix.size() - state->prefix_offset;
+                    const auto buffered = state->buffers ? state->buffers->input.size() : 0;
+                    if (command == BIO_CTRL_PENDING) {
+                        const auto max_prefix = static_cast<std::size_t>(LONG_MAX) - buffered;
+                        return static_cast<long>(std::min(prefix, max_prefix) + buffered);
+                    }
+                    if (command == BIO_CTRL_WPENDING && state->buffers)
+                        return static_cast<long>(state->buffers->output.size());
+                    if (command == BIO_CTRL_EOF) return state->input_eof && !prefix && !buffered;
                 }
                 return 0;
             })) tls_error("create socket BIO method");
@@ -397,15 +415,17 @@ void context::set_server_name_policy(sni_policy missing, sni_policy unrecognized
 
 struct stream::implementation {
     tcp::stream transport;
-    socket_bio bio_state{transport, {}};
+    socket_bio bio_state;
     std::shared_ptr<tls::context::implementation> configuration;
     std::unique_ptr<SSL, decltype(&SSL_free)> ssl{nullptr, SSL_free};
     bool active = false;
     bool handshaken = false;
     bool eof = false;
 
-    implementation(tcp::stream socket, std::shared_ptr<tls::context::implementation> config)
-        : transport(std::move(socket)), configuration(std::move(config)) {
+    implementation(tcp::stream socket, std::shared_ptr<tls::context::implementation> config,
+                   std::string_view pre_read)
+        : transport(std::move(socket)), bio_state{transport, std::string(pre_read)},
+          configuration(std::move(config)) {
         if (!configuration) throw std::logic_error("moved-from TLS context");
         configuration->freeze();
         ERR_clear_error();
@@ -447,7 +467,9 @@ struct stream::implementation {
 
 stream::stream(io_context& io, const tls::context& config) : stream(tcp::stream(io), config) {}
 stream::stream(tcp::stream transport, const tls::context& config)
-    : impl_(std::make_unique<implementation>(std::move(transport), config.impl_)) {}
+    : stream(std::move(transport), config, {}) {}
+stream::stream(tcp::stream transport, const tls::context& config, std::string_view pre_read)
+    : impl_(std::make_unique<implementation>(std::move(transport), config.impl_, pre_read)) {}
 stream::~stream() = default;
 stream::stream(stream&&) noexcept = default;
 stream& stream::operator=(stream&&) noexcept = default;

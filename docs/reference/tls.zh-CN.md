@@ -117,9 +117,11 @@ ALPN 策略；隐式 TLS 与 STARTTLS 使用完全相同的选择机制。
 ALPN 选择，详见 [OpenSSL 官方语义](https://docs.openssl.org/3.0/man3/SSL_CTX_set_tlsext_servername_callback/)。
 
 STARTTLS 应先在 TCP 流完成明文协议协商，再将其移动进 `tls::stream`：客户端
-调用 `handshake(peer_name)`，服务端调用 `handshake()`。移动后不再进行明文
-操作；协商阶段应只读取明文响应字节，已经读进应用缓冲区的加密字节无法重新
-喂给当前基于 socket 的 TLS 接口。
+调用 `handshake(peer_name)`，服务端调用 `handshake()`。如果协议识别或协商已经
+从 TCP 流读走了一些 TLS 字节，可以按线上顺序将它们作为第三个参数 `pre_read`
+传给 `tls::stream(std::move(transport), config, pre_read)`。构造函数返回前会复制
+这些字节，TLS 流会先回放它们，再从 TCP 读取。前缀可以包含完整 ClientHello，
+也可以在 TLS record 中间结束。
 
 ## 读写与并发
 

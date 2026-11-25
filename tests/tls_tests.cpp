@@ -30,9 +30,33 @@ struct finished {
     void arrive() { if (++count == 2) io.stop(); }
 };
 
+enum class replay_prefix { none, complete_hello, mid_record };
+
+pace::task<std::string> read_client_hello_prefix(pace::tcp::stream& socket, replay_prefix replay) {
+    std::string prefix = co_await socket.read_exact(5);
+    require(prefix[0] == '\x16', "expected TLS handshake record");
+    const auto record_size = (static_cast<unsigned char>(prefix[3]) << 8) |
+                             static_cast<unsigned char>(prefix[4]);
+    require(record_size > 4 && record_size <= 16384, "unexpected ClientHello record size");
+    const bool complete = replay == replay_prefix::complete_hello;
+    prefix += co_await socket.read_exact(complete ? record_size : record_size / 2);
+    require(prefix[5] == '\x01', "expected ClientHello message");
+    if (complete) {
+        const auto hello_size = (static_cast<unsigned char>(prefix[6]) << 16) |
+                                (static_cast<unsigned char>(prefix[7]) << 8) |
+                                static_cast<unsigned char>(prefix[8]);
+        require(hello_size + 4 == record_size, "test client did not send a complete ClientHello in its first record");
+    }
+    co_return prefix;
+}
+
 pace::task<void> echo_server(pace::tcp::listener& listener, const pace::tls::context& config,
-                            std::size_t size, finished& done) {
-    pace::tls::stream socket(co_await listener.accept(), config);
+                            std::size_t size, finished& done, replay_prefix replay) {
+    auto transport = co_await listener.accept();
+    std::string prefix;
+    if (replay != replay_prefix::none) prefix = co_await read_client_hello_prefix(transport, replay);
+    pace::tls::stream socket(std::move(transport), config, prefix);
+    std::string{}.swap(prefix); // The TLS stream owns its copy before the handshake starts.
     co_await socket.handshake();
     require(socket.selected_protocol() == "h2", "server ALPN preference was not selected");
     std::array<char, 4093> bytes{};
@@ -69,7 +93,8 @@ pace::task<void> echo_client(pace::tls::stream& socket, pace::tcp::endpoint endp
     co_await socket.shutdown();
     done.arrive();
 }
-void verified_roundtrip(const std::filesystem::path& fixtures, std::string name) {
+void verified_roundtrip(const std::filesystem::path& fixtures, std::string name,
+                        replay_prefix replay = replay_prefix::none) {
     pace::io_context io;
     pace::tls::context server(pace::tls::role::server);
     server.use_certificate_chain((fixtures / "localhost.pem").string(), (fixtures / "localhost-key.pem").string());
@@ -84,7 +109,7 @@ void verified_roundtrip(const std::filesystem::path& fixtures, std::string name)
     pace::tcp::listener listener(io, {"127.0.0.1", 0});
     finished done{io};
     constexpr std::size_t payload = 96 * 1024 + 13;
-    io.spawn(echo_server(listener, server, payload, done));
+    io.spawn(echo_server(listener, server, payload, done, replay));
     io.spawn(echo_client(client, listener.local_endpoint(), std::move(name), payload, done));
     io.run();
     require(done.count == 2, "TLS roundtrip did not complete both peers");
@@ -575,6 +600,8 @@ int main(int argc, char** argv) {
             std::filesystem::path(__FILE__).parent_path() / "certs";
         verified_roundtrip(fixtures, "localhost");
         verified_roundtrip(fixtures, "127.0.0.1");
+        verified_roundtrip(fixtures, "localhost", replay_prefix::complete_hello);
+        verified_roundtrip(fixtures, "localhost", replay_prefix::mid_record);
         rejected_handshake(fixtures, "wrong.example", true, false, false);
         rejected_handshake(fixtures, "localhost", false, false, false);
         rejected_handshake(fixtures, "localhost", true, true, false);
