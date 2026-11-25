@@ -11,6 +11,7 @@ import shutil
 import statistics
 import subprocess
 import tempfile
+import time
 
 from ci_smoke import executable
 
@@ -19,6 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = Path("build/net-performance")
 TESTS = ("pace_backend_tests", "pace_network_tests", "pace_udp_tests")
 BENCHMARKS = ("pace_net_hotpaths", "pace_scaling")
+HOTPATHS = {"poll-dense": 400, "poll-sparse": 2500, "udp": 800}
+TCP = {f"tcp-{workers}w-{clients}c-depth{depth}": (workers, clients, depth)
+       for workers, clients, depth in ((1, 8, 1), (4, 8, 1), (1, 8, 8), (1, 32, 1))}
 
 
 def build(root, args, candidate):
@@ -34,39 +38,46 @@ def build(root, args, candidate):
     return root / BUILD
 
 
-def workloads(directory, backend, trial):
-    for workload, count in (("poll-dense", 400), ("poll-sparse", 2500), ("udp", 1200)):
+def measure(directory, backend, trial, workload):
+    if workload in HOTPATHS:
+        count = HOTPATHS[workload]
         output = subprocess.check_output([
             str(executable(directory, "pace_net_hotpaths")), workload, str(count)
         ], text=True, timeout=40)
         result = json.loads(output)
         if (result["backend"], result["workload"], result["iterations"]) != (backend, workload, count):
             raise ValueError(f"unexpected hot path result: {result}")
-        yield workload, {"ns_per_operation": result["ns_per_operation"]}
+        return {"ns_per_operation": result["ns_per_operation"]}
 
-    for workers, clients, depth in ((1, 8, 1), (4, 8, 1), (1, 8, 8), (1, 32, 1)):
-        requests = 4000
-        output = subprocess.check_output([
-            str(executable(directory, "pace_scaling")), "--mode", "runtime", "--workers", str(workers),
-            "--clients", str(clients), "--pipeline", str(depth), "--bytes", "64", "--requests", str(requests),
-            "--warmup", "256", "--timeout-ms", "10000", "--trial", str(trial),
-        ], text=True, timeout=60)
-        result = json.loads(output)
-        checksum = clients * (clients + 1) // 2 * (requests * (requests + 1) // 2)
-        if (result["validated"] is not True or result["completed_requests"] != clients * requests or
-                result["checksum"] != checksum or result["pipeline"] != depth or
-                result["per_worker_completed_requests"] != [clients * requests // workers] * workers):
-            raise ValueError(f"unexpected TCP workload result: {result}")
-        yield f"tcp-{workers}w-{clients}c-depth{depth}", {
-            metric: result[metric] for metric in ("requests_per_second", "p99_us")
-        }
+    workers, clients, depth = TCP[workload]
+    requests = 4000
+    command = [str(executable(directory, "pace_scaling")), "--mode", "runtime", "--workers", str(workers),
+               "--clients", str(clients), "--pipeline", str(depth), "--bytes", "64", "--requests", str(requests),
+               "--warmup", "256", "--timeout-ms", "10000", "--trial", str(trial)]
+    for delay in (2, 5, 0):
+        run = subprocess.run(command, text=True, capture_output=True, timeout=60)
+        if not run.returncode:
+            break
+        if not delay or os.name != "nt" or "client connect: 10055" not in run.stderr:
+            raise RuntimeError(f"{workload} trial {trial} failed: {run.stderr.strip()}")
+        print(f"{workload} trial {trial}: Winsock resource pressure, retrying in {delay}s", flush=True)
+        time.sleep(delay)
+    result = json.loads(run.stdout)
+    checksum = clients * (clients + 1) // 2 * (requests * (requests + 1) // 2)
+    if (result["validated"] is not True or result["completed_requests"] != clients * requests or
+            result["checksum"] != checksum or result["pipeline"] != depth or
+            result["per_worker_completed_requests"] != [clients * requests // workers] * workers):
+        raise ValueError(f"unexpected TCP workload result: {result}")
+    return {metric: result[metric] for metric in ("requests_per_second", "p99_us")}
 
 
 def compare(args, builds, revisions):
     records = {}
-    for trial in range(1, args.trials + 1):
-        for revision in tuple(builds)[::1 if trial % 2 else -1]:
-            for workload, metrics in workloads(builds[revision], args.backend, trial):
+    # Complete TCP before the UDP case, which opens a fresh socket per exchange.
+    for workload in ("poll-dense", "poll-sparse", *TCP, "udp"):
+        for trial in range(1, args.trials + 1):
+            for revision in tuple(builds)[::1 if trial % 2 else -1]:
+                metrics = measure(builds[revision], args.backend, trial, workload)
                 for metric, value in metrics.items():
                     if not math.isfinite(value) or value <= 0:
                         raise ValueError(f"invalid measurement for {workload}/{metric}: {value}")

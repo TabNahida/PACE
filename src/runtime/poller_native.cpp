@@ -229,6 +229,7 @@ std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms) {
     struct delivered_interest { native_socket_type fd; implementation::interest* interest; };
     std::array<delivered_interest, max_batch> delivered;
     std::size_t size = 0;
+    std::size_t bidirectional = 0;
     for (int i = 0; i < count; ++i) {
         const auto& event = events[static_cast<std::size_t>(i)];
         if (event.filter == EVFILT_USER) continue;
@@ -237,21 +238,33 @@ std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms) {
         const auto token = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(event.udata));
         if (entry == impl_->interests.end() || entry->second.token != token) continue;
         auto& interest = entry->second;
+        const bool readable = event.filter == EVFILT_READ;
+        const bool writable = event.filter == EVFILT_WRITE;
+        const bool error = (event.flags & EV_ERROR) || ((event.flags & EV_EOF) && event.fflags != 0);
+        const unsigned filter = readable ? 1U : 2U;
+        if (!(interest.filters & filter)) continue;
+        if (interest.filters == filter) {
+            // A single filter has no counterpart to merge or delete.
+            interest.filters = 0;
+            output[size++] = {token, readable, writable, error};
+            continue;
+        }
         if (interest.event_index == max_batch) {
             interest.event_index = size;
-            delivered[size] = {fd, &interest};
+            delivered[bidirectional++] = {fd, &interest};
             output[size++] = {token, false, false, false};
         }
         auto& result = output[interest.event_index];
-        result.readable |= event.filter == EVFILT_READ;
-        result.writable |= event.filter == EVFILT_WRITE;
-        result.error |= bool(event.flags & EV_ERROR) || ((event.flags & EV_EOF) && event.fflags != 0);
+        result.readable |= readable;
+        result.writable |= writable;
+        result.error |= error;
     }
     // EV_ONESHOT removed delivered filters already. Disarm only their counterpart.
-    for (std::size_t i = 0; i < size; ++i) {
+    for (std::size_t i = 0; i < bidirectional; ++i) {
         const auto [fd, interest] = delivered[i];
-        if ((interest->filters & 1U) && !output[i].readable) impl_->erase(fd, EVFILT_READ);
-        if ((interest->filters & 2U) && !output[i].writable) impl_->erase(fd, EVFILT_WRITE);
+        const auto& result = output[interest->event_index];
+        if (!result.readable) impl_->erase(fd, EVFILT_READ);
+        if (!result.writable) impl_->erase(fd, EVFILT_WRITE);
         interest->filters = 0;
         interest->event_index = max_batch;
     }

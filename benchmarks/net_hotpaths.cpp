@@ -34,18 +34,20 @@ double poll_time(pace::io_context& io, std::size_t iterations, std::size_t batch
 
     std::array<pace::detail::poll_event, 256> events;
     std::vector<bool> seen(batch);
-    clock_type::duration elapsed{};
+    std::vector<clock_type::duration> samples;
+    samples.reserve(iterations);
     for (std::size_t iteration = 0; iteration < warmup + iterations; ++iteration) {
         for (auto& target : targets)
             require(::sendto(sender.native_handle(), "x", 1, 0, target.data(), target.length) == 1, "UDP marker send");
         std::size_t delivered = 0;
+        clock_type::duration elapsed{};
         std::fill(seen.begin(), seen.end(), false);
         const auto deadline = clock_type::now() + 5s;
         while (delivered < batch) {
             const auto started = clock_type::now();
             require(started < deadline, "poll delivery timed out");
             const auto count = poller.wait(events, 100);
-            if (iteration >= warmup) elapsed += clock_type::now() - started;
+            elapsed += clock_type::now() - started;
             for (std::size_t i = 0; i < count; ++i) {
                 const auto& event = events[i];
                 require(event.token >= 1 && event.token <= batch && event.readable && !event.error, "bad poll event");
@@ -59,8 +61,11 @@ double poll_time(pace::io_context& io, std::size_t iterations, std::size_t batch
                 ++delivered;
             }
         }
+        if (iteration >= warmup) samples.push_back(elapsed);
     }
-    return std::chrono::duration<double, std::nano>(elapsed).count() / (iterations * batch);
+    const auto median = samples.begin() + samples.size() / 2;
+    std::nth_element(samples.begin(), median, samples.end());
+    return std::chrono::duration<double, std::nano>(*median).count() / batch;
 }
 
 pace::task<void> reply(std::shared_ptr<pace::udp::socket> peer, std::size_t count) {
