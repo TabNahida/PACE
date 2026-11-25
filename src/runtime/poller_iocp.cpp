@@ -111,7 +111,8 @@ public:
     }
     std::size_t wait(std::span<poll_event> events, int timeout) override {
         if (events.empty()) return 0;
-        std::array<OVERLAPPED_ENTRY, 256> entries{};
+        // GetQueuedCompletionStatusEx initializes the entries it returns.
+        std::array<OVERLAPPED_ENTRY, 256> entries;
         ULONG received = 0;
         if (!GetQueuedCompletionStatusEx(port_, entries.data(), static_cast<ULONG>(std::min(entries.size(), events.size())),
                 &received, timeout < 0 ? INFINITE : static_cast<DWORD>(timeout), FALSE)) {

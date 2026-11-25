@@ -358,6 +358,60 @@ void shutdown_exactly_once() {
     require(drained == 300, "stop before run must drain callbacks across batch boundaries");
 }
 
+void cancellation_batch_with_unregistration() {
+    pace::io_context io;
+    pace::cancellation_source source;
+    constexpr std::size_t count = 600;
+    std::array<pace::io_context::cancellation_handle, count> registrations;
+    std::array<unsigned, count> calls{};
+    unsigned delivered = 0;
+    io.post([&] {
+        for (std::size_t i = 0; i < registrations.size(); ++i) {
+            registrations[i] = io.on_cancel(source.token(), [&, i](std::error_code error) {
+                require(error == std::errc::operation_canceled, "wrong scheduled cancellation reason");
+                ++calls[i];
+                if (i == 0) registrations.back().cancel();
+                if (++delivered == registrations.size() - 1) io.stop();
+            });
+        }
+        std::thread requester([&] { source.request_cancellation(); });
+        requester.join();
+    });
+    io.run();
+    require(calls.back() == 0, "unregistered cancellation callback was delivered");
+    for (std::size_t i = 0; i < calls.size() - 1; ++i)
+        require(calls[i] == 1, "queued cancellations must be delivered exactly once");
+}
+
+void shutdown_preserves_pending_timeout_reasons() {
+    pace::io_context io;
+    pace::cancellation_source deadline_source;
+    pace::cancellation_source untouched_source;
+    constexpr std::size_t count = 257; // One beyond a normal cancellation dispatch turn.
+    std::array<pace::io_context::cancellation_handle, count> registrations;
+    pace::io_context::cancellation_handle untouched_registration;
+    std::array<std::error_code, count> reasons{};
+    std::error_code untouched_reason;
+    std::size_t delivered = 0;
+    io.post([&] {
+        untouched_registration = io.on_cancel(untouched_source.token(), [&](std::error_code reason) {
+            untouched_reason = reason;
+        });
+        for (std::size_t i = 0; i < count; ++i) {
+            registrations[i] = io.on_cancel(deadline_source.token(), [&, i](std::error_code reason) {
+                reasons[i] = reason;
+                if (++delivered == 1) io.stop();
+            });
+        }
+        require(deadline_source.request_timeout(), "timeout request was not accepted");
+    });
+    io.run();
+    require(delivered == count, "shutdown dropped a pending timeout callback");
+    for (const auto& reason : reasons)
+        require(reason == std::errc::timed_out, "shutdown overwrote a pending timeout reason");
+    require(untouched_reason == std::errc::operation_canceled, "shutdown did not cancel the untouched source");
+}
+
 struct datagram_pair {
     std::array<pace::native_socket_type, 2> sockets{pace::invalid_socket, pace::invalid_socket};
     datagram_pair() {
@@ -572,6 +626,21 @@ void readiness_union_contract() {
         io.run();
         require(canceled == 1, "context stop must cancel a readiness union only once");
     }
+}
+
+void invalid_socket_is_rejected() {
+    pace::run([](pace::io_context& io) -> pace::task<void> {
+        std::array waits{io.wait_readable(pace::invalid_socket), io.wait_writable(pace::invalid_socket),
+                         io.wait_ready(pace::invalid_socket)};
+        for (auto& wait : waits) {
+            try {
+                co_await wait;
+                require(false, "invalid socket was accepted");
+            } catch (const std::system_error& error) {
+                require(error.code() == std::errc::bad_file_descriptor, "wrong invalid-socket error");
+            }
+        }
+    });
 }
 
 void profiling_contract() {
@@ -1053,11 +1122,14 @@ void run_tests() {
     profiling_contract();
     poller_output_contract();
     readiness_union_contract();
+    invalid_socket_is_rejected();
     mixed_concurrent_submissions();
     repeated_sleep_and_wake();
     timer_fairness_with_ready_work();
     cancellable_callback_timers();
     cancel_sleepers_out_of_order();
+    cancellation_batch_with_unregistration();
+    shutdown_preserves_pending_timeout_reasons();
     protocol_signals();
     shutdown_exactly_once();
     runtime_thread_modes();

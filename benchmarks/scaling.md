@@ -75,6 +75,24 @@ state and source hashes at invocation. Keep the actual compiler command beside
 published evidence: current source hashes alone cannot identify the source used
 to build a supplied executable.
 
+The [runtime performance workflow](../.github/workflows/runtime-performance.yml)
+pairs a baseline and a candidate on the same runner for epoll, io_uring, kqueue
+(macOS and FreeBSD), IOCP and WSAPoll. It retains five separate process trials
+per revision, component timings and TCP measurements at two connection counts.
+The readiness probe times collection after staging one or 256 datagrams. The
+inbox probe times the first due callback after staging 65,536 submissions and
+checks that all submissions drain. The cancellation probe times a single
+request through callback delivery in the presence of unrelated registrations.
+
+To compare locally, use two dedicated source checkouts. The script copies the
+candidate's probe and benchmark target definitions into the baseline checkout
+so both revisions run the same harness:
+
+```sh
+python3 scripts/compare_runtime_perf.py --build --baseline /path/to/baseline \
+  --backend epoll --output runtime-performance
+```
+
 For a small correctness smoke after building (not performance evidence):
 
 ```sh

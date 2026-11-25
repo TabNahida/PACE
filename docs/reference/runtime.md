@@ -74,6 +74,13 @@ or callback blocks its own context until it suspends or returns. A worker count
 equal to the logical CPU count is a default, not a tuning recommendation for all
 workloads; reserve CPU for clients, blocking workers and other services as needed.
 
+At low connection counts, spreading connections across more reactors can leave
+each poll with only one ready descriptor. Compare explicit worker counts under
+the expected connection load and check both throughput and tail latency.
+Protocols that support batching independent messages can also do more work
+per readiness notification. The [worker scaling benchmark](../../benchmarks/scaling.md)
+covers these workloads.
+
 For complete control, use standalone contexts and application-owned threads
 instead. The runtime does not accept externally supplied executors or manage a
 separate blocking-work pool. See [execution choices](../tutorial/05-execution.md).

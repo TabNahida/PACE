@@ -1,0 +1,89 @@
+name: Runtime performance
+
+on:
+  push:
+    branches: ['codex/runtime-*']
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Git ref for the baseline
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: ${{ matrix.id }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: linux-epoll, os: ubuntu-24.04, backend: epoll}
+          - {id: linux-io-uring, os: ubuntu-24.04, backend: io_uring}
+          - {id: macos-kqueue, os: macos-15, backend: kqueue}
+          - {id: windows-iocp, os: windows-2025, backend: iocp}
+          - {id: windows-wsapoll, os: windows-2025, backend: wsapoll}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.baseline || 'main' }}
+          path: pace-baseline
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.0.9'
+          actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: runtime-performance-${{ matrix.id }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Test candidate and compare both revisions on the same runner
+        run: python scripts/compare_runtime_perf.py --build --baseline pace-baseline --backend ${{ matrix.backend }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-performance-${{ matrix.id }}
+          path: runtime-performance/
+          if-no-files-found: error
+
+  freebsd:
+    name: FreeBSD / kqueue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.baseline || 'main' }}
+          path: pace-baseline
+      - uses: vmactions/freebsd-vm@v1
+        with:
+          release: '14.3'
+          cache-after-prepare: true
+          prepare: |
+            set -eu
+            pkg install -y python3 git pkgconf gmake cmake ninja curl unzip gsed bash perl5
+            git clone --recursive --depth 1 --branch v3.0.9 https://github.com/xmake-io/xmake.git /tmp/pace-xmake-source
+            (cd /tmp/pace-xmake-source && ./configure && gmake -j4 && gmake install)
+          run: |
+            set -eu
+            export XMAKE_ROOT=y
+            # The VM receives both checkouts with the runner's original ownership.
+            checkout_dir="$(pwd -P)"
+            git config --global --add safe.directory "$checkout_dir"
+            git config --global --add safe.directory "$checkout_dir/pace-baseline"
+            python3 scripts/compare_runtime_perf.py --build --baseline pace-baseline --backend kqueue
+      - name: Append paired benchmark summary
+        run: cat runtime-performance/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-performance-freebsd-kqueue
+          path: runtime-performance/
+          if-no-files-found: error

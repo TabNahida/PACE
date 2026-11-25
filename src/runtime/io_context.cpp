@@ -16,6 +16,7 @@ namespace pace {
 namespace profiling = detail::profiling;
 namespace {
 thread_local io_context* active_context = nullptr;
+constexpr std::size_t dispatch_limit = 256;
 std::error_code canceled() { return std::make_error_code(std::errc::operation_canceled); }
 void check_affinity(io_context* context) {
     if (active_context != context) throw std::logic_error("I/O must execute on its owning io_context");
@@ -36,20 +37,85 @@ struct io_context::cancellation_records {
     struct record {
         cancellation_token token;
         std::function<void(std::error_code)> callback;
+        std::uint64_t id = 0;
+        record* previous = nullptr;
+        record* next = nullptr;
+        bool queued = false;
         std::optional<detail::cancellation_registration> wake;
     };
+    detail::poller& poller;
+    std::mutex pending_mutex;
+    record* first = nullptr;
+    record* last = nullptr;
+    std::atomic<bool> pending{false};
     std::map<std::uint64_t, record> entries;
     std::uint64_t next_id = 0;
-    std::exception_ptr dispatch(bool all = false) {
+    explicit cancellation_records(detail::poller& wake_poller) : poller(wake_poller) {}
+    ~cancellation_records() {
+        while (!entries.empty()) {
+            auto node = entries.extract(entries.begin());
+            detach(node.mapped());
+        }
+    }
+    // Notifications can run on any thread. The record already owns the queue
+    // links, so requesting cancellation cannot allocate.
+    void enqueue(record& entry) noexcept {
+        bool notify;
+        {
+            std::lock_guard lock(pending_mutex);
+            notify = !first;
+            entry.queued = true;
+            entry.previous = last;
+            if (last) last->next = &entry;
+            else first = &entry;
+            last = &entry;
+            if (notify) pending.store(true, std::memory_order_release);
+        }
+        if (notify) poller.wake();
+    }
+    void unlink(record& entry) noexcept {
+        if (entry.previous) entry.previous->next = entry.next;
+        else first = entry.next;
+        if (entry.next) entry.next->previous = entry.previous;
+        else last = entry.previous;
+        entry.queued = false;
+        if (!first) pending.store(false, std::memory_order_relaxed);
+    }
+    std::uint64_t take_pending() noexcept {
+        if (!pending.load(std::memory_order_acquire)) return 0;
+        std::lock_guard lock(pending_mutex);
+        if (!first) return 0;
+        const auto id = first->id;
+        unlink(*first);
+        return id;
+    }
+    void detach(record& entry) noexcept {
+        // Wait for any notifier before releasing the record. Once reset
+        // returns, only the reactor can change this record's queued flag.
+        entry.wake.reset();
+        if (entry.queued) {
+            std::lock_guard lock(pending_mutex);
+            unlink(entry);
+        }
+    }
+    void cancel(std::uint64_t id) noexcept {
+        auto node = entries.extract(id);
+        if (!node.empty()) detach(node.mapped());
+    }
+    std::exception_ptr dispatch(bool shutdown = false) {
         std::exception_ptr failure;
-        // Extract before callbacks: resumption may unregister other records.
-        for (auto it = entries.begin(); it != entries.end();) {
-            auto error = all ? canceled() : it->second.token.error();
-            if (!error) { ++it; continue; }
-            auto node = entries.extract(it);
-            node.mapped().wake.reset();
-            try { node.mapped().callback(error); } catch (...) { if (!failure) failure = std::current_exception(); }
-            it = entries.upper_bound(node.key());
+        for (std::size_t i = 0; shutdown || i < dispatch_limit; ++i) {
+            auto id = take_pending();
+            if (!id && shutdown && !entries.empty()) id = entries.begin()->first;
+            if (!id) break;
+            // Extract before invoking a callback that may unregister other records.
+            auto node = entries.extract(id);
+            auto& entry = node.mapped();
+            detach(entry);
+            auto error = entry.token.error();
+            // Shutdown supplies a reason only if the source has none of its own.
+            if (shutdown && !error) error = canceled();
+            try { entry.callback(error); } catch (...) { if (!failure) failure = std::current_exception(); }
         }
         return failure;
     }
@@ -64,12 +130,29 @@ struct io_context::implementation {
     std::atomic<bool> running{false};
     bool has_run = false;
     bool cancellation_started = false;
-    std::atomic<bool> local_cancellation{false};
     std::shared_ptr<cancellation_records> cancellations;
     std::mutex inbox_mutex;
     std::atomic<bool> inbox_pending{false};
     std::deque<task<void>> incoming_tasks;
     std::deque<std::function<void()>> incoming_posts;
+    // Called with inbox_mutex held, after enqueue.
+    bool mark_inbox() noexcept {
+        const bool notify = !inbox_pending.load(std::memory_order_relaxed);
+        if (notify) inbox_pending.store(true, std::memory_order_release);
+        return notify;
+    }
+    template<class Work, class Promote>
+    static void promote_batch(std::deque<Work>& batch, Promote promote) {
+        if (batch.size() <= dispatch_limit) {
+            for (auto& work : batch) promote(work);
+            batch.clear();
+            return;
+        }
+        for (std::size_t i = 0; i < dispatch_limit; ++i) {
+            promote(batch.front());
+            batch.pop_front();
+        }
+    }
     std::deque<std::function<void()>> posts;
     std::deque<std::coroutine_handle<>> ready;
     std::vector<task<void>::handle_type> roots;
@@ -199,7 +282,7 @@ struct io_context::implementation {
         if (state.reader == operation) state.reader = nullptr;
         if (state.writer == operation) state.writer = nullptr;
     }
-    void cancel_all() {
+    void cancel_all(bool running_on_owner) {
         for (auto& state : descriptors) {
             if (state.fd == invalid_socket) continue;
             poller.remove(state.fd);
@@ -214,7 +297,7 @@ struct io_context::implementation {
         }
         if (callbacks) callbacks->clear();
         cancellation_started = true;
-        if (cancellations && io_context::current()) {
+        if (cancellations && running_on_owner) {
             auto failure = cancellations->dispatch(true);
             if (!first_error) first_error = failure;
         }
@@ -250,7 +333,7 @@ io_context::cancellation_handle& io_context::cancellation_handle::operator=(canc
 }
 void io_context::cancellation_handle::cancel() noexcept {
     if (auto id = std::exchange(id_, 0)) {
-        if (auto records = records_.lock()) { auto node = records->entries.extract(id); }
+        if (auto records = records_.lock()) records->cancel(id);
     }
     records_.reset();
 }
@@ -261,18 +344,16 @@ io_context::cancellation_handle io_context::on_cancel(cancellation_token token,
     if (stopped()) throw std::system_error(canceled());
     if (!callback) throw std::invalid_argument("empty cancellation callback");
     token.throw_if_cancelled();
-    if (!impl_->cancellations) impl_->cancellations = std::make_shared<cancellation_records>();
+    if (!impl_->cancellations) impl_->cancellations = std::make_shared<cancellation_records>(impl_->poller);
     auto& records = *impl_->cancellations;
     if (records.next_id == UINT64_MAX) throw std::overflow_error("cancellation identity exhausted");
     cancellation_handle result;
     result.id_ = ++records.next_id; result.records_ = impl_->cancellations;
-    auto [it, inserted] = records.entries.try_emplace(result.id_);
-    it->second.token = std::move(token);
-    it->second.callback = std::move(callback);
-    it->second.wake.emplace(it->second.token, [this] {
-        if (!impl_->local_cancellation.exchange(true, std::memory_order_release))
-            impl_->poller.wake();
-    });
+    auto& entry = records.entries.try_emplace(result.id_).first->second;
+    entry.id = result.id_;
+    entry.token = std::move(token);
+    entry.callback = std::move(callback);
+    entry.wake.emplace(entry.token, [&records, &entry] { records.enqueue(entry); });
     return result;
 }
 void io_context::cancel_wait(io_awaiter& operation, std::error_code error) {
@@ -335,7 +416,7 @@ io_context::~io_context() {
     // Caller must join run() before destruction. Destruct user objects while the
     // entire implementation is alive, and reject reentrant submissions.
     stop();
-    impl_->cancel_all();
+    impl_->cancel_all(false);
     impl_->incoming_tasks.clear();
     impl_->incoming_posts.clear();
     impl_->posts.clear();
@@ -380,8 +461,7 @@ void io_context::spawn(task<void> work) {
         std::lock_guard lock(p.inbox_mutex);
         if (stopped()) throw std::system_error(canceled());
         p.incoming_tasks.push_back(std::move(work));
-        notify = !p.inbox_pending.load(std::memory_order_relaxed);
-        if (notify) p.inbox_pending.store(true, std::memory_order_release);
+        notify = p.mark_inbox();
     }
     if (notify) p.poller.wake();
 }
@@ -398,8 +478,7 @@ void io_context::post(std::function<void()> work) {
         std::lock_guard lock(p.inbox_mutex);
         if (stopped()) throw std::system_error(canceled());
         p.incoming_posts.push_back(std::move(work));
-        notify = !p.inbox_pending.load(std::memory_order_relaxed);
-        if (notify) p.inbox_pending.store(true, std::memory_order_release);
+        notify = p.mark_inbox();
     }
     if (notify) p.poller.wake();
 }
@@ -523,37 +602,42 @@ void io_context::run() {
     // every producer wake allocates their maps/blocks even for a single post.
     std::deque<task<void>> new_tasks;
     std::deque<std::function<void()>> new_posts;
+    bool inbox_buffered = false;
     for (;;) {
         profiling::scope inbox_timing(profiling::stage::inbox);
-        // Most turns contain no external submissions. Avoid constructing empty
-        // deques (which can allocate) and taking the inbox lock on those turns.
-        if (p.inbox_pending.load(std::memory_order_acquire)) {
-            {
-                std::lock_guard lock(p.inbox_mutex);
-                new_tasks.swap(p.incoming_tasks);
-                new_posts.swap(p.incoming_posts);
-                // Publish the empty transition under the same lock as enqueue.
-                // The first producer after this drain must wake the poller.
-                p.inbox_pending.store(false, std::memory_order_relaxed);
+        bool inbox_deferred = p.inbox_pending.load(std::memory_order_acquire);
+        if (inbox_deferred || inbox_buffered) {
+            if (inbox_deferred) {
+                const bool take_tasks = new_tasks.empty();
+                const bool take_posts = new_posts.empty();
+                if (take_tasks || take_posts) {
+                    std::lock_guard lock(p.inbox_mutex);
+                    if (take_tasks) new_tasks.swap(p.incoming_tasks);
+                    if (take_posts) new_posts.swap(p.incoming_posts);
+                    // Leave new arrivals in a category queued until its local batch drains.
+                    inbox_deferred = (!take_tasks && !p.incoming_tasks.empty()) ||
+                                     (!take_posts && !p.incoming_posts.empty());
+                    p.inbox_pending.store(inbox_deferred, std::memory_order_relaxed);
+                }
             }
-            for (auto& work : new_tasks) p.adopt_root(*this, work);
-            for (auto& work : new_posts) p.posts.push_back(std::move(work));
-            new_tasks.clear();
-            new_posts.clear();
+            if (!new_tasks.empty())
+                p.promote_batch(new_tasks, [&](auto& work) { p.adopt_root(*this, work); });
+            if (!new_posts.empty())
+                p.promote_batch(new_posts, [&](auto& work) { p.posts.push_back(std::move(work)); });
+            inbox_buffered = !new_tasks.empty() || !new_posts.empty();
         }
         inbox_timing.close();
-        if (p.local_cancellation.load(std::memory_order_acquire) &&
-            p.local_cancellation.exchange(false, std::memory_order_acq_rel) && p.cancellations)
+        if (p.cancellations && p.cancellations->pending.load(std::memory_order_acquire))
             record_error(p.cancellations->dispatch());
-        if (stopped() && !p.cancellation_started) p.cancel_all();
+        if (stopped() && !p.cancellation_started) p.cancel_all(true);
         profiling::scope post_timing(profiling::stage::post_dispatch);
-        for (std::size_t i = 0, count = std::min<std::size_t>(p.posts.size(), 256); i < count; ++i) {
+        for (std::size_t i = 0, count = std::min(p.posts.size(), dispatch_limit); i < count; ++i) {
             auto work = std::move(p.posts.front()); p.posts.pop_front();
             try { work(); } catch (...) { record_error(std::current_exception()); }
         }
         post_timing.close();
         profiling::scope ready_timing(profiling::stage::coroutine_execution);
-        for (std::size_t i = 0, count = std::min<std::size_t>(p.ready.size(), 256); i < count; ++i) {
+        for (std::size_t i = 0, count = std::min(p.ready.size(), dispatch_limit); i < count; ++i) {
             auto handle = p.ready.front(); p.ready.pop_front();
             handle.resume();
         }
@@ -571,19 +655,19 @@ void io_context::run() {
         }
         reap_timing.close();
         if (stopped()) {
-            if (!p.cancellation_started) p.cancel_all();
+            if (!p.cancellation_started) p.cancel_all(true);
             bool inbox_empty;
             { std::lock_guard lock(p.inbox_mutex); inbox_empty = p.incoming_tasks.empty() && p.incoming_posts.empty(); }
-            if (p.ready.empty() && p.posts.empty() && inbox_empty) break;
+            if (p.ready.empty() && p.posts.empty() && !inbox_buffered && inbox_empty) break;
             continue;
         }
         profiling::scope timer_timing(profiling::stage::timers);
         if (!p.timers.empty() || (p.callbacks && !p.callbacks->callbacks.empty())) {
             const auto now = std::chrono::steady_clock::now();
-            while (!p.timers.empty() && p.timers.top()->deadline <= now) {
+            for (std::size_t i = 0; i < dispatch_limit && !p.timers.empty() && p.timers.top()->deadline <= now; ++i) {
                 p.ready.push_back(p.timers.top()->continuation); p.timers.pop();
             }
-            for (std::size_t i = 0; i < 256 && p.callbacks && !p.callbacks->callbacks.empty(); ++i) {
+            for (std::size_t i = 0; i < dispatch_limit && p.callbacks && !p.callbacks->callbacks.empty(); ++i) {
                 auto it = p.callbacks->callbacks.begin();
                 if (it->first.first > now) break;
                 auto node = p.callbacks->callbacks.extract(it);
@@ -593,7 +677,8 @@ void io_context::run() {
         }
         if (stopped()) continue;
         int timeout = -1;
-        if (!p.ready.empty() || !p.posts.empty()) timeout = 0;
+        if (!p.ready.empty() || !p.posts.empty() || inbox_buffered || inbox_deferred ||
+            (p.cancellations && p.cancellations->pending.load(std::memory_order_acquire))) timeout = 0;
         else if (!p.timers.empty() || (p.callbacks && !p.callbacks->callbacks.empty())) {
             auto deadline = p.timers.empty() ? std::chrono::steady_clock::time_point::max()
                                            : p.timers.top()->deadline;
