@@ -25,6 +25,12 @@ inline constexpr native_socket_type invalid_socket = static_cast<native_socket_t
 
 namespace detail {
 
+#ifdef _WIN32
+inline SOCKET create_windows_socket(int family, int type, int protocol) noexcept {
+    return ::WSASocketW(family, type, protocol, nullptr, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
+}
+#endif
+
 // Function-local initialization is thread-safe and precedes every owned socket.
 inline void initialize_sockets() {
 #ifdef _WIN32

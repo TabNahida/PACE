@@ -93,8 +93,8 @@ void native_poller::update(native_socket_type fd, bool readable, bool writable, 
     if (token == wake_token) throw std::invalid_argument("poller token UINT64_MAX is reserved");
     if (!readable && !writable) { remove(fd); return; }
     epoll_event event{};
-    event.events = (impl_->persistent ? 0U : EPOLLONESHOT) | EPOLLRDHUP;
-    if (readable) event.events |= EPOLLIN;
+    event.events = impl_->persistent ? 0U : EPOLLONESHOT;
+    if (readable) event.events |= EPOLLIN | EPOLLRDHUP;
     if (writable) event.events |= EPOLLOUT;
     event.data.u64 = token;
     if (::epoll_ctl(impl_->queue, EPOLL_CTL_MOD, fd, &event) == 0) return;
@@ -141,7 +141,12 @@ void native_poller::wake() noexcept {
 
 struct native_poller::implementation {
     int queue = -1;
-    std::unordered_map<native_socket_type, unsigned> interests;
+    struct interest {
+        std::uint64_t token = 0;
+        unsigned filters = 0;
+        std::size_t event_index = max_batch;
+    };
+    std::unordered_map<native_socket_type, interest> interests;
 
     implementation() {
         queue = ::kqueue();
@@ -173,9 +178,8 @@ void native_poller::update(native_socket_type fd, bool readable, bool writable, 
     static_assert(sizeof(std::uintptr_t) >= sizeof(token), "PACE kqueue requires a 64-bit target");
     if (token == wake_token) throw std::invalid_argument("poller token UINT64_MAX is reserved");
     if (!readable && !writable) { remove(fd); return; }
-    auto [entry, inserted] = impl_->interests.try_emplace(fd, 0);
-    (void)inserted;
-    const auto previous = entry->second;
+    auto& interest = impl_->interests[fd];
+    const auto previous = interest.filters;
     std::array<struct kevent, 2> changes{};
     int count = 0;
     auto* data = reinterpret_cast<void*>(static_cast<std::uintptr_t>(token));
@@ -189,7 +193,8 @@ void native_poller::update(native_socket_type fd, bool readable, bool writable, 
             EVFILT_WRITE, EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, data);
         ++count;
     } else if (previous & 2U) impl_->erase(fd, EVFILT_WRITE);
-    entry->second = (readable ? 1U : 0U) | (writable ? 2U : 0U);
+    interest.token = token;
+    interest.filters = (readable ? 1U : 0U) | (writable ? 2U : 0U);
     int result;
     do { result = ::kevent(impl_->queue, changes.data(), count, nullptr, 0, nullptr); }
     while (result < 0 && errno == EINTR);
@@ -203,8 +208,8 @@ void native_poller::update(native_socket_type fd, bool readable, bool writable, 
 void native_poller::remove(native_socket_type fd) noexcept {
     const auto entry = impl_->interests.find(fd);
     if (entry == impl_->interests.end()) return;
-    if (entry->second & 1U) impl_->erase(fd, EVFILT_READ);
-    if (entry->second & 2U) impl_->erase(fd, EVFILT_WRITE);
+    if (entry->second.filters & 1U) impl_->erase(fd, EVFILT_READ);
+    if (entry->second.filters & 2U) impl_->erase(fd, EVFILT_WRITE);
     impl_->interests.erase(entry);
 }
 
@@ -221,31 +226,47 @@ std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms) {
         if (errno == EINTR) return 0;
         fail("kevent wait");
     }
-    std::array<native_socket_type, max_batch> descriptors;
+    struct delivered_interest { native_socket_type fd; implementation::interest* interest; };
+    std::array<delivered_interest, max_batch> delivered;
     std::size_t size = 0;
+    std::size_t bidirectional = 0;
     for (int i = 0; i < count; ++i) {
         const auto& event = events[static_cast<std::size_t>(i)];
         if (event.filter == EVFILT_USER) continue;
         const auto fd = static_cast<native_socket_type>(event.ident);
-        std::size_t index = 0;
-        while (index < size && descriptors[index] != fd) ++index;
-        if (index == size) {
-            descriptors[size] = fd;
-            output[size++] = {static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(event.udata)),
-                false, false, false};
+        const auto entry = impl_->interests.find(fd);
+        const auto token = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(event.udata));
+        if (entry == impl_->interests.end() || entry->second.token != token) continue;
+        auto& interest = entry->second;
+        const bool readable = event.filter == EVFILT_READ;
+        const bool writable = event.filter == EVFILT_WRITE;
+        const bool error = (event.flags & EV_ERROR) || ((event.flags & EV_EOF) && event.fflags != 0);
+        const unsigned filter = readable ? 1U : 2U;
+        if (!(interest.filters & filter)) continue;
+        if (interest.filters == filter) {
+            // A single filter has no counterpart to merge or delete.
+            interest.filters = 0;
+            output[size++] = {token, readable, writable, error};
+            continue;
         }
-        auto& result = output[index];
-        result.readable |= event.filter == EVFILT_READ;
-        result.writable |= event.filter == EVFILT_WRITE;
-        result.error |= bool(event.flags & EV_ERROR) || ((event.flags & EV_EOF) && event.fflags != 0);
+        if (interest.event_index == max_batch) {
+            interest.event_index = size;
+            delivered[bidirectional++] = {fd, &interest};
+            output[size++] = {token, false, false, false};
+        }
+        auto& result = output[interest.event_index];
+        result.readable |= readable;
+        result.writable |= writable;
+        result.error |= error;
     }
     // EV_ONESHOT removed delivered filters already. Disarm only their counterpart.
-    for (std::size_t i = 0; i < size; ++i) {
-        const auto entry = impl_->interests.find(descriptors[i]);
-        if (entry == impl_->interests.end()) continue;
-        if ((entry->second & 1U) && !output[i].readable) impl_->erase(descriptors[i], EVFILT_READ);
-        if ((entry->second & 2U) && !output[i].writable) impl_->erase(descriptors[i], EVFILT_WRITE);
-        entry->second = 0;
+    for (std::size_t i = 0; i < bidirectional; ++i) {
+        const auto [fd, interest] = delivered[i];
+        const auto& result = output[interest->event_index];
+        if (!result.readable) impl_->erase(fd, EVFILT_READ);
+        if (!result.writable) impl_->erase(fd, EVFILT_WRITE);
+        interest->filters = 0;
+        interest->event_index = max_batch;
     }
     return size;
 }
@@ -268,9 +289,9 @@ struct native_poller::implementation {
     implementation() {
         initialize_sockets();
         try {
-            notification = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            notification = create_windows_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
             if (notification == INVALID_SOCKET) fail("socket wakeup receiver");
-            notifier = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            notifier = create_windows_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
             if (notifier == INVALID_SOCKET) fail("socket wakeup sender");
             sockaddr_in endpoint{};
             endpoint.sin_family = AF_INET;
@@ -335,26 +356,36 @@ void native_poller::remove(native_socket_type fd) noexcept {
 
 std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms) {
     if (output.empty()) return 0;
-    const int count = ::WSAPoll(impl_->descriptors.data(), static_cast<ULONG>(impl_->descriptors.size()), timeout_ms);
-    if (count == SOCKET_ERROR) {
+    int ready = ::WSAPoll(impl_->descriptors.data(), static_cast<ULONG>(impl_->descriptors.size()), timeout_ms);
+    if (ready == SOCKET_ERROR) {
         if (::WSAGetLastError() == WSAEINTR) return 0;
         fail("WSAPoll");
     }
     if (impl_->descriptors[0].revents) {
+        --ready;
         std::array<char, 256> bytes{};
         // Bound draining so a producer flood cannot starve coroutine execution.
         for (std::size_t i = 0; i < max_batch; ++i)
             if (::recv(impl_->notification, bytes.data(), static_cast<int>(bytes.size()), 0) <= 0) break;
     }
     std::size_t size = 0;
-    std::size_t index = 1;
-    while (index < impl_->descriptors.size() && size < output.size()) {
-        const auto events = impl_->descriptors[index].revents;
-        if (!events) { ++index; continue; }
+    const auto collect = [&](std::size_t index, short events) {
         output[size++] = {impl_->tokens[index],
             bool(events & (POLLRDNORM | POLLRDBAND | POLLHUP)),
             bool(events & POLLWRNORM), bool(events & (POLLERR | POLLHUP | POLLNVAL))};
         impl_->erase(index);
+    };
+    // Rearmed sockets are appended. A lone event is often on the last socket.
+    if (ready == 1 && impl_->descriptors.size() > 1 && impl_->descriptors.back().revents) {
+        collect(impl_->descriptors.size() - 1, impl_->descriptors.back().revents);
+        return size;
+    }
+    std::size_t index = 1;
+    while (ready > 0 && index < impl_->descriptors.size() && size < output.size()) {
+        const auto events = impl_->descriptors[index].revents;
+        if (!events) { ++index; continue; }
+        --ready;
+        collect(index, events);
     }
     return size;
 }

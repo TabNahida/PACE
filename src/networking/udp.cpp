@@ -52,12 +52,13 @@ struct pending_operation {
 };
 native_socket_type create_socket(address_family family) {
     detail::initialize_sockets();
-#if defined(__linux__)
-    constexpr int type = SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC;
+#if defined(_WIN32)
+    const auto fd = detail::create_windows_socket(detail::native_address_family(family), SOCK_DGRAM, IPPROTO_UDP);
+#elif defined(__linux__)
+    const auto fd = ::socket(detail::native_address_family(family), SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_UDP);
 #else
-    constexpr int type = SOCK_DGRAM;
+    const auto fd = ::socket(detail::native_address_family(family), SOCK_DGRAM, IPPROTO_UDP);
 #endif
-    const auto fd = static_cast<native_socket_type>(::socket(detail::native_address_family(family), type, IPPROTO_UDP));
     if (fd == invalid_socket) fail("UDP socket");
     try {
 #if defined(_WIN32)
@@ -205,14 +206,21 @@ task<packet> async_exchange(io_context& io, endpoint peer, std::string request, 
     if (peer.port == 0) throw std::invalid_argument("UDP peer port must be nonzero");
     const auto native = detail::parse_socket_address(peer.address, peer.port, peer.family, peer.scope_id);
     const auto expected = detail::socket_endpoint<endpoint>(native.data(), native.length);
-    auto socket = open(io);
-    co_await socket.send(std::move(request), std::move(peer));
+    socket connection(io, native.family());
+    co_await connection.send(std::move(request), std::move(peer));
+    std::string data(capacity, '\0');
+    unsigned skipped = 0;
     for (;;) {
-        auto reply = co_await socket.receive(capacity);
+        auto reply = co_await connection.receive_from(std::span<char>(data));
         if (reply.sender.address == expected.address && reply.sender.port == expected.port &&
-            reply.sender.family == expected.family && reply.sender.scope_id == expected.scope_id)
-            co_return reply;
-        co_await io.yield(); // A ready stream of unrelated datagrams must not starve cancellation.
+            reply.sender.family == expected.family && reply.sender.scope_id == expected.scope_id) {
+            data.resize(reply.size);
+            co_return packet{std::move(data), std::move(reply.sender), reply.truncated};
+        }
+        if (++skipped == 16) {
+            skipped = 0;
+            co_await io.yield();
+        }
     }
 }
 

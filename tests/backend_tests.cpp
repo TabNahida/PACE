@@ -27,7 +27,7 @@ int main() {
         pace::detail::poller poller(false);
         std::cout << "backend=" << pace::backend_name(poller.backend()) << '\n';
         pace::udp::socket sender(io, {"127.0.0.1", 0});
-        std::array<pace::detail::poll_event, 64> events{};
+        std::array<pace::detail::poll_event, 256> events{};
         // More subscriptions/cancellations than the 256-entry io_uring SQ.
         std::vector<pace::udp::socket> sockets;
         sockets.reserve(512);

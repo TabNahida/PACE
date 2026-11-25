@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -39,6 +40,24 @@ pace::task<void> owned_packets(pace::io_context& io) {
     try { (void)co_await receiver.receive(); }
     catch (const std::system_error& error) { canceled = error.code() == std::errc::operation_canceled; }
     require(canceled, "owned receive lost cancellation");
+    io.stop();
+}
+
+pace::task<void> exchange_replies(std::shared_ptr<pace::udp::socket> peer) {
+    auto request = co_await peer->receive(16);
+    require(request.data == "request", "UDP exchange request");
+    auto other = pace::udp::bind(peer->context(), {"127.0.0.1", 0});
+    co_await other.send_to("unrelated", request.sender);
+    co_await peer->send_to("reply", request.sender);
+}
+
+pace::task<void> exchange_filtered(pace::io_context& io) {
+    auto peer = std::make_shared<pace::udp::socket>(io, pace::udp::endpoint{"127.0.0.1", 0});
+    const auto endpoint = peer->local_endpoint();
+    io.spawn(exchange_replies(peer));
+    auto reply = co_await pace::udp::async_exchange(io, endpoint, "request", 3);
+    require(reply.data == "rep" && reply.truncated && reply.sender.port == endpoint.port,
+            "UDP exchange must preserve source filtering and truncation");
     io.stop();
 }
 
@@ -222,6 +241,7 @@ void run(pace::io_context& io) {
 int main() {
     try {
         { pace::io_context io; io.spawn(owned_packets(io)); run(io); }
+        { pace::io_context io; io.spawn(exchange_filtered(io)); run(io); }
         { pace::io_context io; io.spawn(roundtrip(io)); run(io); }
         { pace::io_context io; io.spawn(ipv6_roundtrip(io)); run(io); }
         { pace::io_context io; io.spawn(ipv6_wildcards(io)); run(io); }
