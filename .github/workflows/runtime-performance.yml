@@ -75,6 +75,10 @@ jobs:
           run: |
             set -eu
             export XMAKE_ROOT=y
+            # The VM receives both checkouts with the runner's original ownership.
+            checkout_dir="$(pwd -P)"
+            git config --global --add safe.directory "$checkout_dir"
+            git config --global --add safe.directory "$checkout_dir/pace-baseline"
             python3 scripts/compare_runtime_perf.py --build --baseline pace-baseline --backend kqueue
       - name: Append paired benchmark summary
         run: cat runtime-performance/summary.md >> "$GITHUB_STEP_SUMMARY"
