@@ -13,15 +13,17 @@ import subprocess
 
 def executable(directory, name):
     filename = f"{name}.exe" if os.name == "nt" else name
-    matches = sorted(directory.rglob(filename))
+    matches = sorted(path for path in directory.rglob(filename) if path.is_file())
     if len(matches) != 1:
         raise ValueError(f"expected one {filename} under {directory}, found {matches}")
     return matches[0].resolve()
 
 
 def build(source, backend, tests):
+    output = source / "build" / "runtime-performance"
+    project = ("-P", str(source))
     flags = [
-        "-m", "release", "-o", "build/runtime-performance", "--http1=n",
+        "-m", "release", "-o", str(output), "--http1=n",
         "--websocket=n", "--tls=n", "--dns=n", "--quic=n", "--http2=n",
         "--http3=n", "--components=y", "--scaling=y", "--profiling=n",
         "--sanitizers=n", "--examples=n", f"--tests={'y' if tests else 'n'}",
@@ -29,10 +31,9 @@ def build(source, backend, tests):
     ]
     targets = ("pace_runtime_hotpaths", "pace_components", "pace_scaling")
     checks = ("pace_runtime_tests", "pace_backend_tests", "pace_structured_tests")
-    subprocess.run(["xmake", "f", "-c", *flags], cwd=source, check=True)
+    subprocess.run(["xmake", "f", "-c", *project, *flags], cwd=source, check=True)
     for name in (*targets, *(checks if tests else ())):
-        subprocess.run(["xmake", "-y", name], cwd=source, check=True)
-    output = source / "build/runtime-performance"
+        subprocess.run(["xmake", *project, "-y", name], cwd=source, check=True)
     if tests:
         for name in checks:
             subprocess.run([str(executable(output, name))], cwd=source, check=True, timeout=90)
