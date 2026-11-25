@@ -124,6 +124,9 @@ export namespace pace::tls {
     using ::pace::tls::role;
     using ::pace::tls::trust_source;
     using ::pace::tls::sni_policy;
+    using ::pace::tls::pin_type;
+    using ::pace::tls::sha256_digest;
+    using ::pace::tls::verification_callback;
     using ::pace::tls::context;
     using ::pace::tls::stream;
 }

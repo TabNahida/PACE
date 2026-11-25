@@ -1,6 +1,9 @@
 #include <pace/tls.hpp>
+#include <openssl/pem.h>
 
+#include <algorithm>
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
@@ -341,6 +344,7 @@ pace::tls::context sni_configuration(const std::filesystem::path& fixtures,
                                        (fixtures / (std::string(name) + "-key.pem")).string());
         selected.set_alpn_protocols({name});
         server.add_server_name(name, selected);
+        if (std::string_view(name) == "a.example") server.add_server_name("route.example", selected);
         // selected's public object dies here; routing owns its immutable state.
     }
     if (broken_localhost) {
@@ -373,6 +377,7 @@ struct client_case {
     std::string name;
     std::string protocol;
     bool accept = true;
+    std::optional<std::string> server_name = std::nullopt;
 };
 
 template<class Stream>
@@ -439,8 +444,13 @@ pace::task<void> selected_client(pace::io_context& io, const pace::tls::context&
     pace::tls::stream socket(std::move(transport), config);
     bool accepted = false;
     try {
-        if (starttls) co_await socket.handshake(test.name);
-        else co_await socket.connect(endpoint, test.name);
+        if (starttls) {
+            if (test.server_name) co_await socket.handshake(test.name, *test.server_name);
+            else co_await socket.handshake(test.name);
+        } else {
+            if (test.server_name) co_await socket.connect(endpoint, test.name, *test.server_name);
+            else co_await socket.connect(endpoint, test.name);
+        }
         accepted = true;
     } catch (const std::system_error& error) {
         require(error.code() == std::errc::protocol_error && !socket.is_open(),
@@ -591,6 +601,101 @@ void ipv6_application_trust(const std::filesystem::path& fixtures, bool starttls
                     starttls, false, {}, "::1");
 }
 
+void independent_client_sni(const std::filesystem::path& fixtures, bool starttls) {
+    auto server = sni_configuration(fixtures, pace::tls::sni_policy::use_default, pace::tls::sni_policy::reject);
+    auto client = application_trust(fixtures);
+    handshake_group(server, client,
+                    {{"a.example", "a.example", true, "route.example"},
+                     {"::1", "a.example", true, "route.example"},
+                     {"b.example", "", false, "route.example"},
+                     {"localhost", "default", true, ""},
+                     {"localhost", "", false},
+                     {"a.example", "", false, ""}}, starttls);
+}
+
+pace::tls::sha256_digest decode_pin(std::string_view hex) {
+    pace::tls::sha256_digest pin{};
+    require(hex.size() == 2 * pin.size(), "invalid test pin length");
+    for (auto& byte : pin) {
+        unsigned value = 0;
+        const auto end = hex.data() + 2;
+        const auto result = std::from_chars(hex.data(), end, value, 16);
+        require(result.ec == std::errc{} && result.ptr == end, "invalid test pin hex");
+        byte = static_cast<std::byte>(value);
+        hex.remove_prefix(2);
+    }
+    return pin;
+}
+
+std::string fixture_der(const std::filesystem::path& path) {
+    const auto pem = read_file(path);
+    std::unique_ptr<BIO, decltype(&BIO_free)> input(BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())), BIO_free);
+    require(bool(input), "create test PEM reader");
+    std::unique_ptr<X509, decltype(&X509_free)> certificate(PEM_read_bio_X509(input.get(), nullptr, nullptr, nullptr), X509_free);
+    require(bool(certificate), "decode test certificate");
+    const int size = i2d_X509(certificate.get(), nullptr);
+    require(size > 0, "size test DER certificate");
+    std::string der(static_cast<std::size_t>(size), '\0');
+    auto* output = reinterpret_cast<unsigned char*>(der.data());
+    require(i2d_X509(certificate.get(), &output) == size, "encode test DER certificate");
+    return der;
+}
+
+void client_verification_modes(const std::filesystem::path& fixtures) {
+    using namespace pace::tls;
+    context server(role::server);
+    server.use_certificate_chain((fixtures / "localhost-chain.pem").string(), (fixtures / "localhost-key.pem").string());
+    server.set_alpn_protocols({"h2"});
+    auto make_client = [] {
+        context client(role::client, trust_source::application);
+        client.set_alpn_protocols({"h2"});
+        return client;
+    };
+
+    // Independently computed from the certificate and SPKI DER with openssl dgst.
+    for (const auto& [type, hex] : std::array{
+            std::pair{pin_type::leaf_certificate, "c3684a2f2b7036538c5984641852cbbacd67923d0ced6d36e1cb360b1935d2dd"},
+            std::pair{pin_type::subject_public_key_info, "94ceb5d2a0b41214783f4425e3b3afe36c195c272a7f93b0b0db54ba8314aefa"}}) {
+        auto client = make_client();
+        auto pin = decode_pin(hex);
+        client.set_verify_pin(type, pin);
+        handshake_group(server, client, {{"", "h2"}, {"localhost", "h2"}, {"127.0.0.1", "h2"},
+                                         {"wrong.example", "", false}, {"127.0.0.2", "", false}}, false);
+
+        auto bad_pin = make_client();
+        bad_pin.load_verify_file((fixtures / "ca.pem").string());
+        pin.front() ^= std::byte{1};
+        bad_pin.set_verify_pin(type, pin);
+        handshake_group(server, bad_pin, {{"localhost", "", false}}, false);
+    }
+
+    const std::array expected_chain{fixture_der(fixtures / "localhost.pem"), fixture_der(fixtures / "ca.pem")};
+    unsigned calls = 0;
+    auto callback_client = make_client();
+    callback_client.set_verify_callback([&](std::span<const std::string> chain) {
+        ++calls;
+        return std::ranges::equal(chain, expected_chain);
+    });
+    handshake_group(server, callback_client, {{"localhost", "h2"}, {"wrong.example", "", false}}, false);
+    require(calls == 1, "verification callback ran before the peer identity check");
+
+    auto rejecting_client = make_client();
+    rejecting_client.load_verify_file((fixtures / "ca.pem").string());
+    rejecting_client.set_verify_callback([](std::span<const std::string>) { return false; });
+    handshake_group(server, rejecting_client, {{"localhost", "", false}}, false);
+    auto throwing_client = make_client();
+    throwing_client.set_verify_callback([](std::span<const std::string>) -> bool { throw std::runtime_error("verifier failure"); });
+    handshake_group(server, throwing_client, {{"localhost", "", false}}, false);
+
+    auto insecure_client = make_client();
+    insecure_client.insecure_skip_verify();
+    handshake_group(server, insecure_client, {{"", "h2"}, {"wrong.example", "h2"}}, true);
+
+    rejects_frozen([&] { callback_client.set_verify_pin(pin_type::leaf_certificate, {}); });
+    rejects_frozen([&] { callback_client.set_verify_callback([](std::span<const std::string>) { return true; }); });
+    rejects_frozen([&] { insecure_client.insecure_skip_verify(); });
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -618,6 +723,9 @@ int main(int argc, char** argv) {
         shared_sni_threads(fixtures);
         ipv6_application_trust(fixtures, false);
         ipv6_application_trust(fixtures, true);
+        independent_client_sni(fixtures, false);
+        independent_client_sni(fixtures, true);
+        client_verification_modes(fixtures);
         std::cout << "TLS tests passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

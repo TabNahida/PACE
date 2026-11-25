@@ -29,9 +29,11 @@ co_await socket.connect({"192.0.2.1", 443}, "api.example.com");
 ```
 
 示例地址保留用于文档，实际应替换为解析后的数字 IPv4 / IPv6 地址。TCP 地址和预期
-证书身份分开传入。域名会设置 SNI 并检查证书主机名；数字 IP 则检查 IP SAN，
-不会发送 DNS SNI。客户端必须提供非空身份，始终验证证书链与身份；没有跳过
-验证的开关。默认客户端加载 OpenSSL 信任路径，`load_verify_file` 可追加 CA。
+证书身份分开传入。默认验证证书链和非空的 DNS/IP 身份。DNS 身份默认也用于
+SNI，数字 IP 则检查 IP SAN。可通过 `connect(endpoint, peer_name, server_name)`
+或 `handshake(peer_name, server_name)` 独立指定 ASCII DNS SNI，传入空的
+`server_name` 可关闭 SNI。默认客户端加载 OpenSSL 信任路径，`load_verify_file`
+可追加 CA。
 TLS 接口不会自动解析域名，可先使用独立的 [DNS 扩展](dns.md)。
 
 应用自己管理信任根时，可以完全跳过默认路径加载：
@@ -51,9 +53,8 @@ OpenSSL 默认路径配置失败也可构造客户端，再添加明确指定的
 `load_verify_pem` 接受一个或多个 `CERTIFICATE` PEM 块，以空白分隔，解析整个
 输入后才添加证书。空输入、损坏或混入其他内容的 bundle 会抛错；重复证书可
 重复添加。证书保存在配置拥有的信任库中，调用返回后输入内存即可释放，无需
-临时文件。`load_verify_file` 仍可加载显式文件。两种方式始终保留证书链、有效期
-和 DNS / IP 身份验证，不暴露可绕过验证的 callback、原生可变句柄或借用的
-`X509_STORE`。PACE 不自动导入 Windows 证书库或 macOS Keychain；应用可以将
+临时文件。`load_verify_file` 仍可加载显式文件。两种方式都为默认的 CA 验证提供
+信任根。PACE 不自动导入 Windows 证书库或 macOS Keychain；应用可以将
 所选平台证书编码为内存 PEM 后传入。
 
 ```cpp
@@ -78,6 +79,32 @@ co_await socket.handshake();
 ALPN 服务端按自身列表顺序选择与客户端的共同协议。客户端提供列表但没有交集
 时握手失败；没有提供 ALPN 的对端可以成功且结果为空。HTTP/2 应主动检查
 `selected_protocol() == "h2"`。ALPN 只负责协商，不实现对应应用协议。
+
+## 客户端验证模式
+
+在构造 TLS 流前选择验证模式。每次设置都会选定一种模式。无需系统信任库时，
+可用 `trust_source::application` 构造配置。
+
+- `set_verify_pin(pin_type::leaf_certificate, digest)` 比较叶证书 DER 的 SHA-256。
+  `pin_type::subject_public_key_info` 比较完整 DER SPKI 的 SHA-256。两者均接收
+  32 个原始摘要字节，以匹配的固定值替代证书链和有效期校验，可用于自签名证书。
+- `set_verify_callback(verifier)` 将对端提供的 DER 证书按发送顺序传给应用，
+  首项为叶证书。应用决定是否信任该链，可以组合自己的 CA 和公钥检查。返回
+  `false` 或抛出异常会拒绝握手。证书数据只在调用期间有效。回调在所属 reactor
+  同步执行，同一配置供多个 reactor 使用时，回调必须支持并发调用。
+- `insecure_skip_verify()` 关闭证书和身份校验，用于测试和互操作。连接加密，
+  对端身份未经认证。
+
+固定摘要和自定义验证模式也会检查显式提供的 DNS/IP `peer_name`。传入空串可由
+固定摘要或应用策略决定身份。
+
+```cpp
+pace::tls::context client(pace::tls::role::client,
+                          pace::tls::trust_source::application);
+client.set_verify_pin(pace::tls::pin_type::subject_public_key_info, expected_spki_sha256);
+pace::tls::stream connection(io, client);
+co_await connection.connect({"192.0.2.1", 443}, "", "relay.example.com");
+```
 
 ## 多域名独立证书与 SNI
 

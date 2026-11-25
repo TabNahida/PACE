@@ -4,7 +4,10 @@
 
 #ifdef PACE_HAS_TLS
 
+#include <array>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,10 +17,15 @@ namespace pace::tls {
 enum class role { client, server };
 enum class trust_source { system, application };
 enum class sni_policy { use_default, reject };
+enum class pin_type { leaf_certificate, subject_public_key_info };
+using sha256_digest = std::array<std::byte, 32>;
+// Peer-supplied DER certificates in wire order, leaf first. The view and its
+// contents are borrowed for the call. Return true to accept the chain.
+using verification_callback = std::function<bool(std::span<const std::string>)>;
 
 // Configuration freezes on first stream construction or registration as an SNI
 // target; subsequent setters throw logic_error. Streams retain shared ownership
-// of their configuration and every SNI target. Clients always verify the peer.
+// of their configuration and every SNI target. Clients default to CA and name verification.
 class context {
 public:
     // application starts with no trusted roots and never loads default paths.
@@ -32,6 +40,14 @@ public:
     // Copies one or more PEM CERTIFICATE blocks into the owned trust store.
     // No filesystem access; the input may be released immediately after return.
     void load_verify_pem(std::string_view certificates);
+    // Client-only alternatives to CA verification. The pin hashes the DER
+    // encoding of the selected leaf object. Both modes check any supplied peer name.
+    void set_verify_pin(pin_type type, sha256_digest digest);
+    // Runs synchronously on the owning reactor. May run concurrently across
+    // reactors sharing this context. Returning false or throwing rejects the peer.
+    void set_verify_callback(verification_callback verifier);
+    // Disables certificate and name verification for testing and interoperability.
+    void insecure_skip_verify();
     void use_certificate_chain(const std::string& certificate_chain_file,
                                const std::string& private_key_file);
     // Server preference order; an offered list without overlap fails negotiation.
@@ -66,10 +82,12 @@ public:
     stream(const stream&) = delete;
     stream& operator=(const stream&) = delete;
 
-    // Client name is mandatory and checked against the certificate, independently
-    // of the numeric TCP endpoint. DNS names also configure SNI. No insecure mode.
+    // CA verification requires a DNS name or IP address. The default SNI is
+    // derived from a DNS peer name. An explicit empty server_name suppresses SNI.
     task<void> connect(tcp::endpoint endpoint, std::string peer_name);
+    task<void> connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name);
     task<void> handshake(std::string peer_name = {});
+    task<void> handshake(std::string peer_name, std::string server_name);
     task<std::size_t> read_some(std::span<char> buffer);
     task<void> write_all(std::string_view bytes);
     task<std::size_t> read_some(std::span<std::byte> buffer) {
@@ -93,10 +111,12 @@ private:
     struct implementation;
     std::unique_ptr<implementation> impl_;
     friend class pace::detail::tls_driver;
-    task<void> perform_handshake(std::string peer_name);
+    task<void> connect_impl(tcp::endpoint endpoint, std::string peer_name, std::optional<std::string> server_name);
+    task<void> handshake_impl(std::string peer_name, std::optional<std::string> server_name);
+    task<void> perform_handshake();
 };
 
-// Complete a verified handshake before returning the owned stream. Custom
+// Complete a handshake using the supplied verification policy. Custom
 // configuration is borrowed through task completion; streams retain its state.
 inline task<stream> connect(io_context& io, const context& configuration,
                              tcp::endpoint peer, std::string expected_name) {
