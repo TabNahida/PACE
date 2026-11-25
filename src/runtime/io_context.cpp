@@ -261,18 +261,14 @@ struct io_context::implementation {
         }
         auto& state = descriptors[index];
         const auto generation = (state.token >> 32) + 1;
-        state.fd = fd;
-        state.token = (generation << 32) | index;
-        ++descriptor_count;
+        state.fd = fd; state.token = (generation << 32) | index; ++descriptor_count;
         return state.token;
     }
     void erase_descriptor(std::uint64_t token) noexcept {
         if (auto* state = find_descriptor(token)) {
-            *state = {};
-            state->token = token;
-            // Retire an exhausted slot so a queued event can never match a reused identity.
-            if ((token >> 32) < UINT32_MAX)
-                free_descriptors.push_back(static_cast<std::uint32_t>(token));
+            // Retire an exhausted slot so its previous tokens cannot recur.
+            *state = {.token = token};
+            if ((token >> 32) != UINT32_MAX) free_descriptors.push_back(static_cast<std::uint32_t>(token));
             --descriptor_count;
         }
     }

@@ -61,6 +61,11 @@ if has_config("scaling") then
         add_files(path.join(pace_root, "benchmarks/scaling_bench.cpp"))
         add_deps("pace_net")
     target_end()
+    target("pace_net_hotpaths")
+        set_kind("binary")
+        add_files(path.join(pace_root, "benchmarks/net_hotpaths.cpp"))
+        add_deps("pace_net")
+    target_end()
 end
 if has_config("benchmarks") then
     target("pace_bench")

@@ -1,4 +1,5 @@
 #include <pace/tcp.hpp>
+#include <pace/operation.hpp>
 #include <pace/this_context.hpp>
 #include <pace/detail/profiling.hpp>
 #include <pace/detail/socket_address.hpp>
@@ -6,6 +7,7 @@
 #if defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -73,10 +75,39 @@ native_socket_type accept_socket(native_socket_type listener) {
 #endif
     const auto fd = ::accept(listener, nullptr, nullptr);
     if (fd != invalid_socket) {
-        try { configure_socket(fd); }
+        try {
+#if defined(_WIN32)
+            if (!::SetHandleInformation(reinterpret_cast<HANDLE>(fd), HANDLE_FLAG_INHERIT, 0))
+                throw std::system_error(::GetLastError(), std::system_category(), "SetHandleInformation(socket)");
+#endif
+            configure_socket(fd);
+        }
         catch (...) { close_socket(fd); throw; }
     }
     return fd;
+}
+
+bool retry_accept(int error) noexcept {
+#if defined(_WIN32)
+    return error == WSAECONNRESET || error == WSAECONNABORTED;
+#else
+    if (error == ECONNABORTED || error == EPROTO) return true;
+#if defined(__linux__)
+    // Linux reports errors from queued connections through accept itself.
+    return error == ENETDOWN || error == ENOPROTOOPT || error == EHOSTDOWN ||
+           error == ENONET || error == EHOSTUNREACH || error == EOPNOTSUPP || error == ENETUNREACH;
+#else
+    return false;
+#endif
+#endif
+}
+
+bool accept_resource_pressure(int error) noexcept {
+#if defined(_WIN32)
+    return error == WSAEMFILE || error == WSAENOBUFS;
+#else
+    return error == EMFILE || error == ENFILE || error == ENOBUFS || error == ENOMEM;
+#endif
 }
 
 int set_option(native_socket_type fd, int level, int name, int value) {
@@ -85,12 +116,13 @@ int set_option(native_socket_type fd, int level, int name, int value) {
 
 native_socket_type create_socket(address_family family) {
     detail::initialize_sockets();
-#if defined(__linux__)
-    constexpr int type = SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC;
+#if defined(_WIN32)
+    const auto fd = detail::create_windows_socket(detail::native_address_family(family), SOCK_STREAM, IPPROTO_TCP);
+#elif defined(__linux__)
+    const auto fd = ::socket(detail::native_address_family(family), SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 #else
-    constexpr int type = SOCK_STREAM;
+    const auto fd = ::socket(detail::native_address_family(family), SOCK_STREAM, 0);
 #endif
-    native_socket_type fd = ::socket(detail::native_address_family(family), type, 0);
     if (fd == invalid_socket) socket_error("socket");
     try {
 #if !defined(__linux__)
@@ -198,7 +230,9 @@ task<std::size_t> stream::read_some(std::span<char> buffer) {
 }
 
 task<void> stream::write_all(std::string_view bytes) {
-    do {
+    constexpr std::size_t write_quantum = 1024 * 1024;
+    auto budget = write_quantum;
+    for (;;) {
         check_operation(*context_, fd_);
         if (bytes.empty()) co_return;
 #if defined(MSG_NOSIGNAL)
@@ -206,9 +240,18 @@ task<void> stream::write_all(std::string_view bytes) {
 #else
         constexpr int flags = 0;
 #endif
-        const auto count = detail::profiling::measure(detail::profiling::stage::send, [&] { return ::send(fd_, bytes.data(), static_cast<int>(std::min<std::size_t>(bytes.size(), INT_MAX)), flags); });
+        const auto size = static_cast<int>(std::min(bytes.size(), budget));
+        const auto count = detail::profiling::measure(detail::profiling::stage::send, [&] { return ::send(fd_, bytes.data(), size, flags); });
         if (count > 0) {
-            bytes.remove_prefix(static_cast<std::size_t>(count));
+            const auto sent = static_cast<std::size_t>(count);
+            if (sent == bytes.size()) co_return;
+            bytes.remove_prefix(sent);
+            budget -= sent;
+            if (budget == 0) {
+                co_await context_->yield();
+                if (!is_open()) throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+                budget = write_quantum;
+            }
             continue;
         }
         if (count == 0)
@@ -217,7 +260,8 @@ task<void> stream::write_all(std::string_view bytes) {
         if (interrupted(error)) continue;
         if (!would_block(error)) socket_error("send");
         co_await context_->wait_writable(fd_);
-    } while (!bytes.empty());
+        budget = write_quantum;
+    }
 }
 
 void stream::set_no_delay(bool enabled) {
@@ -346,31 +390,50 @@ listener::listener(io_context& context, endpoint endpoint, listen_options option
 
 listener::~listener() { close(); }
 listener::listener(listener&& other) noexcept
-    : context_(other.context_), fd_(std::exchange(other.fd_, invalid_socket)), family_(other.family_) {}
+    : context_(other.context_), fd_(std::exchange(other.fd_, invalid_socket)), family_(other.family_),
+      accept_attempts_(other.accept_attempts_) {}
 listener& listener::operator=(listener&& other) noexcept {
     if (this != &other) {
         close();
         context_ = other.context_;
         fd_ = std::exchange(other.fd_, invalid_socket);
         family_ = other.family_;
+        accept_attempts_ = other.accept_attempts_;
     }
     return *this;
 }
 
 task<stream> listener::accept() {
+    constexpr unsigned accept_quantum = 64;
+    constexpr auto resource_backoff = std::chrono::milliseconds(50);
+    if (accept_backoff_) throw std::logic_error("another TCP accept is pending");
     for (;;) {
         check_operation(*context_, fd_);
+        if (accept_attempts_ == accept_quantum) {
+            accept_attempts_ = 0;
+            co_await context_->yield();
+            if (fd_ == invalid_socket) throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+            continue;
+        }
+        ++accept_attempts_;
         const native_socket_type accepted = detail::profiling::measure(detail::profiling::stage::accept, [&] { return accept_socket(fd_); });
         if (accepted != invalid_socket) co_return stream(*context_, accepted, family_);
         const auto error = last_socket_error();
-        if (interrupted(error)) continue;
-#if defined(_WIN32)
-        if (error == WSAECONNRESET) continue;
-#else
-        if (error == ECONNABORTED || error == EPROTO) continue;
-#endif
-        if (!would_block(error)) socket_error("accept");
-        co_await context_->wait_readable(fd_);
+        if (interrupted(error) || retry_accept(error)) continue;
+        accept_attempts_ = 0;
+        if (would_block(error)) co_await context_->wait_readable(fd_);
+        else if (accept_resource_pressure(error)) {
+            cancellation_source source;
+            struct clear_backoff {
+                cancellation_source*& active;
+                ~clear_backoff() { active = nullptr; }
+            } reset{accept_backoff_};
+            accept_backoff_ = &source;
+            co_await with_cancellation(source.token(), [io = context_, resource_backoff]() -> task<void> {
+                co_await io->sleep_for(resource_backoff);
+            });
+        }
+        else throw std::system_error(socket_error_code(error), "accept");
     }
 }
 
@@ -384,6 +447,7 @@ endpoint listener::local_endpoint() const {
 
 void listener::close() noexcept {
     if (fd_ != invalid_socket) {
+        if (accept_backoff_) accept_backoff_->request_cancellation();
         context_->release_socket(fd_);
         close_socket(std::exchange(fd_, invalid_socket));
     }

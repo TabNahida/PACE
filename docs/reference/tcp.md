@@ -146,8 +146,8 @@ fails. It does not promise that the peer has received or processed those bytes.
 Keep the backing string/array alive and unchanged until completion. The task owns
 the view, not its bytes. Empty views complete without a send after checking socket
 state. The byte-span overloads adapt to the same implementation without copying
-the payload. Individual native read/send sizes are capped at `INT_MAX`, and
-`write_all` advances until all requested data has been accepted.
+the payload. `write_all` advances until all requested data has been accepted and
+yields between batches during large writes so other connections can progress.
 
 `set_no_delay(true)` enables `TCP_NODELAY`; `false` disables it. Call before run or
 on the owning loop. It throws on invalid/stopped state or native option failure.
@@ -207,7 +207,9 @@ before run or on the owner without concurrent close/move.
 
 `accept()` waits for one connection and returns a new owning `stream` bound to the
 **listener's context**. Accepted sockets are configured nonblocking. Certain
-transient aborted/reset accepts are retried; other failures propagate. There is
+transient aborted/reset accepts are retried. Temporary descriptor or socket
+buffer exhaustion backs off before retrying. The reactor can run other work
+between batches of successful accepts. Other failures propagate. There is
 one outstanding accept per listener. The listener must stay alive and unmoved
 while accept is suspended. There is no accepted-socket context-rebinding API.
 
