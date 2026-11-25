@@ -30,7 +30,8 @@ def build(source, backend, tests):
     targets = ("pace_runtime_hotpaths", "pace_components", "pace_scaling")
     checks = ("pace_runtime_tests", "pace_backend_tests", "pace_structured_tests")
     subprocess.run(["xmake", "f", "-c", *flags], cwd=source, check=True)
-    subprocess.run(["xmake", "-y", *targets, *(checks if tests else ())], cwd=source, check=True)
+    for name in (*targets, *(checks if tests else ())):
+        subprocess.run(["xmake", "-y", name], cwd=source, check=True)
     output = source / "build/runtime-performance"
     if tests:
         for name in checks:
