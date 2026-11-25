@@ -138,6 +138,18 @@ struct io_context::implementation {
         if (notify) inbox_pending.store(true, std::memory_order_release);
         return notify;
     }
+    template<class Work, class Promote>
+    static void promote_batch(std::deque<Work>& batch, Promote promote) {
+        if (batch.size() <= dispatch_limit) {
+            for (auto& work : batch) promote(work);
+            batch.clear();
+            return;
+        }
+        for (std::size_t i = 0; i < dispatch_limit; ++i) {
+            promote(batch.front());
+            batch.pop_front();
+        }
+    }
     std::deque<std::function<void()>> posts;
     std::deque<std::coroutine_handle<>> ready;
     std::vector<task<void>::handle_type> roots;
@@ -591,29 +603,29 @@ void io_context::run() {
     // every producer wake allocates their maps/blocks even for a single post.
     std::deque<task<void>> new_tasks;
     std::deque<std::function<void()>> new_posts;
+    bool inbox_buffered = false;
     for (;;) {
         profiling::scope inbox_timing(profiling::stage::inbox);
         bool inbox_deferred = p.inbox_pending.load(std::memory_order_acquire);
-        if (inbox_deferred) {
-            const bool take_tasks = new_tasks.empty();
-            const bool take_posts = new_posts.empty();
-            if (take_tasks || take_posts) {
-                std::lock_guard lock(p.inbox_mutex);
-                if (take_tasks) new_tasks.swap(p.incoming_tasks);
-                if (take_posts) new_posts.swap(p.incoming_posts);
-                // Leave new arrivals in a category queued until its local batch drains.
-                inbox_deferred = (!take_tasks && !p.incoming_tasks.empty()) ||
-                                 (!take_posts && !p.incoming_posts.empty());
-                p.inbox_pending.store(inbox_deferred, std::memory_order_relaxed);
+        if (inbox_deferred || inbox_buffered) {
+            if (inbox_deferred) {
+                const bool take_tasks = new_tasks.empty();
+                const bool take_posts = new_posts.empty();
+                if (take_tasks || take_posts) {
+                    std::lock_guard lock(p.inbox_mutex);
+                    if (take_tasks) new_tasks.swap(p.incoming_tasks);
+                    if (take_posts) new_posts.swap(p.incoming_posts);
+                    // Leave new arrivals in a category queued until its local batch drains.
+                    inbox_deferred = (!take_tasks && !p.incoming_tasks.empty()) ||
+                                     (!take_posts && !p.incoming_posts.empty());
+                    p.inbox_pending.store(inbox_deferred, std::memory_order_relaxed);
+                }
             }
-        }
-        for (std::size_t i = 0; i < dispatch_limit && !new_tasks.empty(); ++i) {
-            p.adopt_root(*this, new_tasks.front());
-            new_tasks.pop_front();
-        }
-        for (std::size_t i = 0; i < dispatch_limit && !new_posts.empty(); ++i) {
-            p.posts.push_back(std::move(new_posts.front()));
-            new_posts.pop_front();
+            if (!new_tasks.empty())
+                p.promote_batch(new_tasks, [&](auto& work) { p.adopt_root(*this, work); });
+            if (!new_posts.empty())
+                p.promote_batch(new_posts, [&](auto& work) { p.posts.push_back(std::move(work)); });
+            inbox_buffered = !new_tasks.empty() || !new_posts.empty();
         }
         inbox_timing.close();
         if (p.cancellations && p.cancellations->pending.load(std::memory_order_acquire))
@@ -647,7 +659,7 @@ void io_context::run() {
             if (!p.cancellation_started) p.cancel_all(true);
             bool inbox_empty;
             { std::lock_guard lock(p.inbox_mutex); inbox_empty = p.incoming_tasks.empty() && p.incoming_posts.empty(); }
-            if (p.ready.empty() && p.posts.empty() && new_tasks.empty() && new_posts.empty() && inbox_empty) break;
+            if (p.ready.empty() && p.posts.empty() && !inbox_buffered && inbox_empty) break;
             continue;
         }
         profiling::scope timer_timing(profiling::stage::timers);
@@ -666,7 +678,7 @@ void io_context::run() {
         }
         if (stopped()) continue;
         int timeout = -1;
-        if (!p.ready.empty() || !p.posts.empty() || !new_tasks.empty() || !new_posts.empty() || inbox_deferred ||
+        if (!p.ready.empty() || !p.posts.empty() || inbox_buffered || inbox_deferred ||
             (p.cancellations && p.cancellations->pending.load(std::memory_order_acquire))) timeout = 0;
         else if (!p.timers.empty() || (p.callbacks && !p.callbacks->callbacks.empty())) {
             auto deadline = p.timers.empty() ? std::chrono::steady_clock::time_point::max()
