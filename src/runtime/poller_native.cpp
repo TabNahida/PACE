@@ -141,7 +141,11 @@ void native_poller::wake() noexcept {
 
 struct native_poller::implementation {
     int queue = -1;
-    std::unordered_map<native_socket_type, unsigned> interests;
+    struct interest {
+        unsigned mask = 0;
+        std::uint16_t batch_index = max_batch;
+    };
+    std::unordered_map<native_socket_type, interest> interests;
 
     implementation() {
         queue = ::kqueue();
@@ -173,9 +177,8 @@ void native_poller::update(native_socket_type fd, bool readable, bool writable, 
     static_assert(sizeof(std::uintptr_t) >= sizeof(token), "PACE kqueue requires a 64-bit target");
     if (token == wake_token) throw std::invalid_argument("poller token UINT64_MAX is reserved");
     if (!readable && !writable) { remove(fd); return; }
-    auto [entry, inserted] = impl_->interests.try_emplace(fd, 0);
-    (void)inserted;
-    const auto previous = entry->second;
+    auto& interest = impl_->interests.try_emplace(fd).first->second;
+    const auto previous = interest.mask;
     std::array<struct kevent, 2> changes{};
     int count = 0;
     auto* data = reinterpret_cast<void*>(static_cast<std::uintptr_t>(token));
@@ -189,7 +192,7 @@ void native_poller::update(native_socket_type fd, bool readable, bool writable, 
             EVFILT_WRITE, EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, data);
         ++count;
     } else if (previous & 2U) impl_->erase(fd, EVFILT_WRITE);
-    entry->second = (readable ? 1U : 0U) | (writable ? 2U : 0U);
+    interest.mask = (readable ? 1U : 0U) | (writable ? 2U : 0U);
     int result;
     do { result = ::kevent(impl_->queue, changes.data(), count, nullptr, 0, nullptr); }
     while (result < 0 && errno == EINTR);
@@ -203,8 +206,8 @@ void native_poller::update(native_socket_type fd, bool readable, bool writable, 
 void native_poller::remove(native_socket_type fd) noexcept {
     const auto entry = impl_->interests.find(fd);
     if (entry == impl_->interests.end()) return;
-    if (entry->second & 1U) impl_->erase(fd, EVFILT_READ);
-    if (entry->second & 2U) impl_->erase(fd, EVFILT_WRITE);
+    if (entry->second.mask & 1U) impl_->erase(fd, EVFILT_READ);
+    if (entry->second.mask & 2U) impl_->erase(fd, EVFILT_WRITE);
     impl_->interests.erase(entry);
 }
 
@@ -221,31 +224,35 @@ std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms) {
         if (errno == EINTR) return 0;
         fail("kevent wait");
     }
-    // Group both filters of the same descriptor before disarming either.
-    auto end = events.begin() + count;
-    if (count > 1) {
-        end = std::remove_if(events.begin(), end, [](const auto& event) { return event.filter == EVFILT_USER; });
-        std::sort(events.begin(), end, [](const auto& left, const auto& right) {
-            return left.ident < right.ident;
-        });
-    } else if (count == 1 && events[0].filter == EVFILT_USER) return 0;
+    struct delivered_interest { native_socket_type fd; implementation::interest* interest; };
+    std::array<delivered_interest, max_batch> delivered;
     std::size_t size = 0;
-    for (auto event = events.begin(); event != end;) {
-        const auto fd = static_cast<native_socket_type>(event->ident);
-        auto& result = output[size++];
-        result = {static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(event->udata)), false, false, false};
-        do {
-            result.readable |= event->filter == EVFILT_READ;
-            result.writable |= event->filter == EVFILT_WRITE;
-            result.error |= bool(event->flags & EV_ERROR) || ((event->flags & EV_EOF) && event->fflags != 0);
-            ++event;
-        } while (event != end && event->ident == static_cast<std::uintptr_t>(fd));
-        // EV_ONESHOT removed delivered filters already. Disarm only their counterpart.
+    // Remember the first event's position in the descriptor record so both
+    // filters can merge without changing the order reported by the kernel.
+    for (int i = 0; i < count; ++i) {
+        const auto& event = events[static_cast<std::size_t>(i)];
+        if (event.filter == EVFILT_USER) continue;
+        const auto fd = static_cast<native_socket_type>(event.ident);
         const auto entry = impl_->interests.find(fd);
         if (entry == impl_->interests.end()) continue;
-        if ((entry->second & 1U) && !result.readable) impl_->erase(fd, EVFILT_READ);
-        if ((entry->second & 2U) && !result.writable) impl_->erase(fd, EVFILT_WRITE);
-        entry->second = 0;
+        auto& interest = entry->second;
+        if (interest.batch_index == max_batch) {
+            interest.batch_index = static_cast<std::uint16_t>(size);
+            delivered[size] = {fd, &interest};
+            output[size++] = {static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(event.udata)),
+                false, false, false};
+        }
+        auto& result = output[interest.batch_index];
+        result.readable |= event.filter == EVFILT_READ;
+        result.writable |= event.filter == EVFILT_WRITE;
+        result.error |= bool(event.flags & EV_ERROR) || ((event.flags & EV_EOF) && event.fflags != 0);
+    }
+    // EV_ONESHOT removed delivered filters already. Disarm only their counterpart.
+    for (std::size_t i = 0; i < size; ++i) {
+        const auto [fd, interest] = delivered[i];
+        if ((interest->mask & 1U) && !output[i].readable) impl_->erase(fd, EVFILT_READ);
+        if ((interest->mask & 2U) && !output[i].writable) impl_->erase(fd, EVFILT_WRITE);
+        *interest = {};
     }
     return size;
 }
