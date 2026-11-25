@@ -57,6 +57,9 @@ class stream {
 public:
     stream(io_context& io, const tls::context& configuration);
     stream(tcp::stream transport, const tls::context& configuration);
+    // Copies TLS bytes already consumed from this TCP stream and replays them
+    // before reading from the socket. The prefix may end anywhere in a record.
+    stream(tcp::stream transport, const tls::context& configuration, std::string_view pre_read);
     ~stream();
     stream(stream&&) noexcept;
     stream& operator=(stream&&) noexcept;

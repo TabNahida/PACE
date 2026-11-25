@@ -156,6 +156,7 @@ processing. Its callback runs before ALPN selection. See the official
 ```cpp
 stream(io_context& io, const tls::context& configuration);
 stream(tcp::stream transport, const tls::context& configuration);
+stream(tcp::stream transport, const tls::context& configuration, std::string_view pre_read);
 ~stream();
 stream(stream&&) noexcept;
 stream& operator=(stream&&) noexcept;
@@ -193,9 +194,11 @@ mode. On an already-connected client stream call `handshake(peer_name)`.
 
 For STARTTLS, finish the protocol's plaintext negotiation on the TCP stream,
 then move it into `tls::stream` and call `handshake(peer_name)` on the client or
-`handshake()` on the server. Read only the plaintext response bytes: encrypted
-bytes already consumed into an application buffer cannot be fed back through
-this socket-based TLS interface.
+`handshake()` on the server. If protocol detection or negotiation already
+consumed TLS bytes, pass those bytes in wire order to the constructor as
+`pre_read`. The stream copies the prefix before the constructor returns and
+replays it before reading from TCP. The prefix may contain a complete
+ClientHello or end anywhere within a TLS record.
 
 On the server, wrap the accepted stream and call `handshake()` without a name:
 
