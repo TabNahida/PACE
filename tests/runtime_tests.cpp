@@ -383,6 +383,35 @@ void cancellation_batch_with_unregistration() {
         require(calls[i] == 1, "queued cancellations must be delivered exactly once");
 }
 
+void shutdown_preserves_pending_timeout_reasons() {
+    pace::io_context io;
+    pace::cancellation_source deadline_source;
+    pace::cancellation_source untouched_source;
+    constexpr std::size_t count = 257; // One beyond a normal cancellation dispatch turn.
+    std::array<pace::io_context::cancellation_handle, count> registrations;
+    pace::io_context::cancellation_handle untouched_registration;
+    std::array<std::error_code, count> reasons{};
+    std::error_code untouched_reason;
+    std::size_t delivered = 0;
+    io.post([&] {
+        untouched_registration = io.on_cancel(untouched_source.token(), [&](std::error_code reason) {
+            untouched_reason = reason;
+        });
+        for (std::size_t i = 0; i < count; ++i) {
+            registrations[i] = io.on_cancel(deadline_source.token(), [&, i](std::error_code reason) {
+                reasons[i] = reason;
+                if (++delivered == 1) io.stop();
+            });
+        }
+        require(deadline_source.request_timeout(), "timeout request was not accepted");
+    });
+    io.run();
+    require(delivered == count, "shutdown dropped a pending timeout callback");
+    for (const auto& reason : reasons)
+        require(reason == std::errc::timed_out, "shutdown overwrote a pending timeout reason");
+    require(untouched_reason == std::errc::operation_canceled, "shutdown did not cancel the untouched source");
+}
+
 struct datagram_pair {
     std::array<pace::native_socket_type, 2> sockets{pace::invalid_socket, pace::invalid_socket};
     datagram_pair() {
@@ -1100,6 +1129,7 @@ void run_tests() {
     cancellable_callback_timers();
     cancel_sleepers_out_of_order();
     cancellation_batch_with_unregistration();
+    shutdown_preserves_pending_timeout_reasons();
     protocol_signals();
     shutdown_exactly_once();
     runtime_thread_modes();

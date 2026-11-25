@@ -105,13 +105,16 @@ struct io_context::cancellation_records {
     std::exception_ptr dispatch(bool shutdown = false) {
         std::exception_ptr failure;
         for (std::size_t i = 0; shutdown || i < dispatch_limit; ++i) {
-            const auto id = shutdown ? (entries.empty() ? 0 : entries.begin()->first) : take_pending();
+            auto id = take_pending();
+            if (!id && shutdown && !entries.empty()) id = entries.begin()->first;
             if (!id) break;
             // Extract before invoking a callback that may unregister other records.
             auto node = entries.extract(id);
             auto& entry = node.mapped();
             detach(entry);
-            const auto error = shutdown ? canceled() : entry.token.error();
+            auto error = entry.token.error();
+            // Shutdown supplies a reason only if the source has none of its own.
+            if (shutdown && !error) error = canceled();
             try { entry.callback(error); } catch (...) { if (!failure) failure = std::current_exception(); }
         }
         return failure;
