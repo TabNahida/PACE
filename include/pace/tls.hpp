@@ -5,13 +5,96 @@
 #ifdef PACE_HAS_TLS
 
 #include <array>
+#include <concepts>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
-namespace pace::detail { class tls_driver; }
+namespace pace::tls { class stream; }
+namespace pace::detail {
+class tls_driver;
+
+template<class Transport>
+concept tls_closeable = requires(Transport& transport) {
+    { transport.close() } noexcept -> std::same_as<void>;
+};
+
+template<class Transport>
+concept tls_resettable = requires(Transport& transport) {
+    { transport.finish_write() } -> std::same_as<void>;
+    { transport.reset() } noexcept -> std::same_as<void>;
+};
+
+template<class Transport>
+concept tls_byte_stream = (tls_closeable<Transport> || tls_resettable<Transport>) &&
+    requires(Transport& transport, const Transport& owner, std::span<char> input, std::string_view output) {
+        { owner.context() } noexcept -> std::same_as<io_context&>;
+        { transport.read_some(input) } -> std::same_as<task<std::size_t>>;
+        { transport.write_all(output) } -> std::same_as<task<void>>;
+    };
+
+class tls_transport {
+public:
+    virtual ~tls_transport() = default;
+    virtual io_context& context() const noexcept = 0;
+    virtual bool is_open() const noexcept = 0;
+    virtual tls::stream* nested_stream() noexcept = 0;
+    virtual bool supports_concurrent_io() const noexcept = 0;
+    virtual task<std::size_t> read_some(std::span<char>) = 0;
+    virtual task<void> write_all(std::string_view) = 0;
+    virtual task<void> shutdown(std::chrono::milliseconds) = 0;
+    virtual void close() noexcept = 0;
+};
+
+template<tls_byte_stream Transport>
+class tls_transport_model final : public tls_transport {
+public:
+    explicit tls_transport_model(Transport transport) : transport_(std::move(transport)) {}
+    ~tls_transport_model() override { close(); }
+    io_context& context() const noexcept override { return transport_.context(); }
+    bool is_open() const noexcept override {
+        if constexpr (requires { { transport_.is_open() } noexcept -> std::same_as<bool>; })
+            return open_ && transport_.is_open();
+        return open_;
+    }
+    tls::stream* nested_stream() noexcept override {
+        if constexpr (std::same_as<Transport, tls::stream>) return &transport_;
+        else return nullptr;
+    }
+    bool supports_concurrent_io() const noexcept override {
+        if constexpr (requires { { transport_.supports_concurrent_io() } noexcept -> std::same_as<bool>; })
+            return transport_.supports_concurrent_io();
+        else return true;
+    }
+    task<std::size_t> read_some(std::span<char> buffer) override { return transport_.read_some(buffer); }
+    task<void> write_all(std::string_view bytes) override { return transport_.write_all(bytes); }
+    task<void> shutdown(std::chrono::milliseconds timeout) override {
+        if constexpr (tls_closeable<Transport> && requires { { transport_.shutdown(timeout) } -> std::same_as<task<void>>; }) {
+            co_await transport_.shutdown(timeout);
+            close();
+        } else if constexpr (tls_resettable<Transport>) {
+            transport_.finish_write();
+            // Dropping a QUIC stream before the peer's FIN cancels its send side.
+            std::array<char, 4096> discard{};
+            while (co_await transport_.read_some(discard)) co_await context().yield();
+            open_ = false;
+        } else close();
+        co_return;
+    }
+    void close() noexcept override {
+        if (!std::exchange(open_, false)) return;
+        if constexpr (tls_closeable<Transport>) transport_.close();
+        else transport_.reset();
+    }
+private:
+    Transport transport_;
+    bool open_ = true;
+};
+} // namespace pace::detail
+
 namespace pace::tls {
 
 enum class role { client, server };
@@ -66,7 +149,7 @@ private:
     friend class stream;
 };
 
-// Move-only TLS over an owned TCP stream. Exactly one asynchronous operation may
+// Move-only TLS over an owned byte stream. Exactly one asynchronous operation may
 // be active at a time (including reads vs writes). Move only while idle; preserve
 // this object's address and borrowed buffers until each operation finishes.
 class stream {
@@ -76,13 +159,22 @@ public:
     // Copies TLS bytes already consumed from this TCP stream and replays them
     // before reading from the socket. The prefix may end anywhere in a record.
     stream(tcp::stream transport, const tls::context& configuration, std::string_view pre_read);
+    // The transport must already be connected and ready for bidirectional I/O.
+    // Its close/reset must cancel pending operations on its owning reactor.
+    // Shutdown may overlap a transport read and write. Adapters with serialized
+    // I/O can declare supports_concurrent_io() const noexcept returning false.
+    template<pace::detail::tls_byte_stream Transport> requires (!std::same_as<Transport, tcp::stream>)
+    stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {})
+        : stream(std::make_unique<pace::detail::tls_transport_model<Transport>>(std::move(transport)),
+                 configuration, pre_read) {}
     ~stream();
     stream(stream&&) noexcept;
     stream& operator=(stream&&) noexcept;
     stream(const stream&) = delete;
     stream& operator=(const stream&) = delete;
 
-    // CA verification requires a DNS name or IP address. The default SNI is
+    // connect is available on TCP-backed streams. CA verification requires a DNS
+    // name or IP address. The default SNI is
     // derived from a DNS peer name. An explicit empty server_name suppresses SNI.
     task<void> connect(tcp::endpoint endpoint, std::string peer_name);
     task<void> connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name);
@@ -110,6 +202,8 @@ public:
 private:
     struct implementation;
     std::unique_ptr<implementation> impl_;
+    stream(std::unique_ptr<pace::detail::tls_transport> transport,
+           const tls::context& configuration, std::string_view pre_read);
     friend class pace::detail::tls_driver;
     task<void> connect_impl(tcp::endpoint endpoint, std::string peer_name, std::optional<std::string> server_name);
     task<void> handshake_impl(std::string peer_name, std::optional<std::string> server_name);

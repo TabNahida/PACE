@@ -1,4 +1,6 @@
 #include <pace/tls.hpp>
+#include <pace/detail/reactor_signal.hpp>
+#include <pace/quic.hpp>
 #include <openssl/pem.h>
 
 #include <algorithm>
@@ -696,6 +698,258 @@ void client_verification_modes(const std::filesystem::path& fixtures) {
     rejects_frozen([&] { insecure_client.insecure_skip_verify(); });
 }
 
+struct pipe_state {
+    explicit pipe_state(pace::io_context& context, std::size_t capacity = 1024)
+        : io(context), changed(context), capacity(capacity) {}
+    pace::io_context& io;
+    pace::detail::reactor_signal changed;
+    const std::size_t capacity;
+    std::array<std::string, 2> inbound;
+    std::array<bool, 2> closed{};
+    std::array<unsigned, 2> shutdown_calls{};
+};
+
+template<bool HasShutdown = false>
+class pipe_stream {
+public:
+    pipe_stream(std::shared_ptr<pipe_state> state, std::size_t side) : state_(std::move(state)), side_(side) {}
+    pipe_stream(pipe_stream&&) noexcept = default;
+    pace::io_context& context() const noexcept { return state_->io; }
+    bool is_open() const noexcept { return !state_->closed[side_]; }
+    void close() noexcept {
+        if (!is_open()) return;
+        state_->closed[side_] = true;
+        state_->changed.notify();
+    }
+    // This adapter uses shutdown for cleanup and relies on close to release the pipe.
+    pace::task<void> shutdown(std::chrono::milliseconds) requires HasShutdown {
+        ++state_->shutdown_calls[side_];
+        co_return;
+    }
+    pace::task<std::size_t> read_some(std::span<char> buffer) {
+        auto& queue = state_->inbound[side_];
+        while (is_open() && queue.empty() && !state_->closed[1 - side_]) co_await state_->changed.wait();
+        check_open();
+        // Split record headers and payloads even when more bytes are available.
+        const auto count = std::min({queue.size(), buffer.size(), std::size_t(131)});
+        std::copy_n(queue.data(), count, buffer.data());
+        queue.erase(0, count);
+        state_->changed.notify();
+        co_return count;
+    }
+    pace::task<void> write_all(std::string_view bytes) {
+        auto& queue = state_->inbound[1 - side_];
+        const auto capacity = state_->capacity;
+        while (!bytes.empty()) {
+            while (is_open() && queue.size() == capacity && !state_->closed[1 - side_])
+                co_await state_->changed.wait();
+            check_open();
+            if (state_->closed[1 - side_]) throw std::system_error(std::make_error_code(std::errc::broken_pipe));
+            const auto count = std::min(capacity - queue.size(), bytes.size());
+            queue.append(bytes.data(), count);
+            bytes.remove_prefix(count);
+            state_->changed.notify();
+        }
+    }
+private:
+    void check_open() const {
+        if (!is_open()) throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+    }
+    std::shared_ptr<pipe_state> state_;
+    std::size_t side_;
+};
+
+struct transport_contexts {
+    pace::tls::context server{pace::tls::role::server};
+    pace::tls::context client{pace::tls::role::client, pace::tls::trust_source::application};
+    explicit transport_contexts(const std::filesystem::path& fixtures) {
+        server.use_certificate_chain((fixtures / "localhost.pem").string(), (fixtures / "localhost-key.pem").string());
+        server.set_alpn_protocols({"test-echo"});
+        client.load_verify_file((fixtures / "ca.pem").string());
+        client.set_alpn_protocols({"test-echo"});
+    }
+};
+
+constexpr std::size_t transport_payload_size = 96 * 1024 + 13;
+
+pace::task<void> transport_echo_server(pace::tls::stream stream, finished& done) {
+    co_await stream.handshake();
+    require(stream.selected_protocol() == "test-echo", "server generic TLS ALPN mismatch");
+    const auto bytes = co_await pace::read_exact(stream, transport_payload_size);
+    co_await stream.write_all(bytes);
+    co_await stream.shutdown(2s);
+    require(!stream.is_open(), "generic TLS server shutdown did not close the stream");
+    done.arrive();
+}
+
+pace::task<void> transport_echo_client(pace::tls::stream stream, finished& done) {
+    co_await stream.handshake("localhost");
+    require(stream.selected_protocol() == "test-echo", "client generic TLS ALPN mismatch");
+    std::string bytes(transport_payload_size, '\0');
+    for (std::size_t i = 0; i < bytes.size(); ++i) bytes[i] = static_cast<char>(i * 31 % 251);
+    co_await stream.write_all(bytes);
+    require((co_await pace::read_exact(stream, bytes.size())) == bytes, "generic TLS echo changed the payload");
+    std::array<char, 1> tail{};
+    require((co_await stream.read_some(tail)) == 0, "generic TLS peer did not send close_notify");
+    co_await stream.shutdown(2s);
+    require(!stream.is_open(), "generic TLS client shutdown did not close the stream");
+    done.arrive();
+}
+
+template<bool HasShutdown>
+pace::task<void> pipe_echo_server(pipe_stream<HasShutdown> transport, const pace::tls::context& config, finished& done) {
+    // Read a record header and part of its body before wrapping the byte stream.
+    std::array<char, 7> prefix{};
+    co_await pace::read_exact(transport, std::span<char>(prefix));
+    co_await transport_echo_server(
+        pace::tls::stream(std::move(transport), config, std::string_view(prefix.data(), prefix.size())), done);
+}
+
+template<bool HasShutdown = false>
+void memory_transport(const transport_contexts& contexts, std::size_t capacity) {
+    pace::io_context io;
+    auto pipe = std::make_shared<pipe_state>(io, capacity);
+    finished done{io};
+    const auto deadline = io.call_after(5s, [] { throw std::runtime_error("in-memory TLS roundtrip stalled"); });
+    io.spawn(pipe_echo_server(pipe_stream<HasShutdown>(pipe, 0), contexts.server, done));
+    io.spawn(transport_echo_client(pace::tls::stream(pipe_stream<HasShutdown>(pipe, 1), contexts.client), done));
+    io.run();
+    require(done.count == 2, "in-memory TLS roundtrip incomplete");
+    constexpr unsigned expected = HasShutdown ? 1u : 0u;
+    require(pipe->shutdown_calls == std::array{expected, expected}, "unexpected in-memory shutdown hook calls");
+    require(pipe->closed[0] && pipe->closed[1], "TLS shutdown left the in-memory transport open");
+}
+
+pace::task<void> withhold_transport_shutdown(pace::tls::stream stream) {
+    co_await stream.handshake();
+    co_await stream.write_all("ready");
+    try { co_await stream.context().sleep_for(1h); }
+    catch (const std::system_error& error) {
+        require(error.code() == std::errc::operation_canceled, "unexpected in-memory peer error");
+    }
+}
+
+pace::task<void> shutdown_memory_client(pace::tls::stream stream, bool& finished) {
+    co_await stream.handshake("localhost");
+    require((co_await pace::read_exact(stream, 5)) == "ready", "in-memory peer did not complete the handshake");
+    co_await stream.shutdown(5ms);
+    require(!stream.is_open(), "timed-out in-memory shutdown left the stream open");
+    finished = true;
+    stream.context().stop();
+}
+
+void memory_shutdown_timeout(const transport_contexts& contexts) {
+    pace::io_context io;
+    auto pipe = std::make_shared<pipe_state>(io);
+    bool finished = false;
+    io.spawn(withhold_transport_shutdown(pace::tls::stream(pipe_stream(pipe, 0), contexts.server)));
+    io.spawn(shutdown_memory_client(pace::tls::stream(pipe_stream(pipe, 1), contexts.client), finished));
+    io.run();
+    require(finished && pipe->closed[1], "in-memory shutdown timeout did not unwind");
+}
+
+void simultaneous_memory_shutdown(const transport_contexts& contexts, unsigned layers) {
+    pace::io_context io;
+    // One direction cannot buffer even one encrypted close_notify record.
+    auto pipe = std::make_shared<pipe_state>(io, 16);
+    finished done{io};
+    unsigned handshakes = 0;
+    const auto peer = [&](std::size_t side, const pace::tls::context& config, std::string peer_name) -> pace::task<void> {
+        pace::tls::stream stream(pipe_stream<true>(pipe, side), config);
+        co_await stream.handshake(peer_name);
+        for (unsigned layer = 1; layer < layers; ++layer) {
+            stream = pace::tls::stream(std::move(stream), config);
+            co_await stream.handshake(peer_name);
+        }
+        if (++handshakes == 2) pipe->changed.notify();
+        while (handshakes != 2) co_await pipe->changed.wait();
+        co_await stream.shutdown(100ms);
+        done.arrive();
+    };
+    io.spawn(peer(0, contexts.server, {}));
+    io.spawn(peer(1, contexts.client, "localhost"));
+    io.run();
+    require(done.count == 2 && pipe->closed[0] && pipe->closed[1], "simultaneous TLS shutdown did not close the pipe");
+    require(pipe->shutdown_calls == std::array{1u, 1u}, "simultaneous TLS shutdown timed out before the cleanup hooks");
+}
+
+void memory_transport_truncation(const transport_contexts& contexts) {
+    pace::io_context io;
+    auto pipe = std::make_shared<pipe_state>(io);
+    finished done{io};
+    const auto server = [&]() -> pace::task<void> {
+        pace::tls::stream stream(pipe_stream(pipe, 0), contexts.server);
+        co_await stream.handshake();
+        co_await stream.write_all("record");
+        stream.close();
+        done.arrive();
+    };
+    const auto client = [&]() -> pace::task<void> {
+        pace::tls::stream stream(pipe_stream(pipe, 1), contexts.client);
+        co_await stream.handshake("localhost");
+        require((co_await pace::read_exact(stream, 6)) == "record", "in-memory TLS lost an authenticated record");
+        std::array<char, 1> byte{};
+        bool rejected = false;
+        try { (void)co_await stream.read_some(byte); }
+        catch (const std::system_error& error) { rejected = error.code() == std::errc::protocol_error; }
+        require(rejected && !stream.is_open(), "in-memory TLS accepted unauthenticated EOF");
+        done.arrive();
+    };
+    io.spawn(server());
+    io.spawn(client());
+    io.run();
+    require(done.count == 2, "in-memory TLS truncation test did not finish");
+}
+
+pace::task<void> nested_tls_server(pace::tcp::listener& listener, const transport_contexts& contexts, finished& done) {
+    auto outer = co_await pace::tls::accept(co_await listener.accept(), contexts.server);
+    co_await transport_echo_server(pace::tls::stream(std::move(outer), contexts.server), done);
+}
+
+pace::task<void> nested_tls_client(pace::tcp::listener& listener, const transport_contexts& contexts, finished& done) {
+    auto outer = co_await pace::tls::connect(contexts.client, listener.local_endpoint(), "localhost");
+    co_await transport_echo_client(pace::tls::stream(std::move(outer), contexts.client), done);
+}
+
+void nested_tls_transport(const transport_contexts& contexts) {
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    finished done{io};
+    io.spawn(nested_tls_server(listener, contexts, done));
+    io.spawn(nested_tls_client(listener, contexts, done));
+    io.run();
+    require(done.count == 2, "nested TLS roundtrip incomplete");
+}
+
+#ifdef PACE_HAS_QUIC
+pace::task<void> quic_tls_server(pace::quic::listener& listener, std::optional<pace::quic::connection>& connection,
+                                const pace::tls::context& config, finished& done) {
+    connection.emplace(co_await listener.accept());
+    co_await transport_echo_server(pace::tls::stream(co_await connection->accept_stream(), config), done);
+}
+
+pace::task<void> quic_tls_client(pace::quic::connection& connection, pace::udp::endpoint peer,
+                                const pace::tls::context& config, finished& done) {
+    co_await connection.connect(std::move(peer), "localhost");
+    co_await transport_echo_client(pace::tls::stream(co_await connection.open_stream(), config), done);
+}
+
+void quic_transport(const std::filesystem::path& fixtures, const transport_contexts& contexts) {
+    pace::io_context io;
+    pace::quic::context server(pace::quic::role::server), client;
+    server.use_certificate_chain((fixtures / "localhost.pem").string(), (fixtures / "localhost-key.pem").string());
+    client.load_verify_file((fixtures / "ca.pem").string());
+    pace::quic::listener listener(io, {"127.0.0.1", 0}, server);
+    pace::quic::connection client_connection(io, client);
+    std::optional<pace::quic::connection> server_connection;
+    finished done{io};
+    io.spawn(quic_tls_server(listener, server_connection, contexts.server, done));
+    io.spawn(quic_tls_client(client_connection, listener.local_endpoint(), contexts.client, done));
+    io.run();
+    require(done.count == 2, "TLS over QUIC roundtrip incomplete");
+}
+#endif
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -726,6 +980,17 @@ int main(int argc, char** argv) {
         independent_client_sni(fixtures, false);
         independent_client_sni(fixtures, true);
         client_verification_modes(fixtures);
+        const transport_contexts contexts(fixtures);
+        memory_transport(contexts, 64);
+        memory_transport<true>(contexts, 1024);
+        memory_shutdown_timeout(contexts);
+        simultaneous_memory_shutdown(contexts, 1);
+        simultaneous_memory_shutdown(contexts, 2);
+        memory_transport_truncation(contexts);
+        nested_tls_transport(contexts);
+#ifdef PACE_HAS_QUIC
+        quic_transport(fixtures, contexts);
+#endif
         std::cout << "TLS tests passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

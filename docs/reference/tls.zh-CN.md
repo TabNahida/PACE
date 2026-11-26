@@ -150,11 +150,39 @@ STARTTLS 应先在 TCP 流完成明文协议协商，再将其移动进 `tls::st
 这些字节，TLS 流会先回放它们，再从 TCP 读取。前缀可以包含完整 ClientHello，
 也可以在 TLS record 中间结束。
 
+## 在异步字节流上运行 TLS
+
+`tls::stream(transport, configuration, pre_read = {})` 也可以接管已连接的有序
+双向字节流。可移动传入 QUIC 双向流、已完成外层握手的 `tls::stream`，或应用
+自己的字节流适配器。随后客户端调用 `handshake(peer_name)`，服务端调用
+`handshake()`。如果已读走部分 TLS 字节，可通过 `pre_read` 按发送顺序回放。
+
+```cpp
+auto bytes = co_await quic_connection.open_stream(pace::quic::stream_type::bidirectional);
+pace::tls::stream inner(std::move(bytes), tls_configuration);
+co_await inner.handshake("relay.example.com");
+```
+
+QUIC 父连接必须活到 TLS 流使用结束。自定义传输提供
+`context() const noexcept` 并返回 `io_context&`，通过
+`read_some(std::span<char>) -> task<std::size_t>` 读取、
+`write_all(std::string_view) -> task<void>` 写入。读到字节流末尾时返回零，写入
+接受全部字节后返回。传输还需提供 `close() noexcept`，或同时提供 QUIC 风格的
+`finish_write()` 和 `reset() noexcept`。关闭或重置应以 `operation_canceled`
+取消挂起操作。可选的 `is_open() const noexcept` 让 TLS 观察底层关闭。
+关闭期间，TLS 可以同时进行一次底层读取和一次底层写入，使缓冲区满时仍能交换
+关闭通知。要求串行 I/O 的适配器可实现 `bool supports_concurrent_io() const noexcept`
+并返回 `false`。嵌套 TLS 的每一层都按顺序处理 TLS 记录。最底层传输可以在各层读取对端关闭通知时并发发送密文。
+
+TLS 使用有界缓冲区收发密文，传输和 TLS 操作均在同一 reactor 上执行。
+使用异步传输的服务端会关闭 TLS 1.3 会话票据，让有界传输在握手后能直接交换应用数据。
+`connect()`、`set_no_delay()` 和 HTTP/2 的 TLS 多路复用驱动要求直接使用 TCP。
+
 ## 读写与并发
 
 `read_some(span<char/byte>)` 读取解密数据；`write_all(string_view/span<const byte>)`
 处理全部明文字节的加密写入。缓冲区和 view 在整个挂起期间都借用应用内存。
-非空读取返回零只代表验证过的 `close_notify`，裸 TCP EOF 被视为截断错误。
+非空读取返回零只代表验证过的 `close_notify`，传输直接到达 EOF 时会视为截断错误。
 空缓冲区直接返回零。
 
 **同一 TLS 流同时只能执行一个异步操作，读写不能重叠。** 握手和关闭也遵守
@@ -171,11 +199,13 @@ OpenSSL 的读写操作都可能要求等待任一方向的就绪，不能直接
 ## 关闭
 
 `shutdown(timeout = 100ms)` 发送并等待 `close_notify` 后关闭；
-`close_gracefully` 是同义方法。内部使用可取消的 reactor 定时器界定就绪等待，超时正常
-关闭，TLS 错误和取消继续抛出。零或负超时会尝试一次后关闭，不能保证对端已
-收到；协作式时限无法抢占阻塞应用代码。操作结束即注销定时器，不留下轮询任务
+`close_gracefully` 是同义方法。完成交换后，提供 `close()` 的自定义传输会先执行
+可选的 `shutdown(std::chrono::milliseconds)` 做清理，再调用 `close()`。
+QUIC 风格的传输会发送并等待 FIN。内部使用可取消的 reactor 定时器限制操作时间，超时正常关闭，TLS
+错误和取消继续抛出。零或负超时会尝试一次 TCP 关闭，其他传输立即关闭。协作式
+时限无法抢占阻塞应用代码。操作结束即注销定时器，不留下轮询任务
 或延迟回调。
 
-`close()` 立即取消等待并关闭 socket，不发送 TLS 关闭通知。之后仍需保留流
+`close()` 立即取消等待并关闭或重置底层传输，不发送 TLS 关闭通知。之后仍需保留流
 对象直到挂起的成员函数返回。`close()` 应在所属 reactor 上调用，或在它未运行
 时调用。源对象被移动后，仅允许析构、赋值、`close()` 和 `is_open()`。
