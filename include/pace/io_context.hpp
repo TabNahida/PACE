@@ -1,8 +1,9 @@
 #pragma once
 
-#include <pace/task.hpp>
-#include <pace/platform.hpp>
 #include <pace/io_backend.hpp>
+#include <pace/platform.hpp>
+#include <pace/task.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -11,13 +12,19 @@
 #include <system_error>
 #include <utility>
 
-namespace pace {
-namespace detail { struct scheduler_access; }
+namespace pace
+{
+namespace detail
+{
+struct scheduler_access;
+} // namespace detail
 
 // One reactor, one running thread. spawn/post/stop are thread-safe; I/O is affine.
-class io_context {
+class io_context
+{
     struct callback_timers;
     struct cancellation_records;
+
 public:
     explicit io_context(io_backend selected = io_backend::automatic);
     [[nodiscard]] io_backend backend() const noexcept;
@@ -27,8 +34,10 @@ public:
 
     // Context-owned services (e.g. connection pools). Called only on this loop.
     // Keys and values live until the context is destroyed; values may own sockets.
-    std::shared_ptr<void> local_state(std::shared_ptr<const void> key,
-        const std::function<std::shared_ptr<void>()>& create);
+    std::shared_ptr<void> local_state(
+        std::shared_ptr<const void> key,
+        const std::function<std::shared_ptr<void>()>& create
+    );
     // Borrow a previously created service without shared_ptr reference traffic.
     // The pointer remains valid until context destruction; owning-loop use only.
     void* find_local_state(const void* key);
@@ -46,7 +55,8 @@ public:
     // armed; cancel/destruction immediately releases the callback. Like socket
     // operations, registration and cancellation are context-affine, or may run
     // before run()/after it returns. A handle may outlive its io_context.
-    class timer_handle {
+    class timer_handle
+    {
     public:
         timer_handle() noexcept = default;
         ~timer_handle();
@@ -55,23 +65,26 @@ public:
         timer_handle(const timer_handle&) = delete;
         timer_handle& operator=(const timer_handle&) = delete;
         void cancel() noexcept;
+
     private:
         friend class io_context;
         std::weak_ptr<callback_timers> timers_;
         std::chrono::steady_clock::time_point deadline_{};
         std::uint64_t id_ = 0;
     };
-    [[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline,
-                                       std::function<void()> callback);
-    template<class Rep, class Period>
-    [[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration,
-                                          std::function<void()> callback) {
+
+    [[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, std::function<void()> callback);
+
+    template <class Rep, class Period>
+    [[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, std::function<void()> callback)
+    {
         return call_at(sleep_for(duration).deadline, std::move(callback));
     }
 
     // Context-affine registration; cancellation_source requests are thread-safe.
     // Callbacks execute on this loop and are unregistered by handle destruction.
-    class cancellation_handle {
+    class cancellation_handle
+    {
     public:
         cancellation_handle() noexcept = default;
         ~cancellation_handle();
@@ -79,14 +92,17 @@ public:
         cancellation_handle& operator=(cancellation_handle&&) noexcept;
         cancellation_handle(const cancellation_handle&) = delete;
         void cancel() noexcept;
+
     private:
         friend class io_context;
         std::weak_ptr<cancellation_records> records_;
         std::uint64_t id_ = 0;
     };
+
     [[nodiscard]] cancellation_handle on_cancel(cancellation_token, std::function<void(std::error_code)>);
 
-    struct io_awaiter {
+    struct io_awaiter
+    {
         io_context& context;
         native_socket_type fd;
         bool writable;
@@ -96,22 +112,47 @@ public:
         cancellation_token token{};
         cancellation_handle registration{};
         bool await_ready() noexcept;
-        template<class P> bool await_suspend(std::coroutine_handle<P> handle) {
-            if constexpr (requires { handle.promise().cancellation; }) token = handle.promise().cancellation;
-            if (token.stop_possible()) {
-                if (auto e = token.error()) { error = e; return false; }
+
+        template <class P>
+        bool await_suspend(std::coroutine_handle<P> handle)
+        {
+            if constexpr (requires { handle.promise().cancellation; })
+            {
+                token = handle.promise().cancellation;
+            }
+            if (token.stop_possible())
+            {
+                if (auto e = token.error())
+                {
+                    error = e;
+                    return false;
+                }
                 registration = context.on_cancel(token, [this](std::error_code e) { context.cancel_wait(*this, e); });
             }
             return context.arm(*this, handle);
         }
+
         void await_resume();
     };
-    io_awaiter wait_readable(native_socket_type fd) noexcept { return {*this, fd, false, {}, {}}; }
-    io_awaiter wait_writable(native_socket_type fd) noexcept { return {*this, fd, true, {}, {}}; }
-    // Claims both directions; either readiness notification resumes it once.
-    io_awaiter wait_ready(native_socket_type fd) noexcept { return {*this, fd, false, {}, {}, true}; }
 
-    struct timer_awaiter {
+    io_awaiter wait_readable(native_socket_type fd) noexcept
+    {
+        return {*this, fd, false, {}, {}};
+    }
+
+    io_awaiter wait_writable(native_socket_type fd) noexcept
+    {
+        return {*this, fd, true, {}, {}};
+    }
+
+    // Claims both directions; either readiness notification resumes it once.
+    io_awaiter wait_ready(native_socket_type fd) noexcept
+    {
+        return {*this, fd, false, {}, {}, true};
+    }
+
+    struct timer_awaiter
+    {
         io_context& context;
         std::chrono::steady_clock::time_point deadline;
         std::error_code error;
@@ -121,18 +162,32 @@ public:
         // Position in the owning reactor's deadline heap while suspended.
         std::size_t heap_index = static_cast<std::size_t>(-1);
         bool await_ready() noexcept;
-        template<class P> bool await_suspend(std::coroutine_handle<P> handle) {
-            if constexpr (requires { handle.promise().cancellation; }) token = handle.promise().cancellation;
-            if (token.stop_possible()) {
-                if (auto e = token.error()) { error = e; return false; }
+
+        template <class P>
+        bool await_suspend(std::coroutine_handle<P> handle)
+        {
+            if constexpr (requires { handle.promise().cancellation; })
+            {
+                token = handle.promise().cancellation;
+            }
+            if (token.stop_possible())
+            {
+                if (auto e = token.error())
+                {
+                    error = e;
+                    return false;
+                }
                 registration = context.on_cancel(token, [this](std::error_code e) { context.cancel_wait(*this, e); });
             }
             return context.arm(*this, handle);
         }
+
         void await_resume();
     };
-    template<class Rep, class Period>
-    timer_awaiter sleep_for(std::chrono::duration<Rep, Period> duration) noexcept {
+
+    template <class Rep, class Period>
+    timer_awaiter sleep_for(std::chrono::duration<Rep, Period> duration) noexcept
+    {
         using clock = std::chrono::steady_clock;
         using ticks = std::chrono::duration<long double, clock::period>;
         const auto now = clock::now();
@@ -140,23 +195,43 @@ public:
         const auto maximum = static_cast<long double>(clock::time_point::max().time_since_epoch().count());
         const auto absolute = static_cast<long double>(now.time_since_epoch().count()) + requested;
         auto deadline = now;
-        if (requested > 0) {
+        if (requested > 0)
+        {
             deadline = absolute >= maximum ? clock::time_point::max()
-                : clock::time_point(clock::duration(static_cast<clock::rep>(absolute)));
+                                           : clock::time_point(clock::duration(static_cast<clock::rep>(absolute)));
         }
         return {*this, deadline, {}, {}};
     }
-    struct yield_awaiter {
+
+    struct yield_awaiter
+    {
         io_context& context;
-        bool await_ready() const noexcept { return false; }
+
+        bool await_ready() const noexcept
+        {
+            return false;
+        }
+
         cancellation_token token{};
-        template<class P> void await_suspend(std::coroutine_handle<P> handle) {
-            if constexpr (requires { handle.promise().cancellation; }) token = handle.promise().cancellation;
+
+        template <class P>
+        void await_suspend(std::coroutine_handle<P> handle)
+        {
+            if constexpr (requires { handle.promise().cancellation; })
+            {
+                token = handle.promise().cancellation;
+            }
             context.schedule(handle);
         }
+
         void await_resume();
     };
-    yield_awaiter yield() noexcept { return {*this}; }
+
+    yield_awaiter yield() noexcept
+    {
+        return {*this};
+    }
+
 private:
     friend struct detail::scheduler_access;
     void cancel_wait(io_awaiter&, std::error_code);
@@ -169,9 +244,14 @@ private:
     static void completed(void*, std::coroutine_handle<>) noexcept;
 };
 
-namespace detail {
-struct scheduler_access {
-    static void schedule(io_context& io, std::coroutine_handle<> handle) { io.schedule(handle); }
+namespace detail
+{
+struct scheduler_access
+{
+    static void schedule(io_context& io, std::coroutine_handle<> handle)
+    {
+        io.schedule(handle);
+    }
 };
-}
+} // namespace detail
 } // namespace pace

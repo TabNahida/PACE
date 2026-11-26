@@ -9,14 +9,15 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+
 #include <psapi.h>
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <signal.h>
 #if defined(__APPLE__)
 #include <mach/mach.h>
 #endif
@@ -58,7 +59,8 @@
 #include <thread>
 #include <vector>
 
-namespace {
+namespace
+{
 using clock_type = std::chrono::steady_clock;
 namespace profiling = pace::detail::profiling;
 constexpr std::size_t server_buffer_size = 64 * 1024;
@@ -67,8 +69,10 @@ constexpr std::size_t server_buffer_size = 64 * 1024;
 // getrusage can retain a launcher's pre-exec RSS peak and is deliberately avoided.
 // The sample includes identical clients and latency storage, not only the library.
 constexpr std::string_view memory_scope = "whole process including server, blocking clients and latency samples";
-constexpr std::string_view memory_window = "current process image through server/client shutdown, before result aggregation";
-constexpr std::string_view memory_unavailable_reason = "no verified current-image peak resident memory provider on this platform";
+constexpr std::string_view memory_window =
+    "current process image through server/client shutdown, before result aggregation";
+constexpr std::string_view memory_unavailable_reason =
+    "no verified current-image peak resident memory provider on this platform";
 #if defined(_WIN32)
 constexpr std::string_view memory_source = "GetProcessMemoryInfo.PeakWorkingSetSize";
 #elif defined(__APPLE__)
@@ -79,43 +83,67 @@ constexpr std::string_view memory_source = "/proc/self/status.VmHWM_KiB";
 constexpr std::string_view memory_source = "unavailable";
 #endif
 
-std::optional<std::uint64_t> peak_process_memory_bytes() {
+std::optional<std::uint64_t> peak_process_memory_bytes()
+{
 #if defined(_WIN32)
     PROCESS_MEMORY_COUNTERS counters{};
     counters.cb = sizeof(counters);
-    if (!::GetProcessMemoryInfo(::GetCurrentProcess(), &counters, sizeof(counters)) ||
-        counters.PeakWorkingSetSize == 0)
+    if (!::GetProcessMemoryInfo(::GetCurrentProcess(), &counters, sizeof(counters)) || counters.PeakWorkingSetSize == 0)
+    {
         throw std::runtime_error("GetProcessMemoryInfo failed or returned zero peak working set");
+    }
     return static_cast<std::uint64_t>(counters.PeakWorkingSetSize);
 #elif defined(__APPLE__)
     mach_task_basic_info_data_t info{};
     mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-    if (::task_info(::mach_task_self(), MACH_TASK_BASIC_INFO,
-                    reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS ||
-        count != MACH_TASK_BASIC_INFO_COUNT || info.resident_size_max == 0)
+    if (::task_info(::mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count)
+            != KERN_SUCCESS
+        || count != MACH_TASK_BASIC_INFO_COUNT || info.resident_size_max == 0)
+    {
         throw std::runtime_error("task_info failed or returned zero current-image peak resident size");
+    }
     return static_cast<std::uint64_t>(info.resident_size_max);
 #elif defined(__linux__)
     // VmHWM belongs to mm_struct, which exec replaces, unlike ru_maxrss. Kernel
     // RSS accounting is approximate; this is not an allocation census or PSS.
     const auto close_file = [](std::FILE* file) { std::fclose(file); };
     std::unique_ptr<std::FILE, decltype(close_file)> file(std::fopen("/proc/self/status", "r"), close_file);
-    if (!file) throw std::runtime_error("cannot read /proc/self/status for current-image peak RSS");
+    if (!file)
+    {
+        throw std::runtime_error("cannot read /proc/self/status for current-image peak RSS");
+    }
     std::array<char, 256> line{};
-    while (std::fgets(line.data(), static_cast<int>(line.size()), file.get())) {
+    while (std::fgets(line.data(), static_cast<int>(line.size()), file.get()))
+    {
         std::string_view text(line.data());
-        if (!text.starts_with("VmHWM:")) continue;
+        if (!text.starts_with("VmHWM:"))
+        {
+            continue;
+        }
         text.remove_prefix(6);
-        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.remove_prefix(1);
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t'))
+        {
+            text.remove_prefix(1);
+        }
         std::uint64_t kib = 0;
         const auto parsed = std::from_chars(text.data(), text.data() + text.size(), kib);
         if (parsed.ec != std::errc{} || parsed.ptr == text.data())
+        {
             throw std::runtime_error("invalid VmHWM counter");
+        }
         text.remove_prefix(static_cast<std::size_t>(parsed.ptr - text.data()));
-        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.remove_prefix(1);
-        if (text != "kB\n" && text != "kB") throw std::runtime_error("unexpected VmHWM units");
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t'))
+        {
+            text.remove_prefix(1);
+        }
+        if (text != "kB\n" && text != "kB")
+        {
+            throw std::runtime_error("unexpected VmHWM units");
+        }
         if (!kib || kib > std::numeric_limits<std::uint64_t>::max() / 1024)
+        {
             throw std::runtime_error("VmHWM byte count is zero or out of range");
+        }
         return kib * 1024;
     }
     throw std::runtime_error("VmHWM is missing from /proc/self/status");
@@ -126,26 +154,40 @@ std::optional<std::uint64_t> peak_process_memory_bytes() {
 #endif
 }
 
-void print_peak_memory(std::optional<std::uint64_t> bytes) {
+void print_peak_memory(std::optional<std::uint64_t> bytes)
+{
     std::cout << "{\"bytes\":";
-    if (bytes) std::cout << *bytes;
-    else std::cout << "null";
-    std::cout << ",\"source\":\"" << memory_source << "\",\"scope\":\"" << memory_scope
-        << "\",\"window\":\"" << memory_window << "\",\"available\":" << (bytes ? "true" : "false");
-    if (!bytes) std::cout << ",\"unavailable_reason\":\"" << memory_unavailable_reason << "\"";
+    if (bytes)
+    {
+        std::cout << *bytes;
+    }
+    else
+    {
+        std::cout << "null";
+    }
+    std::cout << ",\"source\":\"" << memory_source << "\",\"scope\":\"" << memory_scope << "\",\"window\":\""
+              << memory_window << "\",\"available\":" << (bytes ? "true" : "false");
+    if (!bytes)
+    {
+        std::cout << ",\"unavailable_reason\":\"" << memory_unavailable_reason << "\"";
+    }
     std::cout << '}';
 }
 
 // Diagnostic only: no sockets, server threads or comparative timings. Touch and
 // free 32 MiB so tests can distinguish a retained peak from current RSS and can
 // launch this under a deliberately bloated parent to detect pre-exec pollution.
-void memory_probe() {
+void memory_probe()
+{
     const auto before = peak_process_memory_bytes();
     constexpr std::size_t allocation = 32 * 1024 * 1024;
     {
         auto pages = std::make_unique<char[]>(allocation);
         volatile char* touched = pages.get();
-        for (std::size_t index = 0; index < allocation; index += 4096) touched[index] = 1;
+        for (std::size_t index = 0; index < allocation; index += 4096)
+        {
+            touched[index] = 1;
+        }
     }
     const auto after = peak_process_memory_bytes();
     std::cout << "{\"probe\":\"peak_process_memory\",\"allocated_bytes\":" << allocation << ",\"before\":";
@@ -155,61 +197,125 @@ void memory_probe() {
     std::cout << "}\n";
 }
 
-class server {
+class server
+{
 public:
     virtual ~server() = default;
     virtual std::uint16_t port() const = 0;
     virtual void stop() noexcept = 0;
-    virtual const profiling::counters* profile() const noexcept { return nullptr; }
-    void check_error() {
-        std::lock_guard lock(error_mutex_);
-        if (error_) std::rethrow_exception(error_);
+
+    virtual const profiling::counters* profile() const noexcept
+    {
+        return nullptr;
     }
+
+    void check_error()
+    {
+        std::lock_guard lock(error_mutex_);
+        if (error_)
+        {
+            std::rethrow_exception(error_);
+        }
+    }
+
 protected:
-    void remember_error(std::exception_ptr error) noexcept {
+    void remember_error(std::exception_ptr error) noexcept
+    {
         std::lock_guard lock(error_mutex_);
-        if (!error_) error_ = error;
+        if (!error_)
+        {
+            error_ = error;
+        }
     }
+
 private:
     std::mutex error_mutex_;
     std::exception_ptr error_;
 };
 
-class pace_server final : public server {
+class pace_server final : public server
+{
 public:
-    pace_server() : listener_(context_, {"127.0.0.1", 0}) {
+    pace_server()
+        : listener_(context_, {"127.0.0.1", 0})
+    {
         context_.spawn(accept_loop());
-        worker_ = std::thread([this] {
-            if constexpr (profiling::enabled) profiling::reset();
-            try { context_.run(); }
-            catch (...) { remember_error(std::current_exception()); }
-            if constexpr (profiling::enabled) profile_ = profiling::snapshot();
-        });
+        worker_ = std::thread(
+            [this]
+            {
+                if constexpr (profiling::enabled)
+                {
+                    profiling::reset();
+                }
+                try
+                {
+                    context_.run();
+                }
+                catch (...)
+                {
+                    remember_error(std::current_exception());
+                }
+                if constexpr (profiling::enabled)
+                {
+                    profile_ = profiling::snapshot();
+                }
+            }
+        );
     }
-    ~pace_server() override { stop(); }
-    std::uint16_t port() const override { return listener_.local_endpoint().port; }
-    void stop() noexcept override {
+
+    ~pace_server() override
+    {
+        stop();
+    }
+
+    std::uint16_t port() const override
+    {
+        return listener_.local_endpoint().port;
+    }
+
+    void stop() noexcept override
+    {
         context_.stop();
-        if (worker_.joinable()) worker_.join();
+        if (worker_.joinable())
+        {
+            worker_.join();
+        }
     }
-    const profiling::counters* profile() const noexcept override {
+
+    const profiling::counters* profile() const noexcept override
+    {
         // benchmark() reads this only after stop() has joined the server thread.
-        if constexpr (profiling::enabled) return &profile_;
+        if constexpr (profiling::enabled)
+        {
+            return &profile_;
+        }
         return nullptr;
     }
+
 private:
-    pace::task<void> echo(pace::tcp::stream socket) {
+    pace::task<void> echo(pace::tcp::stream socket)
+    {
         socket.set_no_delay();
         std::array<char, server_buffer_size> buffer{};
-        for (;;) {
+        for (;;)
+        {
             const auto size = co_await socket.read_some(buffer);
-            if (!size) co_return;
+            if (!size)
+            {
+                co_return;
+            }
             co_await socket.write_all({buffer.data(), size});
         }
     }
-    pace::task<void> accept_loop() {
-        for (;;) context_.spawn(echo(co_await listener_.accept()));
+
+    pace::task<void> accept_loop()
+    {
+        for (;;)
+        {
+            context_.spawn(echo(co_await listener_.accept()));
+        }
     }
+
     pace::io_context context_;
     pace::tcp::listener listener_;
     std::thread worker_;
@@ -217,44 +323,98 @@ private:
 };
 
 #ifdef PACE_HAS_ASIO
-class asio_server final : public server {
+class asio_server final : public server
+{
 public:
-    asio_server() : acceptor_(context_, {asio::ip::address_v4::loopback(), 0}) {
-        asio::co_spawn(context_, accept_loop(), [this](std::exception_ptr error) {
-            if (error) remember_error(error);
-        });
-        worker_ = std::thread([this] {
-            try { context_.run(); }
-            catch (...) { remember_error(std::current_exception()); }
-        });
+    asio_server()
+        : acceptor_(context_, {asio::ip::address_v4::loopback(), 0})
+    {
+        asio::co_spawn(
+            context_,
+            accept_loop(),
+            [this](std::exception_ptr error)
+            {
+                if (error)
+                {
+                    remember_error(error);
+                }
+            }
+        );
+        worker_ = std::thread(
+            [this]
+            {
+                try
+                {
+                    context_.run();
+                }
+                catch (...)
+                {
+                    remember_error(std::current_exception());
+                }
+            }
+        );
     }
-    ~asio_server() override { stop(); }
-    std::uint16_t port() const override { return acceptor_.local_endpoint().port(); }
-    void stop() noexcept override {
+
+    ~asio_server() override
+    {
+        stop();
+    }
+
+    std::uint16_t port() const override
+    {
+        return acceptor_.local_endpoint().port();
+    }
+
+    void stop() noexcept override
+    {
         context_.stop();
-        if (worker_.joinable()) worker_.join();
+        if (worker_.joinable())
+        {
+            worker_.join();
+        }
     }
+
 private:
-    asio::awaitable<void> echo(asio::ip::tcp::socket socket) {
+    asio::awaitable<void> echo(asio::ip::tcp::socket socket)
+    {
         socket.set_option(asio::ip::tcp::no_delay(true));
         std::array<char, server_buffer_size> buffer{};
-        for (;;) {
+        for (;;)
+        {
             std::error_code error;
-            const auto size = co_await socket.async_read_some(asio::buffer(buffer),
-                asio::redirect_error(asio::use_awaitable, error));
-            if (error == asio::error::eof) co_return;
-            if (error) throw std::system_error(error);
+            const auto size =
+                co_await socket.async_read_some(asio::buffer(buffer), asio::redirect_error(asio::use_awaitable, error));
+            if (error == asio::error::eof)
+            {
+                co_return;
+            }
+            if (error)
+            {
+                throw std::system_error(error);
+            }
             co_await asio::async_write(socket, asio::buffer(buffer.data(), size), asio::use_awaitable);
         }
     }
-    asio::awaitable<void> accept_loop() {
-        for (;;) {
+
+    asio::awaitable<void> accept_loop()
+    {
+        for (;;)
+        {
             auto socket = co_await acceptor_.async_accept(asio::use_awaitable);
-            asio::co_spawn(context_, echo(std::move(socket)), [this](std::exception_ptr error) {
-                if (error) remember_error(error);
-            });
+            asio::co_spawn(
+                context_,
+                echo(std::move(socket)),
+                [this](std::exception_ptr error)
+                {
+                    if (error)
+                    {
+                        remember_error(error);
+                    }
+                }
+            );
         }
     }
+
     asio::io_context context_{1};
     asio::ip::tcp::acceptor acceptor_;
     std::thread worker_;
@@ -262,15 +422,19 @@ private:
 #endif
 
 #ifdef PACE_HAS_LIBUV
-class uv_server final : public server {
-    struct peer {
+class uv_server final : public server
+{
+    struct peer
+    {
         uv_tcp_t socket{};
         uv_write_t write{};
         std::array<char, server_buffer_size> buffer{};
         uv_server* owner;
     };
+
 public:
-    uv_server() {
+    uv_server()
+    {
         check(uv_loop_init(&loop_));
         check(uv_tcp_init(&loop_, &listener_));
         listener_.data = this;
@@ -285,83 +449,182 @@ public:
         shutdown_.data = this;
         worker_ = std::thread([this] { uv_run(&loop_, UV_RUN_DEFAULT); });
     }
-    ~uv_server() override { stop(); }
-    std::uint16_t port() const override { return port_; }
-    void stop() noexcept override {
-        if (!worker_.joinable()) return;
+
+    ~uv_server() override
+    {
+        stop();
+    }
+
+    std::uint16_t port() const override
+    {
+        return port_;
+    }
+
+    void stop() noexcept override
+    {
+        if (!worker_.joinable())
+        {
+            return;
+        }
         uv_async_send(&shutdown_);
         worker_.join();
         uv_loop_close(&loop_);
     }
+
 private:
-    static void check(int result) {
-        if (result < 0) throw std::runtime_error(std::string("libuv: ") + uv_strerror(result));
+    static void check(int result)
+    {
+        if (result < 0)
+        {
+            throw std::runtime_error(std::string("libuv: ") + uv_strerror(result));
+        }
     }
-    void error(int code) noexcept {
-        try { check(code); }
-        catch (...) { remember_error(std::current_exception()); }
+
+    void error(int code) noexcept
+    {
+        try
+        {
+            check(code);
+        }
+        catch (...)
+        {
+            remember_error(std::current_exception());
+        }
     }
-    static void close_peer(uv_handle_t* handle) {
+
+    static void close_peer(uv_handle_t* handle)
+    {
         delete static_cast<peer*>(handle->data);
     }
-    static void disconnect(peer* connection) {
+
+    static void disconnect(peer* connection)
+    {
         auto* handle = reinterpret_cast<uv_handle_t*>(&connection->socket);
-        if (!uv_is_closing(handle)) uv_close(handle, close_peer);
+        if (!uv_is_closing(handle))
+        {
+            uv_close(handle, close_peer);
+        }
     }
-    static void allocate(uv_handle_t* handle, std::size_t, uv_buf_t* buffer) {
+
+    static void allocate(uv_handle_t* handle, std::size_t, uv_buf_t* buffer)
+    {
         auto* connection = static_cast<peer*>(handle->data);
         *buffer = uv_buf_init(connection->buffer.data(), static_cast<unsigned>(connection->buffer.size()));
     }
-    static void on_write(uv_write_t* request, int status) {
+
+    static void on_write(uv_write_t* request, int status)
+    {
         auto* connection = static_cast<peer*>(request->data);
-        if (uv_is_closing(reinterpret_cast<uv_handle_t*>(&connection->socket))) return;
-        if (status < 0) {
+        if (uv_is_closing(reinterpret_cast<uv_handle_t*>(&connection->socket)))
+        {
+            return;
+        }
+        if (status < 0)
+        {
             connection->owner->error(status);
             disconnect(connection);
             return;
         }
         const auto result = uv_read_start(reinterpret_cast<uv_stream_t*>(&connection->socket), allocate, on_read);
-        if (result < 0) { connection->owner->error(result); disconnect(connection); }
+        if (result < 0)
+        {
+            connection->owner->error(result);
+            disconnect(connection);
+        }
     }
-    static void on_read(uv_stream_t* stream, std::ptrdiff_t size, const uv_buf_t*) {
+
+    static void on_read(uv_stream_t* stream, std::ptrdiff_t size, const uv_buf_t*)
+    {
         auto* connection = static_cast<peer*>(stream->data);
-        if (size == 0) return;
-        if (size < 0) {
-            if (size != UV_EOF) connection->owner->error(static_cast<int>(size));
+        if (size == 0)
+        {
+            return;
+        }
+        if (size < 0)
+        {
+            if (size != UV_EOF)
+            {
+                connection->owner->error(static_cast<int>(size));
+            }
             disconnect(connection);
             return;
         }
         uv_read_stop(stream);
         auto buffer = uv_buf_init(connection->buffer.data(), static_cast<unsigned>(size));
         const auto result = uv_write(&connection->write, stream, &buffer, 1, on_write);
-        if (result < 0) { connection->owner->error(result); disconnect(connection); }
+        if (result < 0)
+        {
+            connection->owner->error(result);
+            disconnect(connection);
+        }
     }
-    static void on_connection(uv_stream_t* listener, int status) {
+
+    static void on_connection(uv_stream_t* listener, int status)
+    {
         auto* owner = static_cast<uv_server*>(listener->data);
-        if (status < 0) { owner->error(status); return; }
+        if (status < 0)
+        {
+            owner->error(status);
+            return;
+        }
         auto* connection = new (std::nothrow) peer{};
-        if (!connection) { owner->error(UV_ENOMEM); return; }
+        if (!connection)
+        {
+            owner->error(UV_ENOMEM);
+            return;
+        }
         connection->owner = owner;
         connection->socket.data = connection;
         connection->write.data = connection;
         auto result = uv_tcp_init(&owner->loop_, &connection->socket);
-        if (result < 0) { owner->error(result); delete connection; return; }
+        if (result < 0)
+        {
+            owner->error(result);
+            delete connection;
+            return;
+        }
         connection->socket.data = connection;
         result = uv_accept(listener, reinterpret_cast<uv_stream_t*>(&connection->socket));
-        if (result >= 0) result = uv_tcp_nodelay(&connection->socket, 1);
-        if (result >= 0) result = uv_read_start(reinterpret_cast<uv_stream_t*>(&connection->socket), allocate, on_read);
-        if (result < 0) { owner->error(result); disconnect(connection); }
+        if (result >= 0)
+        {
+            result = uv_tcp_nodelay(&connection->socket, 1);
+        }
+        if (result >= 0)
+        {
+            result = uv_read_start(reinterpret_cast<uv_stream_t*>(&connection->socket), allocate, on_read);
+        }
+        if (result < 0)
+        {
+            owner->error(result);
+            disconnect(connection);
+        }
     }
-    static void on_shutdown(uv_async_t* handle) {
+
+    static void on_shutdown(uv_async_t* handle)
+    {
         auto* owner = static_cast<uv_server*>(handle->data);
-        uv_walk(&owner->loop_, [](uv_handle_t* current, void* argument) {
-            auto* self = static_cast<uv_server*>(argument);
-            if (uv_is_closing(current)) return;
-            if (current->type == UV_TCP && current != reinterpret_cast<uv_handle_t*>(&self->listener_))
-                uv_close(current, close_peer);
-            else uv_close(current, nullptr);
-        }, owner);
+        uv_walk(
+            &owner->loop_,
+            [](uv_handle_t* current, void* argument)
+            {
+                auto* self = static_cast<uv_server*>(argument);
+                if (uv_is_closing(current))
+                {
+                    return;
+                }
+                if (current->type == UV_TCP && current != reinterpret_cast<uv_handle_t*>(&self->listener_))
+                {
+                    uv_close(current, close_peer);
+                }
+                else
+                {
+                    uv_close(current, nullptr);
+                }
+            },
+            owner
+        );
     }
+
     uv_loop_t loop_{};
     uv_tcp_t listener_{};
     uv_async_t shutdown_{};
@@ -373,41 +636,75 @@ private:
 #ifdef _WIN32
 using socket_type = SOCKET;
 constexpr socket_type invalid_socket = INVALID_SOCKET;
-void close_socket(socket_type fd) { closesocket(fd); }
-std::string socket_error() { return std::to_string(WSAGetLastError()); }
+
+void close_socket(socket_type fd)
+{
+    closesocket(fd);
+}
+
+std::string socket_error()
+{
+    return std::to_string(WSAGetLastError());
+}
 #else
 using socket_type = int;
 constexpr socket_type invalid_socket = -1;
-void close_socket(socket_type fd) { ::close(fd); }
-std::string socket_error() { return std::strerror(errno); }
+
+void close_socket(socket_type fd)
+{
+    ::close(fd);
+}
+
+std::string socket_error()
+{
+    return std::strerror(errno);
+}
 #endif
 
-struct socket_guard {
+struct socket_guard
+{
     socket_type fd = invalid_socket;
-    ~socket_guard() { if (fd != invalid_socket) close_socket(fd); }
+
+    ~socket_guard()
+    {
+        if (fd != invalid_socket)
+        {
+            close_socket(fd);
+        }
+    }
 };
 
-void exchange(socket_type socket, std::vector<char>& payload, std::vector<char>& received,
-              std::uint64_t sequence) {
+void exchange(socket_type socket, std::vector<char>& payload, std::vector<char>& received, std::uint64_t sequence)
+{
     std::memcpy(payload.data(), &sequence, sizeof(sequence));
     std::size_t position = 0;
-    while (position < payload.size()) {
-        const auto count = ::send(socket, payload.data() + position,
-                                  static_cast<int>(payload.size() - position), 0);
-        if (count <= 0) throw std::runtime_error("client send: " + socket_error());
+    while (position < payload.size())
+    {
+        const auto count = ::send(socket, payload.data() + position, static_cast<int>(payload.size() - position), 0);
+        if (count <= 0)
+        {
+            throw std::runtime_error("client send: " + socket_error());
+        }
         position += static_cast<std::size_t>(count);
     }
     position = 0;
-    while (position < received.size()) {
-        const auto count = ::recv(socket, received.data() + position,
-                                  static_cast<int>(received.size() - position), 0);
-        if (count <= 0) throw std::runtime_error("client recv/EOF: " + socket_error());
+    while (position < received.size())
+    {
+        const auto count = ::recv(socket, received.data() + position, static_cast<int>(received.size() - position), 0);
+        if (count <= 0)
+        {
+            throw std::runtime_error("client recv/EOF: " + socket_error());
+        }
         position += static_cast<std::size_t>(count);
     }
-    if (payload != received) throw std::runtime_error("echo payload mismatch");
+    if (payload != received)
+    {
+        throw std::runtime_error("echo payload mismatch");
+    }
 }
 
-struct options {
+struct options
+{
     std::string backend = "pace";
     std::size_t clients = 8;
     std::size_t requests = 5000;
@@ -417,18 +714,29 @@ struct options {
     unsigned trial = 1;
 };
 
-std::unique_ptr<server> make_server(const std::string& backend) {
-    if (backend == "pace") return std::make_unique<pace_server>();
+std::unique_ptr<server> make_server(const std::string& backend)
+{
+    if (backend == "pace")
+    {
+        return std::make_unique<pace_server>();
+    }
 #ifdef PACE_HAS_ASIO
-    if (backend == "asio") return std::make_unique<asio_server>();
+    if (backend == "asio")
+    {
+        return std::make_unique<asio_server>();
+    }
 #endif
 #ifdef PACE_HAS_LIBUV
-    if (backend == "libuv") return std::make_unique<uv_server>();
+    if (backend == "libuv")
+    {
+        return std::make_unique<uv_server>();
+    }
 #endif
     throw std::invalid_argument("backend not built: " + backend);
 }
 
-void benchmark(const options& config) {
+void benchmark(const options& config)
+{
     auto service = make_server(config.backend);
     const auto port = service->port();
     std::latch ready(static_cast<std::ptrdiff_t>(config.clients));
@@ -438,107 +746,151 @@ void benchmark(const options& config) {
     workers.reserve(config.clients);
     std::vector<std::vector<double>> latencies(config.clients);
     std::vector<std::exception_ptr> errors(config.clients);
-    for (std::size_t id = 0; id < config.clients; ++id) {
-        workers.emplace_back([&, id] {
-            bool ready_signaled = false;
-            try {
-                socket_guard socket{::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)};
-                if (socket.fd == invalid_socket) throw std::runtime_error("client socket: " + socket_error());
-                const int enabled = 1;
-                if (::setsockopt(socket.fd, IPPROTO_TCP, TCP_NODELAY,
-                    reinterpret_cast<const char*>(&enabled), sizeof(enabled)) != 0)
-                    throw std::runtime_error("TCP_NODELAY: " + socket_error());
+    for (std::size_t id = 0; id < config.clients; ++id)
+    {
+        workers.emplace_back(
+            [&, id]
+            {
+                bool ready_signaled = false;
+                try
+                {
+                    socket_guard socket{::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)};
+                    if (socket.fd == invalid_socket)
+                    {
+                        throw std::runtime_error("client socket: " + socket_error());
+                    }
+                    const int enabled = 1;
+                    if (::setsockopt(
+                            socket.fd,
+                            IPPROTO_TCP,
+                            TCP_NODELAY,
+                            reinterpret_cast<const char*>(&enabled),
+                            sizeof(enabled)
+                        )
+                        != 0)
+                    {
+                        throw std::runtime_error("TCP_NODELAY: " + socket_error());
+                    }
 #ifdef _WIN32
-                const DWORD timeout = config.timeout_ms;
+                    const DWORD timeout = config.timeout_ms;
 #else
-                timeval timeout{};
-                timeout.tv_sec = static_cast<decltype(timeout.tv_sec)>(config.timeout_ms / 1000);
-                timeout.tv_usec = static_cast<decltype(timeout.tv_usec)>((config.timeout_ms % 1000) * 1000);
+                    timeval timeout{};
+                    timeout.tv_sec = static_cast<decltype(timeout.tv_sec)>(config.timeout_ms / 1000);
+                    timeout.tv_usec = static_cast<decltype(timeout.tv_usec)>((config.timeout_ms % 1000) * 1000);
 #endif
-                for (const int option : {SO_RCVTIMEO, SO_SNDTIMEO}) {
-                    if (::setsockopt(socket.fd, SOL_SOCKET, option,
-                        reinterpret_cast<const char*>(&timeout), sizeof(timeout)) != 0)
-                        throw std::runtime_error("client timeout: " + socket_error());
+                    for (const int option : {SO_RCVTIMEO, SO_SNDTIMEO})
+                    {
+                        if (::setsockopt(
+                                socket.fd,
+                                SOL_SOCKET,
+                                option,
+                                reinterpret_cast<const char*>(&timeout),
+                                sizeof(timeout)
+                            )
+                            != 0)
+                            throw std::runtime_error("client timeout: " + socket_error());
+                    }
+                    sockaddr_in endpoint{};
+                    endpoint.sin_family = AF_INET;
+                    endpoint.sin_port = htons(port);
+                    ::inet_pton(AF_INET, "127.0.0.1", &endpoint.sin_addr);
+                    if (::connect(socket.fd, reinterpret_cast<sockaddr*>(&endpoint), sizeof(endpoint)) != 0)
+                        throw std::runtime_error("client connect: " + socket_error());
+                    std::vector<char> payload(config.bytes), received(config.bytes);
+                    for (std::size_t i = 0; i < payload.size(); ++i)
+                        payload[i] = static_cast<char>((i * 31 + id * 17) % 251);
+                    auto& samples = latencies[id];
+                    samples.reserve(config.requests);
+                    const auto connection_tag = static_cast<std::uint64_t>(id) << 48;
+                    for (std::size_t i = 0; i < config.warmup; ++i)
+                        exchange(socket.fd, payload, received, (std::uint64_t{1} << 63) | connection_tag | i);
+                    ready.count_down();
+                    ready_signaled = true;
+                    start.wait();
+                    for (std::size_t i = 0; i < config.requests; ++i)
+                    {
+                        const auto before = clock_type::now();
+                        exchange(socket.fd, payload, received, connection_tag | i);
+                        samples.push_back(
+                            std::chrono::duration<double, std::micro>(clock_type::now() - before).count()
+                        );
+                    }
                 }
-                sockaddr_in endpoint{};
-                endpoint.sin_family = AF_INET;
-                endpoint.sin_port = htons(port);
-                ::inet_pton(AF_INET, "127.0.0.1", &endpoint.sin_addr);
-                if (::connect(socket.fd, reinterpret_cast<sockaddr*>(&endpoint), sizeof(endpoint)) != 0)
-                    throw std::runtime_error("client connect: " + socket_error());
-                std::vector<char> payload(config.bytes), received(config.bytes);
-                for (std::size_t i = 0; i < payload.size(); ++i)
-                    payload[i] = static_cast<char>((i * 31 + id * 17) % 251);
-                auto& samples = latencies[id];
-                samples.reserve(config.requests);
-                const auto connection_tag = static_cast<std::uint64_t>(id) << 48;
-                for (std::size_t i = 0; i < config.warmup; ++i)
-                    exchange(socket.fd, payload, received, (std::uint64_t{1} << 63) | connection_tag | i);
-                ready.count_down();
-                ready_signaled = true;
-                start.wait();
-                for (std::size_t i = 0; i < config.requests; ++i) {
-                    const auto before = clock_type::now();
-                    exchange(socket.fd, payload, received, connection_tag | i);
-                    samples.push_back(std::chrono::duration<double, std::micro>(clock_type::now() - before).count());
+                catch (...)
+                {
+                    errors[id] = std::current_exception();
+                    if (!ready_signaled)
+                        ready.count_down();
                 }
-            } catch (...) {
-                errors[id] = std::current_exception();
-                if (!ready_signaled) ready.count_down();
             }
-        });
+        );
     }
     ready.wait();
     const auto begin = clock_type::now();
     start_signal.set_value();
-    for (auto& worker : workers) worker.join();
+    for (auto& worker : workers)
+    {
+        worker.join();
+    }
     const auto elapsed = std::chrono::duration<double>(clock_type::now() - begin).count();
     // Cancellation during shutdown is suppressed by the backends; genuine
     // errors observed while draining must also invalidate the result.
     service->check_error();
     service->stop();
     service->check_error();
-    for (const auto& error : errors) if (error) std::rethrow_exception(error);
+    for (const auto& error : errors)
+    {
+        if (error)
+        {
+            std::rethrow_exception(error);
+        }
+    }
     // Sample before allocating the duplicate merged latency vector below.
     const auto peak_memory = peak_process_memory_bytes();
     std::vector<double> merged;
     merged.reserve(config.clients * config.requests);
-    for (auto& samples : latencies) merged.insert(merged.end(), samples.begin(), samples.end());
+    for (auto& samples : latencies)
+    {
+        merged.insert(merged.end(), samples.begin(), samples.end());
+    }
     std::sort(merged.begin(), merged.end());
-    const auto percentile = [&](double fraction) {
-        return merged[static_cast<std::size_t>(std::ceil(fraction * merged.size())) - 1];
-    };
+    const auto percentile = [&](double fraction)
+    { return merged[static_cast<std::size_t>(std::ceil(fraction * merged.size())) - 1]; };
     const double throughput = merged.size() / elapsed;
-    std::cout << std::fixed << std::setprecision(9)
-        << "{\"benchmark\":\"tcp_echo\",\"backend\":\"" << config.backend
-        << "\",\"trial\":" << config.trial << ",\"server_threads\":1,\"client_threads\":" << config.clients
-        << ",\"connections\":" << config.clients << ",\"pipeline\":1,\"payload_bytes\":" << config.bytes
-        << ",\"requests_per_client\":" << config.requests << ",\"warmup_per_client\":" << config.warmup
-        << ",\"completed_requests\":" << merged.size() << ",\"seconds\":" << elapsed
-        << ",\"requests_per_second\":" << throughput
-        << ",\"roundtrip_mib_per_second\":" << throughput * config.bytes * 2 / (1024 * 1024)
-        << ",\"p50_us\":" << percentile(0.50) << ",\"p95_us\":" << percentile(0.95)
-        << ",\"p99_us\":" << percentile(0.99)
-        << ",\"max_us\":" << merged.back() << ",\"payload_verified\":true"
-        << ",\"extended_metrics_version\":2,\"latency_samples\":" << merged.size()
-        << ",\"peak_process_memory\":";
+    std::cout << std::fixed << std::setprecision(9) << "{\"benchmark\":\"tcp_echo\",\"backend\":\"" << config.backend
+              << "\",\"trial\":" << config.trial << ",\"server_threads\":1,\"client_threads\":" << config.clients
+              << ",\"connections\":" << config.clients << ",\"pipeline\":1,\"payload_bytes\":" << config.bytes
+              << ",\"requests_per_client\":" << config.requests << ",\"warmup_per_client\":" << config.warmup
+              << ",\"completed_requests\":" << merged.size() << ",\"seconds\":" << elapsed
+              << ",\"requests_per_second\":" << throughput
+              << ",\"roundtrip_mib_per_second\":" << throughput * config.bytes * 2 / (1024 * 1024)
+              << ",\"p50_us\":" << percentile(0.50) << ",\"p95_us\":" << percentile(0.95)
+              << ",\"p99_us\":" << percentile(0.99) << ",\"max_us\":" << merged.back() << ",\"payload_verified\":true"
+              << ",\"extended_metrics_version\":2,\"latency_samples\":" << merged.size() << ",\"peak_process_memory\":";
     print_peak_memory(peak_memory);
     std::cout << ",\"instrumented\":" << (service->profile() ? "true" : "false");
-    if (const auto* counters = service->profile()) {
-        std::cout << ",\"pace_profile\":{\"window\":\"server event-loop lifetime including startup, warmup and shutdown\",\"stages\":[";
-        for (std::size_t index = 0; index < counters->size(); ++index) {
-            if (index != 0) std::cout << ',';
+    if (const auto* counters = service->profile())
+    {
+        std::cout << ",\"pace_profile\":{\"window\":\"server event-loop lifetime including startup, warmup and "
+                     "shutdown\",\"stages\":[";
+        for (std::size_t index = 0; index < counters->size(); ++index)
+        {
+            if (index != 0)
+            {
+                std::cout << ',';
+            }
             const auto& value = (*counters)[index];
-            std::cout << "{\"name\":\"" << profiling::names[index]
-                << "\",\"calls\":" << value.calls << ",\"inclusive_ns\":" << value.inclusive_ns
-                << ",\"exclusive_ns\":" << value.exclusive_ns << '}';
+            std::cout << "{\"name\":\"" << profiling::names[index] << "\",\"calls\":" << value.calls
+                      << ",\"inclusive_ns\":" << value.inclusive_ns << ",\"exclusive_ns\":" << value.exclusive_ns
+                      << '}';
         }
         std::cout << "]}";
     }
     std::cout << "}\n";
 }
 
-void list_backends() {
+void list_backends()
+{
     std::cout << "{\"backends\":[\"pace\"";
 #ifdef PACE_HAS_ASIO
     std::cout << ",\"asio\"";
@@ -547,7 +899,7 @@ void list_backends() {
     std::cout << ",\"libuv\"";
 #endif
     std::cout << "],\"extended_metrics_version\":2,\"peak_process_memory_source\":\"" << memory_source
-        << "\",\"pace_profiling\":" << (profiling::enabled ? "true" : "false") << ",\"asio_version\":";
+              << "\",\"pace_profiling\":" << (profiling::enabled ? "true" : "false") << ",\"asio_version\":";
 #ifdef PACE_HAS_ASIO
     std::cout << ASIO_VERSION;
 #else
@@ -584,51 +936,107 @@ void list_backends() {
     std::cout << "}\n";
 }
 
-std::size_t integer(std::string_view input) {
+std::size_t integer(std::string_view input)
+{
     if (input.empty() || input.find_first_not_of("0123456789") != std::string_view::npos)
+    {
         throw std::invalid_argument("expected positive integer");
+    }
     return std::stoull(std::string(input));
 }
 } // namespace
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
 #ifdef _WIN32
     WSADATA winsock{};
-    if (WSAStartup(MAKEWORD(2, 2), &winsock) != 0) return 1;
-    struct winsock_guard { ~winsock_guard() { WSACleanup(); } } guard;
+    if (WSAStartup(MAKEWORD(2, 2), &winsock) != 0)
+    {
+        return 1;
+    }
+
+    struct winsock_guard
+    {
+        ~winsock_guard()
+        {
+            WSACleanup();
+        }
+    } guard;
 #else
     ::signal(SIGPIPE, SIG_IGN);
 #endif
-    try {
+    try
+    {
         options config;
-        for (int i = 1; i < argc; ++i) {
+        for (int i = 1; i < argc; ++i)
+        {
             const std::string_view argument = argv[i];
-            if (argument == "--list") { list_backends(); return 0; }
-            if (argument == "--memory-probe") { memory_probe(); return 0; }
-            if (argument == "--help") {
-                std::cout << "pace_bench --backend pace|asio|libuv [--clients 8] [--requests 5000] "
-                    "[--warmup 500] [--bytes 64] [--timeout-ms 5000] [--trial 1]\n"
-                    "pace_bench --memory-probe  # diagnostic allocation probe; no network workload\n";
+            if (argument == "--list")
+            {
+                list_backends();
                 return 0;
             }
-            if (i + 1 == argc) throw std::invalid_argument("missing option value");
+            if (argument == "--memory-probe")
+            {
+                memory_probe();
+                return 0;
+            }
+            if (argument == "--help")
+            {
+                std::cout << "pace_bench --backend pace|asio|libuv [--clients 8] [--requests 5000] "
+                             "[--warmup 500] [--bytes 64] [--timeout-ms 5000] [--trial 1]\n"
+                             "pace_bench --memory-probe  # diagnostic allocation probe; no network workload\n";
+                return 0;
+            }
+            if (i + 1 == argc)
+            {
+                throw std::invalid_argument("missing option value");
+            }
             const std::string_view value = argv[++i];
-            if (argument == "--backend") config.backend = value;
-            else if (argument == "--clients") config.clients = integer(value);
-            else if (argument == "--requests") config.requests = integer(value);
-            else if (argument == "--warmup") config.warmup = integer(value);
-            else if (argument == "--bytes") config.bytes = integer(value);
-            else if (argument == "--timeout-ms") config.timeout_ms = static_cast<unsigned>(integer(value));
-            else if (argument == "--trial") config.trial = static_cast<unsigned>(integer(value));
-            else throw std::invalid_argument("unknown option: " + std::string(argument));
+            if (argument == "--backend")
+            {
+                config.backend = value;
+            }
+            else if (argument == "--clients")
+            {
+                config.clients = integer(value);
+            }
+            else if (argument == "--requests")
+            {
+                config.requests = integer(value);
+            }
+            else if (argument == "--warmup")
+            {
+                config.warmup = integer(value);
+            }
+            else if (argument == "--bytes")
+            {
+                config.bytes = integer(value);
+            }
+            else if (argument == "--timeout-ms")
+            {
+                config.timeout_ms = static_cast<unsigned>(integer(value));
+            }
+            else if (argument == "--trial")
+            {
+                config.trial = static_cast<unsigned>(integer(value));
+            }
+            else
+            {
+                throw std::invalid_argument("unknown option: " + std::string(argument));
+            }
         }
-        if (!config.clients || config.clients > 256 || !config.requests || config.requests > 10000000 ||
-            config.clients * config.requests > 20000000 || config.warmup > 1000000 ||
-            config.bytes < 8 || config.bytes > 1048576 || config.timeout_ms < 100 || config.timeout_ms > 60000)
+        if (!config.clients || config.clients > 256 || !config.requests || config.requests > 10000000
+            || config.clients * config.requests > 20000000 || config.warmup > 1000000 || config.bytes < 8
+            || config.bytes > 1048576 || config.timeout_ms < 100 || config.timeout_ms > 60000)
+        {
             throw std::invalid_argument("out-of-range benchmark configuration");
+        }
         benchmark(config);
         return 0;
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << "benchmark failed: " << error.what() << '\n';
         return 1;
     }
