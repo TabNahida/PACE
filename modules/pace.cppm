@@ -127,6 +127,11 @@ export namespace pace::tls {
     using ::pace::tls::pin_type;
     using ::pace::tls::sha256_digest;
     using ::pace::tls::verification_callback;
+    using ::pace::tls::client_hello_key_share;
+    using ::pace::tls::client_hello;
+    using ::pace::tls::client_hello_action;
+    using ::pace::tls::client_hello_callback;
+    using ::pace::tls::client_hello_handoff;
     using ::pace::tls::context;
     using ::pace::tls::stream;
 }

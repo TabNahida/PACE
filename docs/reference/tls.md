@@ -50,13 +50,15 @@ public:
     void set_alpn_protocols(const std::vector<std::string>& protocols);
     void add_server_name(std::string name, const context& configuration);
     void set_server_name_policy(sni_policy missing, sni_policy unrecognized);
+    void set_client_hello_callback(client_hello_callback callback);
 };
 }
 ```
 
 `tls::context` is TLS configuration, separate from an `io_context` reactor.
-Configuration freezes when the first stream is constructed from it, or when it
-is registered as an SNI target. Later mutation is rejected with `logic_error`,
+Configuration freezes when the first stream is constructed from it, when it is
+registered as an SNI target or when a ClientHello callback selects it. Later
+mutation is rejected with `logic_error`,
 even after those streams have closed. Configure certificates, trust and ALPN
 before that boundary; use a new context to change them. Setters and freezing are
 serialized internally. Once configured, a context can create independent streams
@@ -186,6 +188,52 @@ tickets, so session resumption cannot bypass per-connection selection. This is
 necessary because OpenSSL's servername callback runs after session-resumption
 processing. Its callback runs before ALPN selection. See the official
 [OpenSSL SNI callback contract](https://docs.openssl.org/3.0/man3/SSL_CTX_set_tlsext_servername_callback/).
+
+## Inspect and route the ClientHello
+
+Set `context::set_client_hello_callback` on a server before constructing streams.
+It runs synchronously once per connection, on the first ClientHello and before
+certificate selection. Shared contexts may invoke it concurrently on different
+reactors. The callback receives the offered SNI, ALPN protocols, supported
+versions, cipher suite IDs, key shares, legacy version, session ID and exact
+handshake message (including its four-byte handshake header). Lists preserve
+wire order. Views borrow memory for the call. The raw handshake message spans
+TLS record boundaries and excludes record headers.
+
+- `client_hello_action::proceed()` applies the entry context's normal SNI policy.
+- `client_hello_action::select(context)` freezes and retains the selected server
+  context for its certificate and ALPN. The selection takes precedence over SNI
+  routing, and a failed handshake closes the connection.
+- `client_hello_action::reject()` sends a fatal handshake alert. A thrown
+  exception also fails the handshake.
+- `client_hello_action::handoff()` suspends TLS before sending any response.
+  Call `handshake_with_handoff()` to recover the original transport.
+
+```cpp
+server.set_client_hello_callback([](const pace::tls::client_hello& hello) {
+    if (hello.server_name == "upstream.example.com")
+        return pace::tls::client_hello_action::handoff();
+    return pace::tls::client_hello_action::proceed();
+});
+
+pace::tls::stream session(co_await listener.accept(), server);
+if (auto handoff = co_await session.handshake_with_handoff()) {
+    // Process pre_read in wire order before reading any more from the transport.
+    co_await route_to_upstream(std::move(handoff->transport), std::move(handoff->pre_read));
+} else {
+    co_await handle_https(session);
+}
+```
+
+`handshake_with_handoff<Transport>()` defaults to `tcp::stream`. For a custom
+transport or QUIC stream, supply its original type. An empty result means the
+TLS handshake completed. A handoff transfers the open transport and every byte
+already read, including the constructor's prefix and any bytes read past the
+ClientHello, and leaves the TLS stream moved-from. Capture is limited to 1 MiB
+of additional reads before the callback. On the existing `handshake()` and
+`accept()` paths, a handoff request closes the transport silently and reports a
+protocol error. Contexts with this callback disable session resumption and tickets
+so certificate selection is independent on each connection.
 
 ## Streams and handshakes
 

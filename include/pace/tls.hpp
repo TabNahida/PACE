@@ -6,9 +6,11 @@
 
 #include <array>
 #include <concepts>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -89,6 +91,11 @@ public:
         if constexpr (tls_closeable<Transport>) transport_.close();
         else transport_.reset();
     }
+    Transport release() {
+        Transport result(std::move(transport_));
+        open_ = false;
+        return result;
+    }
 private:
     Transport transport_;
     bool open_ = true;
@@ -106,9 +113,32 @@ using sha256_digest = std::array<std::byte, 32>;
 // contents are borrowed for the call. Return true to accept the chain.
 using verification_callback = std::function<bool(std::span<const std::string>)>;
 
-// Configuration freezes on first stream construction or registration as an SNI
-// target; subsequent setters throw logic_error. Streams retain shared ownership
-// of their configuration and every SNI target. Clients default to CA and name verification.
+struct client_hello_key_share {
+    std::uint16_t group = 0;
+    std::string_view key_exchange;
+};
+
+// Wire order and wire IDs. An absent SNI, ALPN or supported_versions extension
+// yields an empty field. All views are borrowed until the callback returns.
+struct client_hello {
+    std::string_view server_name;
+    std::vector<std::string_view> alpn_protocols;
+    std::vector<std::uint16_t> supported_versions;
+    std::vector<std::uint16_t> cipher_suites;
+    std::vector<client_hello_key_share> key_shares;
+    std::uint16_t legacy_version = 0;
+    std::string_view session_id;
+    // The exact handshake message, including its four-byte handshake header.
+    std::string_view raw_message;
+};
+
+class client_hello_action;
+using client_hello_callback = std::function<client_hello_action(const client_hello&)>;
+
+// Configuration freezes on first stream construction, registration as an SNI
+// target or selection by a ClientHello callback. Subsequent setters throw
+// logic_error. Streams retain shared ownership of their configuration and
+// routing targets. Clients default to CA and name verification.
 class context {
 public:
     // application starts with no trusted roots and never loads default paths.
@@ -143,10 +173,43 @@ public:
     // Missing and unrecognized SNI independently use the default certificate or
     // fail this handshake. Both default to use_default. Server contexts only.
     void set_server_name_policy(sni_policy missing, sni_policy unrecognized);
+    // Server only. Invoked once for the first ClientHello, before certificate
+    // selection. The callback runs on the reactor and may run concurrently
+    // across reactors sharing the context. Throwing aborts the handshake.
+    void set_client_hello_callback(client_hello_callback callback);
 private:
     struct implementation;
     std::shared_ptr<implementation> impl_;
     friend class stream;
+    friend class client_hello_action;
+};
+
+class client_hello_action {
+public:
+    // Continue with this context's ordinary SNI and certificate selection.
+    static client_hello_action proceed() noexcept { return {}; }
+    // Select and retain a server context immediately. Its configuration freezes.
+    static client_hello_action select(const context& configuration);
+    // Send a fatal handshake alert.
+    static client_hello_action reject() noexcept { return client_hello_action(kind::reject); }
+    // Pause before writing anything, for handshake_with_handoff().
+    static client_hello_action handoff() noexcept { return client_hello_action(kind::handoff); }
+
+private:
+    enum class kind { proceed, select, reject, handoff };
+    explicit client_hello_action(kind value) noexcept : kind_(value) {}
+    client_hello_action() = default;
+    kind kind_ = kind::proceed;
+    std::shared_ptr<context::implementation> configuration_;
+    friend class stream;
+};
+
+template<class Transport>
+struct client_hello_handoff {
+    Transport transport;
+    // Every byte already read in wire order, including the constructor prefix
+    // and any bytes read ahead after the ClientHello.
+    std::string pre_read;
 };
 
 // Move-only TLS over an owned byte stream. Exactly one asynchronous operation may
@@ -180,6 +243,24 @@ public:
     task<void> connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name);
     task<void> handshake(std::string peer_name = {});
     task<void> handshake(std::string peer_name, std::string server_name);
+    // Server only. Empty on a completed TLS handshake. On handoff this stream
+    // becomes moved-from and the caller owns the original, still-open transport
+    // and its pre-read bytes. Transport must match the type passed at construction.
+    template<pace::detail::tls_byte_stream Transport = tcp::stream>
+    task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff() {
+        using model_type = pace::detail::tls_transport_model<Transport>;
+        if constexpr (std::same_as<Transport, tcp::stream>) require_tcp_handoff();
+        else if (!dynamic_cast<model_type*>(generic_transport()))
+            throw std::logic_error("TLS handoff requires the original transport type");
+        co_await handshake_impl({}, std::nullopt, true);
+        if (!handoff_requested()) co_return std::nullopt;
+        if constexpr (std::same_as<Transport, tcp::stream>) co_return release_tcp();
+        else {
+            auto [transport, prefix] = release_generic();
+            auto& model = static_cast<model_type&>(*transport);
+            co_return client_hello_handoff<Transport>{model.release(), std::move(prefix)};
+        }
+    }
     task<std::size_t> read_some(std::span<char> buffer);
     task<void> write_all(std::string_view bytes);
     task<std::size_t> read_some(std::span<std::byte> buffer) {
@@ -205,9 +286,15 @@ private:
     stream(std::unique_ptr<pace::detail::tls_transport> transport,
            const tls::context& configuration, std::string_view pre_read);
     friend class pace::detail::tls_driver;
+    friend struct tls::context::implementation;
     task<void> connect_impl(tcp::endpoint endpoint, std::string peer_name, std::optional<std::string> server_name);
-    task<void> handshake_impl(std::string peer_name, std::optional<std::string> server_name);
-    task<void> perform_handshake();
+    task<void> handshake_impl(std::string peer_name, std::optional<std::string> server_name, bool allow_handoff);
+    task<bool> perform_handshake();
+    bool handoff_requested() const noexcept;
+    void require_tcp_handoff() const;
+    pace::detail::tls_transport* generic_transport() const noexcept;
+    client_hello_handoff<tcp::stream> release_tcp();
+    client_hello_handoff<std::unique_ptr<pace::detail::tls_transport>> release_generic();
 };
 
 // Complete a handshake using the supplied verification policy. Custom
