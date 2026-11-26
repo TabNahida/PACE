@@ -1,8 +1,9 @@
 #include <pace/io_context.hpp>
 #include <pace/detail/poller.hpp>
 #include <pace/detail/profiling.hpp>
-#include <array>
+
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <climits>
 #include <deque>
@@ -12,29 +13,49 @@
 #include <unordered_map>
 #include <vector>
 
-namespace pace {
+namespace pace
+{
 namespace profiling = detail::profiling;
-namespace {
+
+namespace
+{
 thread_local io_context* active_context = nullptr;
 constexpr std::size_t dispatch_limit = 256;
-std::error_code canceled() { return std::make_error_code(std::errc::operation_canceled); }
-void check_affinity(io_context* context) {
-    if (active_context != context) throw std::logic_error("I/O must execute on its owning io_context");
-}
+
+std::error_code canceled()
+{
+    return std::make_error_code(std::errc::operation_canceled);
 }
 
-struct io_context::callback_timers {
+void check_affinity(io_context* context)
+{
+    if (active_context != context)
+    {
+        throw std::logic_error("I/O must execute on its owning io_context");
+    }
+}
+} // namespace
+
+struct io_context::callback_timers
+{
     using key = std::pair<std::chrono::steady_clock::time_point, std::uint64_t>;
     std::map<key, std::function<void()>> callbacks;
     std::uint64_t next_id = 0;
-    void clear() noexcept {
+
+    void clear() noexcept
+    {
         // Extract before destroying captures: a capture may own another handle.
-        while (!callbacks.empty()) { auto node = callbacks.extract(callbacks.begin()); }
+        while (!callbacks.empty())
+        {
+            auto node = callbacks.extract(callbacks.begin());
+        }
     }
 };
 
-struct io_context::cancellation_records {
-    struct record {
+struct io_context::cancellation_records
+{
+    struct record
+    {
         cancellation_token token;
         std::function<void(std::error_code)> callback;
         std::uint64_t id = 0;
@@ -43,6 +64,7 @@ struct io_context::cancellation_records {
         bool queued = false;
         std::optional<detail::cancellation_registration> wake;
     };
+
     detail::poller& poller;
     std::mutex pending_mutex;
     record* first = nullptr;
@@ -50,82 +72,164 @@ struct io_context::cancellation_records {
     std::atomic<bool> pending{false};
     std::map<std::uint64_t, record> entries;
     std::uint64_t next_id = 0;
-    explicit cancellation_records(detail::poller& wake_poller) : poller(wake_poller) {}
-    ~cancellation_records() {
-        while (!entries.empty()) {
+
+    explicit cancellation_records(detail::poller& wake_poller)
+        : poller(wake_poller)
+    {
+    }
+
+    ~cancellation_records()
+    {
+        while (!entries.empty())
+        {
             auto node = entries.extract(entries.begin());
             detach(node.mapped());
         }
     }
+
     // Notifications can run on any thread. The record already owns the queue
     // links, so requesting cancellation cannot allocate.
-    void enqueue(record& entry) noexcept {
+    void enqueue(record& entry) noexcept
+    {
         bool notify;
         {
             std::lock_guard lock(pending_mutex);
             notify = !first;
             entry.queued = true;
             entry.previous = last;
-            if (last) last->next = &entry;
-            else first = &entry;
+            if (last)
+            {
+                last->next = &entry;
+            }
+            else
+            {
+                first = &entry;
+            }
             last = &entry;
-            if (notify) pending.store(true, std::memory_order_release);
+            if (notify)
+            {
+                pending.store(true, std::memory_order_release);
+            }
         }
-        if (notify) poller.wake();
+        if (notify)
+        {
+            poller.wake();
+        }
     }
-    void unlink(record& entry) noexcept {
-        if (entry.previous) entry.previous->next = entry.next;
-        else first = entry.next;
-        if (entry.next) entry.next->previous = entry.previous;
-        else last = entry.previous;
+
+    void unlink(record& entry) noexcept
+    {
+        if (entry.previous)
+        {
+            entry.previous->next = entry.next;
+        }
+        else
+        {
+            first = entry.next;
+        }
+        if (entry.next)
+        {
+            entry.next->previous = entry.previous;
+        }
+        else
+        {
+            last = entry.previous;
+        }
         entry.queued = false;
-        if (!first) pending.store(false, std::memory_order_relaxed);
+        if (!first)
+        {
+            pending.store(false, std::memory_order_relaxed);
+        }
     }
-    std::uint64_t take_pending() noexcept {
-        if (!pending.load(std::memory_order_acquire)) return 0;
+
+    std::uint64_t take_pending() noexcept
+    {
+        if (!pending.load(std::memory_order_acquire))
+        {
+            return 0;
+        }
         std::lock_guard lock(pending_mutex);
-        if (!first) return 0;
+        if (!first)
+        {
+            return 0;
+        }
         const auto id = first->id;
         unlink(*first);
         return id;
     }
-    void detach(record& entry) noexcept {
+
+    void detach(record& entry) noexcept
+    {
         // Wait for any notifier before releasing the record. Once reset
         // returns, only the reactor can change this record's queued flag.
         entry.wake.reset();
-        if (entry.queued) {
+        if (entry.queued)
+        {
             std::lock_guard lock(pending_mutex);
             unlink(entry);
         }
     }
-    void cancel(std::uint64_t id) noexcept {
+
+    void cancel(std::uint64_t id) noexcept
+    {
         auto node = entries.extract(id);
-        if (!node.empty()) detach(node.mapped());
+        if (!node.empty())
+        {
+            detach(node.mapped());
+        }
     }
-    std::exception_ptr dispatch(bool shutdown = false) {
+
+    std::exception_ptr dispatch(bool shutdown = false)
+    {
         std::exception_ptr failure;
-        for (std::size_t i = 0; shutdown || i < dispatch_limit; ++i) {
+        for (std::size_t i = 0; shutdown || i < dispatch_limit; ++i)
+        {
             auto id = take_pending();
-            if (!id && shutdown && !entries.empty()) id = entries.begin()->first;
-            if (!id) break;
+            if (!id && shutdown && !entries.empty())
+            {
+                id = entries.begin()->first;
+            }
+            if (!id)
+            {
+                break;
+            }
             // Extract before invoking a callback that may unregister other records.
             auto node = entries.extract(id);
             auto& entry = node.mapped();
             detach(entry);
             auto error = entry.token.error();
             // Shutdown supplies a reason only if the source has none of its own.
-            if (shutdown && !error) error = canceled();
-            try { entry.callback(error); } catch (...) { if (!failure) failure = std::current_exception(); }
+            if (shutdown && !error)
+            {
+                error = canceled();
+            }
+            try
+            {
+                entry.callback(error);
+            }
+            catch (...)
+            {
+                if (!failure)
+                {
+                    failure = std::current_exception();
+                }
+            }
         }
         return failure;
     }
 };
 
-struct io_context::implementation {
+struct io_context::implementation
+{
     detail::poller poller;
     const bool persistent_interests;
+
     explicit implementation(io_backend backend)
-        : poller(detail::poller::supports_persistent, backend), persistent_interests(poller.persistent()) {}
+        : poller(detail::poller::supports_persistent, backend)
+        , persistent_interests(poller.persistent())
+    {
+    }
+
     std::atomic<bool> stopping{false};
     std::atomic<bool> running{false};
     bool has_run = false;
@@ -135,48 +239,81 @@ struct io_context::implementation {
     std::atomic<bool> inbox_pending{false};
     std::deque<task<void>> incoming_tasks;
     std::deque<std::function<void()>> incoming_posts;
+
     // Called with inbox_mutex held, after enqueue.
-    bool mark_inbox() noexcept {
+    bool mark_inbox() noexcept
+    {
         const bool notify = !inbox_pending.load(std::memory_order_relaxed);
-        if (notify) inbox_pending.store(true, std::memory_order_release);
+        if (notify)
+        {
+            inbox_pending.store(true, std::memory_order_release);
+        }
         return notify;
     }
-    template<class Work, class Promote>
-    static void promote_batch(std::deque<Work>& batch, Promote promote) {
-        if (batch.size() <= dispatch_limit) {
-            for (auto& work : batch) promote(work);
+
+    template <class Work, class Promote>
+    static void promote_batch(std::deque<Work>& batch, Promote promote)
+    {
+        if (batch.size() <= dispatch_limit)
+        {
+            for (auto& work : batch)
+            {
+                promote(work);
+            }
             batch.clear();
             return;
         }
-        for (std::size_t i = 0; i < dispatch_limit; ++i) {
+        for (std::size_t i = 0; i < dispatch_limit; ++i)
+        {
             promote(batch.front());
             batch.pop_front();
         }
     }
+
     std::deque<std::function<void()>> posts;
     std::deque<std::coroutine_handle<>> ready;
     std::vector<task<void>::handle_type> roots;
-    void adopt_root(io_context& io, task<void>& work) {
+
+    void adopt_root(io_context& io, task<void>& work)
+    {
         const auto handle = work.release();
-        if (!handle) return;
+        if (!handle)
+        {
+            return;
+        }
         auto& promise = handle.promise();
         promise.root_index = roots.size();
-        try {
+        try
+        {
             roots.push_back(handle);
             ready.push_back(handle);
-        } catch (...) {
-            if (roots.size() > promise.root_index) roots.pop_back();
+        }
+        catch (...)
+        {
+            if (roots.size() > promise.root_index)
+            {
+                roots.pop_back();
+            }
             handle.destroy();
             throw;
         }
         promise.on_completion = io_context::completed;
         promise.completion_context = &io;
     }
+
     std::coroutine_handle<> completed_head{};
     std::exception_ptr first_error;
-    struct service { std::shared_ptr<const void> key; std::shared_ptr<void> value; };
+
+    struct service
+    {
+        std::shared_ptr<const void> key;
+        std::shared_ptr<void> value;
+    };
+
     std::unordered_map<const void*, service> services;
-    struct fd_state {
+
+    struct fd_state
+    {
         io_awaiter* reader = nullptr;
         io_awaiter* writer = nullptr;
         native_socket_type fd = invalid_socket;
@@ -184,6 +321,7 @@ struct io_context::implementation {
         bool dirty = false;
         std::uint64_t token = 0;
     };
+
     // Dense reusable slots: event dispatch is a checked array lookup instead
     // of a second node-based hash lookup. Generations reject stale OS events.
     std::vector<fd_state> descriptors;
@@ -191,131 +329,235 @@ struct io_context::implementation {
     std::size_t descriptor_count = 0;
     std::unordered_map<native_socket_type, std::uint64_t> tokens;
     std::vector<std::uint64_t> dirty_descriptors;
+
     // Cancellation can remove any sleeper, including thousands at once. Keep
     // its slot in the coroutine frame to avoid a scan and heap rebuild.
-    struct timer_queue {
+    struct timer_queue
+    {
         std::vector<timer_awaiter*> heap;
-        bool empty() const noexcept { return heap.empty(); }
-        timer_awaiter* top() const noexcept { return heap.front(); }
 
-        void place(std::size_t slot, timer_awaiter* timer) noexcept {
+        bool empty() const noexcept
+        {
+            return heap.empty();
+        }
+
+        timer_awaiter* top() const noexcept
+        {
+            return heap.front();
+        }
+
+        void place(std::size_t slot, timer_awaiter* timer) noexcept
+        {
             heap[slot] = timer;
             timer->heap_index = slot;
         }
-        void sift_up(std::size_t slot, timer_awaiter* timer) noexcept {
-            while (slot) {
+
+        void sift_up(std::size_t slot, timer_awaiter* timer) noexcept
+        {
+            while (slot)
+            {
                 const auto parent = (slot - 1) / 2;
-                if (heap[parent]->deadline <= timer->deadline) break;
+                if (heap[parent]->deadline <= timer->deadline)
+                {
+                    break;
+                }
                 place(slot, heap[parent]);
                 slot = parent;
             }
             place(slot, timer);
         }
-        void push(timer_awaiter* timer) {
+
+        void push(timer_awaiter* timer)
+        {
             heap.push_back(timer);
             sift_up(heap.size() - 1, timer);
         }
-        bool erase(timer_awaiter* timer) noexcept {
+
+        bool erase(timer_awaiter* timer) noexcept
+        {
             auto slot = timer->heap_index;
-            if (slot >= heap.size() || heap[slot] != timer) return false;
+            if (slot >= heap.size() || heap[slot] != timer)
+            {
+                return false;
+            }
             auto* last = heap.back();
             heap.pop_back();
             timer->heap_index = static_cast<std::size_t>(-1);
-            if (slot == heap.size()) return true;
-            if (slot && last->deadline < heap[(slot - 1) / 2]->deadline) {
+            if (slot == heap.size())
+            {
+                return true;
+            }
+            if (slot && last->deadline < heap[(slot - 1) / 2]->deadline)
+            {
                 sift_up(slot, last);
                 return true;
             }
-            while (slot < heap.size() / 2) {
+            while (slot < heap.size() / 2)
+            {
                 auto child = 2 * slot + 1;
-                if (child + 1 < heap.size() && heap[child + 1]->deadline < heap[child]->deadline) ++child;
-                if (last->deadline <= heap[child]->deadline) break;
+                if (child + 1 < heap.size() && heap[child + 1]->deadline < heap[child]->deadline)
+                {
+                    ++child;
+                }
+                if (last->deadline <= heap[child]->deadline)
+                {
+                    break;
+                }
                 place(slot, heap[child]);
                 slot = child;
             }
             place(slot, last);
             return true;
         }
-        void pop() noexcept { erase(top()); }
+
+        void pop() noexcept
+        {
+            erase(top());
+        }
     } timers;
+
     std::shared_ptr<callback_timers> callbacks;
 
-    fd_state* find_descriptor(std::uint64_t token) noexcept {
+    fd_state* find_descriptor(std::uint64_t token) noexcept
+    {
         const auto index = static_cast<std::uint32_t>(token);
-        if (index >= descriptors.size()) return nullptr;
+        if (index >= descriptors.size())
+        {
+            return nullptr;
+        }
         auto& state = descriptors[index];
         return state.fd != invalid_socket && state.token == token ? &state : nullptr;
     }
-    std::uint64_t add_descriptor(native_socket_type fd) {
+
+    std::uint64_t add_descriptor(native_socket_type fd)
+    {
         std::uint32_t index;
-        if (!free_descriptors.empty()) { index = free_descriptors.back(); free_descriptors.pop_back(); }
-        else {
+        if (!free_descriptors.empty())
+        {
+            index = free_descriptors.back();
+            free_descriptors.pop_back();
+        }
+        else
+        {
             if (descriptors.size() == UINT32_MAX)
+            {
                 throw std::overflow_error("descriptor slots exhausted");
-            if (descriptors.size() == descriptors.capacity()) {
+            }
+            if (descriptors.size() == descriptors.capacity())
+            {
                 const auto capacity = std::max<std::size_t>(16, descriptors.size() * 2);
                 free_descriptors.reserve(capacity);
                 descriptors.reserve(capacity);
             }
-            index = static_cast<std::uint32_t>(descriptors.size()); descriptors.emplace_back();
+            index = static_cast<std::uint32_t>(descriptors.size());
+            descriptors.emplace_back();
         }
         auto& state = descriptors[index];
         const auto generation = (state.token >> 32) + 1;
-        state.fd = fd; state.token = (generation << 32) | index; ++descriptor_count;
+        state.fd = fd;
+        state.token = (generation << 32) | index;
+        ++descriptor_count;
         return state.token;
     }
-    void erase_descriptor(std::uint64_t token) noexcept {
-        if (auto* state = find_descriptor(token)) {
+
+    void erase_descriptor(std::uint64_t token) noexcept
+    {
+        if (auto* state = find_descriptor(token))
+        {
             // Retire an exhausted slot so its previous tokens cannot recur.
             *state = {.token = token};
-            if ((token >> 32) != UINT32_MAX) free_descriptors.push_back(static_cast<std::uint32_t>(token));
+            if ((token >> 32) != UINT32_MAX)
+            {
+                free_descriptors.push_back(static_cast<std::uint32_t>(token));
+            }
             --descriptor_count;
         }
     }
 
-    void finish(fd_state& state, io_awaiter* operation, std::error_code error = {}) {
-        if (!operation) return;
+    void finish(fd_state& state, io_awaiter* operation, std::error_code error = {})
+    {
+        if (!operation)
+        {
+            return;
+        }
         operation->error = error;
         ready.push_back(operation->continuation);
         // wait_ready owns both slots. Clear both before another direction from
         // the same event (or cancel_all) can enqueue the continuation again.
-        if (state.reader == operation) state.reader = nullptr;
-        if (state.writer == operation) state.writer = nullptr;
+        if (state.reader == operation)
+        {
+            state.reader = nullptr;
+        }
+        if (state.writer == operation)
+        {
+            state.writer = nullptr;
+        }
     }
-    void cancel_all(bool running_on_owner) {
-        for (auto& state : descriptors) {
-            if (state.fd == invalid_socket) continue;
+
+    void cancel_all(bool running_on_owner)
+    {
+        for (auto& state : descriptors)
+        {
+            if (state.fd == invalid_socket)
+            {
+                continue;
+            }
             poller.remove(state.fd);
             finish(state, state.reader, canceled());
             finish(state, state.writer, canceled());
         }
-        descriptors.clear(); free_descriptors.clear(); descriptor_count = 0; tokens.clear();
+        descriptors.clear();
+        free_descriptors.clear();
+        descriptor_count = 0;
+        tokens.clear();
         dirty_descriptors.clear();
-        while (!timers.empty()) {
-            auto* timer = timers.top(); timers.pop();
-            timer->error = canceled(); ready.push_back(timer->continuation);
+        while (!timers.empty())
+        {
+            auto* timer = timers.top();
+            timers.pop();
+            timer->error = canceled();
+            ready.push_back(timer->continuation);
         }
-        if (callbacks) callbacks->clear();
+        if (callbacks)
+        {
+            callbacks->clear();
+        }
         cancellation_started = true;
-        if (cancellations && running_on_owner) {
+        if (cancellations && running_on_owner)
+        {
             auto failure = cancellations->dispatch(true);
-            if (!first_error) first_error = failure;
+            if (!first_error)
+            {
+                first_error = failure;
+            }
         }
     }
-    void update(fd_state& state, std::uint64_t token) {
+
+    void update(fd_state& state, std::uint64_t token)
+    {
         const unsigned interests = (state.reader ? 1U : 0U) | (state.writer ? 2U : 0U);
-        if (persistent_interests) {
-            if (interests == state.interests) return;
+        if (persistent_interests)
+        {
+            if (interests == state.interests)
+            {
+                return;
+            }
         }
         poller.update(state.fd, state.reader != nullptr, state.writer != nullptr, token);
         state.interests = interests;
     }
-    void reconcile_descriptors() {
+
+    void reconcile_descriptors()
+    {
         // Resumed I/O usually rearms the same direction before the next poll.
         // Keep that subscription unchanged; remove only truly idle interests.
-        for (const auto token : dirty_descriptors) {
+        for (const auto token : dirty_descriptors)
+        {
             auto* found = find_descriptor(token);
-            if (!found) continue;
+            if (!found)
+            {
+                continue;
+            }
             auto& state = *found;
             update(state, token);
             state.dirty = false;
@@ -324,31 +566,71 @@ struct io_context::implementation {
     }
 };
 
-io_context::cancellation_handle::~cancellation_handle() { cancel(); }
+io_context::cancellation_handle::~cancellation_handle()
+{
+    cancel();
+}
+
 io_context::cancellation_handle::cancellation_handle(cancellation_handle&& other) noexcept
-    : records_(std::move(other.records_)), id_(std::exchange(other.id_, 0)) {}
-io_context::cancellation_handle& io_context::cancellation_handle::operator=(cancellation_handle&& other) noexcept {
-    if (this != &other) { cancel(); records_ = std::move(other.records_); id_ = std::exchange(other.id_, 0); }
+    : records_(std::move(other.records_))
+    , id_(std::exchange(other.id_, 0))
+{
+}
+
+io_context::cancellation_handle& io_context::cancellation_handle::operator=(cancellation_handle&& other) noexcept
+{
+    if (this != &other)
+    {
+        cancel();
+        records_ = std::move(other.records_);
+        id_ = std::exchange(other.id_, 0);
+    }
     return *this;
 }
-void io_context::cancellation_handle::cancel() noexcept {
-    if (auto id = std::exchange(id_, 0)) {
-        if (auto records = records_.lock()) records->cancel(id);
+
+void io_context::cancellation_handle::cancel() noexcept
+{
+    if (auto id = std::exchange(id_, 0))
+    {
+        if (auto records = records_.lock())
+        {
+            records->cancel(id);
+        }
     }
     records_.reset();
 }
-io_context::cancellation_handle io_context::on_cancel(cancellation_token token,
-        std::function<void(std::error_code)> callback) {
-    if (!token.stop_possible()) return {};
+
+io_context::cancellation_handle io_context::on_cancel(
+    cancellation_token token,
+    std::function<void(std::error_code)> callback
+)
+{
+    if (!token.stop_possible())
+    {
+        return {};
+    }
     check_affinity(this);
-    if (stopped()) throw std::system_error(canceled());
-    if (!callback) throw std::invalid_argument("empty cancellation callback");
+    if (stopped())
+    {
+        throw std::system_error(canceled());
+    }
+    if (!callback)
+    {
+        throw std::invalid_argument("empty cancellation callback");
+    }
     token.throw_if_cancelled();
-    if (!impl_->cancellations) impl_->cancellations = std::make_shared<cancellation_records>(impl_->poller);
+    if (!impl_->cancellations)
+    {
+        impl_->cancellations = std::make_shared<cancellation_records>(impl_->poller);
+    }
     auto& records = *impl_->cancellations;
-    if (records.next_id == UINT64_MAX) throw std::overflow_error("cancellation identity exhausted");
+    if (records.next_id == UINT64_MAX)
+    {
+        throw std::overflow_error("cancellation identity exhausted");
+    }
     cancellation_handle result;
-    result.id_ = ++records.next_id; result.records_ = impl_->cancellations;
+    result.id_ = ++records.next_id;
+    result.records_ = impl_->cancellations;
     auto& entry = records.entries.try_emplace(result.id_).first->second;
     entry.id = result.id_;
     entry.token = std::move(token);
@@ -356,26 +638,49 @@ io_context::cancellation_handle io_context::on_cancel(cancellation_token token,
     entry.wake.emplace(entry.token, [&records, &entry] { records.enqueue(entry); });
     return result;
 }
-void io_context::cancel_wait(io_awaiter& operation, std::error_code error) {
+
+void io_context::cancel_wait(io_awaiter& operation, std::error_code error)
+{
     const auto token = impl_->tokens.find(operation.fd);
-    if (token == impl_->tokens.end()) return;
+    if (token == impl_->tokens.end())
+    {
+        return;
+    }
     auto& state = *impl_->find_descriptor(token->second);
-    if (state.reader != &operation && state.writer != &operation) return;
+    if (state.reader != &operation && state.writer != &operation)
+    {
+        return;
+    }
     impl_->finish(state, &operation, error);
     impl_->update(state, token->second);
 }
-void io_context::cancel_wait(timer_awaiter& operation, std::error_code error) {
-    if (!impl_->timers.erase(&operation)) return;
+
+void io_context::cancel_wait(timer_awaiter& operation, std::error_code error)
+{
+    if (!impl_->timers.erase(&operation))
+    {
+        return;
+    }
     operation.error = error;
     impl_->ready.push_back(operation.continuation);
 }
 
-io_context::timer_handle::~timer_handle() { cancel(); }
+io_context::timer_handle::~timer_handle()
+{
+    cancel();
+}
+
 io_context::timer_handle::timer_handle(timer_handle&& other) noexcept
-    : timers_(std::move(other.timers_)), deadline_(other.deadline_),
-      id_(std::exchange(other.id_, 0)) {}
-io_context::timer_handle& io_context::timer_handle::operator=(timer_handle&& other) noexcept {
-    if (this != &other) {
+    : timers_(std::move(other.timers_))
+    , deadline_(other.deadline_)
+    , id_(std::exchange(other.id_, 0))
+{
+}
+
+io_context::timer_handle& io_context::timer_handle::operator=(timer_handle&& other) noexcept
+{
+    if (this != &other)
+    {
         cancel();
         timers_ = std::move(other.timers_);
         deadline_ = other.deadline_;
@@ -383,24 +688,47 @@ io_context::timer_handle& io_context::timer_handle::operator=(timer_handle&& oth
     }
     return *this;
 }
-void io_context::timer_handle::cancel() noexcept {
+
+void io_context::timer_handle::cancel() noexcept
+{
     const auto id = std::exchange(id_, 0);
-    if (id) {
-        if (auto timers = timers_.lock()) {
+    if (id)
+    {
+        if (auto timers = timers_.lock())
+        {
             // Captures can cancel other timers, so destroy outside the map.
             auto node = timers->callbacks.extract({deadline_, id});
         }
     }
     timers_.reset();
 }
-io_context::timer_handle io_context::call_at(std::chrono::steady_clock::time_point deadline,
-                                            std::function<void()> callback) {
-    if (impl_->running.load(std::memory_order_acquire)) check_affinity(this);
-    if (stopped()) throw std::system_error(canceled());
-    if (!callback) throw std::invalid_argument("empty timer callback");
-    if (!impl_->callbacks) impl_->callbacks = std::make_shared<callback_timers>();
+
+io_context::timer_handle io_context::call_at(
+    std::chrono::steady_clock::time_point deadline,
+    std::function<void()> callback
+)
+{
+    if (impl_->running.load(std::memory_order_acquire))
+    {
+        check_affinity(this);
+    }
+    if (stopped())
+    {
+        throw std::system_error(canceled());
+    }
+    if (!callback)
+    {
+        throw std::invalid_argument("empty timer callback");
+    }
+    if (!impl_->callbacks)
+    {
+        impl_->callbacks = std::make_shared<callback_timers>();
+    }
     auto& timers = *impl_->callbacks;
-    if (timers.next_id == UINT64_MAX) throw std::overflow_error("timer identity exhausted");
+    if (timers.next_id == UINT64_MAX)
+    {
+        throw std::overflow_error("timer identity exhausted");
+    }
     ++timers.next_id;
     timer_handle handle;
     handle.deadline_ = deadline;
@@ -410,9 +738,18 @@ io_context::timer_handle io_context::call_at(std::chrono::steady_clock::time_poi
     return handle;
 }
 
-io_context::io_context(io_backend selected) : impl_(std::make_unique<implementation>(selected)) {}
-io_backend io_context::backend() const noexcept { return impl_->poller.backend(); }
-io_context::~io_context() {
+io_context::io_context(io_backend selected)
+    : impl_(std::make_unique<implementation>(selected))
+{
+}
+
+io_backend io_context::backend() const noexcept
+{
+    return impl_->poller.backend();
+}
+
+io_context::~io_context()
+{
     // Caller must join run() before destruction. Destruct user objects while the
     // entire implementation is alive, and reject reentrant submissions.
     stop();
@@ -420,95 +757,185 @@ io_context::~io_context() {
     impl_->incoming_tasks.clear();
     impl_->incoming_posts.clear();
     impl_->posts.clear();
-    for (auto root : impl_->roots) root.destroy();
+    for (auto root : impl_->roots)
+    {
+        root.destroy();
+    }
     impl_->roots.clear();
     impl_->ready.clear();
     impl_->services.clear();
 }
-io_context* io_context::current() noexcept { return active_context; }
-bool io_context::stopped() const noexcept { return impl_->stopping.load(std::memory_order_acquire); }
-void io_context::stop() noexcept {
-    if (!impl_->stopping.exchange(true, std::memory_order_acq_rel)) impl_->poller.wake();
+
+io_context* io_context::current() noexcept
+{
+    return active_context;
 }
-std::shared_ptr<void> io_context::local_state(std::shared_ptr<const void> key,
-        const std::function<std::shared_ptr<void>()>& create) {
+
+bool io_context::stopped() const noexcept
+{
+    return impl_->stopping.load(std::memory_order_acquire);
+}
+
+void io_context::stop() noexcept
+{
+    if (!impl_->stopping.exchange(true, std::memory_order_acq_rel))
+    {
+        impl_->poller.wake();
+    }
+}
+
+std::shared_ptr<void> io_context::local_state(
+    std::shared_ptr<const void> key,
+    const std::function<std::shared_ptr<void>()>& create
+)
+{
     check_affinity(this);
-    if (!key || !create) throw std::invalid_argument("invalid context service");
-    if (stopped()) throw std::system_error(canceled());
+    if (!key || !create)
+    {
+        throw std::invalid_argument("invalid context service");
+    }
+    if (stopped())
+    {
+        throw std::system_error(canceled());
+    }
     auto it = impl_->services.find(key.get());
-    if (it != impl_->services.end()) return it->second.value;
+    if (it != impl_->services.end())
+    {
+        return it->second.value;
+    }
     auto value = create();
-    if (!value) throw std::invalid_argument("empty context service");
+    if (!value)
+    {
+        throw std::invalid_argument("empty context service");
+    }
     const auto address = key.get();
     impl_->services.emplace(address, implementation::service{std::move(key), value});
     return value;
 }
-void* io_context::find_local_state(const void* key) {
+
+void* io_context::find_local_state(const void* key)
+{
     check_affinity(this);
-    if (stopped()) throw std::system_error(canceled());
+    if (stopped())
+    {
+        throw std::system_error(canceled());
+    }
     const auto it = impl_->services.find(key);
     return it == impl_->services.end() ? nullptr : it->second.value.get();
 }
-void io_context::spawn(task<void> work) {
+
+void io_context::spawn(task<void> work)
+{
     auto& p = *impl_;
-    if (current() == this) {
-        if (stopped()) throw std::system_error(canceled());
+    if (current() == this)
+    {
+        if (stopped())
+        {
+            throw std::system_error(canceled());
+        }
         p.adopt_root(*this, work);
         return;
     }
     bool notify;
     {
         std::lock_guard lock(p.inbox_mutex);
-        if (stopped()) throw std::system_error(canceled());
+        if (stopped())
+        {
+            throw std::system_error(canceled());
+        }
         p.incoming_tasks.push_back(std::move(work));
         notify = p.mark_inbox();
     }
-    if (notify) p.poller.wake();
+    if (notify)
+    {
+        p.poller.wake();
+    }
 }
-void io_context::post(std::function<void()> work) {
-    if (!work) throw std::invalid_argument("empty posted function");
+
+void io_context::post(std::function<void()> work)
+{
+    if (!work)
+    {
+        throw std::invalid_argument("empty posted function");
+    }
     auto& p = *impl_;
-    if (current() == this) {
-        if (stopped()) throw std::system_error(canceled());
+    if (current() == this)
+    {
+        if (stopped())
+        {
+            throw std::system_error(canceled());
+        }
         p.posts.push_back(std::move(work));
         return;
     }
     bool notify;
     {
         std::lock_guard lock(p.inbox_mutex);
-        if (stopped()) throw std::system_error(canceled());
+        if (stopped())
+        {
+            throw std::system_error(canceled());
+        }
         p.incoming_posts.push_back(std::move(work));
         notify = p.mark_inbox();
     }
-    if (notify) p.poller.wake();
+    if (notify)
+    {
+        p.poller.wake();
+    }
 }
-void io_context::completed(void* context, std::coroutine_handle<> handle) noexcept {
+
+void io_context::completed(void* context, std::coroutine_handle<> handle) noexcept
+{
     auto& p = *static_cast<io_context*>(context)->impl_;
     auto h = task<void>::handle_type::from_address(handle.address());
     h.promise().completed_next = p.completed_head;
     p.completed_head = handle;
 }
-void io_context::schedule(std::coroutine_handle<> handle) {
+
+void io_context::schedule(std::coroutine_handle<> handle)
+{
     check_affinity(this);
     impl_->ready.push_back(handle);
 }
-bool io_context::io_awaiter::await_ready() noexcept {
-    if (context.stopped()) { error = canceled(); return true; }
+
+bool io_context::io_awaiter::await_ready() noexcept
+{
+    if (context.stopped())
+    {
+        error = canceled();
+        return true;
+    }
     return false;
 }
-void io_context::io_awaiter::await_resume() {
-    if (token.stop_possible()) {
+
+void io_context::io_awaiter::await_resume()
+{
+    if (token.stop_possible())
+    {
         registration.cancel();
         token.throw_if_cancelled();
     }
-    if (error) throw std::system_error(error);
-    if (context.stopped()) throw std::system_error(canceled());
+    if (error)
+    {
+        throw std::system_error(error);
+    }
+    if (context.stopped())
+    {
+        throw std::system_error(canceled());
+    }
 }
-bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle) {
+
+bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle)
+{
     profiling::scope timing(profiling::stage::io_arm);
     check_affinity(this);
-    if (stopped()) { operation.error = canceled(); return false; }
-    if (operation.fd == invalid_socket) {
+    if (stopped())
+    {
+        operation.error = canceled();
+        return false;
+    }
+    if (operation.fd == invalid_socket)
+    {
         operation.error = std::make_error_code(std::errc::bad_file_descriptor);
         return false;
     }
@@ -516,32 +943,71 @@ bool io_context::arm(io_awaiter& operation, std::coroutine_handle<> handle) {
     auto token_it = p.tokens.find(operation.fd);
     const bool inserted = token_it == p.tokens.end();
     std::uint64_t token;
-    if (inserted) {
+    if (inserted)
+    {
         token = p.add_descriptor(operation.fd);
-        try { p.tokens.emplace(operation.fd, token); }
-        catch (...) { p.erase_descriptor(token); throw; }
-    } else token = token_it->second;
+        try
+        {
+            p.tokens.emplace(operation.fd, token);
+        }
+        catch (...)
+        {
+            p.erase_descriptor(token);
+            throw;
+        }
+    }
+    else
+    {
+        token = token_it->second;
+    }
     auto& state = *p.find_descriptor(token);
     const bool read = !operation.writable || operation.either;
     const bool write = operation.writable || operation.either;
     if ((read && state.reader) || (write && state.writer))
+    {
         throw std::logic_error("only one pending operation per socket direction is allowed");
+    }
     operation.continuation = handle;
-    if (read) state.reader = &operation;
-    if (write) state.writer = &operation;
-    try { p.update(state, token); }
-    catch (...) {
-        if (read) state.reader = nullptr;
-        if (write) state.writer = nullptr;
-        if (inserted) { p.tokens.erase(operation.fd); p.erase_descriptor(token); }
+    if (read)
+    {
+        state.reader = &operation;
+    }
+    if (write)
+    {
+        state.writer = &operation;
+    }
+    try
+    {
+        p.update(state, token);
+    }
+    catch (...)
+    {
+        if (read)
+        {
+            state.reader = nullptr;
+        }
+        if (write)
+        {
+            state.writer = nullptr;
+        }
+        if (inserted)
+        {
+            p.tokens.erase(operation.fd);
+            p.erase_descriptor(token);
+        }
         throw;
     }
     return true;
 }
-void io_context::cancel(native_socket_type fd) noexcept {
+
+void io_context::cancel(native_socket_type fd) noexcept
+{
     auto& p = *impl_;
     const auto it = p.tokens.find(fd);
-    if (it == p.tokens.end()) return;
+    if (it == p.tokens.end())
+    {
+        return;
+    }
     auto& state = *p.find_descriptor(it->second);
     p.poller.remove(fd);
     p.finish(state, state.reader, canceled());
@@ -549,53 +1015,121 @@ void io_context::cancel(native_socket_type fd) noexcept {
     p.erase_descriptor(it->second);
     p.tokens.erase(it);
 }
-void io_context::release_socket(native_socket_type fd) noexcept {
+
+void io_context::release_socket(native_socket_type fd) noexcept
+{
     cancel(fd);
     impl_->poller.forget(fd);
 }
-bool io_context::timer_awaiter::await_ready() noexcept {
-    if (context.stopped()) { error = canceled(); return true; }
+
+bool io_context::timer_awaiter::await_ready() noexcept
+{
+    if (context.stopped())
+    {
+        error = canceled();
+        return true;
+    }
     return false; // Even zero-duration sleeps yield, so they cannot starve shutdown.
 }
-void io_context::timer_awaiter::await_resume() {
-    if (token.stop_possible()) {
+
+void io_context::timer_awaiter::await_resume()
+{
+    if (token.stop_possible())
+    {
         registration.cancel();
         token.throw_if_cancelled();
     }
-    if (error) throw std::system_error(error);
-    if (context.stopped()) throw std::system_error(canceled());
+    if (error)
+    {
+        throw std::system_error(error);
+    }
+    if (context.stopped())
+    {
+        throw std::system_error(canceled());
+    }
 }
-bool io_context::arm(timer_awaiter& operation, std::coroutine_handle<> handle) {
+
+bool io_context::arm(timer_awaiter& operation, std::coroutine_handle<> handle)
+{
     check_affinity(this);
-    if (stopped()) { operation.error = canceled(); return false; }
+    if (stopped())
+    {
+        operation.error = canceled();
+        return false;
+    }
     operation.continuation = handle;
     impl_->timers.push(&operation);
     return true;
 }
-void io_context::yield_awaiter::await_resume() {
+
+void io_context::yield_awaiter::await_resume()
+{
     token.throw_if_cancelled();
-    if (context.stopped()) throw std::system_error(canceled());
+    if (context.stopped())
+    {
+        throw std::system_error(canceled());
+    }
 }
 
-void io_context::run() {
+void io_context::run()
+{
     auto& p = *impl_;
-    if (active_context) throw std::logic_error("nested io_context::run is not supported");
-    if (p.running.exchange(true)) throw std::logic_error("io_context already running");
-    struct reset_guard {
+    if (active_context)
+    {
+        throw std::logic_error("nested io_context::run is not supported");
+    }
+    if (p.running.exchange(true))
+    {
+        throw std::logic_error("io_context already running");
+    }
+
+    struct reset_guard
+    {
         implementation& p;
-        ~reset_guard() { active_context = nullptr; p.running.store(false); }
+
+        ~reset_guard()
+        {
+            active_context = nullptr;
+            p.running.store(false);
+        }
     } guard{p};
-    if (p.has_run) throw std::logic_error("io_context is single-use");
+
+    if (p.has_run)
+    {
+        throw std::logic_error("io_context is single-use");
+    }
     p.has_run = true;
     active_context = this;
     profiling::scope run_timing(profiling::stage::reactor_run);
-    auto record_error = [&](std::exception_ptr error) {
-        try { if (error) std::rethrow_exception(error); }
-        catch (const std::system_error& e) {
-            if (stopped() && e.code() == std::errc::operation_canceled) return;
-            if (!p.first_error) p.first_error = error;
+    auto record_error = [&](std::exception_ptr error)
+    {
+        try
+        {
+            if (error)
+            {
+                std::rethrow_exception(error);
+            }
+        }
+        catch (const std::system_error& e)
+        {
+            if (stopped() && e.code() == std::errc::operation_canceled)
+            {
+                return;
+            }
+            if (!p.first_error)
+            {
+                p.first_error = error;
+            }
             stop();
-        } catch (...) { if (!p.first_error) p.first_error = error; stop(); }
+        }
+        catch (...)
+        {
+            if (!p.first_error)
+            {
+                p.first_error = error;
+            }
+            stop();
+        }
     };
     std::array<detail::poll_event, 256> events{};
     // Reuse the empty batches between drains. Reconstructing two deques on
@@ -603,47 +1137,78 @@ void io_context::run() {
     std::deque<task<void>> new_tasks;
     std::deque<std::function<void()>> new_posts;
     bool inbox_buffered = false;
-    for (;;) {
+    for (;;)
+    {
         profiling::scope inbox_timing(profiling::stage::inbox);
         bool inbox_deferred = p.inbox_pending.load(std::memory_order_acquire);
-        if (inbox_deferred || inbox_buffered) {
-            if (inbox_deferred) {
+        if (inbox_deferred || inbox_buffered)
+        {
+            if (inbox_deferred)
+            {
                 const bool take_tasks = new_tasks.empty();
                 const bool take_posts = new_posts.empty();
-                if (take_tasks || take_posts) {
+                if (take_tasks || take_posts)
+                {
                     std::lock_guard lock(p.inbox_mutex);
-                    if (take_tasks) new_tasks.swap(p.incoming_tasks);
-                    if (take_posts) new_posts.swap(p.incoming_posts);
+                    if (take_tasks)
+                    {
+                        new_tasks.swap(p.incoming_tasks);
+                    }
+                    if (take_posts)
+                    {
+                        new_posts.swap(p.incoming_posts);
+                    }
                     // Leave new arrivals in a category queued until its local batch drains.
-                    inbox_deferred = (!take_tasks && !p.incoming_tasks.empty()) ||
-                                     (!take_posts && !p.incoming_posts.empty());
+                    inbox_deferred =
+                        (!take_tasks && !p.incoming_tasks.empty()) || (!take_posts && !p.incoming_posts.empty());
                     p.inbox_pending.store(inbox_deferred, std::memory_order_relaxed);
                 }
             }
             if (!new_tasks.empty())
+            {
                 p.promote_batch(new_tasks, [&](auto& work) { p.adopt_root(*this, work); });
+            }
             if (!new_posts.empty())
+            {
                 p.promote_batch(new_posts, [&](auto& work) { p.posts.push_back(std::move(work)); });
+            }
             inbox_buffered = !new_tasks.empty() || !new_posts.empty();
         }
         inbox_timing.close();
         if (p.cancellations && p.cancellations->pending.load(std::memory_order_acquire))
+        {
             record_error(p.cancellations->dispatch());
-        if (stopped() && !p.cancellation_started) p.cancel_all(true);
+        }
+        if (stopped() && !p.cancellation_started)
+        {
+            p.cancel_all(true);
+        }
         profiling::scope post_timing(profiling::stage::post_dispatch);
-        for (std::size_t i = 0, count = std::min(p.posts.size(), dispatch_limit); i < count; ++i) {
-            auto work = std::move(p.posts.front()); p.posts.pop_front();
-            try { work(); } catch (...) { record_error(std::current_exception()); }
+        for (std::size_t i = 0, count = std::min(p.posts.size(), dispatch_limit); i < count; ++i)
+        {
+            auto work = std::move(p.posts.front());
+            p.posts.pop_front();
+            try
+            {
+                work();
+            }
+            catch (...)
+            {
+                record_error(std::current_exception());
+            }
         }
         post_timing.close();
         profiling::scope ready_timing(profiling::stage::coroutine_execution);
-        for (std::size_t i = 0, count = std::min(p.ready.size(), dispatch_limit); i < count; ++i) {
-            auto handle = p.ready.front(); p.ready.pop_front();
+        for (std::size_t i = 0, count = std::min(p.ready.size(), dispatch_limit); i < count; ++i)
+        {
+            auto handle = p.ready.front();
+            p.ready.pop_front();
             handle.resume();
         }
         ready_timing.close();
         profiling::scope reap_timing(profiling::stage::root_reaping);
-        while (p.completed_head) {
+        while (p.completed_head)
+        {
             auto h = task<void>::handle_type::from_address(p.completed_head.address());
             p.completed_head = h.promise().completed_next;
             record_error(h.promise().exception);
@@ -654,66 +1219,134 @@ void io_context::run() {
             h.destroy();
         }
         reap_timing.close();
-        if (stopped()) {
-            if (!p.cancellation_started) p.cancel_all(true);
+        if (stopped())
+        {
+            if (!p.cancellation_started)
+            {
+                p.cancel_all(true);
+            }
             bool inbox_empty;
-            { std::lock_guard lock(p.inbox_mutex); inbox_empty = p.incoming_tasks.empty() && p.incoming_posts.empty(); }
-            if (p.ready.empty() && p.posts.empty() && !inbox_buffered && inbox_empty) break;
+            {
+                std::lock_guard lock(p.inbox_mutex);
+                inbox_empty = p.incoming_tasks.empty() && p.incoming_posts.empty();
+            }
+            if (p.ready.empty() && p.posts.empty() && !inbox_buffered && inbox_empty)
+            {
+                break;
+            }
             continue;
         }
         profiling::scope timer_timing(profiling::stage::timers);
-        if (!p.timers.empty() || (p.callbacks && !p.callbacks->callbacks.empty())) {
+        if (!p.timers.empty() || (p.callbacks && !p.callbacks->callbacks.empty()))
+        {
             const auto now = std::chrono::steady_clock::now();
-            for (std::size_t i = 0; i < dispatch_limit && !p.timers.empty() && p.timers.top()->deadline <= now; ++i) {
-                p.ready.push_back(p.timers.top()->continuation); p.timers.pop();
+            for (std::size_t i = 0; i < dispatch_limit && !p.timers.empty() && p.timers.top()->deadline <= now; ++i)
+            {
+                p.ready.push_back(p.timers.top()->continuation);
+                p.timers.pop();
             }
-            for (std::size_t i = 0; i < dispatch_limit && p.callbacks && !p.callbacks->callbacks.empty(); ++i) {
+            for (std::size_t i = 0; i < dispatch_limit && p.callbacks && !p.callbacks->callbacks.empty(); ++i)
+            {
                 auto it = p.callbacks->callbacks.begin();
-                if (it->first.first > now) break;
+                if (it->first.first > now)
+                {
+                    break;
+                }
                 auto node = p.callbacks->callbacks.extract(it);
-                try { node.mapped()(); } catch (...) { record_error(std::current_exception()); }
-                if (stopped()) break;
+                try
+                {
+                    node.mapped()();
+                }
+                catch (...)
+                {
+                    record_error(std::current_exception());
+                }
+                if (stopped())
+                {
+                    break;
+                }
             }
         }
-        if (stopped()) continue;
+        if (stopped())
+        {
+            continue;
+        }
         int timeout = -1;
-        if (!p.ready.empty() || !p.posts.empty() || inbox_buffered || inbox_deferred ||
-            (p.cancellations && p.cancellations->pending.load(std::memory_order_acquire))) timeout = 0;
-        else if (!p.timers.empty() || (p.callbacks && !p.callbacks->callbacks.empty())) {
-            auto deadline = p.timers.empty() ? std::chrono::steady_clock::time_point::max()
-                                           : p.timers.top()->deadline;
+        if (!p.ready.empty() || !p.posts.empty() || inbox_buffered || inbox_deferred
+            || (p.cancellations && p.cancellations->pending.load(std::memory_order_acquire)))
+        {
+            timeout = 0;
+        }
+        else if (!p.timers.empty() || (p.callbacks && !p.callbacks->callbacks.empty()))
+        {
+            auto deadline = p.timers.empty() ? std::chrono::steady_clock::time_point::max() : p.timers.top()->deadline;
             if (p.callbacks && !p.callbacks->callbacks.empty())
+            {
                 deadline = std::min(deadline, p.callbacks->callbacks.begin()->first.first);
+            }
             const auto current = std::chrono::steady_clock::now();
-            auto ms = deadline <= current ? 0 : std::chrono::ceil<std::chrono::milliseconds>(deadline - current).count();
+            auto ms =
+                deadline <= current ? 0 : std::chrono::ceil<std::chrono::milliseconds>(deadline - current).count();
             timeout = static_cast<int>(std::min<decltype(ms)>(ms, INT_MAX));
         }
         timer_timing.close();
         // Task-only loops have no descriptor readiness to collect. Inbox and
         // timers are still checked on every bounded dispatch turn above.
-        if (timeout == 0 && !p.descriptor_count) continue;
-        try {
-            if (p.persistent_interests) p.reconcile_descriptors();
-            const auto count = profiling::measure(timeout == 0 ? profiling::stage::poll_nonblocking
-                : profiling::stage::poll_blocking, [&] { return p.poller.wait(events, timeout); });
+        if (timeout == 0 && !p.descriptor_count)
+        {
+            continue;
+        }
+        try
+        {
+            if (p.persistent_interests)
+            {
+                p.reconcile_descriptors();
+            }
+            const auto count = profiling::measure(
+                timeout == 0 ? profiling::stage::poll_nonblocking : profiling::stage::poll_blocking,
+                [&] { return p.poller.wait(events, timeout); }
+            );
             profiling::scope event_timing(profiling::stage::event_dispatch);
-            for (std::size_t i = 0; i < count; ++i) {
+            for (std::size_t i = 0; i < count; ++i)
+            {
                 const auto& event = events[i];
                 auto* found = p.find_descriptor(event.token);
-                if (!found) continue;
+                if (!found)
+                {
+                    continue;
+                }
                 auto& state = *found;
-                if (event.readable || event.error) p.finish(state, state.reader);
-                if (event.writable || event.error) p.finish(state, state.writer);
-                if (p.persistent_interests) {
-                    if (!state.dirty) {
+                if (event.readable || event.error)
+                {
+                    p.finish(state, state.reader);
+                }
+                if (event.writable || event.error)
+                {
+                    p.finish(state, state.writer);
+                }
+                if (p.persistent_interests)
+                {
+                    if (!state.dirty)
+                    {
                         p.dirty_descriptors.push_back(event.token);
                         state.dirty = true;
                     }
-                } else if (state.reader || state.writer) p.update(state, event.token);
+                }
+                else if (state.reader || state.writer)
+                {
+                    p.update(state, event.token);
+                }
             }
-        } catch (...) { record_error(std::current_exception()); }
+        }
+        catch (...)
+        {
+            record_error(std::current_exception());
+        }
     }
-    if (p.first_error) std::rethrow_exception(p.first_error);
+    if (p.first_error)
+    {
+        std::rethrow_exception(p.first_error);
+    }
 }
 
 } // namespace pace

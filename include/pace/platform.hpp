@@ -14,7 +14,8 @@
 #include <ws2tcpip.h>
 #endif
 
-namespace pace {
+namespace pace
+{
 
 #ifdef _WIN32
 using native_socket_type = std::uintptr_t;
@@ -23,31 +24,47 @@ using native_socket_type = int;
 #endif
 inline constexpr native_socket_type invalid_socket = static_cast<native_socket_type>(-1);
 
-namespace detail {
+namespace detail
+{
 
 #ifdef _WIN32
-inline SOCKET create_windows_socket(int family, int type, int protocol) noexcept {
+inline SOCKET create_windows_socket(int family, int type, int protocol) noexcept
+{
     return ::WSASocketW(family, type, protocol, nullptr, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
 }
 #endif
 
 // Function-local initialization is thread-safe and precedes every owned socket.
-inline void initialize_sockets() {
+inline void initialize_sockets()
+{
 #ifdef _WIN32
-    struct socket_runtime {
-        socket_runtime() {
+    struct socket_runtime
+    {
+        socket_runtime()
+        {
             WSADATA data{};
             const int error = ::WSAStartup(MAKEWORD(2, 2), &data);
-            if (error) throw std::system_error(error, std::system_category(), "WSAStartup");
+            if (error)
+            {
+                throw std::system_error(error, std::system_category(), "WSAStartup");
+            }
         }
-        ~socket_runtime() { ::WSACleanup(); }
+
+        ~socket_runtime()
+        {
+            ::WSACleanup();
+        }
     };
+
     static socket_runtime runtime;
     (void)runtime;
 #endif
 }
 
-inline void initialize_winsock() { initialize_sockets(); }
+inline void initialize_winsock()
+{
+    initialize_sockets();
+}
 
 } // namespace detail
 } // namespace pace

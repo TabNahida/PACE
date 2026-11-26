@@ -1,15 +1,18 @@
 #pragma once
 
-#include <pace/platform.hpp>
 #include <pace/io_backend.hpp>
+#include <pace/platform.hpp>
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
 
-namespace pace::detail {
+namespace pace::detail
+{
 
-struct poll_event {
+struct poll_event
+{
     std::uint64_t token;
     bool readable;
     bool writable;
@@ -20,7 +23,8 @@ struct poll_event {
 // In the default one-shot mode, delivery disarms the entire descriptor,
 // including its other direction. Persistent mode retains explicit interests.
 // UINT64_MAX is reserved for the internal wakeup notification.
-class poller {
+class poller
+{
 public:
 #if defined(__linux__)
     static constexpr bool supports_persistent = true;
