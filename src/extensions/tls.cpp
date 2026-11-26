@@ -70,6 +70,49 @@ std::string dns_name(std::string_view value) {
     return result;
 }
 
+enum class verification { ca, certificate_pin, spki_pin, callback, insecure };
+
+struct peer_identity {
+    std::string name;
+    bool ip = false;
+};
+
+int check_identity(X509* certificate, const peer_identity& identity) {
+    if (identity.name.empty()) return X509_V_OK;
+    if (identity.ip) {
+        return X509_check_ip_asc(certificate, identity.name.c_str(), 0) == 1
+            ? X509_V_OK : X509_V_ERR_IP_ADDRESS_MISMATCH;
+    }
+    return X509_check_host(certificate, identity.name.data(), identity.name.size(),
+                           X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, nullptr) == 1
+        ? X509_V_OK : X509_V_ERR_HOSTNAME_MISMATCH;
+}
+
+bool matches_pin(X509* certificate, verification mode, const sha256_digest& pin) {
+    std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
+    unsigned size = 0;
+    if (mode == verification::certificate_pin) {
+        if (X509_digest(certificate, EVP_sha256(), digest.data(), &size) != 1) return false;
+    } else {
+        unsigned char* der = nullptr;
+        const int length = i2d_X509_PUBKEY(X509_get_X509_PUBKEY(certificate), &der);
+        const auto release = [](unsigned char* bytes) { OPENSSL_free(bytes); };
+        const std::unique_ptr<unsigned char, decltype(release)> encoded(der, release);
+        if (length <= 0 || EVP_Digest(encoded.get(), static_cast<std::size_t>(length), digest.data(), &size,
+                                     EVP_sha256(), nullptr) != 1) return false;
+    }
+    return size == pin.size() && CRYPTO_memcmp(digest.data(), pin.data(), size) == 0;
+}
+
+std::string certificate_der(const X509* certificate) {
+    const int size = i2d_X509(certificate, nullptr);
+    if (size <= 0) tls_error("encode TLS peer certificate");
+    std::string der(static_cast<std::size_t>(size), '\0');
+    auto* output = reinterpret_cast<unsigned char*>(der.data());
+    if (i2d_X509(certificate, &output) != size) tls_error("encode TLS peer certificate");
+    return der;
+}
+
 bool socket_interrupted() noexcept {
 #ifdef _WIN32
     return ::WSAGetLastError() == WSAEINTR;
@@ -211,6 +254,9 @@ struct context::implementation {
     std::map<std::string, std::shared_ptr<implementation>, std::less<>> names;
     sni_policy missing = sni_policy::use_default;
     sni_policy unrecognized = sni_policy::use_default;
+    verification verify = verification::ca;
+    sha256_digest pin{};
+    verification_callback verifier;
     std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)> handle{nullptr, SSL_CTX_free};
     explicit implementation(role value, trust_source trust) : mode(value) {
         if (mode != role::client && mode != role::server)
@@ -237,6 +283,52 @@ struct context::implementation {
     void freeze() {
         std::lock_guard lock(mutex);
         frozen = true;
+    }
+    void check_client_verification_mutable() const {
+        check_mutable();
+        if (mode != role::client) throw std::invalid_argument("TLS verification policy requires a client context");
+    }
+    void set_verification(verification policy) {
+        verify = policy;
+        SSL_CTX_set_verify(handle.get(), verify == verification::insecure ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, nullptr);
+        SSL_CTX_set_cert_verify_callback(handle.get(), uses_custom_verification() ? verify_certificate : nullptr, this);
+    }
+    bool uses_custom_verification() const noexcept {
+        return verify != verification::ca && verify != verification::insecure;
+    }
+    static int verify_certificate(X509_STORE_CTX* store, void* argument) noexcept {
+        const auto& config = *static_cast<const implementation*>(argument);
+        auto* ssl = static_cast<SSL*>(X509_STORE_CTX_get_ex_data(store, SSL_get_ex_data_X509_STORE_CTX_idx()));
+        const auto* identity = ssl ? static_cast<const peer_identity*>(SSL_get_app_data(ssl)) : nullptr;
+        auto* leaf = X509_STORE_CTX_get0_cert(store);
+        int error = X509_V_ERR_APPLICATION_VERIFICATION;
+        if (leaf && identity) {
+            error = check_identity(leaf, *identity);
+            if (error == X509_V_OK) {
+                try {
+                    bool accepted;
+                    if (config.verify == verification::callback) {
+                        const auto* supplied = X509_STORE_CTX_get0_untrusted(store);
+                        const int count = supplied ? sk_X509_num(supplied) : 0;
+                        std::vector<std::string> chain;
+                        chain.reserve(static_cast<std::size_t>(count) + 1);
+                        chain.push_back(certificate_der(leaf));
+                        for (int i = 0; i < count; ++i) {
+                            const auto* certificate = sk_X509_value(supplied, i);
+                            if (i != 0 || X509_cmp(leaf, certificate) != 0)
+                                chain.push_back(certificate_der(certificate));
+                        }
+                        accepted = config.verifier(std::span<const std::string>(chain));
+                    } else accepted = matches_pin(leaf, config.verify, config.pin);
+                    if (!accepted) error = X509_V_ERR_APPLICATION_VERIFICATION;
+                } catch (...) {
+                    // Exceptions cannot cross the OpenSSL callback boundary.
+                    error = X509_V_ERR_APPLICATION_VERIFICATION;
+                }
+            }
+        }
+        X509_STORE_CTX_set_error(store, error);
+        return error == X509_V_OK;
     }
     void enable_sni() {
         // The servername callback runs after session resumption. Disable both
@@ -334,6 +426,31 @@ void context::load_verify_pem(std::string_view certificates) {
         }
     }
 }
+void context::set_verify_pin(pin_type type, sha256_digest digest) {
+    if (type != pin_type::leaf_certificate && type != pin_type::subject_public_key_info)
+        throw std::invalid_argument("invalid TLS pin type");
+    if (!impl_) throw std::logic_error("moved-from TLS context");
+    std::lock_guard lock(impl_->mutex);
+    impl_->check_client_verification_mutable();
+    impl_->pin = digest;
+    impl_->verifier = {};
+    impl_->set_verification(type == pin_type::leaf_certificate ? verification::certificate_pin : verification::spki_pin);
+}
+void context::set_verify_callback(verification_callback verifier) {
+    if (!verifier) throw std::invalid_argument("empty TLS verification callback");
+    if (!impl_) throw std::logic_error("moved-from TLS context");
+    std::lock_guard lock(impl_->mutex);
+    impl_->check_client_verification_mutable();
+    impl_->verifier = std::move(verifier);
+    impl_->set_verification(verification::callback);
+}
+void context::insecure_skip_verify() {
+    if (!impl_) throw std::logic_error("moved-from TLS context");
+    std::lock_guard lock(impl_->mutex);
+    impl_->check_client_verification_mutable();
+    impl_->verifier = {};
+    impl_->set_verification(verification::insecure);
+}
 void context::use_certificate_chain(const std::string& certificate, const std::string& key) {
     check_path(certificate); check_path(key);
     if (!impl_) throw std::logic_error("moved-from TLS context");
@@ -417,6 +534,7 @@ struct stream::implementation {
     tcp::stream transport;
     socket_bio bio_state;
     std::shared_ptr<tls::context::implementation> configuration;
+    peer_identity identity;
     std::unique_ptr<SSL, decltype(&SSL_free)> ssl{nullptr, SSL_free};
     bool active = false;
     bool handshaken = false;
@@ -431,6 +549,8 @@ struct stream::implementation {
         ERR_clear_error();
         ssl.reset(SSL_new(configuration->handle.get()));
         if (!ssl) tls_error("create TLS session");
+        if (configuration->uses_custom_verification() && SSL_set_app_data(ssl.get(), &identity) != 1)
+            tls_error("set TLS peer identity state");
         auto* bio = BIO_new(socket_method());
         if (!bio) tls_error("create TLS socket BIO");
         BIO_set_data(bio, &bio_state);
@@ -447,6 +567,35 @@ struct stream::implementation {
             throw std::logic_error("TLS operation must execute on its owning io_context");
         if (require_handshake && !handshaken)
             throw std::logic_error("TLS handshake has not completed");
+    }
+    void prepare_handshake(std::string peer_name, const std::optional<std::string>& server_name) {
+        if (handshaken) throw std::logic_error("TLS handshake already completed");
+        if (configuration->mode == role::server) {
+            if (!peer_name.empty() || server_name)
+                throw std::invalid_argument("TLS server handshake does not take a peer or SNI name");
+            return;
+        }
+        if (peer_name.find('\0') != std::string::npos) throw std::invalid_argument("TLS peer name contains NUL");
+        if (peer_name.empty() && configuration->verify == verification::ca)
+            throw std::invalid_argument("TLS client requires a nonempty peer DNS name or IP address for CA verification");
+        unsigned char address[16];
+        const bool ip = ::inet_pton(AF_INET, peer_name.c_str(), address) == 1 ||
+                        ::inet_pton(AF_INET6, peer_name.c_str(), address) == 1;
+        ERR_clear_error();
+        if (configuration->verify == verification::ca) {
+            auto* parameters = SSL_get0_param(ssl.get());
+            X509_VERIFY_PARAM_set_hostflags(parameters, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+            if (ip) {
+                if (X509_VERIFY_PARAM_set1_ip_asc(parameters, peer_name.c_str()) != 1)
+                    tls_error("set TLS peer IP verification");
+            } else if (X509_VERIFY_PARAM_set1_host(parameters, peer_name.data(), peer_name.size()) != 1) {
+                tls_error("set TLS peer name verification");
+            }
+        }
+        if (server_name && !server_name->empty()) dns_name(*server_name);
+        const char* sni = server_name ? server_name->c_str() : (ip ? "" : peer_name.c_str());
+        if (*sni && SSL_set_tlsext_host_name(ssl.get(), sni) != 1) tls_error("set TLS SNI");
+        if (configuration->uses_custom_verification()) identity = {std::move(peer_name), ip};
     }
     struct operation {
         implementation& state;
@@ -488,34 +637,15 @@ std::string stream::selected_protocol() const {
     return length ? std::string(reinterpret_cast<const char*>(protocol), length) : std::string{};
 }
 
-task<void> stream::perform_handshake(std::string peer_name) {
+task<void> stream::perform_handshake() {
     auto& p = *impl_;
-    p.check();
-    if (p.handshaken) throw std::logic_error("TLS handshake already completed");
-    if (p.configuration->mode == role::client) {
-        if (peer_name.empty() || peer_name.find('\0') != std::string::npos)
-            throw std::invalid_argument("TLS client requires a nonempty peer DNS name or IP address");
-        auto* parameters = SSL_get0_param(p.ssl.get());
-        X509_VERIFY_PARAM_set_hostflags(parameters, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-        unsigned char address[16];
-        const bool ip = ::inet_pton(AF_INET, peer_name.c_str(), address) == 1 ||
-                        ::inet_pton(AF_INET6, peer_name.c_str(), address) == 1;
-        ERR_clear_error();
-        if (ip) {
-            if (X509_VERIFY_PARAM_set1_ip_asc(parameters, peer_name.c_str()) != 1)
-                tls_error("set TLS peer IP verification");
-        } else {
-            if (SSL_set1_host(p.ssl.get(), peer_name.c_str()) != 1 ||
-                SSL_set_tlsext_host_name(p.ssl.get(), peer_name.c_str()) != 1)
-                tls_error("set TLS peer name/SNI");
-        }
-    } else if (!peer_name.empty()) throw std::invalid_argument("TLS server handshake does not take a peer name");
     for (;;) {
         p.check();
         ERR_clear_error();
         const int result = SSL_do_handshake(p.ssl.get());
         if (result == 1) {
-            if (p.configuration->mode == role::client && SSL_get_verify_result(p.ssl.get()) != X509_V_OK)
+            if (p.configuration->mode == role::client && p.configuration->verify != verification::insecure &&
+                SSL_get_verify_result(p.ssl.get()) != X509_V_OK)
                 tls_error("TLS peer verification failed", p.ssl.get());
             p.handshaken = true;
             co_return;
@@ -525,23 +655,37 @@ task<void> stream::perform_handshake(std::string peer_name) {
     }
 }
 task<void> stream::connect(tcp::endpoint endpoint, std::string peer_name) {
+    return connect_impl(std::move(endpoint), std::move(peer_name), std::nullopt);
+}
+task<void> stream::connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name) {
+    return connect_impl(std::move(endpoint), std::move(peer_name), std::move(server_name));
+}
+task<void> stream::connect_impl(tcp::endpoint endpoint, std::string peer_name, std::optional<std::string> server_name) {
     if (!impl_) throw std::logic_error("moved-from TLS stream");
     implementation::operation operation(*impl_);
     try {
         impl_->check();
         if (impl_->configuration->mode != role::client)
             throw std::logic_error("TLS connect requires a client context");
-        if (peer_name.empty() || peer_name.find('\0') != std::string::npos)
-            throw std::invalid_argument("TLS connect requires a peer name");
+        impl_->prepare_handshake(std::move(peer_name), server_name);
         co_await impl_->transport.connect(std::move(endpoint));
-        co_await perform_handshake(std::move(peer_name));
+        co_await perform_handshake();
     } catch (...) { close(); throw; }
 }
 task<void> stream::handshake(std::string peer_name) {
+    return handshake_impl(std::move(peer_name), std::nullopt);
+}
+task<void> stream::handshake(std::string peer_name, std::string server_name) {
+    return handshake_impl(std::move(peer_name), std::move(server_name));
+}
+task<void> stream::handshake_impl(std::string peer_name, std::optional<std::string> server_name) {
     if (!impl_) throw std::logic_error("moved-from TLS stream");
     implementation::operation operation(*impl_);
-    try { co_await perform_handshake(std::move(peer_name)); }
-    catch (...) { close(); throw; }
+    try {
+        impl_->check();
+        impl_->prepare_handshake(std::move(peer_name), server_name);
+        co_await perform_handshake();
+    } catch (...) { close(); throw; }
 }
 task<std::size_t> stream::read_some(std::span<char> buffer) {
     if (!impl_) throw std::logic_error("moved-from TLS stream");

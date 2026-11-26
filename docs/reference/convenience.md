@@ -115,9 +115,12 @@ connect uses the OS timeout. Once connected, TLS/HTTP failures never retry the
 request. There is no total request/connect deadline, redirect following, proxy,
 cookie jar, caching or decompression. Use lower-level APIs for those policies.
 
-Default HTTPS creates a verified system-trust configuration with HTTP/1.1 ALPN.
-The URL host determines certificate identity and SNI independently of the resolved
-address. Custom trust uses `async_get(io, tls_configuration, url, ...)` or
-`async_fetch(io, tls_configuration, url, request, ...)`; the configuration must outlive
-the lazy task and the URL must use https. These preserve the existing TLS peer
-verification and ALPN checks. No insecure option is provided.
+By default, HTTPS helpers verify the certificate chain with system trust and
+advertise `http/1.1` via ALPN. The URL host provides the expected certificate
+identity and, for DNS names, SNI independently of the resolved address. Pass a
+TLS context to `async_get(io, tls_configuration, url, ...)` or
+`async_fetch(io, tls_configuration, url, request, ...)` to select the client
+verification policy and ALPN settings. This includes an explicit
+`insecure_skip_verify()` for testing and interoperability. The context must
+outlive the lazy task, and the URL must use HTTPS. The HTTP/1.1 client still
+checks the negotiated ALPN. [TLS verification modes](tls.md#client-verification-modes).

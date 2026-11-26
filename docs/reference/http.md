@@ -30,8 +30,9 @@ auto secure = co_await pace::http::async_get(io, trust, {"127.0.0.1", 8443},
 
 The TLS example needs a trusted certificate for `localhost`; configure a private
 CA with `trust.load_verify_file(...)` before starting the request. The numeric
-address determines where to connect; `peer_name` determines certificate identity,
-SNI for DNS names, and the default Host. There is no insecure verification switch.
+address determines where to connect. `peer_name` determines the expected certificate
+identity, DNS SNI and default Host. The supplied TLS context sets the
+[client verification policy](tls.md#client-verification-modes).
 See the [HTTP/HTTPS tutorial](../tutorial/04-http.md) for a complete local example.
 
 ## Owned messages

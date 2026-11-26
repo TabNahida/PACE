@@ -29,6 +29,9 @@ namespace pace::tls {
 enum class role { client, server };
 enum class trust_source { system, application };
 enum class sni_policy { use_default, reject };
+enum class pin_type { leaf_certificate, subject_public_key_info };
+using sha256_digest = std::array<std::byte, 32>;
+using verification_callback = std::function<bool(std::span<const std::string>)>;
 class context {
 public:
     explicit context(role mode = role::client, trust_source trust = trust_source::system);
@@ -39,6 +42,9 @@ public:
     context& operator=(const context&) = delete;
     void load_verify_file(const std::string& pem_file);
     void load_verify_pem(std::string_view certificates);
+    void set_verify_pin(pin_type type, sha256_digest digest);
+    void set_verify_callback(verification_callback verifier);
+    void insecure_skip_verify();
     void use_certificate_chain(const std::string& certificate_chain_file,
                                const std::string& private_key_file);
     void set_alpn_protocols(const std::vector<std::string>& protocols);
@@ -62,21 +68,19 @@ Public context objects may be moved or destroyed after stream construction;
 certificates, trust roots and callback state remain alive until the last owning
 stream/context is destroyed.
 
-Clients always verify the certificate chain and expected DNS/IP identity.
+Clients default to verifying the certificate chain and expected DNS/IP identity.
 The default `trust_source::system` loads OpenSSL's default trust paths during
 construction; a loading error throws. `trust_source::application` instead starts
 with an empty trust store and **never calls default-path loading**. This permits
 explicit trust configuration even when a deployment's OpenSSL defaults are
-unavailable. Without a suitable root, the handshake fails; there is no insecure
-fallback.
+unavailable. In CA mode, a suitable root is required for the handshake.
 
 `load_verify_file` adds roots from an explicit PEM file. `load_verify_pem` adds one
 or more in-memory `CERTIFICATE` PEM blocks, separated by whitespace. It copies
 the certificates into the context-owned store; the input can be destroyed as soon
 as the call returns. Duplicate certificates are accepted. Empty, malformed or
 mixed-content bundles throw; the entire bundle is parsed before any roots are
-added. No temporary files, borrowed `X509_STORE`, verification callbacks or mutable
-native handles are exposed.
+added. Both methods populate the trust store used by CA verification.
 
 ```cpp
 pace::tls::context client(pace::tls::role::client,
@@ -95,8 +99,7 @@ Server contexts require a certificate chain and matching unencrypted PEM private
 key. The chain file starts with the leaf followed by its intermediates. Loading
 is synchronous and checks key correspondence before installing the new pair, so
 a missing/mismatched key does not replace an earlier valid certificate. Encrypted keys fail without a
-terminal password prompt. A server does not require client certificates in this
-initial API. There is no mutual-TLS policy or verification-disable switch.
+terminal password prompt. A server does not require client certificates in this API.
 
 ALPN identifiers are nonempty strings of 1–255 bytes with a total encoded length
 of at most 65535 bytes. The server selects the first protocol in its configured
@@ -105,6 +108,39 @@ handshake. An empty configured list disables ALPN; a peer that does not send ALP
 can complete without a selected protocol. Applications requiring `h2` must check
 `selected_protocol() == "h2"` before exchanging HTTP/2 frames. ALPN negotiation
 alone does not implement the selected application protocol.
+
+## Client verification modes
+
+Choose a policy on a client context before constructing streams. Each policy
+setter selects a single verification mode. Use `trust_source::application`
+when the policy needs no system trust paths.
+
+- `set_verify_pin(pin_type::leaf_certificate, digest)` matches the SHA-256 of
+  the leaf certificate's DER encoding. `pin_type::subject_public_key_info`
+  hashes the leaf's full DER SubjectPublicKeyInfo. Both take 32 raw digest bytes
+  and accept an untrusted or self-signed leaf when the pin matches. The pin
+  replaces CA chain and validity checks.
+- `set_verify_callback(verifier)` supplies the peer's unverified DER certificates
+  in wire order, with the leaf first. The callback decides whether to trust the
+  chain and may implement its own CA and pin checks. Returning `false` or
+  throwing fails the handshake. The data is borrowed for the call. The callback
+  runs synchronously on the owning reactor and must support concurrent
+  invocation if the context is shared across reactors.
+- `insecure_skip_verify()` disables certificate and peer-name verification for
+  testing and interoperability. The connection is encrypted with an
+  unauthenticated peer.
+
+Pin and callback modes also check the certificate's DNS/IP identity when
+`peer_name` is supplied. Pass an empty `peer_name` to rely on the pin or
+application verification policy for identity.
+
+```cpp
+pace::tls::context client(pace::tls::role::client,
+                          pace::tls::trust_source::application);
+client.set_verify_pin(pace::tls::pin_type::subject_public_key_info, expected_spki_sha256);
+pace::tls::stream connection(io, client);
+co_await connection.connect({"192.0.2.1", 443}, "", "relay.example.com");
+```
 
 ## Independent server certificates with SNI
 
@@ -162,7 +198,9 @@ stream(stream&&) noexcept;
 stream& operator=(stream&&) noexcept;
 
 task<void> connect(tcp::endpoint endpoint, std::string peer_name);
+task<void> connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name);
 task<void> handshake(std::string peer_name = {});
+task<void> handshake(std::string peer_name, std::string server_name);
 io_context& context() const noexcept;
 bool is_open() const noexcept;
 std::string selected_protocol() const;
@@ -187,10 +225,11 @@ co_await connection.connect({"192.0.2.1", 443}, "api.example.com");
 ```
 
 The example address above is reserved for documentation. Use your service's
-resolved address. DNS names configure SNI and certificate hostname checking;
-numeric IP names check IP subject alternative names and do not send DNS SNI.
-An empty name or embedded NUL is rejected. There is no anonymous/insecure client
-mode. On an already-connected client stream call `handshake(peer_name)`.
+resolved address. By default a DNS `peer_name` is also sent as SNI and an IP
+`peer_name` checks the IP SAN. The overloads taking `server_name` let you send a
+separate ASCII DNS name for SNI or pass an empty string to suppress SNI. CA
+verification still requires a nonempty `peer_name`. On an already-connected
+client stream use the corresponding `handshake` overload.
 
 For STARTTLS, finish the protocol's plaintext negotiation on the TCP stream,
 then move it into `tls::stream` and call `handshake(peer_name)` on the client or

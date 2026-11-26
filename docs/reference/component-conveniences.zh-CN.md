@@ -71,13 +71,15 @@ open 返回未绑定 socket，首次发送选择地址族；bind 立即绑定，
 
 启用 --tls=y、链接 pace_tls，包含 `<pace/tls.hpp>`。
 `tls::connect([io,] config, endpoint, expected_name)` 返回握手完成后的 stream；
-省略 config 使用 helper 自己持有的系统信任配置，不设置 ALPN，也不下载根证书。
+省略 config 时，helper 使用自身持有的系统信任配置，验证证书链和预期 DNS/IP
+身份，ALPN 保持未设置。
 `tls::accept(tcp_stream, config)` 接管 TCP 连接并完成服务端握手。
 
 自定义配置**借用到任务完成**，不能保存引用已销毁临时配置的惰性任务。
-返回的 stream 持有共享配置状态。首次使用前完成信任和 ALPN 配置。
-证书身份与数字 endpoint 分开，DNS 名还会设置 SNI；没有跳过验证模式。
-同一个 TLS stream 最多一个异步操作，读写也不能并行。[TLS 契约](tls.md)。
+返回的 stream 持有共享配置状态。显式传入的 config 决定客户端验证策略和 ALPN，
+包括仅用于测试和互操作的 `insecure_skip_verify()`。请在首次使用前完成配置。
+证书身份与数字 endpoint 分开传入，DNS 名还会设置 SNI。
+同一个 TLS stream 最多一个异步操作，读写也不能并行。[客户端验证模式](tls.zh-CN.md#客户端验证模式)。
 
 ## WebSocket
 

@@ -120,11 +120,12 @@ task<tls::stream> tls::accept(tcp::stream, const tls::context&);
 All return a stream only after the handshake. `accept` owns its TCP transport.
 Custom configs are **borrowed through task completion**: do not store a lazy task
 that refers to a destroyed temporary config. Returned streams retain shared config
-state. Config-free clients own a default system-trust config; they do not select
-ALPN, disable verification or download roots. Configure custom trust/ALPN before
-first use. The expected certificate name is required separately from the numeric
-endpoint; DNS names also set SNI. Only one asynchronous TLS stream operation may
-be active, including reads versus writes. [TLS contracts](tls.md).
+state. Config-free clients verify the certificate chain with system trust and
+check the expected DNS/IP name. They leave ALPN unset. A supplied context selects
+the client verification policy and ALPN settings. Configure both before first use.
+Pass the expected certificate name separately from the numeric endpoint. DNS
+names also set SNI. Only one asynchronous TLS stream operation may be active,
+including reads versus writes. [TLS verification modes](tls.md#client-verification-modes).
 
 ## WebSocket
 

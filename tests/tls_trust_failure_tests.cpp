@@ -1,5 +1,5 @@
 // Linux fault injection, linked with --wrap=SSL_CTX_set_default_verify_paths.
-// The library itself contains no test hook or verification-disable mechanism.
+// Exercises CA verification when OpenSSL's default trust paths are unavailable.
 #include <pace/tls.hpp>
 #include <openssl/ssl.h>
 

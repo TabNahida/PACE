@@ -57,7 +57,7 @@ auto response = co_await pace::http::async_get(io, trust, {"127.0.0.1", 8443},
 ```
 
 TCP 连接地址和证书身份是分开的：上例连接本机地址，但必须验证证书中的 `localhost`。
-TLS 配置必须保持有效，直到这个惰性任务使用结束。库没有跳过证书验证的开关。
+TLS 配置必须保持有效，直到这个惰性任务使用结束。
 如果 OpenSSL 安装没有可用的默认根证书，需要显式提供 CA 文件，详见
 [TLS 配置说明](../reference/tls.zh-CN.md#配置与连接)。
 
