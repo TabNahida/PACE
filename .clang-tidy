@@ -1,0 +1,63 @@
+# PACE static analysis. Naming follows the standard library: lower_case everywhere,
+# private and protected data members end in `_`, template parameters are CamelCase.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  cert-err58-cpp,
+  cppcoreguidelines-avoid-goto,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-rvalue-reference-param-not-moved,
+  cppcoreguidelines-slicing,
+  cppcoreguidelines-special-member-functions,
+  misc-*,
+  -misc-include-cleaner,
+  -misc-no-recursion,
+  -misc-non-private-member-variables-in-classes,
+  -misc-use-anonymous-namespace,
+  modernize-*,
+  -modernize-avoid-c-arrays,
+  -modernize-use-nodiscard,
+  -modernize-use-trailing-return-type,
+  -modernize-use-designated-initializers,
+  performance-*,
+  readability-*,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-uppercase-literal-suffix,
+  -readability-implicit-bool-conversion
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '(include|src)/pace/.*|src/.*'
+FormatStyle: file
+
+CheckOptions:
+  - { key: readability-identifier-naming.NamespaceCase,              value: lower_case }
+  - { key: readability-identifier-naming.ClassCase,                  value: lower_case }
+  - { key: readability-identifier-naming.StructCase,                 value: lower_case }
+  - { key: readability-identifier-naming.UnionCase,                  value: lower_case }
+  - { key: readability-identifier-naming.EnumCase,                   value: lower_case }
+  - { key: readability-identifier-naming.EnumConstantCase,           value: lower_case }
+  - { key: readability-identifier-naming.TypeAliasCase,              value: lower_case }
+  - { key: readability-identifier-naming.TypedefCase,                value: lower_case }
+  - { key: readability-identifier-naming.ConceptCase,                value: lower_case }
+  - { key: readability-identifier-naming.FunctionCase,               value: lower_case }
+  - { key: readability-identifier-naming.MethodCase,                 value: lower_case }
+  - { key: readability-identifier-naming.VariableCase,               value: lower_case }
+  - { key: readability-identifier-naming.ParameterCase,              value: lower_case }
+  - { key: readability-identifier-naming.PublicMemberCase,           value: lower_case }
+  - { key: readability-identifier-naming.PrivateMemberCase,          value: lower_case }
+  - { key: readability-identifier-naming.PrivateMemberSuffix,        value: _ }
+  - { key: readability-identifier-naming.ProtectedMemberCase,        value: lower_case }
+  - { key: readability-identifier-naming.ProtectedMemberSuffix,      value: _ }
+  - { key: readability-identifier-naming.TemplateParameterCase,      value: CamelCase }
+  - { key: readability-identifier-naming.TemplateTemplateParameterCase, value: CamelCase }
+  - { key: readability-identifier-naming.ValueTemplateParameterCase, value: lower_case }
+  - { key: readability-identifier-naming.MacroDefinitionCase,        value: UPPER_CASE }
+  - { key: readability-identifier-naming.MacroDefinitionPrefix,      value: PACE_ }
+  - { key: readability-braces-around-statements.ShortStatementLines, value: 0 }
+  - { key: performance-unnecessary-value-param.AllowedTypes,         value: 'std::shared_ptr;std::function' }
+  - { key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor, value: true }
+  - { key: misc-const-correctness.AnalyzeValues,                     value: false }
