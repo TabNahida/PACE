@@ -8,3 +8,6 @@ __pycache__/
 /.xmake-cache/
 
 /ci-results/
+
+# Internal planning
+/docs/plan_v1.md
