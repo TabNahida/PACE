@@ -2,6 +2,7 @@
 #include <pace/detail/reactor_signal.hpp>
 #include <pace/quic.hpp>
 #include <openssl/pem.h>
+#include <openssl/ssl.h>
 
 #include <algorithm>
 #include <array>
@@ -382,21 +383,12 @@ struct client_case {
     std::optional<std::string> server_name = std::nullopt;
 };
 
-template<class Stream>
-pace::task<void> read_exact(Stream& stream, std::span<char> bytes) {
-    while (!bytes.empty()) {
-        const auto count = co_await stream.read_some(bytes);
-        require(count != 0, "early EOF in TLS test exchange");
-        bytes = bytes.subspan(count);
-    }
-}
-
 pace::task<void> selected_server(pace::tcp::stream transport, const pace::tls::context& configuration,
                                  bool starttls, group_finished& done, bool own_configuration = false,
                                  std::filesystem::path fixtures = {}) {
     if (starttls) {
         std::array<char, 10> command{};
-        co_await read_exact(transport, command);
+        co_await pace::read_exact(transport, std::span<char>(command));
         require(std::string_view(command.data(), command.size()) == "STARTTLS\r\n", "STARTTLS command mismatch");
         co_await transport.write_all("220 ready\r\n");
     }
@@ -418,7 +410,7 @@ pace::task<void> selected_server(pace::tcp::stream transport, const pace::tls::c
     if (accepted) {
         ++done.server_success;
         std::array<char, 1> byte{};
-        co_await read_exact(socket, byte);
+        co_await pace::read_exact(socket, std::span<char>(byte));
         co_await socket.write_all(std::string_view(byte.data(), byte.size()));
         co_await socket.shutdown();
     } else ++done.server_failure;
@@ -440,7 +432,7 @@ pace::task<void> selected_client(pace::io_context& io, const pace::tls::context&
         co_await transport.connect(endpoint);
         co_await transport.write_all("STARTTLS\r\n");
         std::array<char, 11> ready{};
-        co_await read_exact(transport, ready);
+        co_await pace::read_exact(transport, std::span<char>(ready));
         require(std::string_view(ready.data(), ready.size()) == "220 ready\r\n", "STARTTLS reply mismatch");
     }
     pace::tls::stream socket(std::move(transport), config);
@@ -463,7 +455,7 @@ pace::task<void> selected_client(pace::io_context& io, const pace::tls::context&
         require(socket.selected_protocol() == test.protocol, "SNI selected the wrong context/ALPN");
         co_await socket.write_all("x");
         std::array<char, 1> reply{};
-        co_await read_exact(socket, reply);
+        co_await pace::read_exact(socket, std::span<char>(reply));
         require(reply[0] == 'x', "SNI data exchange mismatch");
         co_await socket.shutdown();
     }
@@ -698,6 +690,79 @@ void client_verification_modes(const std::filesystem::path& fixtures) {
     rejects_frozen([&] { insecure_client.insecure_skip_verify(); });
 }
 
+void client_hello_routing(const std::filesystem::path& fixtures) {
+    using namespace pace::tls;
+    auto server = sni_configuration(fixtures, sni_policy::use_default, sni_policy::reject);
+    auto client = application_trust(fixtures);
+    unsigned calls = 0;
+    server.set_client_hello_callback([&](const client_hello& hello) {
+        ++calls;
+        if (hello.server_name == "select.example") {
+            context target(role::server);
+            target.use_certificate_chain((fixtures / "b.example.pem").string(),
+                                         (fixtures / "b.example-key.pem").string());
+            target.set_alpn_protocols({"b.example"});
+            return client_hello_action::select(target);
+        }
+        if (hello.server_name == "reject.example") return client_hello_action::reject();
+        if (hello.server_name == "throw.example") throw std::runtime_error("inspection failed");
+        if (hello.server_name == "handoff.example") return client_hello_action::handoff();
+        return client_hello_action::proceed();
+    });
+    handshake_group(server, client, {{"b.example", "b.example", true, "select.example"},
+                                     {"a.example", "a.example"}, {"127.0.0.1", "default"},
+                                     {"b.example", "", false, "reject.example"},
+                                     {"b.example", "", false, "throw.example"},
+                                     {"b.example", "", false, "handoff.example"},
+                                     {"b.example", "", false, "unknown.example"}}, false);
+    require(calls == 7, "ClientHello inspection did not run exactly once per connection");
+    rejects_frozen([&] {
+        server.set_client_hello_callback([](const client_hello&) { return client_hello_action::proceed(); });
+    });
+}
+
+struct client_hello_fixture {
+    std::string message;
+    std::string wire;
+};
+
+client_hello_fixture fragmented_client_hello() {
+    std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)> configuration(SSL_CTX_new(TLS_client_method()), SSL_CTX_free);
+    require(bool(configuration), "could not create TLS test context");
+    std::unique_ptr<SSL, decltype(&SSL_free)> client(SSL_new(configuration.get()), SSL_free);
+    std::unique_ptr<BIO, decltype(&BIO_free)> input(BIO_new(BIO_s_mem()), BIO_free);
+    std::unique_ptr<BIO, decltype(&BIO_free)> wire(BIO_new(BIO_s_mem()), BIO_free);
+    require(client && input && wire && SSL_set_tlsext_host_name(client.get(), "Route.example") == 1 &&
+            SSL_set1_groups_list(client.get(), "X25519") == 1,
+            "could not configure TLS test ClientHello");
+    constexpr unsigned char alpn[]{2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
+    require(SSL_set_alpn_protos(client.get(), alpn, sizeof(alpn)) == 0, "could not set test ALPN");
+    BIO_set_mem_eof_return(input.get(), -1);
+    SSL_set_bio(client.get(), input.release(), wire.get());
+    auto* output = wire.release();
+    SSL_set_connect_state(client.get());
+    const auto result_code = SSL_do_handshake(client.get());
+    require(result_code < 0 && SSL_get_error(client.get(), result_code) == SSL_ERROR_WANT_READ,
+            "test handshake did not wait for its peer");
+    char* data = nullptr;
+    const auto size = BIO_get_mem_data(output, &data);
+    require(size > 48 && data[0] == SSL3_RT_HANDSHAKE && data[5] == SSL3_MT_CLIENT_HELLO &&
+            ((static_cast<unsigned char>(data[3]) << 8) | static_cast<unsigned char>(data[4])) == size - 5,
+            "test client did not produce one ClientHello record");
+    client_hello_fixture result{std::string(data + 5, static_cast<std::size_t>(size - 5)), {}};
+    auto add_record = [&](std::string_view payload) {
+        result.wire.append(data, 3);
+        result.wire.push_back(static_cast<char>(payload.size() >> 8));
+        result.wire.push_back(static_cast<char>(payload.size() & 0xff));
+        result.wire.append(payload);
+    };
+    const std::string_view message(result.message);
+    add_record(message.substr(0, 1)); // Split within the handshake header.
+    add_record(message.substr(1, 42));
+    add_record(message.substr(43));
+    return result;
+}
+
 struct pipe_state {
     explicit pipe_state(pace::io_context& context, std::size_t capacity = 1024)
         : io(context), changed(context), capacity(capacity) {}
@@ -759,6 +824,81 @@ private:
     std::size_t side_;
 };
 
+template<class Transport>
+pace::task<void> check_handoff(Transport transport, const pace::tls::context& config,
+                              std::string_view wire, std::size_t prefix_size,
+                              std::size_t expected_captured, finished& done) {
+    auto prefix = co_await pace::read_exact(transport, prefix_size);
+    pace::tls::stream stream(std::move(transport), config, prefix);
+    auto result = co_await stream.handshake_with_handoff<Transport>();
+    require(result && !stream.is_open() && result->transport.is_open(), "ClientHello handoff lost the transport");
+    auto& [socket, pre_read] = *result;
+    require(wire.starts_with(pre_read) && pre_read.size() >= expected_captured,
+            "handoff changed or lost consumed wire bytes");
+    pre_read += co_await pace::read_exact(socket, wire.size() - pre_read.size());
+    require(pre_read == wire, "handoff dropped or duplicated wire bytes");
+    co_await socket.write_all("routed");
+    socket.close();
+    done.arrive();
+}
+
+template<class Transport>
+pace::task<void> handoff_peer(Transport socket, std::string_view wire, finished& done) {
+    co_await socket.write_all(wire);
+    require((co_await pace::read_exact(socket, 6)) == "routed", "TLS wrote bytes before handing off the connection");
+    socket.close();
+    done.arrive();
+}
+
+void client_hello_handoffs() {
+    using namespace pace::tls;
+    const auto fixture = fragmented_client_hello();
+    const auto wire = fixture.wire + "after ClientHello";
+    context config(role::server);
+    unsigned calls = 0;
+    bool fields_match = false;
+    config.set_client_hello_callback([&](const client_hello& hello) {
+        ++calls;
+        const std::array<std::string_view, 2> protocols{"h2", "http/1.1"};
+        const auto sid_size = static_cast<unsigned char>(fixture.message[38]);
+        fields_match = hello.raw_message == fixture.message && hello.server_name == "Route.example" &&
+            std::ranges::equal(hello.alpn_protocols, protocols) && hello.legacy_version == 0x0303 &&
+            std::ranges::find(hello.supported_versions, 0x0304) != hello.supported_versions.end() &&
+            std::ranges::find(hello.cipher_suites, 0x1301) != hello.cipher_suites.end() &&
+            hello.key_shares.size() == 1 && hello.key_shares.front().group == 0x001d &&
+            hello.key_shares.front().key_exchange.size() == 32 &&
+            hello.session_id == std::string_view(fixture.message).substr(39, sid_size);
+        return client_hello_action::handoff();
+    });
+    // Exercise TCP with no prefix, a prefix ending mid-record, and a prefix
+    // that already includes bytes beyond the final ClientHello record.
+    for (const auto prefix_size : {std::size_t{0}, std::size_t{3}, fixture.wire.size() + 2}) {
+        pace::io_context io;
+        pace::tcp::listener listener(io, {"127.0.0.1", 0});
+        finished done{io};
+        auto server = [&]() -> pace::task<void> {
+            co_await check_handoff(co_await listener.accept(), config, wire, prefix_size,
+                                   std::max(fixture.wire.size(), prefix_size), done);
+        };
+        auto peer = [&]() -> pace::task<void> {
+            pace::tcp::stream socket(io);
+            co_await socket.connect(listener.local_endpoint());
+            co_await handoff_peer(std::move(socket), wire, done);
+        };
+        io.spawn(server());
+        io.spawn(peer());
+        io.run();
+        require(done.count == 2 && fields_match, "TCP ClientHello inspection or handoff failed");
+    }
+    pace::io_context io;
+    auto pipe = std::make_shared<pipe_state>(io, wire.size());
+    finished done{io};
+    io.spawn(check_handoff(pipe_stream(pipe, 0), config, wire, fixture.wire.size() - 2, wire.size(), done));
+    io.spawn(handoff_peer(pipe_stream(pipe, 1), wire, done));
+    io.run();
+    require(done.count == 2 && fields_match && calls == 4, "generic ClientHello inspection or handoff failed");
+}
+
 struct transport_contexts {
     pace::tls::context server{pace::tls::role::server};
     pace::tls::context client{pace::tls::role::client, pace::tls::trust_source::application};
@@ -772,14 +912,18 @@ struct transport_contexts {
 
 constexpr std::size_t transport_payload_size = 96 * 1024 + 13;
 
-pace::task<void> transport_echo_server(pace::tls::stream stream, finished& done) {
-    co_await stream.handshake();
+pace::task<void> transport_echo_exchange(pace::tls::stream& stream, finished& done) {
     require(stream.selected_protocol() == "test-echo", "server generic TLS ALPN mismatch");
     const auto bytes = co_await pace::read_exact(stream, transport_payload_size);
     co_await stream.write_all(bytes);
     co_await stream.shutdown(2s);
     require(!stream.is_open(), "generic TLS server shutdown did not close the stream");
     done.arrive();
+}
+
+pace::task<void> transport_echo_server(pace::tls::stream stream, finished& done) {
+    co_await stream.handshake();
+    co_await transport_echo_exchange(stream, done);
 }
 
 pace::task<void> transport_echo_client(pace::tls::stream stream, finished& done) {
@@ -794,6 +938,38 @@ pace::task<void> transport_echo_client(pace::tls::stream stream, finished& done)
     co_await stream.shutdown(2s);
     require(!stream.is_open(), "generic TLS client shutdown did not close the stream");
     done.arrive();
+}
+
+void client_hello_handoff_roundtrip(const transport_contexts& contexts) {
+    using namespace pace::tls;
+    context router(role::server);
+    router.set_client_hello_callback([](const client_hello&) { return client_hello_action::handoff(); });
+    context termination(role::server);
+    termination.set_client_hello_callback([&](const client_hello&) {
+        return client_hello_action::select(contexts.server);
+    });
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    finished done{io};
+    auto server = [&]() -> pace::task<void> {
+        auto socket = co_await listener.accept();
+        auto prefix = co_await read_client_hello_prefix(socket, replay_prefix::mid_record);
+        stream first(std::move(socket), router, prefix);
+        auto result = co_await first.handshake_with_handoff();
+        require(result.has_value(), "TLS handshake consumed a routed connection");
+        stream upstream(std::move(result->transport), termination, result->pre_read);
+        require(!(co_await upstream.handshake_with_handoff()), "TLS handshake handed off a selected connection");
+        co_await transport_echo_exchange(upstream, done);
+    };
+    auto client = [&]() -> pace::task<void> {
+        pace::tcp::stream socket(io);
+        co_await socket.connect(listener.local_endpoint());
+        co_await transport_echo_client(stream(std::move(socket), contexts.client), done);
+    };
+    io.spawn(server());
+    io.spawn(client());
+    io.run();
+    require(done.count == 2, "handed-off TCP stream could not complete a TLS handshake");
 }
 
 template<bool HasShutdown>
@@ -980,7 +1156,10 @@ int main(int argc, char** argv) {
         independent_client_sni(fixtures, false);
         independent_client_sni(fixtures, true);
         client_verification_modes(fixtures);
+        client_hello_routing(fixtures);
+        client_hello_handoffs();
         const transport_contexts contexts(fixtures);
+        client_hello_handoff_roundtrip(contexts);
         memory_transport(contexts, 64);
         memory_transport<true>(contexts, 1024);
         memory_shutdown_timeout(contexts);

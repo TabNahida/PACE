@@ -114,6 +114,89 @@ std::string certificate_der(const X509* certificate) {
     return der;
 }
 
+// Reuse OpenSSL's ClientHello and extension boundaries. Decode only the
+// length-prefixed vectors exposed to the application.
+struct hello_fields {
+    std::string_view bytes;
+
+    std::string_view take(std::size_t size) {
+        if (size > bytes.size()) throw std::invalid_argument("truncated TLS ClientHello field");
+        const auto field = bytes.substr(0, size);
+        bytes.remove_prefix(size);
+        return field;
+    }
+    std::uint16_t u8() { return static_cast<unsigned char>(take(1).front()); }
+    std::uint16_t u16() {
+        const auto field = take(2);
+        return static_cast<std::uint16_t>((static_cast<unsigned char>(field[0]) << 8) |
+                                         static_cast<unsigned char>(field[1]));
+    }
+    hello_fields list(unsigned width) {
+        auto values = take(width == 1 ? u8() : u16());
+        if (!bytes.empty()) throw std::invalid_argument("trailing bytes in TLS ClientHello extension");
+        return {values};
+    }
+};
+
+std::optional<hello_fields> hello_extension(SSL* ssl, unsigned type) {
+    const unsigned char* data = nullptr;
+    std::size_t size = 0;
+    if (SSL_client_hello_get0_ext(ssl, type, &data, &size) != 1) return std::nullopt;
+    return hello_fields{std::string_view(reinterpret_cast<const char*>(data), size)};
+}
+
+client_hello inspect_hello(SSL* ssl, std::string_view message) {
+    client_hello hello{};
+    hello.raw_message = message;
+    hello.legacy_version = static_cast<std::uint16_t>(SSL_client_hello_get0_legacy_version(ssl));
+    const unsigned char* data = nullptr;
+    auto size = SSL_client_hello_get0_session_id(ssl, &data);
+    if (size) hello.session_id = {reinterpret_cast<const char*>(data), size};
+    size = SSL_client_hello_get0_ciphers(ssl, &data);
+    if (size) {
+        hello_fields ciphers{{reinterpret_cast<const char*>(data), size}};
+        while (!ciphers.bytes.empty()) hello.cipher_suites.push_back(ciphers.u16());
+    }
+    if (auto sni = hello_extension(ssl, TLSEXT_TYPE_server_name)) {
+        auto names = sni->list(2);
+        const auto type = names.u8();
+        const auto name = names.take(names.u16());
+        if (type != TLSEXT_NAMETYPE_host_name || !names.bytes.empty() || name.empty() ||
+            name.find('\0') != std::string_view::npos)
+            throw std::invalid_argument("invalid TLS ClientHello server name");
+        hello.server_name = name;
+    }
+    if (auto alpn = hello_extension(ssl, TLSEXT_TYPE_application_layer_protocol_negotiation)) {
+        auto protocols = alpn->list(2);
+        do {
+            const auto name = protocols.take(protocols.u8());
+            if (name.empty()) throw std::invalid_argument("empty TLS ClientHello ALPN name");
+            hello.alpn_protocols.push_back(name);
+        } while (!protocols.bytes.empty());
+    }
+    if (auto extension = hello_extension(ssl, TLSEXT_TYPE_supported_versions)) {
+        auto versions = extension->list(1);
+        do { hello.supported_versions.push_back(versions.u16()); } while (!versions.bytes.empty());
+    }
+    if (auto extension = hello_extension(ssl, TLSEXT_TYPE_key_share)) {
+        auto shares = extension->list(2);
+        while (!shares.bytes.empty()) {
+            const auto group = shares.u16();
+            const auto key = shares.take(shares.u16());
+            if (key.empty()) throw std::invalid_argument("empty TLS ClientHello key share");
+            hello.key_shares.push_back({group, key});
+        }
+    }
+    return hello;
+}
+
+struct hello_state {
+    std::string message;
+    bool observed = false;
+    bool override_sni = false;
+    bool handoff = false;
+};
+
 bool socket_interrupted() noexcept {
 #ifdef _WIN32
     return ::WSAGetLastError() == WSAEINTR;
@@ -163,11 +246,20 @@ struct transport_bio {
     tcp::stream* socket;
     std::string prefix;
     std::size_t prefix_offset = 0;
-    // Allocated for asynchronous transports and TCP multiplexing. Input stays
-    // with the stream across operations, including prefetched close_notify.
+    // Buffered I/O for asynchronous transports, TCP multiplexing and handoff.
+    // Input stays with the stream across operations, including prefetched close_notify.
     std::unique_ptr<ciphertext_buffers> buffers{};
     bool multiplexing = false, input_eof = false;
     shutdown_writer* writer = nullptr;
+    std::optional<std::string> hello_reads{};
+
+    void stop_capturing_hello() noexcept {
+        hello_reads.reset();
+        if (prefix_offset == prefix.size()) {
+            std::string{}.swap(prefix);
+            prefix_offset = 0;
+        }
+    }
 };
 
 // Only the physical transport writes concurrently during a shutdown exchange.
@@ -191,11 +283,11 @@ int bio_read(BIO* bio, char* bytes, int size) {
     BIO_clear_retry_flags(bio);
     if (!bytes || size <= 0) return 0;
     auto& state = *static_cast<transport_bio*>(BIO_get_data(bio));
-    if (!state.prefix.empty()) {
+    if (state.prefix_offset < state.prefix.size()) {
         const auto count = std::min<std::size_t>(size, state.prefix.size() - state.prefix_offset);
         std::memcpy(bytes, state.prefix.data() + state.prefix_offset, count);
         state.prefix_offset += count;
-        if (state.prefix_offset == state.prefix.size()) {
+        if (state.prefix_offset == state.prefix.size() && !state.hello_reads) {
             std::string{}.swap(state.prefix);
             state.prefix_offset = 0;
         }
@@ -208,7 +300,7 @@ int bio_read(BIO* bio, char* bytes, int size) {
         return static_cast<int>(count);
     }
     if (state.input_eof) return 0;
-    if (!state.socket) {
+    if (!state.socket || state.hello_reads) {
         BIO_set_retry_read(bio);
         return -1;
     }
@@ -269,6 +361,8 @@ BIO_METHOD* transport_method() {
 } // namespace
 
 struct context::implementation {
+    static bool client_hello_overrides_sni(SSL* ssl) noexcept;
+    static int inspect_client_hello(SSL* ssl, int* alert, void*) noexcept;
     role mode;
     std::mutex mutex;
     bool frozen = false;
@@ -279,6 +373,7 @@ struct context::implementation {
     verification verify = verification::ca;
     sha256_digest pin{};
     verification_callback verifier;
+    client_hello_callback on_client_hello;
     std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)> handle{nullptr, SSL_CTX_free};
     explicit implementation(role value, trust_source trust) : mode(value) {
         if (mode != role::client && mode != role::server)
@@ -352,20 +447,23 @@ struct context::implementation {
         X509_STORE_CTX_set_error(store, error);
         return error == X509_V_OK;
     }
-    void enable_sni() {
-        // The servername callback runs after session resumption. Disable both
-        // TLS 1.2 and TLS 1.3 resumption on routing contexts so a ticket cannot
-        // bypass this connection's independent hostname/certificate selection.
+    void disable_routing_resumption() {
+        // Each connection makes an independent certificate selection.
         SSL_CTX_set_session_cache_mode(handle.get(), SSL_SESS_CACHE_OFF);
         SSL_CTX_set_options(handle.get(), SSL_OP_NO_TICKET);
         if (SSL_CTX_set_num_tickets(handle.get(), 0) != 1)
-            tls_error("disable TLS SNI session tickets");
+            tls_error("disable TLS routing session tickets");
+    }
+    void enable_sni() {
+        // The servername callback runs after session resumption.
+        disable_routing_resumption();
         SSL_CTX_set_tlsext_servername_arg(handle.get(), this);
         // OpenSSL casts this callback inside a macro. Keep the lambda outside
         // that expansion so MSVC parses its parameter list and body correctly.
         const auto callback =
             +[](SSL* ssl, int* alert, void* argument) noexcept -> int {
                 const auto& config = *static_cast<implementation*>(argument);
+                if (client_hello_overrides_sni(ssl)) return SSL_TLSEXT_ERR_NOACK;
                 try {
                     const char* requested = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
                     if (requested) {
@@ -551,13 +649,36 @@ void context::set_server_name_policy(sni_policy missing, sni_policy unrecognized
     impl_->missing = missing;
     impl_->unrecognized = unrecognized;
 }
+void context::set_client_hello_callback(client_hello_callback callback) {
+    if (!impl_) throw std::logic_error("moved-from TLS context");
+    if (!callback) throw std::invalid_argument("empty TLS ClientHello callback");
+    std::lock_guard lock(impl_->mutex);
+    impl_->check_mutable();
+    if (impl_->mode != role::server)
+        throw std::invalid_argument("TLS ClientHello inspection requires a server context");
+    impl_->disable_routing_resumption();
+    SSL_CTX_set_client_hello_cb(impl_->handle.get(), implementation::inspect_client_hello, nullptr);
+    impl_->on_client_hello = std::move(callback);
+}
+
+client_hello_action client_hello_action::select(const context& configuration) {
+    if (!configuration.impl_) throw std::logic_error("moved-from TLS context");
+    if (configuration.impl_->mode != role::server)
+        throw std::invalid_argument("TLS ClientHello selection requires a server context");
+    configuration.impl_->freeze();
+    client_hello_action result(kind::select);
+    result.configuration_ = configuration.impl_;
+    return result;
+}
 
 struct stream::implementation {
     std::optional<tcp::stream> socket;
     std::unique_ptr<pace::detail::tls_transport> transport;
     transport_bio bio_state;
     std::shared_ptr<tls::context::implementation> configuration;
+    std::shared_ptr<tls::context::implementation> hello_configuration;
     peer_identity identity;
+    hello_state hello;
     std::unique_ptr<SSL, decltype(&SSL_free)> ssl{nullptr, SSL_free};
     bool active = false;
     bool handshaken = false;
@@ -594,7 +715,62 @@ struct stream::implementation {
         BIO_set_data(bio, &bio_state);
         SSL_set_bio(ssl.get(), bio, bio);
         if (configuration->mode == role::client) SSL_set_connect_state(ssl.get());
-        else SSL_set_accept_state(ssl.get());
+        else {
+            SSL_set_accept_state(ssl.get());
+            if (configuration->on_client_hello) enable_client_hello();
+        }
+    }
+    void enable_client_hello() {
+        if (SSL_set_app_data(ssl.get(), this) != 1)
+            tls_error("set TLS ClientHello state");
+        SSL_set_msg_callback_arg(ssl.get(), &hello);
+        SSL_set_msg_callback(ssl.get(), [](int outgoing, int, int type, const void* data,
+                                            std::size_t size, SSL*, void* argument) noexcept {
+            const auto* bytes = static_cast<const char*>(data);
+            if (outgoing || type != SSL3_RT_HANDSHAKE || !size || bytes[0] != SSL3_MT_CLIENT_HELLO) return;
+            auto& state = *static_cast<hello_state*>(argument);
+            try { state.message.assign(bytes, size); }
+            catch (...) {} // An absent message fails the handshake in inspect_client_hello.
+        });
+    }
+    int inspect_client_hello(int* alert) noexcept {
+        if (hello.observed) return SSL_CLIENT_HELLO_SUCCESS;
+        hello.observed = true;
+        SSL_set_msg_callback(ssl.get(), nullptr);
+        const auto message = std::move(hello.message);
+        *alert = SSL_AD_INTERNAL_ERROR;
+        if (message.empty()) return SSL_CLIENT_HELLO_ERROR;
+        client_hello parsed{};
+        try { parsed = inspect_hello(ssl.get(), message); }
+        catch (const std::invalid_argument&) {
+            *alert = SSL_AD_DECODE_ERROR;
+            return SSL_CLIENT_HELLO_ERROR;
+        } catch (...) { return SSL_CLIENT_HELLO_ERROR; }
+        try {
+            auto decision = configuration->on_client_hello(parsed);
+            // Application OpenSSL calls must not affect SSL_get_error() for
+            // this handshake step.
+            ERR_clear_error();
+            switch (decision.kind_) {
+            case client_hello_action::kind::proceed:
+                break;
+            case client_hello_action::kind::select:
+                if (!decision.configuration_ ||
+                    !SSL_set_SSL_CTX(ssl.get(), decision.configuration_->handle.get()))
+                    return SSL_CLIENT_HELLO_ERROR;
+                hello_configuration = std::move(decision.configuration_);
+                hello.override_sni = true;
+                break;
+            case client_hello_action::kind::reject:
+                *alert = SSL_AD_HANDSHAKE_FAILURE;
+                return SSL_CLIENT_HELLO_ERROR;
+            case client_hello_action::kind::handoff:
+                hello.handoff = true;
+                return SSL_CLIENT_HELLO_RETRY;
+            }
+            bio_state.stop_capturing_hello();
+            return SSL_CLIENT_HELLO_SUCCESS;
+        } catch (...) { return SSL_CLIENT_HELLO_ERROR; }
     }
     io_context& context() const noexcept { return socket ? socket->context() : transport->context(); }
     bool is_open() const noexcept { return socket ? socket->is_open() : transport->is_open(); }
@@ -683,8 +859,17 @@ struct stream::implementation {
         input.compact();
         auto available = std::span(input.bytes).subspan(input.end);
         if (available.empty()) throw std::logic_error("TLS transport input buffer is full");
-        const auto count = co_await transport->read_some(available);
+        auto read = socket ? socket->read_some(available) : transport->read_some(available);
+        const auto count = co_await std::move(read);
         if (count > available.size()) throw std::logic_error("TLS transport read exceeded its buffer");
+        if (auto& reads = bio_state.hello_reads; reads && count) {
+            // Bound read-ahead storage even if the peer keeps sending records
+            // that do not complete the ClientHello.
+            constexpr std::size_t capture_limit = 1024 * 1024;
+            if (count > capture_limit - reads->size())
+                tls_error("TLS ClientHello exceeded the handoff capture limit");
+            reads->append(available.data(), count);
+        }
         input.end += count;
         bio_state.input_eof = count == 0;
     }
@@ -722,7 +907,7 @@ struct stream::implementation {
     task<void> wait(int error) {
         if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
             co_await fail("TLS operation failed (possibly unclean EOF)");
-        } else if (socket) {
+        } else if (socket && !(error == SSL_ERROR_WANT_READ && bio_state.hello_reads)) {
             if (has_output()) co_await flush_output();
             if (error == SSL_ERROR_WANT_READ) co_await context().wait_readable(socket->native_handle());
             else if (!bio_state.writer) co_await context().wait_writable(socket->native_handle());
@@ -732,6 +917,18 @@ struct stream::implementation {
         }
     }
 };
+
+bool context::implementation::client_hello_overrides_sni(SSL* ssl) noexcept {
+    const auto* state = static_cast<const stream::implementation*>(SSL_get_app_data(ssl));
+    return state && state->hello.override_sni;
+}
+
+int context::implementation::inspect_client_hello(SSL* ssl, int* alert, void*) noexcept {
+    auto* state = static_cast<stream::implementation*>(SSL_get_app_data(ssl));
+    if (state) return state->inspect_client_hello(alert);
+    *alert = SSL_AD_INTERNAL_ERROR;
+    return SSL_CLIENT_HELLO_ERROR;
+}
 
 stream::stream(io_context& io, const tls::context& config) : stream(tcp::stream(io), config) {}
 stream::stream(tcp::stream transport, const tls::context& config)
@@ -760,7 +957,25 @@ std::string stream::selected_protocol() const {
     return length ? std::string(reinterpret_cast<const char*>(protocol), length) : std::string{};
 }
 
-task<void> stream::perform_handshake() {
+void stream::require_tcp_handoff() const {
+    if (!impl_ || !impl_->socket) throw std::logic_error("TLS handoff requires the original transport type");
+}
+bool stream::handoff_requested() const noexcept { return impl_->hello.handoff; }
+pace::detail::tls_transport* stream::generic_transport() const noexcept {
+    return impl_ ? impl_->transport.get() : nullptr;
+}
+client_hello_handoff<tcp::stream> stream::release_tcp() {
+    auto state = std::move(impl_);
+    state->bio_state.prefix += *state->bio_state.hello_reads;
+    return {std::move(*state->socket), std::move(state->bio_state.prefix)};
+}
+client_hello_handoff<std::unique_ptr<pace::detail::tls_transport>> stream::release_generic() {
+    auto state = std::move(impl_);
+    state->bio_state.prefix += *state->bio_state.hello_reads;
+    return {std::move(state->transport), std::move(state->bio_state.prefix)};
+}
+
+task<bool> stream::perform_handshake() {
     auto& p = *impl_;
     for (;;) {
         p.check();
@@ -771,10 +986,13 @@ task<void> stream::perform_handshake() {
                 SSL_get_verify_result(p.ssl.get()) != X509_V_OK)
                 tls_error("TLS peer verification failed", p.ssl.get());
             if (p.has_output()) co_await p.flush_output();
+            if (p.socket && p.bio_state.buffers && !p.bio_state.buffers->input.size())
+                p.bio_state.buffers.reset();
             p.handshaken = true;
-            co_return;
+            co_return true;
         }
         const int error = SSL_get_error(p.ssl.get(), result);
+        if (error == SSL_ERROR_WANT_CLIENT_HELLO_CB && p.hello.handoff) co_return false;
         co_await p.wait(error);
     }
 }
@@ -798,19 +1016,32 @@ task<void> stream::connect_impl(tcp::endpoint endpoint, std::string peer_name, s
     } catch (...) { close(); throw; }
 }
 task<void> stream::handshake(std::string peer_name) {
-    return handshake_impl(std::move(peer_name), std::nullopt);
+    return handshake_impl(std::move(peer_name), std::nullopt, false);
 }
 task<void> stream::handshake(std::string peer_name, std::string server_name) {
-    return handshake_impl(std::move(peer_name), std::move(server_name));
+    return handshake_impl(std::move(peer_name), std::move(server_name), false);
 }
-task<void> stream::handshake_impl(std::string peer_name, std::optional<std::string> server_name) {
+task<void> stream::handshake_impl(std::string peer_name, std::optional<std::string> server_name, bool allow_handoff) {
     if (!impl_) throw std::logic_error("moved-from TLS stream");
-    implementation::operation operation(*impl_);
+    auto& p = *impl_;
+    if (allow_handoff && p.configuration->mode != role::server)
+        throw std::logic_error("TLS handoff requires a server context");
+    implementation::operation operation(p);
     try {
-        impl_->check();
-        impl_->prepare_handshake(std::move(peer_name), server_name);
-        co_await perform_handshake();
-    } catch (...) { close(); throw; }
+        p.check();
+        p.prepare_handshake(std::move(peer_name), server_name);
+        if (allow_handoff && p.configuration->on_client_hello) {
+            if (!p.bio_state.buffers) p.bio_state.buffers = std::make_unique<ciphertext_buffers>();
+            p.bio_state.hello_reads.emplace();
+        }
+        if (co_await perform_handshake()) co_return;
+        if (!allow_handoff) tls_error("TLS ClientHello requested handoff; use handshake_with_handoff");
+        p.check();
+    } catch (...) {
+        p.bio_state.stop_capturing_hello();
+        close();
+        throw;
+    }
 }
 task<std::size_t> stream::read_some(std::span<char> buffer) {
     if (!impl_) throw std::logic_error("moved-from TLS stream");

@@ -68,8 +68,8 @@ co_await socket.handshake();
 证书和私钥会先完整检查再安装，缺失或不匹配的私钥不会替换已有的有效证书。
 加密私钥会失败，不会从终端提示输入密码。当前不支持要求客户端证书的 mTLS。
 
-配置在首次构造流或被注册为 SNI 目标时冻结，后续修改抛出 `logic_error`，即使
-流已关闭也不会解冻。修改配置时请创建新的 context。配置修改与冻结在内部串行
+配置在首次构造流、被注册为 SNI 目标或被 ClientHello 回调选中时冻结，后续修改
+抛出 `logic_error`，即使流已关闭也不会解冻。修改配置时请创建新的 context。配置修改与冻结在内部串行
 化，冻结后的配置可供多个 reactor 创建各自独立的流。移动、销毁公开 context
 对象不能与对同一对象的访问并发发生。
 
@@ -149,6 +149,44 @@ STARTTLS 应先在 TCP 流完成明文协议协商，再将其移动进 `tls::st
 传给 `tls::stream(std::move(transport), config, pre_read)`。构造函数返回前会复制
 这些字节，TLS 流会先回放它们，再从 TCP 读取。前缀可以包含完整 ClientHello，
 也可以在 TLS record 中间结束。
+
+## 检查 ClientHello 并路由
+
+服务端在构造流前通过 `context::set_client_hello_callback` 注册回调。回调在所属
+reactor 上同步执行，每条连接仅检查首次 ClientHello，早于证书选择。共享 context
+时，多个 reactor 可以并发调用。回调可读取 SNI、ALPN 列表、支持版本、密码套件 ID、
+密钥份额、旧版协议字段、会话 ID，以及带四字节握手头的原始握手消息。列表保留
+线上顺序，所有 view 仅在回调期间有效。原始消息跨 TLS record 拼接，省略各 record 头。
+
+- `client_hello_action::proceed()` 继续使用入口配置的 SNI 策略。
+- `client_hello_action::select(context)` 冻结并持有所选服务端配置，使用其证书和
+  ALPN。此选择优先于 SNI 路由，握手失败时关闭该连接。
+- `client_hello_action::reject()` 发送致命握手告警。回调抛出异常也会使握手失败。
+- `client_hello_action::handoff()` 在发出响应前暂停 TLS。通过
+  `handshake_with_handoff()` 取回原传输。
+
+```cpp
+server.set_client_hello_callback([](const pace::tls::client_hello& hello) {
+    if (hello.server_name == "upstream.example.com")
+        return pace::tls::client_hello_action::handoff();
+    return pace::tls::client_hello_action::proceed();
+});
+
+pace::tls::stream session(co_await listener.accept(), server);
+if (auto handoff = co_await session.handshake_with_handoff()) {
+    // 先按线上顺序处理 pre_read，再继续从底层传输读取。
+    co_await route_to_upstream(std::move(handoff->transport), std::move(handoff->pre_read));
+} else {
+    co_await handle_https(session);
+}
+```
+
+`handshake_with_handoff<Transport>()` 默认传输类型为 `tcp::stream`，传入 QUIC 流或
+自定义传输时须指定构造时的类型。空结果表示 TLS 握手已完成。交还结果接管仍然
+打开的原传输及全部已读字节，包括构造时传入的前缀和越过 ClientHello 的预读字节，
+TLS 流进入移出状态。回调执行前额外缓存的字节上限为 1 MiB。若使用已有的
+`handshake()` 或 `accept()`，收到交还请求时会静默关闭传输并报告协议错误。
+配置此回调的入口禁用会话恢复和票据，每条连接分别选择证书。
 
 ## 在异步字节流上运行 TLS
 
