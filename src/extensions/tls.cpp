@@ -156,14 +156,14 @@ struct ciphertext_buffer {
         if (begin) { std::memmove(bytes.data(), bytes.data() + begin, size()); end -= begin; begin = 0; }
     }
 };
-struct multiplex_buffers { ciphertext_buffer input, output; };
-struct socket_bio {
-    tcp::stream& transport;
+struct ciphertext_buffers { ciphertext_buffer input, output; };
+struct transport_bio {
+    tcp::stream* socket;
     std::string prefix;
     std::size_t prefix_offset = 0;
-    // Allocated only for an internal multiplexed protocol driver. Input stays
-    // with the stream so its later public shutdown sees prefetched close_notify.
-    std::unique_ptr<multiplex_buffers> buffers{};
+    // Allocated for asynchronous transports and TCP multiplexing. Input stays
+    // with the stream across operations, including prefetched close_notify.
+    std::unique_ptr<ciphertext_buffers> buffers{};
     bool multiplexing = false, input_eof = false;
 };
 
@@ -172,7 +172,7 @@ struct socket_bio {
 int bio_read(BIO* bio, char* bytes, int size) {
     BIO_clear_retry_flags(bio);
     if (!bytes || size <= 0) return 0;
-    auto& state = *static_cast<socket_bio*>(BIO_get_data(bio));
+    auto& state = *static_cast<transport_bio*>(BIO_get_data(bio));
     if (!state.prefix.empty()) {
         const auto count = std::min<std::size_t>(size, state.prefix.size() - state.prefix_offset);
         std::memcpy(bytes, state.prefix.data() + state.prefix_offset, count);
@@ -190,23 +190,27 @@ int bio_read(BIO* bio, char* bytes, int size) {
         return static_cast<int>(count);
     }
     if (state.input_eof) return 0;
-    const int result = socket_read(state.transport, bytes, size);
+    if (!state.socket) {
+        BIO_set_retry_read(bio);
+        return -1;
+    }
+    const int result = socket_read(*state.socket, bytes, size);
     if (result < 0 && socket_would_block()) BIO_set_retry_read(bio);
     return result;
 }
 int bio_write(BIO* bio, const char* bytes, int size) {
     BIO_clear_retry_flags(bio);
     if (!bytes || size <= 0) return 0;
-    auto& state = *static_cast<socket_bio*>(BIO_get_data(bio));
-    if (!state.multiplexing) {
-        const int result = socket_write(state.transport, bytes, size);
+    auto& state = *static_cast<transport_bio*>(BIO_get_data(bio));
+    if (state.socket && !state.multiplexing) {
+        const int result = socket_write(*state.socket, bytes, size);
         if (result < 0 && socket_would_block()) BIO_set_retry_write(bio);
         return result;
     }
     auto& output = state.buffers->output;
     int sent = 0;
-    if (!output.size()) {
-        sent = socket_write(state.transport, bytes, size);
+    if (state.socket && !output.size()) {
+        sent = socket_write(*state.socket, bytes, size);
         if (sent == size) return size; // No copy on the usual writable path.
         if (sent < 0) { if (!socket_would_block()) return sent; sent = 0; }
     }
@@ -216,16 +220,16 @@ int bio_write(BIO* bio, const char* bytes, int size) {
     if (!sent && !copied) { BIO_set_retry_write(bio); return -1; }
     return sent + static_cast<int>(copied);
 }
-BIO_METHOD* socket_method() {
+BIO_METHOD* transport_method() {
     static const auto method = [] {
         std::unique_ptr<BIO_METHOD, decltype(&BIO_meth_free)> result(
-            BIO_meth_new(BIO_TYPE_SOURCE_SINK | BIO_get_new_index(), "PACE nonblocking socket"), BIO_meth_free);
+            BIO_meth_new(BIO_TYPE_SOURCE_SINK | BIO_get_new_index(), "PACE TLS transport"), BIO_meth_free);
         if (!result || !BIO_meth_set_read(result.get(), bio_read) ||
             !BIO_meth_set_write(result.get(), bio_write) ||
             !BIO_meth_set_create(result.get(), [](BIO* bio) { BIO_set_init(bio, 1); return 1; }) ||
             !BIO_meth_set_destroy(result.get(), [](BIO*) { return 1; }) ||
             !BIO_meth_set_ctrl(result.get(), [](BIO* bio, int command, long, void*) -> long {
-                const auto* state = static_cast<socket_bio*>(BIO_get_data(bio));
+                const auto* state = static_cast<transport_bio*>(BIO_get_data(bio));
                 if (command == BIO_CTRL_FLUSH) return 1;
                 if (state) {
                     const auto prefix = state->prefix.size() - state->prefix_offset;
@@ -239,7 +243,7 @@ BIO_METHOD* socket_method() {
                     if (command == BIO_CTRL_EOF) return state->input_eof && !prefix && !buffered;
                 }
                 return 0;
-            })) tls_error("create socket BIO method");
+            })) tls_error("create TLS transport BIO method");
         return result;
     }();
     return method.get();
@@ -531,8 +535,9 @@ void context::set_server_name_policy(sni_policy missing, sni_policy unrecognized
 }
 
 struct stream::implementation {
-    tcp::stream transport;
-    socket_bio bio_state;
+    std::optional<tcp::stream> socket;
+    std::unique_ptr<pace::detail::tls_transport> transport;
+    transport_bio bio_state;
     std::shared_ptr<tls::context::implementation> configuration;
     peer_identity identity;
     std::unique_ptr<SSL, decltype(&SSL_free)> ssl{nullptr, SSL_free};
@@ -540,10 +545,20 @@ struct stream::implementation {
     bool handshaken = false;
     bool eof = false;
 
-    implementation(tcp::stream socket, std::shared_ptr<tls::context::implementation> config,
+    implementation(tcp::stream stream, std::shared_ptr<tls::context::implementation> config,
                    std::string_view pre_read)
-        : transport(std::move(socket)), bio_state{transport, std::string(pre_read)},
+        : socket(std::move(stream)), bio_state{&*socket, std::string(pre_read)},
           configuration(std::move(config)) {
+        initialize();
+    }
+    implementation(std::unique_ptr<pace::detail::tls_transport> stream,
+                   std::shared_ptr<tls::context::implementation> config, std::string_view pre_read)
+        : transport(std::move(stream)),
+          bio_state{nullptr, std::string(pre_read), 0, std::make_unique<ciphertext_buffers>()},
+          configuration(std::move(config)) {
+        initialize();
+    }
+    void initialize() {
         if (!configuration) throw std::logic_error("moved-from TLS context");
         configuration->freeze();
         ERR_clear_error();
@@ -551,19 +566,22 @@ struct stream::implementation {
         if (!ssl) tls_error("create TLS session");
         if (configuration->uses_custom_verification() && SSL_set_app_data(ssl.get(), &identity) != 1)
             tls_error("set TLS peer identity state");
-        auto* bio = BIO_new(socket_method());
-        if (!bio) tls_error("create TLS socket BIO");
+        auto* bio = BIO_new(transport_method());
+        if (!bio) tls_error("create TLS transport BIO");
         BIO_set_data(bio, &bio_state);
         SSL_set_bio(ssl.get(), bio, bio);
         if (configuration->mode == role::client) SSL_set_connect_state(ssl.get());
         else SSL_set_accept_state(ssl.get());
     }
+    io_context& context() const noexcept { return socket ? socket->context() : transport->context(); }
+    bool is_open() const noexcept { return socket ? socket->is_open() : transport->is_open(); }
+    void close() noexcept { if (socket) socket->close(); else transport->close(); }
     void check(bool require_handshake = false) const {
-        if (transport.context().stopped())
+        if (context().stopped())
             throw std::system_error(std::make_error_code(std::errc::operation_canceled));
-        if (!transport.is_open())
+        if (!is_open())
             throw std::system_error(std::make_error_code(std::errc::bad_file_descriptor));
-        if (io_context::current() != &transport.context())
+        if (io_context::current() != &context())
             throw std::logic_error("TLS operation must execute on its owning io_context");
         if (require_handshake && !handshaken)
             throw std::logic_error("TLS handshake has not completed");
@@ -605,12 +623,42 @@ struct stream::implementation {
         }
         ~operation() { state.active = false; }
     };
+    bool has_output() const noexcept { return transport && bio_state.buffers->output.size() != 0; }
+    task<void> flush_output() {
+        auto& output = bio_state.buffers->output;
+        const auto size = output.size();
+        co_await transport->write_all(std::string_view(output.bytes.data() + output.begin, size));
+        output.consume(size);
+    }
+    task<void> fail(const char* message) {
+        if (!has_output()) tls_error(message, ssl.get());
+        std::exception_ptr error;
+        // Preserve this SSL call's error queue before the transport can suspend.
+        try { tls_error(message, ssl.get()); } catch (...) { error = std::current_exception(); }
+        try { co_await flush_output(); } catch (...) {} // Send the alert if the transport is still usable.
+        std::rethrow_exception(error);
+    }
     task<void> wait(int error) {
-        if (error == SSL_ERROR_WANT_READ)
-            co_await transport.context().wait_readable(transport.native_handle());
-        else if (error == SSL_ERROR_WANT_WRITE)
-            co_await transport.context().wait_writable(transport.native_handle());
-        else tls_error("TLS operation failed (possibly unclean EOF)", ssl.get());
+        if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
+            co_await fail("TLS operation failed (possibly unclean EOF)");
+        } else if (socket) {
+            if (error == SSL_ERROR_WANT_READ) co_await context().wait_readable(socket->native_handle());
+            else co_await context().wait_writable(socket->native_handle());
+        } else {
+            if (has_output()) co_await flush_output();
+            if (error == SSL_ERROR_WANT_READ) {
+                if (!is_open()) throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+                if (bio_state.input_eof) tls_error("TLS transport reached unclean EOF", ssl.get());
+                auto& input = bio_state.buffers->input;
+                input.compact();
+                auto available = std::span(input.bytes).subspan(input.end);
+                if (available.empty()) throw std::logic_error("TLS transport input buffer is full");
+                const auto count = co_await transport->read_some(available);
+                if (count > available.size()) throw std::logic_error("TLS transport read exceeded its buffer");
+                input.end += count;
+                bio_state.input_eof = count == 0;
+            }
+        }
     }
 };
 
@@ -619,15 +667,19 @@ stream::stream(tcp::stream transport, const tls::context& config)
     : stream(std::move(transport), config, {}) {}
 stream::stream(tcp::stream transport, const tls::context& config, std::string_view pre_read)
     : impl_(std::make_unique<implementation>(std::move(transport), config.impl_, pre_read)) {}
+stream::stream(std::unique_ptr<pace::detail::tls_transport> transport,
+               const tls::context& config, std::string_view pre_read)
+    : impl_(std::make_unique<implementation>(std::move(transport), config.impl_, pre_read)) {}
 stream::~stream() = default;
 stream::stream(stream&&) noexcept = default;
 stream& stream::operator=(stream&&) noexcept = default;
-io_context& stream::context() const noexcept { return impl_->transport.context(); }
-bool stream::is_open() const noexcept { return impl_ && impl_->transport.is_open(); }
-void stream::close() noexcept { if (impl_) impl_->transport.close(); }
+io_context& stream::context() const noexcept { return impl_->context(); }
+bool stream::is_open() const noexcept { return impl_ && impl_->is_open(); }
+void stream::close() noexcept { if (impl_) impl_->close(); }
 void stream::set_no_delay(bool enabled) {
     if (!impl_) throw std::logic_error("moved-from TLS stream");
-    impl_->transport.set_no_delay(enabled);
+    if (!impl_->socket) throw std::logic_error("TCP_NODELAY requires a TCP-backed TLS stream");
+    impl_->socket->set_no_delay(enabled);
 }
 std::string stream::selected_protocol() const {
     if (!impl_) throw std::logic_error("moved-from TLS stream");
@@ -647,6 +699,7 @@ task<void> stream::perform_handshake() {
             if (p.configuration->mode == role::client && p.configuration->verify != verification::insecure &&
                 SSL_get_verify_result(p.ssl.get()) != X509_V_OK)
                 tls_error("TLS peer verification failed", p.ssl.get());
+            if (p.has_output()) co_await p.flush_output();
             p.handshaken = true;
             co_return;
         }
@@ -662,13 +715,14 @@ task<void> stream::connect(tcp::endpoint endpoint, std::string peer_name, std::s
 }
 task<void> stream::connect_impl(tcp::endpoint endpoint, std::string peer_name, std::optional<std::string> server_name) {
     if (!impl_) throw std::logic_error("moved-from TLS stream");
+    if (!impl_->socket) throw std::logic_error("TLS connect requires a TCP-backed stream");
     implementation::operation operation(*impl_);
     try {
         impl_->check();
         if (impl_->configuration->mode != role::client)
             throw std::logic_error("TLS connect requires a client context");
         impl_->prepare_handshake(std::move(peer_name), server_name);
-        co_await impl_->transport.connect(std::move(endpoint));
+        co_await impl_->socket->connect(std::move(endpoint));
         co_await perform_handshake();
     } catch (...) { close(); throw; }
 }
@@ -698,9 +752,15 @@ task<std::size_t> stream::read_some(std::span<char> buffer) {
             std::size_t count = 0;
             ERR_clear_error();
             const int result = SSL_read_ex(p.ssl.get(), buffer.data(), buffer.size(), &count);
-            if (result == 1) co_return count;
-            const int error = SSL_get_error(p.ssl.get(), result);
-            if (error == SSL_ERROR_ZERO_RETURN) { p.eof = true; co_return 0; }
+            const int error = result == 1 ? SSL_ERROR_NONE : SSL_get_error(p.ssl.get(), result);
+            if (result == 1 || error == SSL_ERROR_ZERO_RETURN) {
+                if (p.has_output()) co_await p.flush_output();
+                if (error == SSL_ERROR_ZERO_RETURN) {
+                    p.eof = true;
+                    co_return 0;
+                }
+                co_return count;
+            }
             co_await p.wait(error);
         }
     } catch (...) { close(); throw; }
@@ -716,7 +776,11 @@ task<void> stream::write_all(std::string_view bytes) {
             std::size_t count = 0;
             ERR_clear_error();
             const int result = SSL_write_ex(p.ssl.get(), bytes.data(), bytes.size(), &count);
-            if (result == 1) { bytes.remove_prefix(count); continue; }
+            if (result == 1) {
+                if (p.has_output()) co_await p.flush_output();
+                bytes.remove_prefix(count);
+                continue;
+            }
             const int error = SSL_get_error(p.ssl.get(), result);
             co_await p.wait(error);
         }
@@ -730,30 +794,50 @@ task<void> stream::shutdown(std::chrono::milliseconds timeout) {
     io_context::timer_handle deadline;
     try {
         p.check(true);
+        // An asynchronous write can suspend, so a zero bound closes it immediately.
+        if (p.transport && timeout <= std::chrono::milliseconds::zero()) {
+            close();
+            co_return;
+        }
         if (timeout > std::chrono::milliseconds::zero()) {
-            deadline = p.transport.context().call_after(timeout, [&] {
+            deadline = p.context().call_after(timeout, [&] {
                 timed_out = true;
-                p.transport.close();
+                p.close();
             });
         }
         for (;;) {
             // Readiness may already have queued this continuation before the
             // deadline closed the fd; in that case the waiter has no cancel code.
-            if (timed_out && !p.transport.context().stopped()) break;
+            if (timed_out && !p.context().stopped()) break;
             p.check(true);
             ERR_clear_error();
             const int result = SSL_shutdown(p.ssl.get());
-            if (result == 1) break;
+            if (result == 1) {
+                if (p.has_output()) co_await p.flush_output();
+                if (p.transport) {
+                    if (timed_out && !p.context().stopped()) break;
+                    p.check(true);
+                    co_await p.transport->shutdown(timeout);
+                    co_return;
+                }
+                break;
+            }
+            if (result == 0 && p.transport) {
+                // SSL may have already buffered the peer's close_notify. Let it
+                // check before reading more from the underlying transport.
+                if (p.has_output()) co_await p.flush_output();
+                continue;
+            }
             const int error = result < 0 ? SSL_get_error(p.ssl.get(), result) : SSL_ERROR_WANT_READ;
             if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE)
-                tls_error("TLS shutdown failed", p.ssl.get());
+                co_await p.fail("TLS shutdown failed");
             if (timeout <= std::chrono::milliseconds::zero()) break;
             co_await p.wait(error);
         }
     } catch (const std::system_error& error) {
         close();
         if (timed_out && error.code() == std::errc::operation_canceled &&
-            !p.transport.context().stopped()) co_return;
+            !p.context().stopped()) co_return;
         throw;
     } catch (...) { close(); throw; }
     close();
@@ -766,8 +850,9 @@ tls_driver::tls_driver(tls::stream& stream) : stream_(stream) {
     if (!stream_.impl_) throw std::logic_error("moved-from TLS stream");
     auto& p = *stream_.impl_;
     if (p.active) throw std::logic_error("another TLS operation is pending");
+    if (!p.socket) throw std::logic_error("multiplexed TLS driver requires a TCP socket");
     p.check(true);
-    if (!p.bio_state.buffers) p.bio_state.buffers = std::make_unique<tls::multiplex_buffers>();
+    if (!p.bio_state.buffers) p.bio_state.buffers = std::make_unique<tls::ciphertext_buffers>();
     p.bio_state.multiplexing = true;
     p.active = true;
 }
@@ -775,11 +860,11 @@ tls_driver::~tls_driver() {
     auto& p = *stream_.impl_;
     // Normal protocol completion includes draining ciphertext. An exceptional
     // exit must not silently drop queued records then attempt a TLS shutdown.
-    if (!drained()) p.transport.close();
+    if (!drained()) p.socket->close();
     p.bio_state.multiplexing = false;
     p.active = false;
 }
-native_socket_type tls_driver::native_handle() const noexcept { return stream_.impl_->transport.native_handle(); }
+native_socket_type tls_driver::native_handle() const noexcept { return stream_.impl_->socket->native_handle(); }
 bool tls_driver::drained() const noexcept {
     return !stream_.impl_->bio_state.buffers->output.size() && !write_retry_ && !read_wants_write_;
 }
@@ -801,7 +886,7 @@ bool tls_driver::progress() {
     auto& output = bio.buffers->output;
     bool changed = false;
     if (output.size()) {
-        const int count = tls::socket_write(p.transport, output.bytes.data() + output.begin, static_cast<int>(output.size()));
+        const int count = tls::socket_write(*p.socket, output.bytes.data() + output.begin, static_cast<int>(output.size()));
         if (count > 0) { output.consume(static_cast<std::size_t>(count)); changed = true; }
         else if (count < 0 && !tls::socket_would_block()) tls::tls_error("TLS ciphertext write failed");
     }
@@ -810,7 +895,7 @@ bool tls_driver::progress() {
     auto& input = bio.buffers->input;
     if ((write_retry_ || read_wants_write_) && !bio.input_eof && input.available()) {
         input.compact();
-        const int count = tls::socket_read(p.transport, input.bytes.data() + input.end, static_cast<int>(input.available()));
+        const int count = tls::socket_read(*p.socket, input.bytes.data() + input.end, static_cast<int>(input.available()));
         if (count > 0) { input.end += static_cast<std::size_t>(count); changed = true; }
         else if (!count) { bio.input_eof = true; changed = true; }
         else if (!tls::socket_would_block()) tls::tls_error("TLS ciphertext read failed");

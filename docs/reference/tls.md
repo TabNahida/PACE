@@ -208,7 +208,7 @@ void set_no_delay(bool enabled = true);
 void close() noexcept;
 ```
 
-The stream owns its TCP transport. Construct with an `io_context` for a new
+For TCP, construct with an `io_context` for a new
 socket, or move an accepted/connected TCP stream into the second constructor.
 Do not use the moved transport for plaintext I/O. `context()` returns the reactor,
 and `selected_protocol()` returns an owned copy of the negotiated ALPN identifier
@@ -246,9 +246,38 @@ pace::tls::stream connection(co_await listener.accept(), server_configuration);
 co_await connection.handshake();
 ```
 
-Both handshake paths suspend on nonblocking socket readiness. Handshake failure
+The TCP handshake suspends on socket readiness. Handshake failure
 or cancellation closes the transport. There is no individual handshake deadline;
 an application may request reactor stop or arrange lifetime-safe stream closure.
+
+## TLS over an asynchronous byte stream
+
+`tls::stream(transport, configuration, pre_read = {})` also accepts an already
+connected, ordered bidirectional byte stream. It owns the supplied transport.
+Move in a `quic::stream` opened bidirectionally, an already-handshaken
+`tls::stream`, or an application byte-stream adapter. Then call
+`handshake(peer_name)` as a client or `handshake()` as a server. Forward any TLS
+bytes consumed before wrapping as `pre_read`, in wire order.
+
+```cpp
+auto bytes = co_await quic_connection.open_stream(pace::quic::stream_type::bidirectional);
+pace::tls::stream inner(std::move(bytes), tls_configuration);
+co_await inner.handshake("relay.example.com");
+```
+
+Keep the parent QUIC connection alive through the TLS stream's lifetime. A
+custom transport supplies `context() const noexcept` returning `io_context&`,
+`read_some(std::span<char>) -> task<std::size_t>` and
+`write_all(std::string_view) -> task<void>`. Reads return zero at byte-stream EOF.
+Writes accept all supplied bytes before returning. Supply `close() noexcept` or
+the QUIC-style pair `finish_write()` and `reset() noexcept`. Close or reset
+must cancel outstanding operations with `operation_canceled`. An optional
+`is_open() const noexcept` lets TLS observe closure of the underlying stream.
+
+TLS exchanges ciphertext in bounded buffers through those asynchronous methods.
+Each transport stays on the same reactor throughout use. `connect()` and
+`set_no_delay()` require direct TCP. PACE's HTTP/2 multiplexing driver over TLS
+likewise requires direct TCP.
 
 ## Records, ownership and concurrency
 
@@ -271,16 +300,16 @@ apply here.
 Keep the stream object at a stable address, with its reactor alive, until each
 operation completes. Move only while idle. Buffers/views borrow application
 memory throughout suspension. `write_all` handles partial encrypted writes and
-finishes when OpenSSL has accepted every plaintext byte; it does not promise
-peer processing. `read_some` returns decrypted bytes, possibly fewer than requested.
-With a nonempty buffer, zero means a verified TLS `close_notify`. Bare TCP EOF
+finishes after passing the ciphertext to the underlying transport. `read_some`
+returns decrypted bytes, possibly fewer than requested.
+With a nonempty buffer, zero means a verified TLS `close_notify`. Transport EOF
 without that alert is a protocol error, preventing silent acceptance of truncated
 TLS traffic. An empty buffer returns zero without reading.
 
 TLS failures use `std::system_error` with `std::errc::protocol_error` and OpenSSL
 diagnostic text. Reactor cancellation uses `operation_canceled`; TCP connect
 errors retain TCP error codes. Invalid arguments and operation-state violations
-use `invalid_argument`/`logic_error`. A failed active operation closes the socket,
+use `invalid_argument`/`logic_error`. A failed active operation closes the transport,
 except that a rejected overlapping operation leaves the existing operation alone.
 Catch expected per-connection failures so an unhandled root does not stop peers.
 
@@ -292,15 +321,19 @@ task<void> close_gracefully(std::chrono::milliseconds timeout = std::chrono::mil
 ```
 
 `shutdown` sends `close_notify`, waits cooperatively for its peer's notification,
-then closes the transport. `close_gracefully` is its alias. A cancellable reactor
-timer bounds nonblocking readiness waits; reaching the timeout closes normally, while a
-TLS error or cancellation closes and propagates. Zero/negative timeout attempts
-shutdown once and then closes if the exchange is incomplete. The bound cannot
+then closes the transport. For a custom transport, TLS calls its optional
+`shutdown(std::chrono::milliseconds) -> task<void>` method. A QUIC-style stream
+sends FIN with `finish_write()` and waits for the peer's FIN. Other custom
+transports use `close()` after the exchange.
+`close_gracefully` is an alias for TLS shutdown. A cancellable reactor timer bounds
+the operation. Reaching the timeout closes normally, while a TLS error or
+cancellation closes and propagates. A nonpositive timeout makes one TCP shutdown
+attempt and closes other transports immediately. The bound cannot
 preempt blocking application code or guarantee peer receipt. No other TLS
 operation may be active during shutdown. Its scoped timer is removed immediately
 when shutdown finishes; no polling task or delayed callback outlives the operation.
 
-`close()` immediately cancels transport waits and closes the native socket; it
+`close()` immediately cancels waits and closes or resets the transport; it
 does not send `close_notify` or wait for suspended members. Retain the C++ stream
 until those members resume and finish. Destruction also closes immediately.
 As with TCP, close on the owning reactor or while it is not running. After moving,
