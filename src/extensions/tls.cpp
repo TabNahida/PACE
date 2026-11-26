@@ -158,6 +158,7 @@ struct ciphertext_buffer {
     }
 };
 struct ciphertext_buffers { ciphertext_buffer input, output; };
+struct shutdown_writer;
 struct transport_bio {
     tcp::stream* socket;
     std::string prefix;
@@ -166,6 +167,22 @@ struct transport_bio {
     // with the stream across operations, including prefetched close_notify.
     std::unique_ptr<ciphertext_buffers> buffers{};
     bool multiplexing = false, input_eof = false;
+    shutdown_writer* writer = nullptr;
+};
+
+// Only the physical transport writes concurrently during a shutdown exchange.
+struct shutdown_writer {
+    transport_bio& bio;
+    task_group& group;
+    std::optional<join_handle<void>> pending;
+    shutdown_writer(transport_bio& state, task_group& tasks) : bio(state), group(tasks) { bio.writer = this; }
+    ~shutdown_writer() { bio.writer = nullptr; }
+    task<void> drain() {
+        if (pending) {
+            co_await *pending;
+            pending.reset();
+        }
+    }
 };
 
 // OpenSSL's stock socket BIO takes an int descriptor. A custom BIO preserves
@@ -203,14 +220,14 @@ int bio_write(BIO* bio, const char* bytes, int size) {
     BIO_clear_retry_flags(bio);
     if (!bytes || size <= 0) return 0;
     auto& state = *static_cast<transport_bio*>(BIO_get_data(bio));
-    if (state.socket && !state.multiplexing) {
+    if (state.socket && !state.multiplexing && !state.writer) {
         const int result = socket_write(*state.socket, bytes, size);
         if (result < 0 && socket_would_block()) BIO_set_retry_write(bio);
         return result;
     }
     auto& output = state.buffers->output;
     int sent = 0;
-    if (state.socket && !output.size()) {
+    if (state.socket && !state.writer && !output.size()) {
         sent = socket_write(*state.socket, bytes, size);
         if (sent == size) return size; // No copy on the usual writable path.
         if (sent < 0) { if (!socket_would_block()) return sent; sent = 0; }
@@ -629,12 +646,27 @@ struct stream::implementation {
         }
         ~operation() { state.active = false; }
     };
-    bool has_output() const noexcept { return transport && bio_state.buffers->output.size() != 0; }
+    bool has_output() const noexcept {
+        return (transport || bio_state.writer) && bio_state.buffers->output.size() != 0;
+    }
     task<void> flush_output() {
         auto& output = bio_state.buffers->output;
-        const auto size = output.size();
-        co_await transport->write_all(std::string_view(output.bytes.data() + output.begin, size));
-        output.consume(size);
+        const std::string_view bytes(output.bytes.data() + output.begin, output.size());
+        if (auto* writer = bio_state.writer) {
+            // Keep wire order if reading the peer's records generates control traffic.
+            co_await writer->drain();
+            writer->pending.emplace(writer->group.spawn([this, owned = std::string(bytes)]() -> task<void> {
+                try {
+                    if (!is_open() || context().stopped())
+                        throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+                    if (socket) co_await socket->write_all(owned);
+                    else co_await transport->write_all(owned);
+                } catch (...) { close(); throw; }
+            }));
+        } else {
+            co_await transport->write_all(bytes);
+        }
+        output.consume(bytes.size());
     }
     task<void> fail(const char* message) {
         if (!has_output()) tls_error(message, ssl.get());
@@ -656,17 +688,23 @@ struct stream::implementation {
         input.end += count;
         bio_state.input_eof = count == 0;
     }
-    task<void> exchange_close_notify() {
-        auto& output = bio_state.buffers->output;
-        // Keep the pending alert stable while the reader continues driving SSL.
-        const std::string alert(output.bytes.data() + output.begin, output.size());
-        output.consume(alert.size());
+    implementation& wire_layer() noexcept {
+        auto* layer = this;
+        while (layer->transport) {
+            auto* nested = layer->transport->nested_stream();
+            if (!nested) break;
+            layer = nested->impl_.get();
+        }
+        return *layer;
+    }
+    task<void> exchange_close_notify(implementation& wire) {
+        if (!wire.bio_state.buffers) wire.bio_state.buffers = std::make_unique<ciphertext_buffers>();
         co_await with_task_group([&](task_group& group) -> task<void> {
-            auto send = group.spawn([&]() -> task<void> {
-                try { co_await transport->write_all(alert); }
-                catch (...) { close(); throw; }
-            });
+            shutdown_writer writer(wire.bio_state, group);
             try {
+                // Encrypt through the nested sessions first. Only the final wire
+                // write stays pending while those same sessions decode peer data.
+                co_await flush_output();
                 for (;;) {
                     if (!is_open() || context().stopped())
                         throw std::system_error(std::make_error_code(std::errc::operation_canceled));
@@ -677,7 +715,7 @@ struct stream::implementation {
                         tls_error("TLS shutdown failed", ssl.get());
                     co_await read_ciphertext();
                 }
-                co_await send;
+                co_await writer.drain();
             } catch (...) { close(); throw; }
         });
     }
@@ -685,8 +723,9 @@ struct stream::implementation {
         if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
             co_await fail("TLS operation failed (possibly unclean EOF)");
         } else if (socket) {
+            if (has_output()) co_await flush_output();
             if (error == SSL_ERROR_WANT_READ) co_await context().wait_readable(socket->native_handle());
-            else co_await context().wait_writable(socket->native_handle());
+            else if (!bio_state.writer) co_await context().wait_writable(socket->native_handle());
         } else {
             if (has_output()) co_await flush_output();
             if (error == SSL_ERROR_WANT_READ) co_await read_ciphertext();
@@ -845,9 +884,12 @@ task<void> stream::shutdown(std::chrono::milliseconds timeout) {
             ERR_clear_error();
             int result = SSL_shutdown(p.ssl.get());
             const int error = result < 0 ? SSL_get_error(p.ssl.get(), result) : SSL_ERROR_WANT_READ;
-            if (result != 1 && error == SSL_ERROR_WANT_READ && p.has_output() && p.transport->supports_concurrent_io()) {
-                co_await p.exchange_close_notify();
-                result = 1;
+            if (result != 1 && error == SSL_ERROR_WANT_READ && p.has_output()) {
+                auto& wire = p.wire_layer();
+                if (wire.socket || wire.transport->supports_concurrent_io()) {
+                    co_await p.exchange_close_notify(wire);
+                    result = 1;
+                }
             }
             if (result == 1) {
                 if (p.has_output()) co_await p.flush_output();

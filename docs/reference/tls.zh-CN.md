@@ -172,7 +172,7 @@ QUIC 父连接必须活到 TLS 流使用结束。自定义传输提供
 取消挂起操作。可选的 `is_open() const noexcept` 让 TLS 观察底层关闭。
 关闭期间，TLS 可以同时进行一次底层读取和一次底层写入，使缓冲区满时仍能交换
 关闭通知。要求串行 I/O 的适配器可实现 `bool supports_concurrent_io() const noexcept`
-并返回 `false`。底层为 `tls::stream` 时自动使用串行 I/O。
+并返回 `false`。嵌套 TLS 的每一层都按顺序处理 TLS 记录。最底层传输可以在各层读取对端关闭通知时并发发送密文。
 
 TLS 使用有界缓冲区收发密文，传输和 TLS 操作均在同一 reactor 上执行。
 使用异步传输的服务端会关闭 TLS 1.3 会话票据，让有界传输在握手后能直接交换应用数据。

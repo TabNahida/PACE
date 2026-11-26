@@ -276,7 +276,8 @@ must cancel outstanding operations with `operation_canceled`. An optional
 During shutdown, TLS can run one transport read and one transport write at the
 same time to exchange alerts when buffers are full. A serialized adapter can
 implement `bool supports_concurrent_io() const noexcept` and return `false`.
-An inner `tls::stream` uses serialized transport I/O automatically.
+For nested TLS, each SSL session processes records serially. The underlying
+byte stream can send ciphertext while the sessions read the peer's close notifications.
 
 TLS exchanges ciphertext in bounded buffers through those asynchronous methods.
 Servers on asynchronous transports suppress TLS 1.3 session tickets so a

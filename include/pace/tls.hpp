@@ -41,6 +41,7 @@ public:
     virtual ~tls_transport() = default;
     virtual io_context& context() const noexcept = 0;
     virtual bool is_open() const noexcept = 0;
+    virtual tls::stream* nested_stream() noexcept = 0;
     virtual bool supports_concurrent_io() const noexcept = 0;
     virtual task<std::size_t> read_some(std::span<char>) = 0;
     virtual task<void> write_all(std::string_view) = 0;
@@ -59,9 +60,12 @@ public:
             return open_ && transport_.is_open();
         return open_;
     }
+    tls::stream* nested_stream() noexcept override {
+        if constexpr (std::same_as<Transport, tls::stream>) return &transport_;
+        else return nullptr;
+    }
     bool supports_concurrent_io() const noexcept override {
-        if constexpr (std::same_as<Transport, tls::stream>) return false;
-        else if constexpr (requires { { transport_.supports_concurrent_io() } noexcept -> std::same_as<bool>; })
+        if constexpr (requires { { transport_.supports_concurrent_io() } noexcept -> std::same_as<bool>; })
             return transport_.supports_concurrent_io();
         else return true;
     }

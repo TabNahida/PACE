@@ -706,7 +706,7 @@ struct pipe_state {
     const std::size_t capacity;
     std::array<std::string, 2> inbound;
     std::array<bool, 2> closed{};
-    unsigned shutdown_calls = 0;
+    std::array<unsigned, 2> shutdown_calls{};
 };
 
 template<bool HasShutdown = false>
@@ -723,7 +723,7 @@ public:
     }
     // This adapter uses shutdown for cleanup and relies on close to release the pipe.
     pace::task<void> shutdown(std::chrono::milliseconds) requires HasShutdown {
-        ++state_->shutdown_calls;
+        ++state_->shutdown_calls[side_];
         co_return;
     }
     pace::task<std::size_t> read_some(std::span<char> buffer) {
@@ -815,7 +815,8 @@ void memory_transport(const transport_contexts& contexts, std::size_t capacity) 
     io.spawn(transport_echo_client(pace::tls::stream(pipe_stream<HasShutdown>(pipe, 1), contexts.client), done));
     io.run();
     require(done.count == 2, "in-memory TLS roundtrip incomplete");
-    require(pipe->shutdown_calls == (HasShutdown ? 2u : 0u), "unexpected in-memory shutdown hook calls");
+    constexpr unsigned expected = HasShutdown ? 1u : 0u;
+    require(pipe->shutdown_calls == std::array{expected, expected}, "unexpected in-memory shutdown hook calls");
     require(pipe->closed[0] && pipe->closed[1], "TLS shutdown left the in-memory transport open");
 }
 
@@ -847,7 +848,7 @@ void memory_shutdown_timeout(const transport_contexts& contexts) {
     require(finished && pipe->closed[1], "in-memory shutdown timeout did not unwind");
 }
 
-void simultaneous_memory_shutdown(const transport_contexts& contexts) {
+void simultaneous_memory_shutdown(const transport_contexts& contexts, unsigned layers) {
     pace::io_context io;
     // One direction cannot buffer even one encrypted close_notify record.
     auto pipe = std::make_shared<pipe_state>(io, 16);
@@ -855,7 +856,11 @@ void simultaneous_memory_shutdown(const transport_contexts& contexts) {
     unsigned handshakes = 0;
     const auto peer = [&](std::size_t side, const pace::tls::context& config, std::string peer_name) -> pace::task<void> {
         pace::tls::stream stream(pipe_stream<true>(pipe, side), config);
-        co_await stream.handshake(std::move(peer_name));
+        co_await stream.handshake(peer_name);
+        for (unsigned layer = 1; layer < layers; ++layer) {
+            stream = pace::tls::stream(std::move(stream), config);
+            co_await stream.handshake(peer_name);
+        }
         if (++handshakes == 2) pipe->changed.notify();
         while (handshakes != 2) co_await pipe->changed.wait();
         co_await stream.shutdown(100ms);
@@ -865,7 +870,7 @@ void simultaneous_memory_shutdown(const transport_contexts& contexts) {
     io.spawn(peer(1, contexts.client, "localhost"));
     io.run();
     require(done.count == 2 && pipe->closed[0] && pipe->closed[1], "simultaneous TLS shutdown did not close the pipe");
-    require(pipe->shutdown_calls == 2, "simultaneous TLS shutdown timed out before the cleanup hooks");
+    require(pipe->shutdown_calls == std::array{1u, 1u}, "simultaneous TLS shutdown timed out before the cleanup hooks");
 }
 
 void memory_transport_truncation(const transport_contexts& contexts) {
@@ -979,7 +984,8 @@ int main(int argc, char** argv) {
         memory_transport(contexts, 64);
         memory_transport<true>(contexts, 1024);
         memory_shutdown_timeout(contexts);
-        simultaneous_memory_shutdown(contexts);
+        simultaneous_memory_shutdown(contexts, 1);
+        simultaneous_memory_shutdown(contexts, 2);
         memory_transport_truncation(contexts);
         nested_tls_transport(contexts);
 #ifdef PACE_HAS_QUIC
