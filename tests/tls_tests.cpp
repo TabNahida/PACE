@@ -847,6 +847,27 @@ void memory_shutdown_timeout(const transport_contexts& contexts) {
     require(finished && pipe->closed[1], "in-memory shutdown timeout did not unwind");
 }
 
+void simultaneous_memory_shutdown(const transport_contexts& contexts) {
+    pace::io_context io;
+    // One direction cannot buffer even one encrypted close_notify record.
+    auto pipe = std::make_shared<pipe_state>(io, 16);
+    finished done{io};
+    unsigned handshakes = 0;
+    const auto peer = [&](std::size_t side, const pace::tls::context& config, std::string peer_name) -> pace::task<void> {
+        pace::tls::stream stream(pipe_stream<true>(pipe, side), config);
+        co_await stream.handshake(std::move(peer_name));
+        if (++handshakes == 2) pipe->changed.notify();
+        while (handshakes != 2) co_await pipe->changed.wait();
+        co_await stream.shutdown(100ms);
+        done.arrive();
+    };
+    io.spawn(peer(0, contexts.server, {}));
+    io.spawn(peer(1, contexts.client, "localhost"));
+    io.run();
+    require(done.count == 2 && pipe->closed[0] && pipe->closed[1], "simultaneous TLS shutdown did not close the pipe");
+    require(pipe->shutdown_calls == 2, "simultaneous TLS shutdown timed out before the cleanup hooks");
+}
+
 void memory_transport_truncation(const transport_contexts& contexts) {
     pace::io_context io;
     auto pipe = std::make_shared<pipe_state>(io);
@@ -958,6 +979,7 @@ int main(int argc, char** argv) {
         memory_transport(contexts, 64);
         memory_transport<true>(contexts, 1024);
         memory_shutdown_timeout(contexts);
+        simultaneous_memory_shutdown(contexts);
         memory_transport_truncation(contexts);
         nested_tls_transport(contexts);
 #ifdef PACE_HAS_QUIC

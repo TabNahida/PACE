@@ -273,6 +273,10 @@ Writes accept all supplied bytes before returning. Supply `close() noexcept` or
 the QUIC-style pair `finish_write()` and `reset() noexcept`. Close or reset
 must cancel outstanding operations with `operation_canceled`. An optional
 `is_open() const noexcept` lets TLS observe closure of the underlying stream.
+During shutdown, TLS can run one transport read and one transport write at the
+same time to exchange alerts when buffers are full. A serialized adapter can
+implement `bool supports_concurrent_io() const noexcept` and return `false`.
+An inner `tls::stream` uses serialized transport I/O automatically.
 
 TLS exchanges ciphertext in bounded buffers through those asynchronous methods.
 Servers on asynchronous transports suppress TLS 1.3 session tickets so a

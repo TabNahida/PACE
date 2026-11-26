@@ -1,5 +1,6 @@
 #include <pace/tls.hpp>
 #include <pace/detail/protocol_driver.hpp>
+#include <pace/task_group.hpp>
 
 #ifdef PACE_HAS_TLS
 #include <openssl/ssl.h>
@@ -643,6 +644,43 @@ struct stream::implementation {
         try { co_await flush_output(); } catch (...) {} // Send the alert if the transport is still usable.
         std::rethrow_exception(error);
     }
+    task<void> read_ciphertext() {
+        if (!is_open()) throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+        if (bio_state.input_eof) tls_error("TLS transport reached unclean EOF", ssl.get());
+        auto& input = bio_state.buffers->input;
+        input.compact();
+        auto available = std::span(input.bytes).subspan(input.end);
+        if (available.empty()) throw std::logic_error("TLS transport input buffer is full");
+        const auto count = co_await transport->read_some(available);
+        if (count > available.size()) throw std::logic_error("TLS transport read exceeded its buffer");
+        input.end += count;
+        bio_state.input_eof = count == 0;
+    }
+    task<void> exchange_close_notify() {
+        auto& output = bio_state.buffers->output;
+        // Keep the pending alert stable while the reader continues driving SSL.
+        const std::string alert(output.bytes.data() + output.begin, output.size());
+        output.consume(alert.size());
+        co_await with_task_group([&](task_group& group) -> task<void> {
+            auto send = group.spawn([&]() -> task<void> {
+                try { co_await transport->write_all(alert); }
+                catch (...) { close(); throw; }
+            });
+            try {
+                for (;;) {
+                    if (!is_open() || context().stopped())
+                        throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+                    ERR_clear_error();
+                    const int result = SSL_shutdown(ssl.get());
+                    if (result == 1) break;
+                    if (result < 0 && SSL_get_error(ssl.get(), result) != SSL_ERROR_WANT_READ)
+                        tls_error("TLS shutdown failed", ssl.get());
+                    co_await read_ciphertext();
+                }
+                co_await send;
+            } catch (...) { close(); throw; }
+        });
+    }
     task<void> wait(int error) {
         if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
             co_await fail("TLS operation failed (possibly unclean EOF)");
@@ -651,18 +689,7 @@ struct stream::implementation {
             else co_await context().wait_writable(socket->native_handle());
         } else {
             if (has_output()) co_await flush_output();
-            if (error == SSL_ERROR_WANT_READ) {
-                if (!is_open()) throw std::system_error(std::make_error_code(std::errc::operation_canceled));
-                if (bio_state.input_eof) tls_error("TLS transport reached unclean EOF", ssl.get());
-                auto& input = bio_state.buffers->input;
-                input.compact();
-                auto available = std::span(input.bytes).subspan(input.end);
-                if (available.empty()) throw std::logic_error("TLS transport input buffer is full");
-                const auto count = co_await transport->read_some(available);
-                if (count > available.size()) throw std::logic_error("TLS transport read exceeded its buffer");
-                input.end += count;
-                bio_state.input_eof = count == 0;
-            }
+            if (error == SSL_ERROR_WANT_READ) co_await read_ciphertext();
         }
     }
 };
@@ -816,7 +843,12 @@ task<void> stream::shutdown(std::chrono::milliseconds timeout) {
             if (timed_out && !p.context().stopped()) break;
             p.check(true);
             ERR_clear_error();
-            const int result = SSL_shutdown(p.ssl.get());
+            int result = SSL_shutdown(p.ssl.get());
+            const int error = result < 0 ? SSL_get_error(p.ssl.get(), result) : SSL_ERROR_WANT_READ;
+            if (result != 1 && error == SSL_ERROR_WANT_READ && p.has_output() && p.transport->supports_concurrent_io()) {
+                co_await p.exchange_close_notify();
+                result = 1;
+            }
             if (result == 1) {
                 if (p.has_output()) co_await p.flush_output();
                 if (p.transport) {
@@ -833,7 +865,6 @@ task<void> stream::shutdown(std::chrono::milliseconds timeout) {
                 if (p.has_output()) co_await p.flush_output();
                 continue;
             }
-            const int error = result < 0 ? SSL_get_error(p.ssl.get(), result) : SSL_ERROR_WANT_READ;
             if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE)
                 co_await p.fail("TLS shutdown failed");
             if (timeout <= std::chrono::milliseconds::zero()) break;

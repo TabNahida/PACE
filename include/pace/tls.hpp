@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+namespace pace::tls { class stream; }
 namespace pace::detail {
 class tls_driver;
 
@@ -40,6 +41,7 @@ public:
     virtual ~tls_transport() = default;
     virtual io_context& context() const noexcept = 0;
     virtual bool is_open() const noexcept = 0;
+    virtual bool supports_concurrent_io() const noexcept = 0;
     virtual task<std::size_t> read_some(std::span<char>) = 0;
     virtual task<void> write_all(std::string_view) = 0;
     virtual task<void> shutdown(std::chrono::milliseconds) = 0;
@@ -56,6 +58,12 @@ public:
         if constexpr (requires { { transport_.is_open() } noexcept -> std::same_as<bool>; })
             return open_ && transport_.is_open();
         return open_;
+    }
+    bool supports_concurrent_io() const noexcept override {
+        if constexpr (std::same_as<Transport, tls::stream>) return false;
+        else if constexpr (requires { { transport_.supports_concurrent_io() } noexcept -> std::same_as<bool>; })
+            return transport_.supports_concurrent_io();
+        else return true;
     }
     task<std::size_t> read_some(std::span<char> buffer) override { return transport_.read_some(buffer); }
     task<void> write_all(std::string_view bytes) override { return transport_.write_all(bytes); }
@@ -149,6 +157,8 @@ public:
     stream(tcp::stream transport, const tls::context& configuration, std::string_view pre_read);
     // The transport must already be connected and ready for bidirectional I/O.
     // Its close/reset must cancel pending operations on its owning reactor.
+    // Shutdown may overlap a transport read and write. Adapters with serialized
+    // I/O can declare supports_concurrent_io() const noexcept returning false.
     template<pace::detail::tls_byte_stream Transport> requires (!std::same_as<Transport, tcp::stream>)
     stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {})
         : stream(std::make_unique<pace::detail::tls_transport_model<Transport>>(std::move(transport)),
