@@ -60,15 +60,16 @@ public:
     task<std::size_t> read_some(std::span<char> buffer) override { return transport_.read_some(buffer); }
     task<void> write_all(std::string_view bytes) override { return transport_.write_all(bytes); }
     task<void> shutdown(std::chrono::milliseconds timeout) override {
-        if constexpr (requires { { transport_.shutdown(timeout) } -> std::same_as<task<void>>; }) {
+        if constexpr (tls_closeable<Transport> && requires { { transport_.shutdown(timeout) } -> std::same_as<task<void>>; }) {
             co_await transport_.shutdown(timeout);
+            close();
         } else if constexpr (tls_resettable<Transport>) {
             transport_.finish_write();
             // Dropping a QUIC stream before the peer's FIN cancels its send side.
             std::array<char, 4096> discard{};
             while (co_await transport_.read_some(discard)) co_await context().yield();
+            open_ = false;
         } else close();
-        open_ = false;
         co_return;
     }
     void close() noexcept override {

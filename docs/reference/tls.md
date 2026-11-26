@@ -275,6 +275,8 @@ must cancel outstanding operations with `operation_canceled`. An optional
 `is_open() const noexcept` lets TLS observe closure of the underlying stream.
 
 TLS exchanges ciphertext in bounded buffers through those asynchronous methods.
+Servers on asynchronous transports suppress TLS 1.3 session tickets so a
+bounded transport can start exchanging application data after the handshake.
 Each transport stays on the same reactor throughout use. `connect()` and
 `set_no_delay()` require direct TCP. PACE's HTTP/2 multiplexing driver over TLS
 likewise requires direct TCP.
@@ -321,10 +323,10 @@ task<void> close_gracefully(std::chrono::milliseconds timeout = std::chrono::mil
 ```
 
 `shutdown` sends `close_notify`, waits cooperatively for its peer's notification,
-then closes the transport. For a custom transport, TLS calls its optional
-`shutdown(std::chrono::milliseconds) -> task<void>` method. A QUIC-style stream
-sends FIN with `finish_write()` and waits for the peer's FIN. Other custom
-transports use `close()` after the exchange.
+then closes the transport. For a custom transport with `close()`, TLS runs any
+`shutdown(std::chrono::milliseconds) -> task<void>` cleanup hook before calling
+`close()`. A QUIC-style stream sends FIN with `finish_write()` and waits for
+the peer's FIN.
 `close_gracefully` is an alias for TLS shutdown. A cancellable reactor timer bounds
 the operation. Reaching the timeout closes normally, while a TLS error or
 cancellation closes and propagates. A nonpositive timeout makes one TCP shutdown

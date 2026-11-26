@@ -699,13 +699,17 @@ void client_verification_modes(const std::filesystem::path& fixtures) {
 }
 
 struct pipe_state {
-    explicit pipe_state(pace::io_context& context) : io(context), changed(context) {}
+    explicit pipe_state(pace::io_context& context, std::size_t capacity = 1024)
+        : io(context), changed(context), capacity(capacity) {}
     pace::io_context& io;
     pace::detail::reactor_signal changed;
+    const std::size_t capacity;
     std::array<std::string, 2> inbound;
     std::array<bool, 2> closed{};
+    unsigned shutdown_calls = 0;
 };
 
+template<bool HasShutdown = false>
 class pipe_stream {
 public:
     pipe_stream(std::shared_ptr<pipe_state> state, std::size_t side) : state_(std::move(state)), side_(side) {}
@@ -716,6 +720,11 @@ public:
         if (!is_open()) return;
         state_->closed[side_] = true;
         state_->changed.notify();
+    }
+    // This adapter uses shutdown for cleanup and relies on close to release the pipe.
+    pace::task<void> shutdown(std::chrono::milliseconds) requires HasShutdown {
+        ++state_->shutdown_calls;
+        co_return;
     }
     pace::task<std::size_t> read_some(std::span<char> buffer) {
         auto& queue = state_->inbound[side_];
@@ -730,7 +739,7 @@ public:
     }
     pace::task<void> write_all(std::string_view bytes) {
         auto& queue = state_->inbound[1 - side_];
-        constexpr std::size_t capacity = 1024;
+        const auto capacity = state_->capacity;
         while (!bytes.empty()) {
             while (is_open() && queue.size() == capacity && !state_->closed[1 - side_])
                 co_await state_->changed.wait();
@@ -787,7 +796,8 @@ pace::task<void> transport_echo_client(pace::tls::stream stream, finished& done)
     done.arrive();
 }
 
-pace::task<void> pipe_echo_server(pipe_stream transport, const pace::tls::context& config, finished& done) {
+template<bool HasShutdown>
+pace::task<void> pipe_echo_server(pipe_stream<HasShutdown> transport, const pace::tls::context& config, finished& done) {
     // Read a record header and part of its body before wrapping the byte stream.
     std::array<char, 7> prefix{};
     co_await pace::read_exact(transport, std::span<char>(prefix));
@@ -795,14 +805,18 @@ pace::task<void> pipe_echo_server(pipe_stream transport, const pace::tls::contex
         pace::tls::stream(std::move(transport), config, std::string_view(prefix.data(), prefix.size())), done);
 }
 
-void memory_transport(const transport_contexts& contexts) {
+template<bool HasShutdown = false>
+void memory_transport(const transport_contexts& contexts, std::size_t capacity) {
     pace::io_context io;
-    auto pipe = std::make_shared<pipe_state>(io);
+    auto pipe = std::make_shared<pipe_state>(io, capacity);
     finished done{io};
-    io.spawn(pipe_echo_server(pipe_stream(pipe, 0), contexts.server, done));
-    io.spawn(transport_echo_client(pace::tls::stream(pipe_stream(pipe, 1), contexts.client), done));
+    const auto deadline = io.call_after(5s, [] { throw std::runtime_error("in-memory TLS roundtrip stalled"); });
+    io.spawn(pipe_echo_server(pipe_stream<HasShutdown>(pipe, 0), contexts.server, done));
+    io.spawn(transport_echo_client(pace::tls::stream(pipe_stream<HasShutdown>(pipe, 1), contexts.client), done));
     io.run();
-    require(done.count == 2 && pipe->closed[0] && pipe->closed[1], "in-memory TLS roundtrip incomplete");
+    require(done.count == 2, "in-memory TLS roundtrip incomplete");
+    require(pipe->shutdown_calls == (HasShutdown ? 2u : 0u), "unexpected in-memory shutdown hook calls");
+    require(pipe->closed[0] && pipe->closed[1], "TLS shutdown left the in-memory transport open");
 }
 
 pace::task<void> withhold_transport_shutdown(pace::tls::stream stream) {
@@ -941,7 +955,8 @@ int main(int argc, char** argv) {
         independent_client_sni(fixtures, true);
         client_verification_modes(fixtures);
         const transport_contexts contexts(fixtures);
-        memory_transport(contexts);
+        memory_transport(contexts, 64);
+        memory_transport<true>(contexts, 1024);
         memory_shutdown_timeout(contexts);
         memory_transport_truncation(contexts);
         nested_tls_transport(contexts);

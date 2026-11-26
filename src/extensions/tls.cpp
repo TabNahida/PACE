@@ -564,6 +564,11 @@ struct stream::implementation {
         ERR_clear_error();
         ssl.reset(SSL_new(configuration->handle.get()));
         if (!ssl) tls_error("create TLS session");
+        // The client can start writing as soon as it sends its Finished. If
+        // the server is still writing TLS 1.3 tickets, a bounded transport
+        // can fill in both directions while neither side is reading.
+        if (transport && configuration->mode == role::server && SSL_set_num_tickets(ssl.get(), 0) != 1)
+            tls_error("disable TLS session tickets for asynchronous transport");
         if (configuration->uses_custom_verification() && SSL_set_app_data(ssl.get(), &identity) != 1)
             tls_error("set TLS peer identity state");
         auto* bio = BIO_new(transport_method());

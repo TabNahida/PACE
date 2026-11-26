@@ -172,6 +172,7 @@ QUIC 父连接必须活到 TLS 流使用结束。自定义传输提供
 取消挂起操作。可选的 `is_open() const noexcept` 让 TLS 观察底层关闭。
 
 TLS 使用有界缓冲区收发密文，传输和 TLS 操作均在同一 reactor 上执行。
+使用异步传输的服务端会关闭 TLS 1.3 会话票据，让有界传输在握手后能直接交换应用数据。
 `connect()`、`set_no_delay()` 和 HTTP/2 的 TLS 多路复用驱动要求直接使用 TCP。
 
 ## 读写与并发
@@ -195,9 +196,9 @@ OpenSSL 的读写操作都可能要求等待任一方向的就绪，不能直接
 ## 关闭
 
 `shutdown(timeout = 100ms)` 发送并等待 `close_notify` 后关闭；
-`close_gracefully` 是同义方法。完成交换后，自定义传输可通过可选的
-`shutdown(std::chrono::milliseconds)` 收尾，QUIC 风格的传输会发送并等待 FIN，其余传输
-调用 `close()`。内部使用可取消的 reactor 定时器限制操作时间，超时正常关闭，TLS
+`close_gracefully` 是同义方法。完成交换后，提供 `close()` 的自定义传输会先执行
+可选的 `shutdown(std::chrono::milliseconds)` 做清理，再调用 `close()`。
+QUIC 风格的传输会发送并等待 FIN。内部使用可取消的 reactor 定时器限制操作时间，超时正常关闭，TLS
 错误和取消继续抛出。零或负超时会尝试一次 TCP 关闭，其他传输立即关闭。协作式
 时限无法抢占阻塞应用代码。操作结束即注销定时器，不留下轮询任务
 或延迟回调。
