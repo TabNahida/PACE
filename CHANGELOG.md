@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1 — 2026-11-26
+
+- Run TLS over owned asynchronous byte streams, including QUIC bidirectional streams, in-memory transports and nested TLS. Replay pre-read bytes and exchange close notifications under backpressure (#33, #35).
+- Add client verification by leaf certificate or SPKI SHA-256 pin, an application verification callback and explicit insecure mode. Set the SNI name independently of the verified peer name (#34).
+- Inspect the server-side ClientHello before certificate selection. Select a context or hand the original transport and pre-read bytes back without sending a TLS response (#36).
+- Harden socket readiness and bound reactor dispatch work. Preserve timeout reasons during reactor shutdown (#23, #24).
+
 ## 0.6.0 — 2026-11-18
 
 - Use ngtcp2 by default when QUIC or HTTP/3 is enabled. Select the native OpenSSL transport with `--quic_backend=openssl`.
