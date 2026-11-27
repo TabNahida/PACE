@@ -2,6 +2,17 @@
 
 ## 1.0.0-alpha.2 — unreleased
 
+- Add cross-context communication (issue #31, `<pace/runtime/channel.hpp>`, `snapshot.hpp`, `on.hpp`):
+  - `pace::channel<T>`, a bounded multi-producer, single-consumer queue owned by one context: non-blocking
+    `try_send` from any thread with an `overflow_policy` (`reject` or `drop_oldest`), `co_await send()` with
+    backpressure from any context, `blocking_send()` for plain threads, and `co_await receive()` on the owner.
+    `close()` and the owner's shutdown wake every waiter; tokens, deadlines and `stop()` cancel waiting sends and
+    receives.
+  - `pace::snapshot<T>`, RCU-style publication of `std::shared_ptr<const T>` to every context of a runtime (or a
+    list of contexts): `get()` reads the context's cached copy without locks or atomic read-modify-writes.
+  - `co_await pace::on(context, work)` runs a task or factory on another context and resumes on the caller's,
+    propagating the caller's cancellation, deadline and stop to the work.
+  - `runtime::shard_index(key)` and `runtime::shard_for(key)`: a fixed key-to-context mapping.
 - **Behavior change:** `task_group::cancel()` no longer makes the scope throw. The `operation_canceled` it causes in
   the body and the children is the requested outcome: the scope joins them and returns the body's value (or
   returns, for a `void` body), so "first to finish wins" works as a group the winner cancels. Cancellation of the

@@ -62,6 +62,10 @@ public:
 
     std::size_t size() const noexcept;
     io_context& context(std::size_t index);
+    template <class Key>
+    std::size_t shard_index(const Key& key) const;
+    template <class Key>
+    io_context& shard_for(const Key& key);
     void run();
     void run_on_current_thread();
     void stop() noexcept;
@@ -74,6 +78,8 @@ public:
 | `~runtime()` | Destroys the contexts. `run()` or `run_on_current_thread()` must have returned. Work still queued on contexts that never ran is destroyed without running. |
 | `size()` | The number of contexts, fixed at construction. |
 | `context(index)` | The context at `index`; throws `std::out_of_range` for `index >= size()`. Addresses are stable for the runtime's lifetime. Submit work with `context(i).spawn(…)` or `context(i).post(…)`. |
+| `shard_index(key)` | The index of the context that owns `key`: `std::hash<Key>` of the key, mixed and reduced modulo `size()`. The same key always gives the same index for the runtime's lifetime; across processes or builds it is only as stable as `std::hash`. Thread-safe. |
+| `shard_for(key)` | `context(shard_index(key))`: the fixed owner of the state behind `key`, for example the context that owns a [`channel`](cross-context.md#channel) for that key. Thread-safe. |
 | `run()` | Starts one thread per context and blocks until all of them have stopped and been joined. |
 | `run_on_current_thread()` | Runs context 0 on the calling thread and the others on `size() - 1` new threads; blocks the same way. With one context no thread is created. |
 | `stop()` | Requests stop on every context. Thread-safe, idempotent, does not wait. |
@@ -100,7 +106,7 @@ Each context is also single-use: running a context yourself and then running the
 
 ## Threads and concurrency
 
-`stop()`, and `spawn`/`post`/`stop` on any `context(i)`, may be called from any thread, including from a task or
+`stop()`, `shard_index`, `shard_for`, and `spawn`/`post`/`stop` on any `context(i)`, may be called from any thread, including from a task or
 callback on one of the runtime's own contexts. Everything else about a context, its sockets and its tasks follows
 the [`io_context` rules](io-context.md#threads-and-concurrency): one thread per context, and objects shared between
 contexts need the application's own synchronization.
@@ -130,6 +136,7 @@ with a single ready descriptor; compare throughput and tail latency at several w
 ## See also
 
 - [`io_context`](io-context.md): what each context does
+- [Cross-context communication](cross-context.md): channels, snapshots and `on()` between these contexts
 - [I/O backends](io-backends.md): the `backend` argument
 - [Tutorial: workers and threads](../../tutorial/08-workers-and-threads.md)
 - [Runtime performance](../../performance/runtime.md)

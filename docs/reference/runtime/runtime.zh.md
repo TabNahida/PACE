@@ -1,4 +1,4 @@
-<!-- source-hash: 4059eaded240 -->
+<!-- source-hash: 3ec0d05d446e -->
 # `pace::runtime`
 
 [English](runtime.md) · [运行时](README.zh.md)
@@ -63,6 +63,10 @@ public:
 
     std::size_t size() const noexcept;
     io_context& context(std::size_t index);
+    template <class Key>
+    std::size_t shard_index(const Key& key) const;
+    template <class Key>
+    io_context& shard_for(const Key& key);
     void run();
     void run_on_current_thread();
     void stop() noexcept;
@@ -75,6 +79,8 @@ public:
 | `~runtime()` | 销毁各个 context。`run()` 或 `run_on_current_thread()` 必须已经返回。从未运行过的 context 上仍在排队的工作会被销毁而不执行。 |
 | `size()` | context 数量，构造时确定。 |
 | `context(index)` | 位于 `index` 的 context；`index >= size()` 时抛出 `std::out_of_range`。其地址在 runtime 生命周期内保持不变。用 `context(i).spawn(…)` 或 `context(i).post(…)` 提交工作。 |
+| `shard_index(key)` | 拥有 `key` 的 context 的下标：对键做 `std::hash<Key>`，再混合并对 `size()` 取模。同一个键在 runtime 生命周期内总是得到同一个下标；跨进程或跨构建时，它的稳定性与 `std::hash` 相同。线程安全。 |
+| `shard_for(key)` | `context(shard_index(key))`：`key` 背后状态的固定属主，例如为该键持有 [`channel`](cross-context.zh.md#channel) 的 context。线程安全。 |
 | `run()` | 为每个 context 启动一个线程，阻塞到它们全部停止并被 join。 |
 | `run_on_current_thread()` | 在调用线程上运行 context 0，其余 context 运行在 `size() - 1` 个新线程上；阻塞方式相同。只有一个 context 时不创建线程。 |
 | `stop()` | 请求所有 context 停止。线程安全、幂等、不等待。 |
@@ -100,7 +106,7 @@ public:
 
 ## 线程与并发
 
-`stop()` 以及任一 `context(i)` 上的 `spawn`/`post`/`stop` 可以从任何线程调用，包括 runtime 自己的 context 上的
+`stop()`、`shard_index`、`shard_for` 以及任一 `context(i)` 上的 `spawn`/`post`/`stop` 可以从任何线程调用，包括 runtime 自己的 context 上的
 task 或回调。关于 context、其 socket 和 task 的其他一切都遵循 [`io_context` 的规则](io-context.zh.md#线程与并发)：
 每个 context 一个线程，在 context 之间共享的对象需要应用自己同步。
 
@@ -128,6 +134,7 @@ task 或回调。关于 context、其 socket 和 task 的其他一切都遵循 [
 ## 参见
 
 - [`io_context`](io-context.zh.md)：每个 context 的职责
+- [跨 context 通信](cross-context.zh.md)：这些 context 之间的 channel、snapshot 和 `on()`
 - [I/O 后端](io-backends.zh.md)：`backend` 参数
 - [教程：工作线程](../../tutorial/08-workers-and-threads.zh.md)
 - [运行时性能](../../performance/runtime.zh.md)

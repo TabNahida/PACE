@@ -130,6 +130,7 @@ nav:
           - reference/runtime/runtime.md
           - reference/runtime/run.md
           - reference/runtime/structured-concurrency.md
+          - reference/runtime/cross-context.md
           - reference/runtime/io-backends.md
           - reference/runtime/handles-and-signals.md
       - Networking:

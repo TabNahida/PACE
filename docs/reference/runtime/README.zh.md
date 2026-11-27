@@ -1,4 +1,4 @@
-<!-- source-hash: 91b015fb5b7a -->
+<!-- source-hash: 3cf0e3482da2 -->
 # 运行时
 
 [English](README.md) · [参考](../README.zh.md)
@@ -6,7 +6,8 @@
 ## 概述
 
 运行时模块负责运行 PACE 的协程：惰性 task、带定时器和就绪等待的单线程 `io_context` 反应器、多线程 runtime、
-同步入口 `pace::run`、取消、截止时间和结构化任务组。其他所有模块都构建在它之上，它没有第三方依赖。
+同步入口 `pace::run`、取消、截止时间、结构化任务组，以及 context 之间的 channel、snapshot 和 `on()`。其他所有模块都构建在它之上，
+它没有第三方依赖。
 
 | 头文件 | 目标 | 构建选项 |
 |:--|:--|:--|
@@ -24,6 +25,7 @@
 | [`runtime`](runtime.zh.md) | `runtime/runtime.hpp` | 每个工作线程一个 context |
 | [`run`](run.zh.md) | `runtime/run.hpp`、`runtime/this_context.hpp`、`runtime/blocking.hpp` | `pace::run`、`this_context`、`sleep_for`、`yield`、`blocking_options`、`blocking_call` |
 | [结构化并发](structured-concurrency.zh.md) | `runtime/task_group.hpp`、`runtime/operation.hpp`、`runtime/cancellation.hpp` | `task_group`、`join_handle`、`with_task_group`、`with_options`、`with_deadline`、`with_cancellation`、`shield`、`deadline`、`cancellation_source`、`cancellation_token` |
+| [跨 context 通信](cross-context.zh.md) | `runtime/channel.hpp`、`runtime/snapshot.hpp`、`runtime/on.hpp` | `channel`、`overflow_policy`、`send_status`、`snapshot`、`on` |
 | [I/O 后端](io-backends.zh.md) | `runtime/io_backend.hpp` | `io_backend`、`backend_name`、`PACE_IO_BACKEND` |
 | [句柄与信号](handles-and-signals.zh.md) | `runtime/io_context.hpp`、`runtime/signal.hpp` | 管道、终端与 TUN 设备上的就绪等待；Windows `wait_handle`；`process_signal`、`signal_set`、`wait_for_signal`、`deliver_signal`、`signal_name` |
 | 本页 | `runtime/ascii.hpp`、`pace.hpp` | `ascii::to_lower`、`ascii::iequals`；包含所有模块的头文件 |
@@ -96,7 +98,7 @@ context 停止期间从根任务逃出的 `operation_canceled` 是预期结果�
 ## 线程与并发
 
 **每个 context 一个线程。** 每个 `io_context` 由一个线程运行，其 socket、定时器和等待只在该线程上使用。`spawn`、`post`
-和 `stop` 是跨线程入口。在 `run()` 之前创建对象、在它返回之后销毁对象都没有问题；在它运行期间从无关线程访问这些对象则不行，
+和 `stop` 是跨线程入口；[channel、snapshot 和 `on()`](cross-context.zh.md) 构建在它们之上。在 `run()` 之前创建对象、在它返回之后销毁对象都没有问题；在它运行期间从无关线程访问这些对象则不行，
 只读访问器也不例外。各协议页面说明一个对象上可以同时有多少个未完成操作。
 
 **阻塞工作会饿死反应器。** 协程一直运行到挂起或返回。阻塞调用或长时间的 CPU 循环会让该 context 上的所有其他 task、

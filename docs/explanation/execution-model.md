@@ -52,6 +52,20 @@ listener so that connections are spread across reactors. To act on another conte
 Cross-thread submissions go through one mutex-protected inbox per context; only the first submission after the
 inbox drains wakes the reactor, so a burst of posts costs one wake-up.
 
+`spawn` and `post` are fire-and-forget. When work on one context needs something from another, the
+[cross-context tools](../reference/runtime/cross-context.md) build the usual patterns on that inbox, and each
+resumes a waiting coroutine on the context it was running on:
+
+- **State owned by one context.** Give a shared table, a quota counter or a device to one context, chosen with
+  `runtime.shard_for(key)`, and let the others send it requests through a `channel<T>`. The owner applies them in
+  order without locks; senders on other contexts wait when the channel is full instead of growing a queue without
+  bound, and plain threads can `try_send`.
+- **Read-mostly data on every context.** A `snapshot<T>` publishes an immutable value, such as routing rules, to
+  every context. Each reads its own cached copy without locks; a publish replaces the copies between turns.
+- **A result from another context.** `co_await pace::on(context, work)` runs the work there and resumes here with
+  its value or exception. The caller's cancellation and deadline reach the work, and the caller waits for it like a
+  child task, which replaces posting a function and then posting the result back.
+
 ## Cooperative scheduling
 
 A coroutine runs until it suspends (on I/O, a timer, `yield`, or awaiting another task) or finishes. Nothing
@@ -61,7 +75,7 @@ lets timers, I/O and shutdown through, but a single coroutine that never suspend
 So blocking calls do not belong on a reactor: a synchronous file read, a lock held across I/O, a long computation,
 or a direct client call (`pace::http::get`) inside a coroutine all stall every other task on that context. Use the
 `async_*` forms inside coroutines. PACE does not yet provide a pool for blocking work; run it on a thread you own
-and `post` the result back to the context that needs it.
+and hand the result back to the context that needs it with `post`, or with `channel::try_send` or `blocking_send`.
 
 ## Stopping
 

@@ -5,8 +5,8 @@
 ## Overview
 
 The runtime module runs PACE's coroutines: lazy tasks, the single-threaded `io_context` reactor with its timers and
-readiness waits, multi-threaded runtimes, the synchronous `pace::run` entry, cancellation, deadlines and structured
-task groups. Every other module builds on it, and it has no third-party dependency.
+readiness waits, multi-threaded runtimes, the synchronous `pace::run` entry, cancellation, deadlines, structured
+task groups, and channels, snapshots and `on()` between contexts. Every other module builds on it, and it has no third-party dependency.
 
 | Header | Target | Build option |
 |:--|:--|:--|
@@ -25,6 +25,7 @@ and `import pace;` exports every module.
 | [`runtime`](runtime.md) | `runtime/runtime.hpp` | one context per worker thread |
 | [`run`](run.md) | `runtime/run.hpp`, `runtime/this_context.hpp`, `runtime/blocking.hpp` | `pace::run`, `this_context`, `sleep_for`, `yield`, `blocking_options`, `blocking_call` |
 | [Structured concurrency](structured-concurrency.md) | `runtime/task_group.hpp`, `runtime/operation.hpp`, `runtime/cancellation.hpp` | `task_group`, `join_handle`, `with_task_group`, `with_options`, `with_deadline`, `with_cancellation`, `shield`, `deadline`, `cancellation_source`, `cancellation_token` |
+| [Cross-context communication](cross-context.md) | `runtime/channel.hpp`, `runtime/snapshot.hpp`, `runtime/on.hpp` | `channel`, `overflow_policy`, `send_status`, `snapshot`, `on` |
 | [I/O backends](io-backends.md) | `runtime/io_backend.hpp` | `io_backend`, `backend_name`, `PACE_IO_BACKEND` |
 | [Handles and signals](handles-and-signals.md) | `runtime/io_context.hpp`, `runtime/signal.hpp` | readiness on pipes, terminals and TUN devices; Windows `wait_handle`; `process_signal`, `signal_set`, `wait_for_signal`, `deliver_signal`, `signal_name` |
 | this page | `runtime/ascii.hpp`, `pace.hpp` | `ascii::to_lower`, `ascii::iequals`; the all-modules header |
@@ -100,7 +101,8 @@ the same way, with `operation_canceled` or `std::errc::timed_out`, without stopp
 ## Threads and concurrency
 
 **One thread per context.** Each `io_context` is run by one thread, and its sockets, timers and waits are used only
-from that thread. `spawn`, `post` and `stop` are the cross-thread entry points. Creating objects before `run()` and
+from that thread. `spawn`, `post` and `stop` are the cross-thread entry points; [channels, snapshots and
+`on()`](cross-context.md) build on them. Creating objects before `run()` and
 destroying them after it returns is fine; touching them from an unrelated thread while it runs is not, read-only
 accessors included. Each protocol's page states how many operations may be outstanding on one object.
 
