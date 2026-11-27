@@ -211,7 +211,10 @@ void io_context::run()
     p.has_run = true;
     active_context = this;
     profiling::scope run_timing(profiling::stage::reactor_run);
-    auto record_error = [&](const std::exception_ptr& error)
+    // By value on purpose: taking the exception_ptr by reference changes how this loop is compiled and
+    // made the yield hot path about 45% slower in most runs (Apple M-series, clang, kqueue).
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): keeps the run loop's code generation
+    auto record_error = [&](std::exception_ptr error)
     {
         try
         {
