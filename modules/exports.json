@@ -34,6 +34,10 @@
           "requires": null
         },
         {
+          "name": "pace::channel",
+          "requires": null
+        },
+        {
           "name": "pace::deadline",
           "requires": null
         },
@@ -62,11 +66,19 @@
           "requires": null
         },
         {
+          "name": "pace::on",
+          "requires": null
+        },
+        {
           "name": "pace::operation_options",
           "requires": null
         },
         {
           "name": "pace::operation_result",
+          "requires": null
+        },
+        {
+          "name": "pace::overflow_policy",
           "requires": null
         },
         {
@@ -79,6 +91,10 @@
         },
         {
           "name": "pace::runtime",
+          "requires": null
+        },
+        {
+          "name": "pace::send_status",
           "requires": null
         },
         {
@@ -95,6 +111,10 @@
         },
         {
           "name": "pace::sleep_for",
+          "requires": null
+        },
+        {
+          "name": "pace::snapshot",
           "requires": null
         },
         {

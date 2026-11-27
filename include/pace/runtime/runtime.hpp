@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
+#include <functional>
 #include <thread>
 #include <vector>
 
@@ -35,6 +37,30 @@ public:
     io_context& context(std::size_t index)
     {
         return *contexts_.at(index);
+    }
+
+    /// The index of the context that owns `key`: std::hash<Key> of the key, mixed and reduced modulo size(). The same
+    /// key always maps to the same index for this runtime's lifetime; the mapping is not stable across processes
+    /// or builds when std::hash is not. Thread-safe.
+    template <class Key>
+    std::size_t shard_index(const Key& key) const
+    {
+        auto mixed = static_cast<std::uint64_t>(std::hash<Key>{}(key));
+        // splitmix64's finalizer: std::hash is the identity for integers on common standard libraries, and keys
+        // such as aligned pointers or strided identifiers would otherwise land on a few contexts.
+        mixed ^= mixed >> 30;
+        mixed *= 0xbf58476d1ce4e5b9ULL;
+        mixed ^= mixed >> 27;
+        mixed *= 0x94d049bb133111ebULL;
+        mixed ^= mixed >> 31;
+        return static_cast<std::size_t>(mixed % contexts_.size());
+    }
+
+    /// context(shard_index(key)): the fixed owner of the state behind `key`. Thread-safe.
+    template <class Key>
+    io_context& shard_for(const Key& key)
+    {
+        return *contexts_[shard_index(key)];
     }
 
     /// Runs every context on its own new thread; blocks until all have stopped and been joined, then rethrows the
