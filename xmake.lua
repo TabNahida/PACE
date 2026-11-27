@@ -1,5 +1,5 @@
 set_project("pace")
-set_version("0.6.1")
+set_version("1.0.0-alpha.1")
 set_xmakever("2.9.8")
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_warnings("allextra")

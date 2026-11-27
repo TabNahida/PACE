@@ -2,10 +2,10 @@
 # GitHub's blame view reads this file automatically.
 
 # Format all C++ sources with clang-format
-53ef3f12de55321e5631627d495c5086857447e1
+8847bb2dfb3c19f537e9ee2a98bce8846a37629d
 
 # Move headers and sources into module directories (paths and include lines only)
-4f4ed21c24bb5315f09c1dbbafbcd16fc9f10cc5
+d0fce26b71f0ed8a07bc96fdab9a4b923d1339ea
 
 # Docs moved into the 1.0 layout (renames only)
-ab32b0d83d48756497d35dea60df4d5b91ac9fcb
+2ea287f8ea1d1d33c8daf06c9c478b05d2874d9f

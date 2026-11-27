@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.0-alpha.1 — 2026-11-27
+
+First pre-release on the way to 1.0: the library is reorganized by module, and the documentation is rewritten.
+Behavior and signatures are unchanged; include paths, xmake targets and the named-module interface changed. See
+[migrating from 0.6 to 1.0](docs/migration/0.6-to-1.0.md).
+
+- **Breaking:** every module has its own directory under `include/pace/<module>/`, its umbrella header
+  `<pace/<module>.hpp>` and its own static library target. `<pace/http.hpp>` is now the protocol-independent HTTP
+  module (messages and routing); HTTP/1.1 is `<pace/http1.hpp>`. `<pace/networking.hpp>`, `<pace/extensions.hpp>`,
+  `<pace/application.hpp>` and the `pace_extensions` / `pace_application` targets are removed.
+- **Breaking:** the `pace::detail` namespace and `include/pace/detail/` are gone; internal headers live in `src/`.
+- **Breaking:** one C++20 named module per library module (`pace.runtime`, `pace.net`, `pace.http`, `pace.http1`,
+  `pace.gateway`, `pace.tls`, `pace.dns`, `pace.quic`, `pace.http2`, `pace.http3`, `pace.websocket`); each exports
+  only its own names. `import pace;` still imports everything enabled.
+- Add `pace::ascii` (`<pace/runtime/ascii.hpp>`) for case-insensitive ASCII comparison.
+- Delete copy assignment from `response_cache`, `quic::listener` and `cancellation_registration`, which copied
+  shared internals.
+- Document every public declaration with `///` comments.
+- Rewrite the documentation in English and Chinese: a 14-chapter tutorial in reading order, guides, a reference
+  page per module in one template, design explanations, performance reports with their raw data, and a
+  [documentation site](https://tabnahida.github.io/PACE/). The README opens with measurements generated from the
+  0.6.1 baseline.
+- Record a [0.6.1 performance baseline](benchmarks/results/baseline-0.6.1-macos-arm64/README.md) that later
+  pre-releases are compared against.
+- Switch the tests to doctest with a per-test watchdog; add libFuzzer targets for HTTP/1 and WebSocket parsing,
+  external interoperability runs (curl, OpenSSL, h2spec), clang-tidy on changed lines, per-module and
+  header-self-containment builds, and documentation checks in CI.
+
 ## 0.6.1 — 2026-11-26
 
 - Run TLS over owned asynchronous byte streams, including QUIC bidirectional streams, in-memory transports and nested TLS. Replay pre-read bytes and exchange close notifications under backpressure (#33, #35).
