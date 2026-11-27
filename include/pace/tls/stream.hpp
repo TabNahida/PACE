@@ -24,17 +24,23 @@ namespace pace::tls
 {
 class tls_driver;
 
+/// A transport closed with `close() noexcept`.
 template <class Transport>
 concept tls_closeable = requires(Transport& transport) {
     { transport.close() } noexcept -> std::same_as<void>;
 };
 
+/// A QUIC-style transport: `finish_write()` sends FIN and `reset() noexcept` aborts both directions.
 template <class Transport>
 concept tls_resettable = requires(Transport& transport) {
     { transport.finish_write() } -> std::same_as<void>;
     { transport.reset() } noexcept -> std::same_as<void>;
 };
 
+/// A connected, ordered, bidirectional byte stream that tls::stream can own and run TLS over. read_some returns 0
+/// only at EOF, write_all accepts every byte, and close/reset cancels outstanding operations with
+/// operation_canceled. Optional: `is_open() const noexcept`, `supports_concurrent_io() const noexcept` (false for
+/// serialized I/O) and `shutdown(std::chrono::milliseconds) -> task<void>` run before close().
 template <class Transport>
 concept tls_byte_stream =
     (tls_closeable<Transport> || tls_resettable<Transport>)
@@ -44,6 +50,7 @@ concept tls_byte_stream =
            { transport.write_all(output) } -> std::same_as<task<void>>;
        };
 
+/// Type erasure behind the generic tls::stream constructor; not part of the public API.
 class tls_transport
 {
 public:
@@ -58,6 +65,7 @@ public:
     virtual void close() noexcept = 0;
 };
 
+/// Adapts a tls_byte_stream to tls_transport; not part of the public API.
 template <tls_byte_stream Transport>
 class tls_transport_model final : public tls_transport
 {
@@ -185,96 +193,119 @@ private:
 
 namespace pace::tls
 {
+/// Whether a context configures clients or servers.
 enum class role
 {
     client,
     server
 };
+/// Where a client context's initial trust roots come from.
 enum class trust_source
 {
-    system,
-    application
+    system,     ///< OpenSSL's default trust paths, loaded by the constructor.
+    application ///< No roots and no default-path loading; add roots with load_verify_*.
 };
+/// What a server with SNI routing does for a missing or unrecognized name.
 enum class sni_policy
 {
-    use_default,
-    reject
+    use_default, ///< Serve the default certificate.
+    reject       ///< Fail the handshake.
 };
+/// What a verification pin hashes.
 enum class pin_type
 {
-    leaf_certificate,
-    subject_public_key_info
+    leaf_certificate,       ///< DER encoding of the leaf certificate.
+    subject_public_key_info ///< DER SubjectPublicKeyInfo of the leaf certificate.
 };
+/// 32 raw SHA-256 bytes.
 using sha256_digest = std::array<std::byte, 32>;
-// Peer-supplied DER certificates in wire order, leaf first. The view and its
-// contents are borrowed for the call. Return true to accept the chain.
+/// Peer-supplied DER certificates in wire order, leaf first. The view and its
+/// contents are borrowed for the call. Return true to accept the chain.
 using verification_callback = std::function<bool(std::span<const std::string>)>;
 
+/// One key_share entry of a ClientHello.
 struct client_hello_key_share
 {
+    /// Named group wire ID.
     std::uint16_t group = 0;
+    /// The key exchange bytes, borrowed until the callback returns.
     std::string_view key_exchange;
 };
 
-// Wire order and wire IDs. An absent SNI, ALPN or supported_versions extension
-// yields an empty field. All views are borrowed until the callback returns.
+/// Wire order and wire IDs. An absent SNI, ALPN or supported_versions extension
+/// yields an empty field. All views are borrowed until the callback returns.
 struct client_hello
 {
+    /// SNI host name.
     std::string_view server_name;
+    /// Offered ALPN protocols.
     std::vector<std::string_view> alpn_protocols;
+    /// supported_versions extension.
     std::vector<std::uint16_t> supported_versions;
+    /// Offered cipher suites.
     std::vector<std::uint16_t> cipher_suites;
+    /// key_share extension.
     std::vector<client_hello_key_share> key_shares;
+    /// legacy_version field.
     std::uint16_t legacy_version = 0;
+    /// legacy_session_id field.
     std::string_view session_id;
-    // The exact handshake message, including its four-byte handshake header.
+    /// The exact handshake message, including its four-byte handshake header.
     std::string_view raw_message;
 };
 
 class client_hello_action;
+/// Server-side ClientHello inspection; the result decides how the handshake continues.
 using client_hello_callback = std::function<client_hello_action(const client_hello&)>;
 
-// Configuration freezes on first stream construction, registration as an SNI
-// target or selection by a ClientHello callback. Subsequent setters throw
-// logic_error. Streams retain shared ownership of their configuration and
-// routing targets. Clients default to CA and name verification.
+/// Configuration freezes on first stream construction, registration as an SNI
+/// target or selection by a ClientHello callback. Subsequent setters throw
+/// logic_error. Streams retain shared ownership of their configuration and
+/// routing targets. Clients default to CA and name verification.
 class context
 {
 public:
-    // application starts with no trusted roots and never loads default paths.
+    /// application starts with no trusted roots and never loads default paths. A system client loads OpenSSL's
+    /// default trust paths and throws std::system_error if that fails.
     explicit context(role mode = role::client, trust_source trust = trust_source::system);
     ~context();
+    /// A moved-from context throws std::logic_error from its setters and cannot create streams.
     context(context&&) noexcept;
     context& operator=(context&&) noexcept;
     context(const context&) = delete;
     context& operator=(const context&) = delete;
 
+    /// Adds the trust roots of a PEM file. Throws std::system_error(protocol_error) if OpenSSL cannot load it.
     void load_verify_file(const std::string& pem_file);
-    // Copies one or more PEM CERTIFICATE blocks into the owned trust store.
-    // No filesystem access; the input may be released immediately after return.
+    /// Copies one or more PEM CERTIFICATE blocks into the owned trust store.
+    /// No filesystem access; the input may be released immediately after return.
+    /// Empty or mixed-content input throws std::invalid_argument; nothing is added on failure.
     void load_verify_pem(std::string_view certificates);
-    // Client-only alternatives to CA verification. The pin hashes the DER
-    // encoding of the selected leaf object. Both modes check any supplied peer name.
+    /// Client-only alternatives to CA verification. The pin hashes the DER
+    /// encoding of the selected leaf object. Both modes check any supplied peer name.
     void set_verify_pin(pin_type type, sha256_digest digest);
-    // Runs synchronously on the owning reactor. May run concurrently across
-    // reactors sharing this context. Returning false or throwing rejects the peer.
+    /// Runs synchronously on the owning reactor. May run concurrently across
+    /// reactors sharing this context. Returning false or throwing rejects the peer.
     void set_verify_callback(verification_callback verifier);
-    // Disables certificate and name verification for testing and interoperability.
+    /// Disables certificate and name verification for testing and interoperability.
     void insecure_skip_verify();
+    /// Loads a PEM chain (leaf first) and its unencrypted PEM key, checking that they match before installing
+    /// them. Throws std::system_error(protocol_error) on failure, keeping any earlier pair.
     void use_certificate_chain(const std::string& certificate_chain_file, const std::string& private_key_file);
-    // Server preference order; an offered list without overlap fails negotiation.
-    // An empty list disables ALPN. Clients must check the negotiated protocol.
+    /// Server preference order; an offered list without overlap fails negotiation.
+    /// An empty list disables ALPN. Clients must check the negotiated protocol.
+    /// Each identifier is 1..255 bytes and the list at most 65535 encoded bytes (std::invalid_argument).
     void set_alpn_protocols(const std::vector<std::string>& protocols);
-    // Exact ASCII DNS names, case-insensitive; no wildcards or IP literals.
-    // Registration freezes and retains the server target. Targets cannot contain
-    // their own SNI mappings. A selected target's failure never uses the default.
+    /// Exact ASCII DNS names, case-insensitive; no wildcards or IP literals.
+    /// Registration freezes and retains the server target. Targets cannot contain
+    /// their own SNI mappings. A selected target's failure never uses the default.
     void add_server_name(std::string name, const context& configuration);
-    // Missing and unrecognized SNI independently use the default certificate or
-    // fail this handshake. Both default to use_default. Server contexts only.
+    /// Missing and unrecognized SNI independently use the default certificate or
+    /// fail this handshake. Both default to use_default. Server contexts only.
     void set_server_name_policy(sni_policy missing, sni_policy unrecognized);
-    // Server only. Invoked once for the first ClientHello, before certificate
-    // selection. The callback runs on the reactor and may run concurrently
-    // across reactors sharing the context. Throwing aborts the handshake.
+    /// Server only. Invoked once for the first ClientHello, before certificate
+    /// selection. The callback runs on the reactor and may run concurrently
+    /// across reactors sharing the context. Throwing aborts the handshake.
     void set_client_hello_callback(client_hello_callback callback);
 
 private:
@@ -284,25 +315,27 @@ private:
     friend class client_hello_action;
 };
 
+/// The decision returned by a client_hello_callback.
 class client_hello_action
 {
 public:
-    // Continue with this context's ordinary SNI and certificate selection.
+    /// Continue with this context's ordinary SNI and certificate selection.
     static client_hello_action proceed() noexcept
     {
         return {};
     }
 
-    // Select and retain a server context immediately. Its configuration freezes.
+    /// Select and retain a server context immediately. Its configuration freezes.
+    /// Throws std::invalid_argument for a client context.
     static client_hello_action select(const context& configuration);
 
-    // Send a fatal handshake alert.
+    /// Send a fatal handshake alert.
     static client_hello_action reject() noexcept
     {
         return client_hello_action(kind::reject);
     }
 
-    // Pause before writing anything, for handshake_with_handoff().
+    /// Pause before writing anything, for handshake_with_handoff().
     static client_hello_action handoff() noexcept
     {
         return client_hello_action(kind::handoff);
@@ -328,31 +361,35 @@ private:
     friend class stream;
 };
 
+/// The result of a ClientHello handoff.
 template <class Transport>
 struct client_hello_handoff
 {
+    /// The original, still-open transport.
     Transport transport;
-    // Every byte already read in wire order, including the constructor prefix
-    // and any bytes read ahead after the ClientHello.
+    /// Every byte already read in wire order, including the constructor prefix
+    /// and any bytes read ahead after the ClientHello.
     std::string pre_read;
 };
 
-// Move-only TLS over an owned byte stream. Exactly one asynchronous operation may
-// be active at a time (including reads vs writes). Move only while idle; preserve
-// this object's address and borrowed buffers until each operation finishes.
+/// Move-only TLS over an owned byte stream. Exactly one asynchronous operation may
+/// be active at a time (including reads vs writes); an overlapping one throws std::logic_error. Move only while
+/// idle; preserve this object's address and borrowed buffers until each operation finishes.
 class stream
 {
 public:
+    /// TLS over a new, unconnected TCP socket on `io`; call connect(). Freezes `configuration`.
     stream(io_context& io, const tls::context& configuration);
+    /// TLS over an accepted or connected TCP stream; call handshake(). Freezes `configuration`.
     stream(tcp::stream transport, const tls::context& configuration);
-    // Copies TLS bytes already consumed from this TCP stream and replays them
-    // before reading from the socket. The prefix may end anywhere in a record.
+    /// Copies TLS bytes already consumed from this TCP stream and replays them
+    /// before reading from the socket. The prefix may end anywhere in a record.
     stream(tcp::stream transport, const tls::context& configuration, std::string_view pre_read);
 
-    // The transport must already be connected and ready for bidirectional I/O.
-    // Its close/reset must cancel pending operations on its owning reactor.
-    // Shutdown may overlap a transport read and write. Adapters with serialized
-    // I/O can declare supports_concurrent_io() const noexcept returning false.
+    /// The transport must already be connected and ready for bidirectional I/O.
+    /// Its close/reset must cancel pending operations on its owning reactor.
+    /// Shutdown may overlap a transport read and write. Adapters with serialized
+    /// I/O can declare supports_concurrent_io() const noexcept returning false.
     template <tls_byte_stream Transport>
     requires(!std::same_as<Transport, tcp::stream>)
     stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {})
@@ -360,23 +397,29 @@ public:
     {
     }
 
+    /// Closes the transport immediately, without close_notify.
     ~stream();
+    /// Only while idle. The source then supports only destruction, assignment, close() and is_open().
     stream(stream&&) noexcept;
     stream& operator=(stream&&) noexcept;
     stream(const stream&) = delete;
     stream& operator=(const stream&) = delete;
 
-    // connect is available on TCP-backed streams. CA verification requires a DNS
-    // name or IP address. The default SNI is
-    // derived from a DNS peer name. An explicit empty server_name suppresses SNI.
+    /// connect is available on TCP-backed client streams. CA verification requires a DNS
+    /// name or IP address. The default SNI is
+    /// derived from a DNS peer name. An explicit empty server_name suppresses SNI.
+    /// Failure or cancellation closes the transport; TLS errors throw std::system_error(protocol_error).
     task<void> connect(tcp::endpoint endpoint, std::string peer_name);
+    /// As above, sending `server_name` as SNI (none when empty).
     task<void> connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name);
+    /// Handshake on a connected transport: clients pass the expected peer name, servers pass nothing.
     task<void> handshake(std::string peer_name = {});
+    /// Client handshake sending `server_name` as SNI (none when empty).
     task<void> handshake(std::string peer_name, std::string server_name);
 
-    // Server only. Empty on a completed TLS handshake. On handoff this stream
-    // becomes moved-from and the caller owns the original, still-open transport
-    // and its pre-read bytes. Transport must match the type passed at construction.
+    /// Server only. Empty on a completed TLS handshake. On handoff this stream
+    /// becomes moved-from and the caller owns the original, still-open transport
+    /// and its pre-read bytes. Transport must match the type passed at construction.
     template <tls_byte_stream Transport = tcp::stream>
     task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff()
     {
@@ -406,32 +449,45 @@ public:
         }
     }
 
+    /// Returns decrypted bytes after the handshake; 0 with a nonempty buffer means a verified close_notify.
+    /// Transport EOF without close_notify throws std::system_error(protocol_error).
     task<std::size_t> read_some(std::span<char> buffer);
+    /// Encrypts and sends every byte; completes once the ciphertext was handed to the transport.
     task<void> write_all(std::string_view bytes);
 
+    /// Byte-span form of read_some(std::span<char>).
     task<std::size_t> read_some(std::span<std::byte> buffer)
     {
         return read_some(std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
     }
 
+    /// Byte-span form of write_all(std::string_view).
     task<void> write_all(std::span<const std::byte> bytes)
     {
         return write_all(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
     }
 
-    // Exchange close_notify cooperatively, closing even on cancellation/error or
-    // timeout. Expiring this bound closes normally, without promising peer receipt.
+    /// Exchange close_notify cooperatively, closing even on cancellation/error or
+    /// timeout. Expiring this bound closes normally, without promising peer receipt.
+    /// Requires a completed handshake and no other active operation.
     task<void> shutdown(std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
 
+    /// The same as shutdown(), under the tcp::stream name.
     task<void> close_gracefully(std::chrono::milliseconds timeout = std::chrono::milliseconds(100))
     {
         return shutdown(timeout);
     }
 
+    /// Closes or resets the transport immediately, cancelling waits, without close_notify. Keep the object alive
+    /// until suspended operations finish.
     void close() noexcept;
+    /// Sets TCP_NODELAY; throws std::logic_error unless the transport is a tcp::stream.
     void set_no_delay(bool enabled = true);
+    /// Whether the transport is open (not whether the handshake succeeded); false when moved-from.
     [[nodiscard]] bool is_open() const noexcept;
+    /// The transport's reactor. Not available on a moved-from stream.
     [[nodiscard]] io_context& context() const noexcept;
+    /// The negotiated ALPN protocol, or an empty string.
     [[nodiscard]] std::string selected_protocol() const;
 
 private:
@@ -450,8 +506,8 @@ private:
     client_hello_handoff<std::unique_ptr<tls_transport>> release_generic();
 };
 
-// Complete a handshake using the supplied verification policy. Custom
-// configuration is borrowed through task completion; streams retain its state.
+/// Complete a handshake using the supplied verification policy. Custom
+/// configuration is borrowed through task completion; streams retain its state.
 inline task<stream> connect(io_context& io, const context& configuration, tcp::endpoint peer, std::string expected_name)
 {
     stream result(io, configuration);
@@ -459,23 +515,26 @@ inline task<stream> connect(io_context& io, const context& configuration, tcp::e
     co_return result;
 }
 
+/// As above, on the context that runs the task.
 inline task<stream> connect(const context& configuration, tcp::endpoint peer, std::string expected_name)
 {
     co_return co_await connect(this_context(), configuration, std::move(peer), std::move(expected_name));
 }
 
-// System trust for a client that needs no custom CA or ALPN configuration.
+/// System trust for a client that needs no custom CA or ALPN configuration.
 inline task<stream> connect(io_context& io, tcp::endpoint peer, std::string expected_name)
 {
     context configuration;
     co_return co_await connect(io, configuration, std::move(peer), std::move(expected_name));
 }
 
+/// As above, on the context that runs the task.
 inline task<stream> connect(tcp::endpoint peer, std::string expected_name)
 {
     co_return co_await connect(this_context(), std::move(peer), std::move(expected_name));
 }
 
+/// Server handshake over an accepted TCP stream; `configuration` is borrowed through task completion.
 inline task<stream> accept(tcp::stream transport, const context& configuration)
 {
     stream result(std::move(transport), configuration);
