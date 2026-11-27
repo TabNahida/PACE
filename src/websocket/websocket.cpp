@@ -608,15 +608,18 @@ struct basic_stream<Transport>::implementation
     {
         message result;
         bool fragmented = false;
-        std::size_t fragments = 0, controls = 0;
+        std::size_t fragments = 0;
+        std::size_t controls = 0;
         for (;;)
         {
             check();
             std::array<char, 2> prefix{};
             co_await exact(prefix);
-            const auto first = static_cast<unsigned char>(prefix[0]), second = static_cast<unsigned char>(prefix[1]);
+            const auto first = static_cast<unsigned char>(prefix[0]);
+            const auto second = static_cast<unsigned char>(prefix[1]);
             const unsigned opcode = first & 15;
-            const bool final = (first & 0x80) != 0, masked = (second & 0x80) != 0;
+            const bool final = (first & 0x80) != 0;
+            const bool masked = (second & 0x80) != 0;
             const bool control = (opcode & 8) != 0;
             if (control && ++controls > bounds.max_control_frames)
             {

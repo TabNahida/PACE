@@ -90,8 +90,7 @@ requires(std::is_invocable_v<std::decay_t<Factory>&, io_context&> || std::is_inv
 auto run(Factory&& factory)
 {
     using function = std::decay_t<Factory>;
-    using result =
-        typename entry_result<decltype(invoke_entry(std::declval<function&>(), std::declval<io_context&>()))>::type;
+    using result = entry_result<decltype(invoke_entry(std::declval<function&>(), std::declval<io_context&>()))>::type;
     if (io_context::current())
     {
         throw std::logic_error("nested pace::run is not supported");

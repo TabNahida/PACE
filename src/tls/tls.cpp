@@ -77,7 +77,7 @@ std::string dns_name(std::string_view value)
         }
         else
         {
-            if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') || (label == 0 && c == '-'))
+            if (((c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-') || (label == 0 && c == '-'))
             {
                 throw std::invalid_argument("invalid TLS SNI DNS name");
             }
@@ -648,7 +648,7 @@ struct context::implementation
 
     void freeze()
     {
-        std::lock_guard lock(mutex);
+        std::scoped_lock lock(mutex);
         frozen = true;
     }
 
@@ -801,7 +801,7 @@ void context::load_verify_file(const std::string& file)
     {
         throw std::logic_error("moved-from TLS context");
     }
-    std::lock_guard lock(impl_->mutex);
+    std::scoped_lock lock(impl_->mutex);
     impl_->check_mutable();
     ERR_clear_error();
     if (SSL_CTX_load_verify_locations(impl_->handle.get(), file.c_str(), nullptr) != 1)
@@ -816,7 +816,7 @@ void context::load_verify_pem(std::string_view certificates)
     {
         throw std::logic_error("moved-from TLS context");
     }
-    std::lock_guard lock(impl_->mutex);
+    std::scoped_lock lock(impl_->mutex);
     impl_->check_mutable();
     std::vector<std::unique_ptr<X509, decltype(&X509_free)>> parsed;
     constexpr std::string_view begin = "-----BEGIN CERTIFICATE-----";
@@ -887,7 +887,7 @@ void context::set_verify_pin(pin_type type, sha256_digest digest)
     {
         throw std::logic_error("moved-from TLS context");
     }
-    std::lock_guard lock(impl_->mutex);
+    std::scoped_lock lock(impl_->mutex);
     impl_->check_client_verification_mutable();
     impl_->pin = digest;
     impl_->verifier = {};
@@ -906,7 +906,7 @@ void context::set_verify_callback(verification_callback verifier)
     {
         throw std::logic_error("moved-from TLS context");
     }
-    std::lock_guard lock(impl_->mutex);
+    std::scoped_lock lock(impl_->mutex);
     impl_->check_client_verification_mutable();
     impl_->verifier = std::move(verifier);
     impl_->set_verification(verification::callback);
@@ -918,7 +918,7 @@ void context::insecure_skip_verify()
     {
         throw std::logic_error("moved-from TLS context");
     }
-    std::lock_guard lock(impl_->mutex);
+    std::scoped_lock lock(impl_->mutex);
     impl_->check_client_verification_mutable();
     impl_->verifier = {};
     impl_->set_verification(verification::insecure);
@@ -932,7 +932,7 @@ void context::use_certificate_chain(const std::string& certificate, const std::s
     {
         throw std::logic_error("moved-from TLS context");
     }
-    std::lock_guard lock(impl_->mutex);
+    std::scoped_lock lock(impl_->mutex);
     impl_->check_mutable();
     ERR_clear_error();
     // Stage the entire pair before touching the live configuration. In
@@ -970,7 +970,7 @@ void context::set_alpn_protocols(const std::vector<std::string>& protocols)
     {
         throw std::logic_error("moved-from TLS context");
     }
-    std::lock_guard lock(impl_->mutex);
+    std::scoped_lock lock(impl_->mutex);
     impl_->check_mutable();
     std::vector<unsigned char> encoded;
     for (const auto& protocol : protocols)
@@ -1066,7 +1066,7 @@ void context::set_server_name_policy(sni_policy missing, sni_policy unrecognized
     {
         throw std::invalid_argument("invalid TLS SNI policy");
     }
-    std::lock_guard lock(impl_->mutex);
+    std::scoped_lock lock(impl_->mutex);
     impl_->check_mutable();
     if (impl_->mode != role::server)
     {
@@ -1087,7 +1087,7 @@ void context::set_client_hello_callback(client_hello_callback callback)
     {
         throw std::invalid_argument("empty TLS ClientHello callback");
     }
-    std::lock_guard lock(impl_->mutex);
+    std::scoped_lock lock(impl_->mutex);
     impl_->check_mutable();
     if (impl_->mode != role::server)
     {
@@ -1579,7 +1579,7 @@ struct stream::implementation
         {
             co_await fail("TLS operation failed (possibly unclean EOF)");
         }
-        else if (socket && !(error == SSL_ERROR_WANT_READ && bio_state.hello_reads))
+        else if (socket && (error != SSL_ERROR_WANT_READ || !bio_state.hello_reads))
         {
             if (has_output())
             {

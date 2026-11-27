@@ -187,7 +187,7 @@ public:
     template <class Function>
     router& mount(std::string prefix, Function&& function)
     {
-        if (prefix.empty() || prefix.front() != '/' || prefix.find_first_of("?#\\") != prefix.npos)
+        if (prefix.empty() || prefix.front() != '/' || prefix.find_first_of("?#\\") != std::string::npos)
         {
             throw std::invalid_argument("invalid mount prefix");
         }

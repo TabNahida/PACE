@@ -36,7 +36,7 @@ inline destination parse_url(std::string_view url)
             c = static_cast<char>(c + ('a' - 'A'));
         }
     }
-    if (scheme_end == url.npos || (scheme != "http" && scheme != "https"))
+    if (scheme_end == std::string_view::npos || (scheme != "http" && scheme != "https"))
     {
         throw std::invalid_argument("expected an absolute http or https URL");
     }
@@ -45,17 +45,19 @@ inline destination parse_url(std::string_view url)
     url.remove_prefix(scheme_end + 3);
     const auto authority_end = url.find_first_of("/?#");
     const auto authority = url.substr(0, authority_end);
-    if (authority.empty() || authority.find('@') != authority.npos)
+    if (authority.empty() || authority.find('@') != std::string_view::npos)
     {
         throw std::invalid_argument("URL needs a host; userinfo is unsupported");
     }
     result.authority = authority;
-    std::string_view host, port;
-    bool explicit_port = false, bracketed = authority.front() == '[';
+    std::string_view host;
+    std::string_view port;
+    bool explicit_port = false;
+    bool bracketed = authority.front() == '[';
     if (bracketed)
     {
         const auto end = authority.find(']');
-        if (end == authority.npos)
+        if (end == std::string_view::npos)
         {
             throw std::invalid_argument("unterminated IPv6 URL host");
         }
@@ -74,7 +76,7 @@ inline destination parse_url(std::string_view url)
     {
         const auto colon = authority.find(':');
         host = authority.substr(0, colon);
-        if (colon != authority.npos)
+        if (colon != std::string_view::npos)
         {
             explicit_port = true;
             port = authority.substr(colon + 1);
@@ -102,7 +104,8 @@ inline destination parse_url(std::string_view url)
     }
     catch (const std::invalid_argument&)
     {
-        if (bracketed || host.empty() || host.size() > 253 || host.find_first_not_of("0123456789.") == host.npos)
+        if (bracketed || host.empty() || host.size() > 253
+            || host.find_first_not_of("0123456789.") == std::string_view::npos)
         {
             throw std::invalid_argument("invalid URL host");
         }
@@ -117,19 +120,19 @@ inline destination parse_url(std::string_view url)
             }
             for (char c : label)
             {
-                if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-'))
+                if ((c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-')
                 {
                     throw std::invalid_argument("invalid URL hostname");
                 }
             }
-            if (dot == remaining.npos)
+            if (dot == std::string_view::npos)
             {
                 break;
             }
             remaining.remove_prefix(dot + 1);
         }
     }
-    auto target = authority_end == url.npos ? std::string_view{} : url.substr(authority_end);
+    auto target = authority_end == std::string_view::npos ? std::string_view{} : url.substr(authority_end);
     target = target.substr(0, target.find('#'));
     result.target = target.empty() || target.front() == '?' ? "/" + std::string(target) : std::string(target);
     return result;

@@ -46,8 +46,11 @@ namespace pace::http
 {
 inline std::uint64_t content_hash(std::string_view input) noexcept
 {
-    constexpr std::uint64_t p1 = 0x9E3779B185EBCA87ULL, p2 = 0xC2B2AE3D27D4EB4FULL, p3 = 0x165667B19E3779F9ULL,
-                            p4 = 0x85EBCA77C2B2AE63ULL, p5 = 0x27D4EB2F165667C5ULL;
+    constexpr std::uint64_t p1 = 0x9E3779B185EBCA87ULL;
+    constexpr std::uint64_t p2 = 0xC2B2AE3D27D4EB4FULL;
+    constexpr std::uint64_t p3 = 0x165667B19E3779F9ULL;
+    constexpr std::uint64_t p4 = 0x85EBCA77C2B2AE63ULL;
+    constexpr std::uint64_t p5 = 0x27D4EB2F165667C5ULL;
     const auto read64 = [](const char* p)
     {
         std::uint64_t value;
@@ -60,7 +63,7 @@ inline std::uint64_t content_hash(std::string_view input) noexcept
             value = 0;
             for (unsigned i = 0; i < 8; ++i)
             {
-                value |= std::uint64_t(static_cast<unsigned char>(p[i])) << (8 * i);
+                value |= static_cast<std::uint64_t>(static_cast<unsigned char>(p[i])) << (8 * i);
             }
         }
         return value;
@@ -77,7 +80,7 @@ inline std::uint64_t content_hash(std::string_view input) noexcept
             value = 0;
             for (unsigned i = 0; i < 4; ++i)
             {
-                value |= std::uint32_t(static_cast<unsigned char>(p[i])) << (8 * i);
+                value |= static_cast<std::uint32_t>(static_cast<unsigned char>(p[i])) << (8 * i);
             }
         }
         return value;
@@ -87,7 +90,10 @@ inline std::uint64_t content_hash(std::string_view input) noexcept
     std::size_t offset = 0;
     if (input.size() >= 32)
     {
-        std::uint64_t a = p1, b = p2, c = 0, d = 0;
+        std::uint64_t a = p1;
+        std::uint64_t b = p2;
+        std::uint64_t c = 0;
+        std::uint64_t d = 0;
         a += p2;
         d -= p1;
         do
@@ -112,7 +118,7 @@ inline std::uint64_t content_hash(std::string_view input) noexcept
     }
     if (input.size() - offset >= 4)
     {
-        hash = std::rotl(hash ^ (std::uint64_t(read32(input.data() + offset)) * p1), 23) * p2 + p3;
+        hash = std::rotl(hash ^ (static_cast<std::uint64_t>(read32(input.data() + offset)) * p1), 23) * p2 + p3;
         offset += 4;
     }
     while (offset < input.size())

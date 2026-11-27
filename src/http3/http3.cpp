@@ -122,7 +122,8 @@ void add_headers(fields& target, const fields& source, limits bounds, bool trail
 
 void check_combined_headers(const fields& headers, const fields& trailers, limits bounds)
 {
-    std::size_t count = 0, bytes = 0;
+    std::size_t count = 0;
+    std::size_t bytes = 0;
     for (const auto* group : {&headers, &trailers})
     {
         for (const auto& field : *group)
@@ -313,7 +314,8 @@ struct session
             [&](session& self)
             {
                 auto& state = self.streams.at(id);
-                const auto key_bytes = nghttp3_rcbuf_get_buf(name), text_bytes = nghttp3_rcbuf_get_buf(value);
+                const auto key_bytes = nghttp3_rcbuf_get_buf(name);
+                const auto text_bytes = nghttp3_rcbuf_get_buf(value);
                 if (self.bounds.max_header_bytes - state.header_bytes < 32)
                 {
                     throw std::length_error("HTTP/3 incoming header limit");

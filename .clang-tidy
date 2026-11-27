@@ -27,7 +27,27 @@ Checks: >
   -readability-identifier-length,
   -readability-magic-numbers,
   -readability-uppercase-literal-suffix,
-  -readability-implicit-bool-conversion
+  -readability-implicit-bool-conversion,
+  -readability-use-concise-preprocessor-directives,
+  -readability-named-parameter,
+  -readability-math-missing-parentheses,
+  -readability-avoid-nested-conditional-operator,
+  -readability-convert-member-functions-to-static,
+  -readability-make-member-function-const,
+  -performance-enum-size,
+  -modernize-use-ranges,
+  -readability-redundant-member-init
+
+# Disabled above, and why:
+# - use-concise-preprocessor-directives: `#if defined(X)` is the house style; it composes with || and &&.
+# - named-parameter: an unnamed parameter is how this code marks a deliberately unused one.
+# - math-missing-parentheses, avoid-nested-conditional-operator: precedence is the reader's job here.
+# - convert-member-functions-to-static, make-member-function-const: these change public signatures;
+#   the P10 API review decides them, not a lint pass.
+# - performance-enum-size: enum widths are part of the API and the ABI.
+# - modernize-use-ranges: iterator algorithms stay; ranges cost compile time without changing behaviour.
+# - redundant-member-init: `member{}` on aggregate members is deliberate; it keeps designated and partial
+#   aggregate initialization free of -Wmissing-field-initializers.
 
 WarningsAsErrors: ''
 HeaderFilterRegex: '(include|src)/pace/.*|src/.*'
@@ -60,4 +80,6 @@ CheckOptions:
   - { key: readability-braces-around-statements.ShortStatementLines, value: 0 }
   - { key: performance-unnecessary-value-param.AllowedTypes,         value: 'std::shared_ptr;std::function' }
   - { key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor, value: true }
+  - { key: cppcoreguidelines-special-member-functions.AllowMissingMoveFunctionsWhenCopyIsDeleted, value: true }
+  - { key: cppcoreguidelines-special-member-functions.AllowImplicitlyDeletedCopyOrMove, value: true }
   - { key: misc-const-correctness.AnalyzeValues,                     value: false }

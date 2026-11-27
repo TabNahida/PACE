@@ -303,19 +303,19 @@ public:
 
     app& proxy(std::string prefix, std::vector<std::string> upstreams, proxy_options options = {})
     {
-        auto service = reverse_proxy(prefix, std::move(upstreams), std::move(options));
+        auto service = reverse_proxy(prefix, std::move(upstreams), options);
         routes_.mount(std::move(prefix), std::move(service));
         return *this;
     }
 
     app& proxy(std::string prefix, std::initializer_list<std::string> upstreams, proxy_options options = {})
     {
-        return proxy(std::move(prefix), std::vector<std::string>(upstreams), std::move(options));
+        return proxy(std::move(prefix), std::vector<std::string>(upstreams), options);
     }
 
     app& proxy(std::string prefix, std::string upstream, proxy_options options = {})
     {
-        return proxy(std::move(prefix), std::vector<std::string>{std::move(upstream)}, std::move(options));
+        return proxy(std::move(prefix), std::vector<std::string>{std::move(upstream)}, options);
     }
 
     // Bind one listener per worker (SO_REUSEPORT); run/join on caller + workers.

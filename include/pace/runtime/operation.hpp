@@ -5,7 +5,7 @@ namespace pace
 {
 template <class Factory>
 using operation_result =
-    typename entry_result<decltype(invoke_entry(std::declval<Factory&>(), std::declval<io_context&>()))>::type;
+    entry_result<decltype(invoke_entry(std::declval<Factory&>(), std::declval<io_context&>()))>::type;
 
 template <class Factory>
 task<operation_result<Factory>> scoped_operation(Factory factory, operation_options options)

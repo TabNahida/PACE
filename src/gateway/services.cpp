@@ -57,7 +57,7 @@ std::vector<std::string> tokens(std::string_view s)
     {
         const auto comma = s.find(',');
         result.push_back(lower(trim(s.substr(0, comma))));
-        if (comma == s.npos)
+        if (comma == std::string_view::npos)
         {
             break;
         }
@@ -68,7 +68,7 @@ std::vector<std::string> tokens(std::string_view s)
 
 std::string prefix_path(std::string p)
 {
-    if (p.empty() || p.front() != '/' || p.find_first_of("?#\\%") != p.npos)
+    if (p.empty() || p.front() != '/' || p.find_first_of("?#\\%") != std::string::npos)
     {
         throw std::invalid_argument("invalid service prefix");
     }
@@ -130,7 +130,8 @@ std::string http_date(std::time_t value)
 
 std::string mime(std::string_view name)
 {
-    auto ext = lower(name.substr(name.find_last_of('.') == name.npos ? name.size() : name.find_last_of('.')));
+    auto ext =
+        lower(name.substr(name.find_last_of('.') == std::string_view::npos ? name.size() : name.find_last_of('.')));
     for (const auto& [suffix, type] : std::array<std::pair<std::string_view, std::string_view>, 15>{
              {{".html", "text/html; charset=utf-8"},
               {".htm", "text/html; charset=utf-8"},
@@ -244,13 +245,13 @@ struct response_cache::implementation
         explicit reader(std::shared_ptr<implementation> p)
             : owner(std::move(p))
         {
-            std::lock_guard lock(owner->readers_mutex);
+            std::scoped_lock lock(owner->readers_mutex);
             owner->readers.insert(this);
         }
 
         ~reader()
         {
-            std::lock_guard lock(owner->readers_mutex);
+            std::scoped_lock lock(owner->readers_mutex);
             owner->retired_hits += hits.load(std::memory_order_relaxed);
             owner->readers.erase(this);
         }
@@ -299,7 +300,7 @@ response_cache::~response_cache() = default;
 std::shared_ptr<const response> response_cache::get(std::string_view key, std::chrono::seconds* resident_age)
 {
     auto& s = impl_->select(key);
-    std::lock_guard lock(s.mutex);
+    std::scoped_lock lock(s.mutex);
     const auto it = s.index.find(key);
     if (it != s.index.end())
     {
@@ -353,7 +354,7 @@ std::optional<response> response_cache::get_copy(std::string_view key, std::chro
     local->value.reset();
     auto& s = impl_->select(key);
     {
-        std::lock_guard lock(s.mutex);
+        std::scoped_lock lock(s.mutex);
         const auto it = s.index.find(key);
         if (it == s.index.end())
         {
@@ -402,7 +403,7 @@ void response_cache::put(std::string key, response value, std::chrono::seconds t
         return;
     }
     auto snapshot = std::make_shared<const response>(std::move(value));
-    std::lock_guard lock(s.mutex);
+    std::scoped_lock lock(s.mutex);
     if (const auto it = s.index.find(key); it != s.index.end())
     {
         s.erase(it->second);
@@ -443,7 +444,7 @@ void response_cache::clear()
     for (auto& pointer : impl_->shards)
     {
         auto& s = *pointer;
-        std::lock_guard lock(s.mutex);
+        std::scoped_lock lock(s.mutex);
         for (std::size_t i = 0; i < s.slots.size(); ++i)
         {
             s.erase(i);
@@ -455,7 +456,7 @@ cache_statistics response_cache::statistics() const
 {
     cache_statistics result;
     {
-        std::lock_guard lock(impl_->readers_mutex);
+        std::scoped_lock lock(impl_->readers_mutex);
         result.hits = impl_->retired_hits;
         for (const auto* reader : impl_->readers)
         {
@@ -465,7 +466,7 @@ cache_statistics response_cache::statistics() const
     for (const auto& pointer : impl_->shards)
     {
         const auto& s = *pointer;
-        std::lock_guard lock(s.mutex);
+        std::scoped_lock lock(s.mutex);
         result.hits += s.stats.hits;
         result.misses += s.stats.misses;
         result.evictions += s.stats.evictions;
@@ -529,7 +530,7 @@ std::vector<std::string> path_parts(std::string_view input, bool dotfiles)
             }
             parts.emplace_back(part);
         }
-        if (slash == remaining.npos)
+        if (slash == std::string_view::npos)
         {
             break;
         }
@@ -600,7 +601,7 @@ response condition_file(response result, const request& req)
             {
                 unchanged = true;
             }
-            if (comma == remaining.npos)
+            if (comma == std::string_view::npos)
             {
                 break;
             }
@@ -629,13 +630,13 @@ response condition_file(response result, const request& req)
         return result;
     }
     // Ignore unsupported units/multiple ranges; never build a multipart body.
-    if (!range.starts_with("bytes=") || range.find(',') != range.npos)
+    if (!range.starts_with("bytes=") || range.find(',') != std::string_view::npos)
     {
         return result;
     }
     range.remove_prefix(6);
     auto dash = range.find('-');
-    if (dash == range.npos)
+    if (dash == std::string_view::npos)
     {
         return result;
     }
@@ -645,7 +646,8 @@ response condition_file(response result, const request& req)
         return !s.empty() && e == std::errc{} && p == s.data() + s.size();
     };
     const auto size = result.body.size();
-    std::size_t first = 0, last = size ? size - 1 : 0;
+    std::size_t first = 0;
+    std::size_t last = size ? size - 1 : 0;
     bool valid;
     if (dash == 0)
     {
@@ -702,7 +704,7 @@ struct static_files::implementation
         , cache(options.cache)
     {
         if (!options.index.empty()
-            && (options.index.find_first_of("/\\:%") != options.index.npos || options.index == "."
+            && (options.index.find_first_of("/\\:%") != std::string::npos || options.index == "."
                 || options.index == ".."))
         {
             throw std::invalid_argument("index must be a filename");
@@ -1079,7 +1081,8 @@ std::chrono::seconds cache_ttl(const response& result, std::chrono::seconds conf
     {
         return {};
     }
-    std::optional<std::chrono::seconds> max_age, shared_age;
+    std::optional<std::chrono::seconds> max_age;
+    std::optional<std::chrono::seconds> shared_age;
     bool public_response = false;
     for (const auto& field : result.headers)
     {
@@ -1090,7 +1093,7 @@ std::chrono::seconds cache_ttl(const response& result, std::chrono::seconds conf
         }
         if (name == "cache-control")
         {
-            for (auto directive : tokens(field.value))
+            for (const auto& directive : tokens(field.value))
             {
                 if (directive == "public")
                 {
@@ -1208,7 +1211,7 @@ struct reverse_proxy::implementation
         }
         for (const auto& url : urls)
         {
-            if (url.find_first_of("?#") != url.npos)
+            if (url.find_first_of("?#") != std::string::npos)
             {
                 throw std::invalid_argument("upstream base must not contain query/fragment");
             }
@@ -1288,7 +1291,7 @@ struct reverse_proxy::implementation
         {
             co_return text("Upgrade/tunnel unsupported\n", 501);
         }
-        if (req.target.find('#') != req.target.npos)
+        if (req.target.find('#') != std::string::npos)
         {
             co_return text("Invalid target\n", 400);
         }

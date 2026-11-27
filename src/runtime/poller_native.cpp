@@ -34,7 +34,7 @@ class native_poller final : public poller_backend
 
 public:
     explicit native_poller(bool persistent);
-    ~native_poller();
+    ~native_poller() override;
     void update(native_socket_type, bool, bool, std::uint64_t) override;
     void remove(native_socket_type) noexcept override;
     std::size_t wait(std::span<poll_event>, int) override;

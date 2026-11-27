@@ -207,11 +207,15 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
 {
     framing result;
     result.keep_alive = version == "HTTP/1.1";
-    bool has_transfer = false, host = false, close = false, persistent = false;
+    bool has_transfer = false;
+    bool host = false;
+    bool close = false;
+    bool persistent = false;
     std::vector<std::string> declared_trailers;
     for (const auto& field : fields)
     {
-        const auto name = std::string_view(field.name), value = std::string_view(field.value);
+        const auto name = std::string_view(field.name);
+        const auto value = std::string_view(field.value);
         if (iequals(name, "content-length"))
         {
             if (result.length || value.empty())
@@ -490,7 +494,7 @@ std::size_t chunk_size(std::string_view line)
                 bool ended = false;
                 while (!line.empty())
                 {
-                    unsigned char c = static_cast<unsigned char>(line.front());
+                    auto c = static_cast<unsigned char>(line.front());
                     line.remove_prefix(1);
                     if (c == '"')
                     {
@@ -506,7 +510,7 @@ std::size_t chunk_size(std::string_view line)
                         c = static_cast<unsigned char>(line.front());
                         line.remove_prefix(1);
                     }
-                    if (!(c == '\t' || (c >= 0x20 && c != 0x7f)))
+                    if (c != '\t' && (c < 0x20 || c == 0x7f))
                     {
                         throw parse_failure{400};
                     }
@@ -662,7 +666,8 @@ task<std::optional<parsed_request>> read_request_head(
     }
     const auto line_end = head->find("\r\n");
     const auto first = std::string_view(*head).substr(0, line_end);
-    const auto space1 = first.find(' '), space2 = first.find(' ', space1 == std::string_view::npos ? 0 : space1 + 1);
+    const auto space1 = first.find(' ');
+    const auto space2 = first.find(' ', space1 == std::string_view::npos ? 0 : space1 + 1);
     if (space1 == std::string_view::npos || space2 == std::string_view::npos
         || first.find(' ', space2 + 1) != std::string_view::npos)
     {
@@ -1155,7 +1160,10 @@ task<void> process_connection(Transport& stream, const Handler& handle, const se
     {
         std::optional<parsed_request> incoming;
         server_response outgoing;
-        bool keep_alive = false, head_request = false, http10 = false, rejected = false;
+        bool keep_alive = false;
+        bool head_request = false;
+        bool http10 = false;
+        bool rejected = false;
         unsigned error_status = 0;
         try
         {

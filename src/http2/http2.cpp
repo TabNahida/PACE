@@ -291,7 +291,8 @@ void add_headers(fields& target, const fields& source, limits bounds, bool trail
 
 void check_combined_headers(const fields& headers, const fields& trailers, limits bounds)
 {
-    std::size_t count = 0, bytes = 0;
+    std::size_t count = 0;
+    std::size_t bytes = 0;
     for (const auto* group : {&headers, &trailers})
     {
         for (const auto& field : *group)
@@ -691,7 +692,7 @@ struct session
             auto wire = wire_headers(headers);
             // Reserve the predicted client stream id so the provider's state has
             // a stable address before the first mem_send call.
-            const int32_t predicted = static_cast<int32_t>(nghttp2_session_get_next_stream_id(native));
+            const auto predicted = static_cast<int32_t>(nghttp2_session_get_next_stream_id(native));
             auto& state = streams[predicted];
             state.result_index = i;
             state.request.method = request.method;

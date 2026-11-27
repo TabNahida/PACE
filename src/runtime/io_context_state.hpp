@@ -96,7 +96,7 @@ struct io_context::cancellation_records
     {
         bool notify;
         {
-            std::lock_guard lock(pending_mutex);
+            std::scoped_lock lock(pending_mutex);
             notify = !first;
             entry.queued = true;
             entry.previous = last;
@@ -151,7 +151,7 @@ struct io_context::cancellation_records
         {
             return 0;
         }
-        std::lock_guard lock(pending_mutex);
+        std::scoped_lock lock(pending_mutex);
         if (!first)
         {
             return 0;
@@ -168,7 +168,7 @@ struct io_context::cancellation_records
         entry.wake.reset();
         if (entry.queued)
         {
-            std::lock_guard lock(pending_mutex);
+            std::scoped_lock lock(pending_mutex);
             unlink(entry);
         }
     }

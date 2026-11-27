@@ -378,7 +378,8 @@ struct lookup : std::enable_shared_from_this<lookup>
                 }
                 // This coroutine also propagates context shutdown to lookups.
                 // A short cap bounds retention of completed operation state.
-                timeval maximum{0, 100000}, next{};
+                timeval maximum{0, 100000};
+                timeval next{};
                 const auto* wait = ares_timeout(self->channel, &maximum, &next);
                 auto delay = std::chrono::microseconds(wait->tv_sec * 1000000LL + wait->tv_usec);
                 delay = std::min(delay, std::chrono::duration_cast<std::chrono::microseconds>(self->deadline - now));

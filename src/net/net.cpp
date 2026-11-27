@@ -324,7 +324,7 @@ task<std::size_t> stream::read_some(std::span<char> buffer)
         );
         if (count >= 0)
         {
-            read_may_be_ready_ = static_cast<std::size_t>(count) == std::min<std::size_t>(buffer.size(), INT_MAX);
+            read_may_be_ready_ = std::cmp_equal(count, std::min<std::size_t>(buffer.size(), INT_MAX));
             co_return static_cast<std::size_t>(count);
         }
         const auto error = last_socket_error();

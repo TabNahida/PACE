@@ -25,7 +25,7 @@ struct cancellation_registration::implementation
     void invoke() noexcept
     {
         {
-            std::lock_guard lock(mutex);
+            std::scoped_lock lock(mutex);
             if (disabled)
             {
                 return;
@@ -37,7 +37,7 @@ struct cancellation_registration::implementation
         // callback, they must not throw; user callbacks run later on the loop.
         callback();
         {
-            std::lock_guard lock(mutex);
+            std::scoped_lock lock(mutex);
             running = false;
         }
         finished.notify_all();
@@ -76,7 +76,7 @@ struct cancellation_state
         }
         std::list<std::shared_ptr<cancellation_registration::implementation>> pending;
         {
-            std::lock_guard lock(mutex);
+            std::scoped_lock lock(mutex);
             for (auto& callback : callbacks)
             {
                 callback->registered = false;
@@ -101,7 +101,7 @@ cancellation_registration::cancellation_registration(const cancellation_token& t
     impl_->owner = token.state_;
     impl_->callback = std::move(callback);
     {
-        std::lock_guard lock(token.state_->mutex);
+        std::scoped_lock lock(token.state_->mutex);
         if (!token.state_->reason.load())
         {
             impl_->position = token.state_->callbacks.insert(token.state_->callbacks.end(), impl_);
@@ -120,7 +120,7 @@ cancellation_registration::~cancellation_registration()
     }
     if (auto state = impl_->owner.lock())
     {
-        std::lock_guard lock(state->mutex);
+        std::scoped_lock lock(state->mutex);
         if (impl_->registered)
         {
             state->callbacks.erase(impl_->position);

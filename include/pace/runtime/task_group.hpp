@@ -373,7 +373,7 @@ public:
     template <class Factory>
     static auto run(Factory factory) -> task<typename entry_result<std::invoke_result_t<Factory&, task_group&>>::type>
     {
-        using result = typename entry_result<std::invoke_result_t<Factory&, task_group&>>::type;
+        using result = entry_result<std::invoke_result_t<Factory&, task_group&>>::type;
         auto token = co_await this_task::cancellation();
         task_group group(std::make_shared<group_state>(this_context(), token));
         const auto& state = group.state_;

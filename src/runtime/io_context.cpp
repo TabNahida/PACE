@@ -74,7 +74,7 @@ std::shared_ptr<void> io_context::local_state(
     {
         throw std::invalid_argument("empty context service");
     }
-    const auto address = key.get();
+    const auto* const address = key.get();
     impl_->services.emplace(address, implementation::service{std::move(key), value});
     return value;
 }
@@ -104,7 +104,7 @@ void io_context::spawn(task<void> work)
     }
     bool notify;
     {
-        std::lock_guard lock(p.inbox_mutex);
+        std::scoped_lock lock(p.inbox_mutex);
         if (stopped())
         {
             throw std::system_error(canceled());
@@ -136,7 +136,7 @@ void io_context::post(std::function<void()> work)
     }
     bool notify;
     {
-        std::lock_guard lock(p.inbox_mutex);
+        std::scoped_lock lock(p.inbox_mutex);
         if (stopped())
         {
             throw std::system_error(canceled());
@@ -251,7 +251,7 @@ void io_context::run()
                 const bool take_posts = new_posts.empty();
                 if (take_tasks || take_posts)
                 {
-                    std::lock_guard lock(p.inbox_mutex);
+                    std::scoped_lock lock(p.inbox_mutex);
                     if (take_tasks)
                     {
                         new_tasks.swap(p.incoming_tasks);
@@ -268,11 +268,17 @@ void io_context::run()
             }
             if (!new_tasks.empty())
             {
-                p.promote_batch(new_tasks, [&](auto& work) { p.adopt_root(*this, work); });
+                pace::io_context::implementation::promote_batch(
+                    new_tasks,
+                    [&](auto& work) { p.adopt_root(*this, work); }
+                );
             }
             if (!new_posts.empty())
             {
-                p.promote_batch(new_posts, [&](auto& work) { p.posts.push_back(std::move(work)); });
+                pace::io_context::implementation::promote_batch(
+                    new_posts,
+                    [&](auto& work) { p.posts.push_back(std::move(work)); }
+                );
             }
             inbox_buffered = !new_tasks.empty() || !new_posts.empty();
         }
@@ -329,7 +335,7 @@ void io_context::run()
             }
             bool inbox_empty;
             {
-                std::lock_guard lock(p.inbox_mutex);
+                std::scoped_lock lock(p.inbox_mutex);
                 inbox_empty = p.incoming_tasks.empty() && p.incoming_posts.empty();
             }
             if (p.ready.empty() && p.posts.empty() && !inbox_buffered && inbox_empty)

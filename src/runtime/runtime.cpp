@@ -61,7 +61,7 @@ void runtime::run_impl(bool use_caller)
         catch (...)
         {
             {
-                std::lock_guard lock(error_mutex);
+                std::scoped_lock lock(error_mutex);
                 if (!error)
                 {
                     error = std::current_exception();
