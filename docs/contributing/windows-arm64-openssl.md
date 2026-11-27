@@ -1,5 +1,7 @@
 # Windows ARM64 OpenSSL handshake diagnosis
 
+[简体中文](windows-arm64-openssl.zh.md) · [Contributing](README.md) · [CI coverage](ci.md)
+
 This is a functional correctness investigation, not a performance measurement.
 The verified build correction is restricted to native Windows ARM64 and
 OpenSSL 3.5.7. Other platforms continue to use the upstream xmake package.
@@ -65,7 +67,8 @@ not evidence of recursive source-level calls.
 
 ## Scoped build correction
 
-The local `pace-openssl3-arm64` package inherits the upstream OpenSSL 3.5.7
+The local `pace-openssl3-arm64` package (`xmake/openssl_arm64.lua`, selected in `xmake/packages.lua` only
+when building for Windows ARM64 with TLS or QUIC) inherits the upstream OpenSSL 3.5.7
 source URL, checksum and installer. Before calling that installer it changes
 the single `/Gs0 /GF /Gy` configuration entry to `/Gs4096 /GF /Gy`.
 The replacement rejects unexpected upstream configuration changes. A distinct
@@ -110,8 +113,9 @@ explain this diagnostic's before/after result.
 
 ## Inspecting the evidence
 
-The job uploads per-stage stdout/stderr and `summary.json` in its test-results
-artifact, plus the executable, PDB and linker map in
+The `windows-arm64` job of `ci.yml` runs the diagnostic with `scripts/ci_openssl_diagnostic.py` before the
+ordinary tests and fails if any stage fails. It uploads per-stage stdout/stderr and `summary.json` in its
+`functional-validation-windows-arm64` artifact, plus the executable, PDB and linker map in
 `openssl-diagnostic-windows-arm64-symbols`. GitHub artifacts expire according
 to the workflow retention period; the fault and relevant instructions are
 preserved above.
