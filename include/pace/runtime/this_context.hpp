@@ -5,8 +5,7 @@
 
 namespace pace
 {
-// Resolve the context on this thread. Call inside a running PACE task/callback;
-// no context is created implicitly and no work moves to another thread.
+/// The context running on this thread. Throws std::logic_error if none is running; never creates one.
 inline io_context& this_context()
 {
     auto* io = io_context::current();
@@ -17,12 +16,14 @@ inline io_context& this_context()
     return *io;
 }
 
+/// this_context().sleep_for(duration). Throws std::logic_error if no context is running on this thread.
 template <class Rep, class Period>
 auto sleep_for(std::chrono::duration<Rep, Period> duration)
 {
     return this_context().sleep_for(duration);
 }
 
+/// this_context().yield(). Throws std::logic_error if no context is running on this thread.
 inline auto yield()
 {
     return this_context().yield();

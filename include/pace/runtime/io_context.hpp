@@ -16,42 +16,59 @@ namespace pace
 {
 struct scheduler_access;
 
-// One reactor, one running thread. spawn/post/stop are thread-safe; I/O is affine.
+/// One reactor run by one thread. spawn, post, stop and stopped are thread-safe; sockets, timers and waits are used
+/// only from the thread running the context. Single-use: it cannot be restarted.
 class io_context
 {
     struct callback_timers;
     struct cancellation_records;
 
 public:
+    /// Creates the poller. Throws std::system_error if it cannot be created or `selected` is unavailable, and
+    /// std::invalid_argument for an unknown PACE_IO_BACKEND.
     explicit io_context(io_backend selected = io_backend::automatic);
+    /// The backend in use; never automatic.
     [[nodiscard]] io_backend backend() const noexcept;
+    /// Stops, cancels waits and destroys queued work, owned roots and services. run() must have returned.
     ~io_context();
     io_context(const io_context&) = delete;
     io_context& operator=(const io_context&) = delete;
 
-    // Context-owned services (e.g. connection pools). Called only on this loop.
-    // Keys and values live until the context is destroyed; values may own sockets.
+    /// Returns the service stored under `key.get()`, creating it with `create` the first time. Keys and values live
+    /// until the context is destroyed. Call on the running context's thread (std::logic_error otherwise); throws
+    /// std::invalid_argument for a null key, empty `create` or null result, operation_canceled once stopped.
     std::shared_ptr<void> local_state(
         std::shared_ptr<const void> key,
         const std::function<std::shared_ptr<void>()>& create
     );
-    // Borrow a previously created service without shared_ptr reference traffic.
-    // The pointer remains valid until context destruction; owning-loop use only.
+    /// Borrows the service stored under `key`, or nullptr. Valid until the context is destroyed. Call on the running
+    /// context's thread; throws operation_canceled once stopped.
     void* find_local_state(const void* key);
+    /// Takes ownership of a root task and schedules it; never runs it inline. Empty tasks are ignored. Thread-safe.
+    /// Throws std::system_error(operation_canceled) once stopped.
     void spawn(task<void> work);
+    /// Queues `work` to run on this context, never inline. Thread-safe. Throws std::invalid_argument for an empty
+    /// function and std::system_error(operation_canceled) once stopped.
     void post(std::function<void()> work);
-    void run(); // Runs until stop(); unhandled task errors are rethrown after draining.
+    /// Runs on the calling thread until stop() and the drain finish, then rethrows the first unhandled error of a
+    /// root, callback or the poller. Throws std::logic_error for a nested, concurrent or repeated run.
+    void run();
+    /// Requests a permanent stop: pending waits resume with operation_canceled. Thread-safe, idempotent, no wait.
     void stop() noexcept;
+    /// Whether stop was requested. Thread-safe.
     bool stopped() const noexcept;
+    /// The context running on the calling thread, or nullptr.
     static io_context* current() noexcept;
-    // Cancel and detach before the owner immediately closes a raw socket.
+    /// cancel(fd), then drops the backend registration. Call immediately before closing a raw socket yourself.
+    /// Must run on the owning thread, or while no thread runs the context.
     void release_socket(native_socket_type fd) noexcept;
-    void cancel(native_socket_type fd) noexcept; // Must run on the owning loop, or before run().
+    /// Resumes the descriptor's pending waits with operation_canceled; the descriptor stays open and usable.
+    /// Must run on the owning thread, or while no thread runs the context.
+    void cancel(native_socket_type fd) noexcept;
 
-    // One-shot callbacks run on this reactor. Keep the handle to keep the timer
-    // armed; cancel/destruction immediately releases the callback. Like socket
-    // operations, registration and cancellation are context-affine, or may run
-    // before run()/after it returns. A handle may outlive its io_context.
+    /// Owns one callback timer: it stays armed while the handle exists. cancel(), destruction and move assignment
+    /// release the callback at once. Use on the owning thread, or while no thread runs the context. A handle may
+    /// outlive its io_context.
     class timer_handle
     {
     public:
@@ -61,6 +78,7 @@ public:
         timer_handle& operator=(timer_handle&&) noexcept;
         timer_handle(const timer_handle&) = delete;
         timer_handle& operator=(const timer_handle&) = delete;
+        /// Disarms the timer or registration and destroys its callback now; does nothing if already released.
         void cancel() noexcept;
 
     private:
@@ -70,16 +88,20 @@ public:
         std::uint64_t id_ = 0;
     };
 
+    /// Runs `callback` once on this context at `deadline`; never inline. Register on the owning thread or before
+    /// run(). Throws std::invalid_argument for an empty callback, operation_canceled once stopped. Stop discards
+    /// pending callbacks.
     [[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, std::function<void()> callback);
 
+    /// call_at(now + duration, callback), with the deadline computed like sleep_for.
     template <class Rep, class Period>
     [[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, std::function<void()> callback)
     {
         return call_at(sleep_for(duration).deadline, std::move(callback));
     }
 
-    // Context-affine registration; cancellation_source requests are thread-safe.
-    // Callbacks execute on this loop and are unregistered by handle destruction.
+    /// Owns one on_cancel registration; cancel(), destruction and move assignment unregister it. Use on the owning
+    /// thread, or while no thread runs the context. A handle may outlive its io_context.
     class cancellation_handle
     {
     public:
@@ -89,6 +111,7 @@ public:
         cancellation_handle& operator=(cancellation_handle&&) noexcept;
         cancellation_handle(const cancellation_handle&) = delete;
         cancellation_handle& operator=(const cancellation_handle&) = delete;
+        /// Disarms the timer or registration and destroys its callback now; does nothing if already released.
         void cancel() noexcept;
 
     private:
@@ -97,8 +120,15 @@ public:
         std::uint64_t id_ = 0;
     };
 
+    /// Runs `callback` on this context with the token's error when `token` is cancelled (by a request, not merely a
+    /// passed deadline) or when the context stops. An empty token registers nothing. Otherwise call on the owning
+    /// thread; throws operation_canceled once stopped, std::invalid_argument for an empty callback, and the token's
+    /// error if it is already cancelled.
     [[nodiscard]] cancellation_handle on_cancel(cancellation_token, std::function<void(std::error_code)>);
 
+    /// A readiness wait: create with wait_*, await once, immediately, on the owning context; do not move or modify
+    /// it while suspended. Fails with the task token's error, operation_canceled on stop or cancel(fd), or
+    /// bad_file_descriptor for invalid_socket.
     struct io_awaiter
     {
         io_context& context;
@@ -133,22 +163,27 @@ public:
         void await_resume();
     };
 
+    /// Suspends until `fd` is readable, at end of stream or in error. Transfers no bytes; retry the nonblocking
+    /// call afterwards. One pending wait per descriptor and direction (std::logic_error otherwise).
     io_awaiter wait_readable(native_socket_type fd) noexcept
     {
         return {*this, fd, false, {}, {}};
     }
 
+    /// Suspends until `fd` is writable or in error. One pending wait per descriptor and direction.
     io_awaiter wait_writable(native_socket_type fd) noexcept
     {
         return {*this, fd, true, {}, {}};
     }
 
-    // Claims both directions; either readiness notification resumes it once.
+    /// Suspends until either direction can make progress; resumes once. Occupies both directions.
     io_awaiter wait_ready(native_socket_type fd) noexcept
     {
         return {*this, fd, false, {}, {}, true};
     }
 
+    /// A timer wait from sleep_for: await once, immediately, on the owning context. Fails with the task token's
+    /// error or operation_canceled on stop.
     struct timer_awaiter
     {
         io_context& context;
@@ -157,7 +192,7 @@ public:
         std::coroutine_handle<> continuation;
         cancellation_token token{};
         cancellation_handle registration{};
-        // Position in the owning reactor's deadline heap while suspended.
+        /// Position in the owning reactor's deadline heap while suspended.
         std::size_t heap_index = static_cast<std::size_t>(-1);
         bool await_ready() noexcept;
 
@@ -183,6 +218,8 @@ public:
         void await_resume();
     };
 
+    /// Suspends for `duration`, computed when called (not when awaited). Durations <= 0 still suspend one turn;
+    /// durations too large for the clock saturate. Timers never fire early and may fire late.
     template <class Rep, class Period>
     timer_awaiter sleep_for(std::chrono::duration<Rep, Period> duration) noexcept
     {
@@ -201,6 +238,8 @@ public:
         return {*this, deadline, {}, {}};
     }
 
+    /// Requeues the coroutine behind other ready work. Throws on resume if the token is cancelled or the context
+    /// stopped.
     struct yield_awaiter
     {
         io_context& context;
@@ -225,6 +264,7 @@ public:
         void await_resume();
     };
 
+    /// Lets other ready coroutines, callbacks and I/O run first. Await on the owning context.
     yield_awaiter yield() noexcept
     {
         return {*this};
@@ -242,6 +282,7 @@ private:
     static void completed(void*, std::coroutine_handle<>) noexcept;
 };
 
+/// Implementation support for task groups: queues a suspended coroutine on `io`. Call on the thread running `io`.
 struct scheduler_access
 {
     static void schedule(io_context& io, std::coroutine_handle<> handle)

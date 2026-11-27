@@ -9,17 +9,20 @@
 
 namespace pace::ascii
 {
+/// Folds A-Z to a-z; every other byte is returned unchanged.
 [[nodiscard]] constexpr char to_lower(char c) noexcept
 {
     return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : c;
 }
 
+/// Whether `a` and `b` are equal ignoring ASCII case.
 [[nodiscard]] constexpr bool iequals(std::string_view a, std::string_view b) noexcept
 {
     return a.size() == b.size()
            && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) { return to_lower(x) == to_lower(y); });
 }
 
+/// Returns `text` with A-Z folded to a-z.
 [[nodiscard]] inline std::string to_lower(std::string text)
 {
     std::transform(text.begin(), text.end(), text.begin(), [](char c) { return to_lower(c); });

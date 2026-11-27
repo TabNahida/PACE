@@ -16,21 +16,25 @@
 
 namespace pace
 {
+/// A native socket: a file descriptor, or a SOCKET value on Windows.
 #ifdef _WIN32
 using native_socket_type = std::uintptr_t;
 #else
 using native_socket_type = int;
 #endif
+/// "No socket". Waiting on it fails with std::errc::bad_file_descriptor.
 inline constexpr native_socket_type invalid_socket = static_cast<native_socket_type>(-1);
 
 #ifdef _WIN32
+/// Creates an overlapped, non-inheritable socket with WSASocketW; returns INVALID_SOCKET on failure.
 inline SOCKET create_windows_socket(int family, int type, int protocol) noexcept
 {
     return ::WSASocketW(family, type, protocol, nullptr, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
 }
 #endif
 
-// Function-local initialization is thread-safe and precedes every owned socket.
+/// Starts Winsock 2.2 once per process on Windows (thread-safe); does nothing elsewhere.
+/// Throws std::system_error if WSAStartup fails. PACE calls it before creating any socket.
 inline void initialize_sockets()
 {
 #ifdef _WIN32
@@ -57,6 +61,7 @@ inline void initialize_sockets()
 #endif
 }
 
+/// Another name for initialize_sockets().
 inline void initialize_winsock()
 {
     initialize_sockets();

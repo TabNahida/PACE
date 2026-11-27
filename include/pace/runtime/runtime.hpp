@@ -10,35 +10,40 @@
 namespace pace
 {
 
-// Sharded reactors: tasks never migrate after being assigned to a context.
+/// A fixed set of io_contexts, each run on its own thread. Tasks stay on the context they were given to; there is no
+/// work stealing. Single-use: run once, in either mode.
 class runtime
 {
 public:
+    /// Creates `workers` contexts (no threads yet). Throws std::invalid_argument for 0 workers.
     explicit runtime(
         std::size_t workers = std::max(1u, std::thread::hardware_concurrency()),
         io_backend backend = io_backend::automatic
     );
+    /// Destroys the contexts. run() or run_on_current_thread() must have returned.
     ~runtime();
     runtime(const runtime&) = delete;
     runtime& operator=(const runtime&) = delete;
 
+    /// The number of contexts.
     std::size_t size() const noexcept
     {
         return contexts_.size();
     }
 
+    /// The context at `index`, stable for the runtime's lifetime. Throws std::out_of_range for index >= size().
     io_context& context(std::size_t index)
     {
         return *contexts_.at(index);
     }
 
-    // Both entry points block until stopped, join all workers, and rethrow the
-    // first context error. A runtime may be run only once across both modes.
+    /// Runs every context on its own new thread; blocks until all have stopped and been joined, then rethrows the
+    /// first context error. Throws std::logic_error if the runtime has already run.
     void run();
-    // Run context(0) on this caller and the remaining contexts on N-1 workers.
-    // With one context no worker thread is created. Rejects calls from inside
-    // another running io_context without consuming this runtime's single run.
+    /// Like run(), but runs context 0 on the calling thread and the others on size() - 1 new threads. Throws
+    /// std::logic_error, without using up the single run, when called on a thread already running a context.
     void run_on_current_thread();
+    /// Requests stop on every context. Thread-safe, idempotent, does not wait.
     void stop() noexcept;
 
 private:

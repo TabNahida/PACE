@@ -1,4 +1,4 @@
-<!-- source-hash: e408f0e16804 -->
+<!-- source-hash: 671b4f0bdfa7 -->
 # `pace::run` 与当前 context
 
 [English](run.md) · [运行时](README.zh.md)
@@ -49,9 +49,9 @@ int main()
 ```cpp
 struct blocking_options
 {
-    std::chrono::milliseconds timeout{30000}; // Compatibility shorthand for a total deadline.
-    cancellation_token cancellation{};
-    pace::deadline deadline{};
+    std::chrono::milliseconds timeout{30000}; ///< Total budget from the start of the call; must be positive.
+    cancellation_token cancellation{};        ///< Cancels the call; may be cancelled from another thread.
+    pace::deadline deadline{};                ///< Absolute deadline; none by default.
 };
 ```
 

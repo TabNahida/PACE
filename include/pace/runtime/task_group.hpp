@@ -8,6 +8,7 @@ namespace pace
 {
 struct group_wait;
 
+/// Implementation support: the shared state of a task group.
 struct group_state
 {
     io_context& io;
@@ -45,6 +46,7 @@ struct group_state
     }
 };
 
+/// Implementation support: the shared state of one child and its join_handle.
 template <class T>
 struct child_state
 {
@@ -74,6 +76,7 @@ struct child_state<void>
     }
 };
 
+/// Implementation support: a child's state together with its owned factory.
 template <class Factory>
 struct owned_child : child_state<operation_result<Factory>>
 {
@@ -86,6 +89,7 @@ struct owned_child : child_state<operation_result<Factory>>
     }
 };
 
+/// Implementation support: the root task that runs one child and records its outcome.
 template <class Factory>
 task<void> run_child(std::shared_ptr<group_state> group, std::shared_ptr<owned_child<Factory>> child)
 {
@@ -117,6 +121,7 @@ task<void> run_child(std::shared_ptr<group_state> group, std::shared_ptr<owned_c
     group->child_finished();
 }
 
+/// Implementation support: waits until a group has no running children.
 struct group_wait
 {
     group_state& state; // drain_group's frame owns the state throughout this wait.
@@ -194,6 +199,7 @@ inline void group_state::child_finished()
     }
 }
 
+/// Implementation support: closes a group and waits for its children (uncancellable at the scope boundary).
 inline task<void> drain_group(std::shared_ptr<group_state> state, bool boundary = false)
 {
     state->check();
@@ -233,8 +239,8 @@ inline task<void> drain_group(std::shared_ptr<group_state> state, bool boundary 
     co_await group_wait(*state, !boundary);
 }
 
-// A move-only result handle. Destroying it neither detaches nor cancels the child:
-// the enclosing task group still joins it. Await at most once, on the same loop.
+/// The move-only result of one child. co_await returns its value or rethrows its exception. Await at most once, on
+/// the group's context (std::logic_error otherwise). Destroying it neither detaches nor cancels the child.
 template <class T>
 class [[nodiscard]] join_handle
 {
@@ -253,6 +259,7 @@ public:
     join_handle& operator=(const join_handle&) = delete;
     ~join_handle() = default;
 
+    /// Awaits the child's completion; opaque.
     struct awaiter
     {
         std::shared_ptr<child_state<T>> state;
@@ -304,6 +311,8 @@ public:
     }
 };
 
+/// A scope of children on one context, created only by task_group::run and with_task_group. Not copyable or movable.
+/// Every member must be used on the group's context (std::logic_error otherwise).
 class task_group
 {
     std::shared_ptr<group_state> state_;
@@ -319,6 +328,9 @@ public:
     task_group& operator=(const task_group&) = delete;
     ~task_group() = default;
 
+    /// Owns `factory` (taking io_context& or nothing, returning task<T>), starts the child on a later turn with the
+    /// group's token and returns join_handle<T>. Throws std::logic_error after join started, and std::system_error
+    /// if the group is cancelled or the context stopped.
     template <class Factory>
     auto spawn(Factory factory)
     {
@@ -343,14 +355,15 @@ public:
         return join_handle<result>(std::move(child));
     }
 
+    /// spawn for an already-created task; what the task borrowed stays borrowed.
     template <class T>
     auto spawn(task<T> work)
     {
         return spawn([work = std::move(work)]() mutable { return std::move(work); });
     }
 
-    // Store scope-local data outside the body coroutine, so exceptional body
-    // exit cannot destroy objects still borrowed by children.
+    /// Moves `value` into group storage, kept until every child has finished, and returns a reference to it. Use it
+    /// for data children borrow. Throws std::logic_error after join started.
     template <class T>
     T& own(T value)
     {
@@ -365,25 +378,30 @@ public:
         return result;
     }
 
+    /// Cancels the group's token: the body and children see operation_canceled. The scope still joins them, then
+    /// throws operation_canceled unless an exception was recorded first.
     void cancel()
     {
         state_->check();
         state_->source.request_cancellation();
     }
 
+    /// The group's token.
     cancellation_token token() const noexcept
     {
         return state_->source.token();
     }
 
-    // Seals the group. Explicit joins observe local cancellation; the enclosing
-    // boundary always performs an uncancellable drain, including on join errors.
-    // Do not join a group from one of its own children.
+    /// Closes the group and waits for every child; does not rethrow their exceptions. Throws the group token's error
+    /// if it is cancelled, std::logic_error for a second concurrent join. Never join from one of the group's own
+    /// children. The scope always drains the children again, uncancellably.
     task<void> join()
     {
         return task_access::bind(drain_group(state_), state_->source.token());
     }
 
+    /// The scope: runs factory(group) as the body, joins every child, destroys own() storage, then rethrows the
+    /// first exception of the body or a child, throws if the group was cancelled, or returns the body's value.
     template <class Factory>
     static auto run(Factory factory) -> task<typename entry_result<std::invoke_result_t<Factory&, task_group&>>::type>
     {
@@ -428,6 +446,7 @@ public:
     }
 };
 
+/// task_group::run(factory), inside with_options(…, options) when `options` is not empty.
 template <class Factory>
 auto with_task_group(Factory factory, operation_options options = {})
 {

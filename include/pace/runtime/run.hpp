@@ -9,6 +9,7 @@
 
 namespace pace
 {
+/// Calls `factory(io)` if that is valid, otherwise `factory()`.
 template <class Factory>
 auto invoke_entry(Factory& factory, io_context& io)
 {
@@ -21,6 +22,7 @@ auto invoke_entry(Factory& factory, io_context& io)
         return std::invoke(factory);
     }
 }
+/// entry_result<task<T>>::type is T: the result type of an entry factory's task.
 template <class T>
 struct entry_result;
 
@@ -30,6 +32,7 @@ struct entry_result<task<T>>
     using type = T;
 };
 
+/// Where run_entry records the entry's value or exception.
 template <class T>
 struct entry_state
 {
@@ -45,6 +48,7 @@ struct entry_state<void>
     bool completed = false;
 };
 
+/// The root task of pace::run: awaits the factory's task, records the outcome in `state` and stops `io`.
 template <class T, class Factory>
 task<void> run_entry(io_context& io, Factory& factory, entry_state<T>& state)
 {
@@ -87,12 +91,11 @@ task<void> run_entry(io_context& io, Factory& factory, entry_state<T>& state)
     }
 }
 
-// Run one entry task on a fresh context on this thread. Own the factory until
-// shutdown finishes, including a temporary capturing coroutine lambda. Entry
-// completion stops the context and drains cancellation of background roots.
-// Return owned data, not sockets/views that borrow this context or the factory.
-// Background tasks must own their data: entry-local objects can be destroyed
-// before those tasks observe cancellation. Nested runs are rejected.
+/// Runs the factory's task on a fresh io_context on this thread and returns its result. The factory (taking
+/// io_context& or nothing) is owned until shutdown finishes, so a capturing coroutine lambda may be passed directly.
+/// Entry completion stops the context and drains the cancellation of background roots. Return owned data, not
+/// sockets or views into the context or the factory. Throws std::logic_error on a thread already running a context,
+/// rethrows the entry's or a background root's exception, and throws operation_canceled if the entry did not finish.
 template <class Factory>
 requires(std::is_invocable_v<std::decay_t<Factory>&, io_context&> || std::is_invocable_v<std::decay_t<Factory>&>)
 auto run(Factory&& factory)
@@ -131,8 +134,8 @@ auto run(Factory&& factory)
     }
 }
 
-// The task owns its arguments, but references/coroutine-lambda captures remain
-// borrowed. Pass a capturing coroutine lambda itself to run(), not lambda().
+/// run() for an already-created task. The task owns its arguments, but its references and lambda captures stay
+/// borrowed: pass a capturing coroutine lambda itself to run(), not lambda().
 template <class T>
 auto run(task<T> entry)
 {

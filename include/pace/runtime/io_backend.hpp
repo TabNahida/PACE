@@ -2,16 +2,19 @@
 
 namespace pace
 {
+/// The readiness poller of an io_context. An explicit choice that is unavailable makes construction throw
+/// std::system_error(not_supported); there is no silent fallback.
 enum class io_backend
 {
-    automatic,
-    epoll,
-    kqueue,
-    wsapoll,
-    io_uring,
-    iocp
+    automatic, ///< PACE_IO_BACKEND if set, otherwise the platform default.
+    epoll,     ///< Linux default.
+    kqueue,    ///< macOS and FreeBSD default.
+    wsapoll,   ///< Windows fallback; always used by 32-bit builds.
+    io_uring,  ///< Linux built with --uring=y; explicit choice only.
+    iocp       ///< 64-bit Windows build 20348+; Windows default when available.
 };
 
+/// The lower-case name of `value`, as accepted by PACE_IO_BACKEND.
 inline const char* backend_name(io_backend value) noexcept
 {
     switch (value)
