@@ -42,7 +42,7 @@ public:
     void set_alpn_protocols(const std::vector<std::string>& protocols);
 
 private:
-    std::shared_ptr<pace::quic::configuration> state_;
+    std::shared_ptr<configuration> state_;
     friend class connection;
     friend class listener;
 };
@@ -81,8 +81,8 @@ public:
     void reset(std::uint64_t application_error = 0) noexcept;
 
 private:
-    explicit stream(std::shared_ptr<pace::quic::stream_state> state);
-    std::shared_ptr<pace::quic::stream_state> state_;
+    explicit stream(std::shared_ptr<stream_state> state);
+    std::shared_ptr<stream_state> state_;
     friend class connection;
 };
 
@@ -111,10 +111,10 @@ public:
     void close(std::uint64_t application_error = 0) noexcept;
 
 private:
-    explicit connection(std::shared_ptr<pace::quic::connection_state> state);
-    std::shared_ptr<pace::quic::connection_state> state_;
+    explicit connection(std::shared_ptr<connection_state> state);
+    std::shared_ptr<connection_state> state_;
     friend class listener;
-    friend struct pace::quic::quic_driver;
+    friend struct quic_driver;
 };
 
 class listener
@@ -129,7 +129,7 @@ public:
     bool is_open() const noexcept;
     void close() noexcept; // Also invalidates accepted connections on this listener.
 private:
-    std::shared_ptr<pace::quic::engine> state_;
+    std::shared_ptr<engine> state_;
 };
 
 // Bind immediately and retain the shared server configuration.

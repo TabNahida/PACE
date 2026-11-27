@@ -93,7 +93,7 @@ inline destination parse_url(std::string_view url)
     result.host = host;
     try
     {
-        const auto address = pace::net::parse_socket_address(result.host, result.port);
+        const auto address = net::parse_socket_address(result.host, result.port);
         if (bracketed != (address.family() == address_family::ipv6))
         {
             throw std::invalid_argument("IPv6 URL hosts require brackets");

@@ -233,7 +233,7 @@ void io_context::run()
             stop();
         }
     };
-    std::array<pace::poll_event, 256> events{};
+    std::array<poll_event, 256> events{};
     // Reuse the empty batches between drains. Reconstructing two deques on
     // every producer wake allocates their maps/blocks even for a single post.
     std::deque<task<void>> new_tasks;

@@ -893,7 +893,7 @@ struct static_files::implementation
             }
             offset += static_cast<std::size_t>(n);
         }
-        const auto hash = pace::http::content_hash(result.body);
+        const auto hash = content_hash(result.body);
         std::array<char, 32> buffer{};
         auto [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), hash, 16);
         (void)error;

@@ -39,7 +39,7 @@ task<operation_result<Factory>> scoped_operation(Factory factory, operation_opti
 template <class Factory>
 auto with_options(Factory factory, operation_options options)
 {
-    return pace::scoped_operation(std::move(factory), std::move(options));
+    return scoped_operation(std::move(factory), std::move(options));
 }
 
 template <class T>
@@ -65,6 +65,6 @@ auto with_cancellation(cancellation_token token, Work work)
 template <class Work>
 auto shield(Work work)
 {
-    return pace::task_access::bind(with_options(std::move(work), {}), {});
+    return task_access::bind(with_options(std::move(work), {}), {});
 }
 } // namespace pace

@@ -89,14 +89,14 @@ public:
 
 private:
     friend class cancellation_source;
-    friend class pace::cancellation_registration;
+    friend class cancellation_registration;
 
-    explicit cancellation_token(std::shared_ptr<pace::cancellation_state> state)
+    explicit cancellation_token(std::shared_ptr<cancellation_state> state)
         : state_(std::move(state))
     {
     }
 
-    std::shared_ptr<pace::cancellation_state> state_;
+    std::shared_ptr<cancellation_state> state_;
 };
 
 // Internal subscription. Destruction synchronizes with an in-flight notification
@@ -133,7 +133,7 @@ public:
     void link(cancellation_token parent);
 
 private:
-    std::shared_ptr<pace::cancellation_state> state_;
+    std::shared_ptr<cancellation_state> state_;
 };
 
 struct operation_options

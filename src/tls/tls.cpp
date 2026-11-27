@@ -1117,7 +1117,7 @@ client_hello_action client_hello_action::select(const context& configuration)
 struct stream::implementation
 {
     std::optional<tcp::stream> socket;
-    std::unique_ptr<pace::tls::tls_transport> transport;
+    std::unique_ptr<tls_transport> transport;
     transport_bio bio_state;
     std::shared_ptr<tls::context::implementation> configuration;
     std::shared_ptr<tls::context::implementation> hello_configuration;
@@ -1137,7 +1137,7 @@ struct stream::implementation
     }
 
     implementation(
-        std::unique_ptr<pace::tls::tls_transport> stream,
+        std::unique_ptr<tls_transport> stream,
         std::shared_ptr<tls::context::implementation> config,
         std::string_view pre_read
     )
@@ -1640,11 +1640,7 @@ stream::stream(tcp::stream transport, const tls::context& config, std::string_vi
 {
 }
 
-stream::stream(
-    std::unique_ptr<pace::tls::tls_transport> transport,
-    const tls::context& config,
-    std::string_view pre_read
-)
+stream::stream(std::unique_ptr<tls_transport> transport, const tls::context& config, std::string_view pre_read)
     : impl_(std::make_unique<implementation>(std::move(transport), config.impl_, pre_read))
 {
 }
@@ -1709,7 +1705,7 @@ bool stream::handoff_requested() const noexcept
     return impl_->hello.handoff;
 }
 
-pace::tls::tls_transport* stream::generic_transport() const noexcept
+tls_transport* stream::generic_transport() const noexcept
 {
     return impl_ ? impl_->transport.get() : nullptr;
 }
@@ -1721,7 +1717,7 @@ client_hello_handoff<tcp::stream> stream::release_tcp()
     return {std::move(*state->socket), std::move(state->bio_state.prefix)};
 }
 
-client_hello_handoff<std::unique_ptr<pace::tls::tls_transport>> stream::release_generic()
+client_hello_handoff<std::unique_ptr<tls_transport>> stream::release_generic()
 {
     auto state = std::move(impl_);
     state->bio_state.prefix += *state->bio_state.hello_reads;

@@ -230,7 +230,7 @@ public:
     }
 
 private:
-    friend struct pace::scheduler_access;
+    friend struct scheduler_access;
     void cancel_wait(io_awaiter&, std::error_code);
     void cancel_wait(timer_awaiter&, std::error_code);
     struct implementation;

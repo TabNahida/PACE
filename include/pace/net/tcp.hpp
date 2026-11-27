@@ -203,7 +203,7 @@ inline std::string exchange(
     std::size_t maximum = 1024 * 1024
 )
 {
-    return pace::blocking_call(
+    return blocking_call(
         [&](io_context& io) { return async_exchange(io, std::move(peer), std::move(request), reply_size, maximum); },
         options
     );

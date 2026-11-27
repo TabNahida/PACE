@@ -68,7 +68,7 @@ template <class T = void>
 class [[nodiscard]] task
 {
 public:
-    struct promise_type : pace::promise_base
+    struct promise_type : promise_base
     {
         std::optional<T> value;
 
@@ -184,7 +184,7 @@ public:
     }
 
 private:
-    friend struct pace::task_access;
+    friend struct task_access;
 
     explicit task(handle_type handle) noexcept
         : handle_(handle)
@@ -198,7 +198,7 @@ template <>
 class [[nodiscard]] task<void>
 {
 public:
-    struct promise_type : pace::promise_base
+    struct promise_type : promise_base
     {
         std::size_t root_index; // Used only while owned by io_context::spawn.
 
@@ -311,7 +311,7 @@ public:
     }
 
 private:
-    friend struct pace::task_access;
+    friend struct task_access;
 
     explicit task(handle_type handle) noexcept
         : handle_(handle)

@@ -90,16 +90,16 @@ requires(std::is_invocable_v<std::decay_t<Factory>&, io_context&> || std::is_inv
 auto run(Factory&& factory)
 {
     using function = std::decay_t<Factory>;
-    using result = typename pace::entry_result<
-        decltype(pace::invoke_entry(std::declval<function&>(), std::declval<io_context&>()))>::type;
+    using result =
+        typename entry_result<decltype(invoke_entry(std::declval<function&>(), std::declval<io_context&>()))>::type;
     if (io_context::current())
     {
         throw std::logic_error("nested pace::run is not supported");
     }
     function owned(std::forward<Factory>(factory));
-    pace::entry_state<result> state;
+    entry_state<result> state;
     io_context io; // Destroy roots before their borrowed factory/state on error.
-    io.spawn(pace::run_entry<result>(io, owned, state));
+    io.spawn(run_entry<result>(io, owned, state));
     io.run();
     if (state.failure)
     {

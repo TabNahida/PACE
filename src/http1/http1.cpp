@@ -1442,7 +1442,7 @@ task<void> serve(io_context& context, tcp::endpoint endpoint, handler handle, li
 
 task<void> serve(tcp::listener& listener, handler handle, limits bounds)
 {
-    co_await pace::http::serve_group(
+    co_await serve_group(
         [&](task_group& group) -> task<void>
         {
             for (;;)
@@ -1479,7 +1479,7 @@ task<void> serve_connection(tcp::stream stream, server_handler handle, server_op
 
 task<void> serve(tcp::listener& listener, server_handler handle, server_options options)
 {
-    co_await pace::http::serve_group(
+    co_await serve_group(
         [&](task_group& group) -> task<void>
         {
             validate_options(options);
@@ -1590,7 +1590,7 @@ task<void> handshake_and_serve(tls::stream stream, server_handler handle, server
 
 task<void> serve(tcp::listener& listener, const tls::context& configuration, handler handle, limits bounds)
 {
-    co_await pace::http::serve_group(
+    co_await serve_group(
         [&](task_group& group) -> task<void>
         {
             for (;;)
@@ -1620,7 +1620,7 @@ task<void> serve(
     server_options options
 )
 {
-    co_await pace::http::serve_group(
+    co_await serve_group(
         [&](task_group& group) -> task<void>
         {
             validate_options(options);

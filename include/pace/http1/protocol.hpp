@@ -240,7 +240,7 @@ inline response fetch(
     client_options options = {}
 )
 {
-    return pace::blocking_call(
+    return blocking_call(
         [&](io_context& io) { return async_fetch(io, std::move(url), std::move(outgoing), bounds, options); },
         wait
     );
@@ -248,7 +248,7 @@ inline response fetch(
 
 inline response get(std::string url, blocking_options wait = {}, limits bounds = {}, client_options options = {})
 {
-    return pace::blocking_call([&](io_context& io) { return async_get(io, std::move(url), bounds, options); }, wait);
+    return blocking_call([&](io_context& io) { return async_get(io, std::move(url), bounds, options); }, wait);
 }
 
 inline response post(
@@ -260,7 +260,7 @@ inline response post(
     client_options options = {}
 )
 {
-    return pace::blocking_call(
+    return blocking_call(
         [&](io_context& io)
         { return async_post(io, std::move(url), std::move(body), std::move(content_type), bounds, options); },
         wait
@@ -377,7 +377,7 @@ inline response fetch(
     client_options options = {}
 )
 {
-    return pace::blocking_call(
+    return blocking_call(
         [&](io_context& io)
         { return async_fetch(io, configuration, std::move(url), std::move(outgoing), bounds, options); },
         wait
@@ -392,7 +392,7 @@ inline response get(
     client_options options = {}
 )
 {
-    return pace::blocking_call(
+    return blocking_call(
         [&](io_context& io) { return async_get(io, configuration, std::move(url), bounds, options); },
         wait
     );

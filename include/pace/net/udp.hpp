@@ -163,7 +163,7 @@ inline task<packet> async_exchange(endpoint peer, std::string request, std::size
 
 inline packet exchange(endpoint peer, std::string request, blocking_options options = {}, std::size_t capacity = 65536)
 {
-    return pace::blocking_call(
+    return blocking_call(
         [&](io_context& io) { return async_exchange(io, std::move(peer), std::move(request), capacity); },
         options
     );

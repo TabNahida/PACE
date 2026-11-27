@@ -227,9 +227,9 @@ inline task<void> drain_group(std::shared_ptr<group_state> state, bool boundary 
 template <class T>
 class [[nodiscard]] join_handle
 {
-    std::shared_ptr<pace::child_state<T>> state_;
+    std::shared_ptr<child_state<T>> state_;
 
-    explicit join_handle(std::shared_ptr<pace::child_state<T>> state)
+    explicit join_handle(std::shared_ptr<child_state<T>> state)
         : state_(std::move(state))
     {
     }
@@ -242,7 +242,7 @@ public:
 
     struct awaiter
     {
-        std::shared_ptr<pace::child_state<T>> state;
+        std::shared_ptr<child_state<T>> state;
 
         bool await_ready() const
         {
@@ -293,13 +293,13 @@ public:
 
 class task_group
 {
-    std::shared_ptr<pace::group_state> state_;
+    std::shared_ptr<group_state> state_;
 
-    explicit task_group(std::shared_ptr<pace::group_state> state)
+    explicit task_group(std::shared_ptr<group_state> state)
         : state_(std::move(state))
     {
     }
-    friend struct pace::task_access;
+    friend struct task_access;
 
 public:
     task_group(const task_group&) = delete;
@@ -314,12 +314,12 @@ public:
             throw std::logic_error("task group is closed");
         }
         state_->source.token().throw_if_cancelled();
-        using result = pace::operation_result<Factory>;
-        auto child = std::make_shared<pace::owned_child<Factory>>(state_->io, std::move(factory));
+        using result = operation_result<Factory>;
+        auto child = std::make_shared<owned_child<Factory>>(state_->io, std::move(factory));
         ++state_->pending;
         try
         {
-            state_->io.spawn(pace::run_child(state_, child));
+            state_->io.spawn(run_child(state_, child));
         }
         catch (...)
         {
@@ -367,21 +367,20 @@ public:
     // Do not join a group from one of its own children.
     task<void> join()
     {
-        return pace::task_access::bind(pace::drain_group(state_), state_->source.token());
+        return task_access::bind(drain_group(state_), state_->source.token());
     }
 
     template <class Factory>
-    static auto run(Factory factory)
-        -> task<typename pace::entry_result<std::invoke_result_t<Factory&, task_group&>>::type>
+    static auto run(Factory factory) -> task<typename entry_result<std::invoke_result_t<Factory&, task_group&>>::type>
     {
-        using result = typename pace::entry_result<std::invoke_result_t<Factory&, task_group&>>::type;
+        using result = typename entry_result<std::invoke_result_t<Factory&, task_group&>>::type;
         auto token = co_await this_task::cancellation();
-        task_group group(std::make_shared<pace::group_state>(this_context(), token));
+        task_group group(std::make_shared<group_state>(this_context(), token));
         const auto& state = group.state_;
-        pace::entry_state<result> value;
+        entry_state<result> value;
         try
         {
-            auto body = pace::task_access::bind(std::invoke(factory, group), state->source.token());
+            auto body = task_access::bind(std::invoke(factory, group), state->source.token());
             if constexpr (std::is_void_v<result>)
             {
                 co_await std::move(body);
@@ -401,7 +400,7 @@ public:
                 std::make_exception_ptr(std::logic_error("task group body exited with another join pending"))
             );
         }
-        co_await pace::task_access::bind(pace::drain_group(state, true), {});
+        co_await task_access::bind(drain_group(state, true), {});
         state->resources.clear();
         if (state->failure)
         {

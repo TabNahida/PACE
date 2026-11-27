@@ -65,7 +65,7 @@ struct io_context::cancellation_records
         record* previous = nullptr;
         record* next = nullptr;
         bool queued = false;
-        std::optional<pace::cancellation_registration> wake;
+        std::optional<cancellation_registration> wake;
     };
 
     pace::poller& poller;
