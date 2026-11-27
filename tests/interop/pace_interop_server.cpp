@@ -146,7 +146,7 @@ int main(int argc, char** argv)
         pace::io_context io;
         std::map<std::string, unsigned> ports;
         std::vector<std::unique_ptr<pace::tcp::listener>> listeners;
-        auto listen = [&](const std::string& name)
+        [[maybe_unused]] auto listen = [&](const std::string& name)
         {
             listeners.push_back(std::make_unique<pace::tcp::listener>(io, pace::tcp::endpoint{"127.0.0.1", 0}));
             ports[name] = listeners.back()->local_endpoint().port;
