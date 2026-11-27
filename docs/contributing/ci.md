@@ -21,6 +21,7 @@ and on pull requests, and can be started by hand.
 | C++ named modules | `modules.yml` | `import pace` with Clang 18 in three configurations |
 | Code style | `style.yml` | clang-format, generated module interfaces |
 | Static analysis | `tidy.yml` | clang-tidy on the lines a change touches |
+| Documentation | `docs.yml` | Translations, structure, links and README figures checked; site built with `mkdocs build --strict` and published to GitHub Pages from `main` once Pages is enabled |
 | Fuzz | `fuzz.yml` | libFuzzer on the HTTP/1 and WebSocket parsers; seed corpus replay on macOS and Windows |
 | Interop | `interop.yml` | curl, `openssl s_client` and h2spec against PACE servers |
 | Benchmark baseline | `baseline.yml` | Manual: every benchmark suite for one revision, raw results as artifacts |

@@ -6,6 +6,8 @@
   that page on the Chinese site. mkdocs-static-i18n builds each language separately, so the English build has
   no `.zh.md` files to resolve against. Chinese pages linking to Chinese pages need nothing: the plugin
   resolves them in the Chinese build.
+- A Chinese page's first line, the `<!-- source-hash: … -->` stamp that scripts/check_docs.py maintains, is dropped:
+  mkdocs takes a page's title from its first element, which must be the `# heading`.
 """
 
 import os
@@ -15,9 +17,11 @@ from pathlib import PurePosixPath
 REPOSITORY = "https://github.com/TabNahida/PACE"
 LINK = re.compile(r"(\]\(|href=\"|src=\")([^)\"\s#]+)(#[^)\"\s]*)?")
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+STAMP = re.compile(r"\A<!--\s*source-hash:[^>]*-->\s*\n")
 
 
 def on_page_markdown(markdown, page, config, files):
+    markdown = STAMP.sub("", markdown)
     docs = PurePosixPath(config["docs_dir"]).name
     source = PurePosixPath(docs) / PurePosixPath(page.file.src_uri).parent
     english = not page.file.src_uri.endswith(".zh.md")

@@ -1,4 +1,4 @@
-<!-- source-hash: 7c50602915bb -->
+<!-- source-hash: 2f3b3a4bd584 -->
 # 持续集成与架构覆盖
 
 [English](ci.md) · [参与贡献](README.zh.md)
@@ -20,6 +20,7 @@ PACE 的 CI 把原生执行、模拟执行和针对外部 SDK 的编译区分开
 | C++ 命名模块 | `modules.yml` | 用 Clang 18 在三种配置下 `import pace` |
 | 代码风格 | `style.yml` | clang-format、生成的模块接口 |
 | 静态分析 | `tidy.yml` | 对改动涉及的行运行 clang-tidy |
+| 文档 | `docs.yml` | 检查译文、结构、链接与 README 配图；用 `mkdocs build --strict` 构建站点，启用 GitHub Pages 后从 `main` 发布 |
 | 模糊测试 | `fuzz.yml` | 对 HTTP/1 和 WebSocket 解析器运行 libFuzzer；在 macOS 和 Windows 上回放种子语料 |
 | 互通测试 | `interop.yml` | curl、`openssl s_client` 和 h2spec 对接 PACE 服务端 |
 | 基准基线 | `baseline.yml` | 手动：为某个版本运行全部基准套件，原始结果作为产物上传 |
