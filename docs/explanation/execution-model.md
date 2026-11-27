@@ -41,7 +41,7 @@ asynchronous at all.
 
 ## Placing work
 
-`spawn` (a task) and `post` (a function) are the only operations that may be called from any thread. Everything
+`spawn` (a task), `post` (a function) and `stop` are the only operations that may be called from any thread. Everything
 else on a context — socket I/O, timers, `yield`, closing a socket, cancelling a registration — belongs to the thread
 running it. Setting objects up before the context runs and destroying them after it has stopped are allowed from
 the owning thread.
