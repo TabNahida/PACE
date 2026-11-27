@@ -61,7 +61,11 @@ jobs:
         continue-on-error: true
         run: python scripts/ci_openssl_diagnostic.py --build-dir build/ci --output-dir ci-results/openssl-diagnostic
       - name: Run all supported protocol tests and tutorials
+        id: tests
         run: xmake test -v
+      - name: Write JUnit reports for the failed test run
+        if: failure() && steps.tests.outcome == 'failure'
+        run: python scripts/junit_tests.py --build-dir build/ci --output ci-results/junit
       - name: Verify WebSocket with independent Python peers
         run: python tests/websocket/websocket_interop.py --build-dir build/ci
       - name: Validate reporting code
