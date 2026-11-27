@@ -1,237 +1,433 @@
-# `pace::tcp`
+# TCP (`pace::tcp`)
 
-For one-call `exchange` / `async_exchange` clients, see [direct clients](../direct-clients.md).
+[简体中文](tcp.zh.md) · [Networking](README.md)
 
-Short forms and owning helpers: [component conveniences](../component-conveniences.md).
+## Overview
 
-[0.3.0 convenience additions](../convenience.md)
+`pace::tcp` provides nonblocking TCP client and server sockets bound to an `io_context`, and one-call
+request/reply helpers.
 
-Include `<pace/net.hpp>`. TCP sockets are nonblocking, move-only and tied to an
-`io_context`. Operations return lazy [tasks](../runtime/task.md). Keep the context alive
-longer than its sockets and listeners, and keep each socket object and operation
-buffer alive until the operation completes.
+| Header | Target | Build option |
+|:--|:--|:--|
+| `<pace/net/tcp.hpp>` (included by `<pace/net.hpp>`) | `pace_net` | none (always built) |
 
-## Addresses and listener options
+Endpoints are numeric IPv4 or IPv6 addresses; there is no implicit name lookup. The generic
+[`pace::write` and `pace::read_exact`](README.md#functions) helpers work on `tcp::stream`. With `--modules=y` the
+names are exported by `import pace.net;`.
+
+## Synopsis
 
 ```cpp
-namespace pace::tcp {
-struct endpoint {
+#include <pace/net.hpp>
+#include <pace/runtime.hpp>
+
+#include <array>
+#include <iostream>
+
+pace::task<void> echo(pace::tcp::stream peer)
+{
+    std::array<char, 4096> buffer{};
+    while (const auto count = co_await peer.read_some(buffer))
+    {
+        co_await peer.write_all(std::string_view(buffer.data(), count));
+    }
+}
+
+pace::task<void> demo(pace::io_context& io)
+{
+    auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+    auto client = co_await pace::tcp::connect(io, listener.local_endpoint());
+    client.set_no_delay();
+    io.spawn(echo(co_await listener.accept()));
+
+    co_await pace::write(client, "Hello, TCP!");
+    std::cout << co_await pace::read_exact(client, 11) << '\n';
+    co_await client.close_gracefully();
+}
+
+int main()
+{
+    pace::run(demo);
+}
+```
+
+## Types
+
+### `endpoint`
+
+```cpp
+struct endpoint
+{
     std::string address = "127.0.0.1";
     std::uint16_t port = 0;
-    pace::address_family family = pace::address_family::unspecified;
+    address_family family = address_family::unspecified;
     std::uint32_t scope_id = 0;
 };
-struct listen_options {
+```
+
+| Member | Meaning |
+|:--|:--|
+| `address` | Numeric, unbracketed IPv4 or IPv6 address, such as `127.0.0.1`, `::1` or `::ffff:192.0.2.1` |
+| `port` | TCP port. `0` on a listener asks the OS for a free port |
+| `family` | `unspecified` infers the family from `address`; `ipv4` or `ipv6` must match it |
+| `scope_id` | IPv6 interface index for scoped (link-local) addresses; must be `0` for IPv4 |
+
+`{address, port}` initializers are enough for most uses. Host names, brackets, embedded NUL bytes, malformed
+addresses, a family that does not match the address and a nonzero scope on IPv4 throw `std::invalid_argument`
+when the endpoint is used. Textual zone suffixes such as `fe80::1%eth0` or `fe80::1%3` are rejected: write
+`{"fe80::1", port, pace::address_family::ipv6, 3}` instead. Choosing the interface index and the reachability of
+link-local addresses are up to the application.
+
+Endpoints returned by `local_endpoint()` and `remote_endpoint()` carry an owned numeric address, the actual port,
+the concrete family (never `unspecified`) and the scope.
+
+### `listen_options`
+
+```cpp
+struct listen_options
+{
     bool reuse_port = false;
     int backlog = 1024;
     bool ipv6_only = true;
 };
-}
 ```
 
-An endpoint owns its numeric IPv4 or IPv6 address, such as `127.0.0.1` or `::1`.
-Existing `{address, port}` initializers remain valid. `pace::address_family`,
-declared in `<pace/net.hpp>`, has `unspecified`, `ipv4` and `ipv6` values. Input
-defaults to automatic inference; an explicit family must match the address.
-Endpoint inspection always returns the concrete family. Hostnames, brackets,
-embedded NUL bytes and malformed addresses throw `std::invalid_argument`.
-Resolve hostnames explicitly with the [DNS extension](../dns/README.md).
+| Member | Meaning |
+|:--|:--|
+| `reuse_port` | Request native same-port listener sharing: `SO_REUSEPORT_LB` where available, otherwise `SO_REUSEPORT`. Throws `std::system_error` with `std::errc::operation_not_supported` where neither exists (Windows) |
+| `backlog` | Length of the pending-connection queue passed to `listen()`. Must be positive; the OS may cap it |
+| `ipv6_only` | On an IPv6 endpoint, sets `IPV6_V6ONLY`. `false` accepts IPv4 and IPv6 on one wildcard listener. Must stay `true` on an IPv4 endpoint |
 
-For scoped IPv6, set `scope_id` to the numeric interface index; native endpoint
-inspection preserves that index separately from the address string. A nonzero
-scope on IPv4 is invalid. Textual zone suffixes such as `fe80::1%eth0` or
-`fe80::1%3` are explicitly rejected: use `{"fe80::1", port,
-pace::address_family::ipv6, 3}`. Interface-index selection and link-local
-reachability are the application's responsibility.
+`reuse_port` lets several listeners (for example one per worker context) accept on one port; the kernel spreads
+new connections among them. It does not move established connections between contexts. Independently of this
+option, PACE sets `SO_REUSEADDR` on POSIX listeners and `SO_EXCLUSIVEADDRUSE` on Windows.
 
-A listener's port `0` requests an OS-assigned port, retrievable through
-`local_endpoint()`. `0.0.0.0` binds all local IPv4 interfaces and `::` binds all
-local IPv6 interfaces. IPv6 listeners explicitly set `IPV6_V6ONLY=1` by default,
-so a separate IPv4 listener can bind the same port. To accept both families on
-one wildcard listener, use `listener(io, {"::", port}, {.ipv6_only = false})`.
-PACE sets `IPV6_V6ONLY=0` before bind and propagates native failures; it does not
-silently fall back to another policy. This option is invalid on an IPv4 endpoint.
-An accepted IPv4 peer is reported as IPv6 with an IPv4-mapped address, for example
-`::ffff:127.0.0.1`. Access-control and logging code must handle mapped addresses.
-Use `::1` or `127.0.0.1` for examples intended to stay local.
+IPv6 listeners always set `IPV6_V6ONLY` explicitly, whatever the OS default, so a separate IPv4 listener can bind
+the same port. With `ipv6_only = false` (for example `listen(io, {"::", port}, {.ipv6_only = false})`) PACE sets
+`IPV6_V6ONLY=0` before binding and reports a failure instead of falling back. IPv4 peers of such a listener are
+reported as IPv4-mapped IPv6 addresses (`::ffff:127.0.0.1`); access control and logging must handle that form.
 
-`backlog` must be positive or construction throws `invalid_argument`. The OS can
-cap the requested queue length. `reuse_port` requests native same-port listener
-sharing (`SO_REUSEPORT_LB` where available, otherwise `SO_REUSEPORT`). It is not
-portable on Windows and throws `system_error(operation_not_supported)` where
-unsupported. Even where available, native errors remain possible. It distributes
-new connections among separate listeners; it does not migrate established sockets
-between contexts. PACE sets `SO_REUSEADDR` on POSIX listeners and exclusive address
-use on Windows independently of this option.
-
-## `stream`: ownership and accessors
+### `stream`
 
 ```cpp
-explicit stream(io_context& context);
-stream(io_context& context, pace::address_family family);
-~stream();
-stream(stream&& other) noexcept;
-stream& operator=(stream&& other) noexcept;
-stream(const stream&) = delete;
-stream& operator=(const stream&) = delete;
+class stream
+{
+public:
+    explicit stream(io_context& context);
+    stream(io_context& context, address_family family);
+    ~stream();
+    stream(stream&& other) noexcept;
+    stream& operator=(stream&& other) noexcept;
+    stream(const stream&) = delete;
+    stream& operator=(const stream&) = delete;
 
-native_socket_type native_handle() const noexcept;
-io_context& context() const noexcept;
-bool is_open() const noexcept;
-endpoint local_endpoint() const;
-endpoint remote_endpoint() const;
-void close() noexcept;
+    task<void> connect(endpoint endpoint);
+    task<std::size_t> read_some(std::span<char> buffer);
+    task<std::size_t> read_some(std::span<std::byte> buffer);
+    task<void> read_exact(std::span<char> buffer);
+    task<void> read_exact(std::span<std::byte> buffer);
+    task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
+    task<void> write_all(std::string_view bytes);
+    task<void> write_all(std::span<const std::byte> bytes);
+
+    void set_no_delay(bool enabled = true);
+    task<void> close_gracefully(
+        std::chrono::milliseconds timeout = std::chrono::milliseconds(100),
+        std::size_t discard_limit = std::size_t{64} * 1024
+    );
+    void close() noexcept;
+
+    [[nodiscard]] native_socket_type native_handle() const noexcept;
+    [[nodiscard]] io_context& context() const noexcept;
+    [[nodiscard]] bool is_open() const noexcept;
+    [[nodiscard]] endpoint local_endpoint() const;
+    [[nodiscard]] endpoint remote_endpoint() const;
+};
 ```
 
-Construction creates an unconnected nonblocking socket and may throw a native
-`system_error`. It may happen before the context runs. The default constructor
-starts with IPv4 and chooses the destination family on the first `connect`.
-For IPv6 it replaces the initial handle while preserving `set_no_delay()`.
-Use `stream(io, pace::address_family::ipv6)` or `ipv4` when configuring other
-native socket options before connect: an explicit family keeps the handle and
-rejects a destination from the other family. Outbound IPv6 sockets support
-IPv4-mapped numeric destinations consistently through `IPV6_V6ONLY=0`.
-`context()` returns the
-same owning context; it does not transfer ownership. `native_handle()` returns a
-borrowed handle; do not independently close it or change nonblocking state.
-`is_open()` reports ownership of a handle, not whether it is connected or healthy.
+A move-only TCP connection owned by one `io_context`. Streams come from `tcp::connect`, `listener::accept`, or
+construction followed by `connect`.
 
-`local_endpoint()` and `remote_endpoint()` query the native socket and return an
-owned numeric address, actual port, concrete family and scope. The remote query
-requires a connected stream. Query before run or on the owning loop, without
-concurrent close/move; native unavailable-endpoint errors propagate. Closed
-sockets throw `bad_file_descriptor` (a stopped context takes precedence).
+#### Construction
 
-Move only when no operation references the source or destination object. A move
-empties the source handle while retaining its context association. Move assignment
-closes the destination's previous socket. Destruction calls `close()`.
+`stream(io)` creates an unconnected nonblocking IPv4 socket and picks the family on the first `connect`: an IPv6
+destination replaces the handle with an IPv6 socket, keeping a `set_no_delay` setting. `stream(io, family)` with
+`ipv4` or `ipv6` keeps its handle and rejects a destination of the other family; use it when you set other native
+options on `native_handle()` before connecting. Outbound IPv6 sockets set `IPV6_V6ONLY=0`, so IPv4-mapped
+destinations work on every platform. Construction may run before the context runs and throws `std::system_error`
+if the OS cannot create the socket.
 
-`close()` is idempotent. On the owning loop it cancels registered waits before
-closing the native handle, leaving `is_open()` false. Construction/setup before
-run and cleanup after run joins are supported. Do not close or destroy a live
-socket concurrently from another thread. Closing schedules suspended operations
-to resume; **destroying the C++ object must wait for those member operations to
-finish**. Use `context.post(...)` with a lifetime-safe reference to request close
-from another thread.
-
-## Connecting, reading and writing
+#### `connect`
 
 ```cpp
 task<void> connect(endpoint endpoint);
+```
+
+Connects to a numeric endpoint. Await it before starting any other operation on the stream. Completion is checked
+through `SO_ERROR`; refusal and other failures throw `std::system_error`. A stream allows one connection attempt:
+once the native attempt has started, another `connect` throws `std::logic_error`, so after a failure close the
+stream and use a new one. An endpoint rejected during validation (before the native attempt) leaves the stream
+usable for a corrected endpoint. There is no connect timeout; use a
+[deadline](../runtime/structured-concurrency.md).
+
+#### Reading
+
+```cpp
 task<std::size_t> read_some(std::span<char> buffer);
 task<std::size_t> read_some(std::span<std::byte> buffer);
+```
+
+Waits until at least one byte is available and returns how many bytes were copied, possibly fewer than
+`buffer.size()`. With a nonempty buffer, `0` means the peer closed its sending side (orderly EOF). An empty buffer
+returns `0` without reading. The bytes are not NUL-terminated.
+
+```cpp
+task<void> read_exact(std::span<char> buffer);
+task<void> read_exact(std::span<std::byte> buffer);
+task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
+```
+
+Members with the same behaviour as the free [`pace::read_exact`](README.md#read_exact): fill exactly the requested
+length without consuming the following bytes, throw `std::system_error` with `std::errc::connection_reset` on EOF
+before the end, and (for the `size` overload) throw `std::length_error` when `size > maximum` before allocating.
+A failed span read may have overwritten a prefix of the buffer.
+
+#### Writing
+
+```cpp
 task<void> write_all(std::string_view bytes);
 task<void> write_all(std::span<const std::byte> bytes);
+```
+
+Sends the whole view, looping over partial sends, and completes when the OS has accepted every byte. That does not
+mean the peer has received or processed them. The task borrows the bytes: keep them alive and unchanged until it
+completes, or use [`pace::write`](README.md#write), which owns a string. An empty view completes without sending.
+Large writes yield to the reactor after each MiB so other connections make progress. On POSIX, sends never raise
+`SIGPIPE`; a closed peer is reported as `std::system_error`.
+
+#### `set_no_delay`
+
+```cpp
 void set_no_delay(bool enabled = true);
 ```
 
-`connect` owns its endpoint value. Await it on the stream's context, before
-starting other operations on that stream. Native pending connection completion is
-checked through `SO_ERROR`; refusal and other failures throw `system_error`.
-There is no built-in connect timeout or hostname resolution. Once a native
-connection attempt has started, another `connect` on that stream throws
-`logic_error`. After connection failure, close the socket and create a fresh
-stream for a retry. Endpoint/family validation failures before a native attempt
-leave the stream available for a corrected endpoint.
+Sets (`true`) or clears (`false`) `TCP_NODELAY`. Call it before the context runs or on the owning context. Throws
+`std::system_error` on a closed stream, a stopped context or an OS failure.
 
-`read_some` waits until at least some bytes are available, an error occurs, or EOF
-is observed. It can return fewer bytes than the buffer size. With a **nonempty**
-buffer, zero means orderly EOF; an empty buffer also returns zero without a read.
-The supplied memory must remain valid and writable for the entire operation.
-Returned bytes are not NUL-terminated. There is no built-in `read_exactly` or
-delimiter parser; loop and track the remaining span when framing a protocol.
-
-`write_all` loops over partial native sends until it accepts the complete view or
-fails. It does not promise that the peer has received or processed those bytes.
-Keep the backing string/array alive and unchanged until completion. The task owns
-the view, not its bytes. Empty views complete without a send after checking socket
-state. The byte-span overloads adapt to the same implementation without copying
-the payload. `write_all` advances until all requested data has been accepted and
-yields between batches during large writes so other connections can progress.
-
-`set_no_delay(true)` enables `TCP_NODELAY`; `false` disables it. Call before run or
-on the owning loop. It throws on invalid/stopped state or native option failure.
-It does not imply an application batching policy or a performance guarantee.
-
-At most one read operation and one write operation may be outstanding at once.
-A connect uses the write side; an accept uses the listener's read side. Two
-same-direction operations are not supported even if one happens to complete
-synchronously. Await one before starting another. Read and write buffers are
-independently owned by the application.
-
-## Bounded graceful close
+#### Bounded graceful close
 
 ```cpp
 task<void> close_gracefully(
     std::chrono::milliseconds timeout = std::chrono::milliseconds(100),
-    std::size_t discard_limit = 64 * 1024);
+    std::size_t discard_limit = std::size_t{64} * 1024
+);
 ```
 
-Await this only when **no other socket operations are outstanding**. It half-closes
-the send direction, then reads and discards incoming bytes until peer EOF, the
-time allowance or the discard allowance is reached. It waits for socket readiness
-with one cancellable deadline; successful completion removes that timer immediately.
-The socket is closed on success, timeout/limit
-completion, cancellation and errors. Native errors and cancellation still
-propagate after close. This supports delivering a final response even when unread
-request data would otherwise cause an immediate reset.
+Half-closes the sending side, then reads and discards incoming bytes until the peer's EOF, `timeout` or
+`discard_limit` bytes, whichever comes first, and closes the socket. This lets a final response reach the peer even
+when the peer still has unread request bytes in flight, which would otherwise make the close send a reset.
 
-Zero/negative timeout or a zero discard allowance skips draining after the send
-shutdown. Reaching a bound is normal completion, not a timeout exception. The
-deadline bounds cooperative draining, not OS scheduling or a peer's delivery
-acknowledgment; a peer that does not cooperate may still see an abrupt final close.
-It is not a general I/O operation deadline.
+- Await it only when no other operation is outstanding on the stream.
+- Reaching `timeout` or `discard_limit` is normal completion, not an error.
+- A zero or negative `timeout`, or a zero `discard_limit`, closes right after the half-close.
+- The socket is closed in every case: success, a bound reached, cancellation and errors. Errors and cancellation
+  still propagate after the close.
+- The bound limits the cooperative drain only. It cannot guarantee that the peer received the data; a peer that
+  keeps sending may still observe an abrupt close.
 
-## `listener`
+#### `close`
 
 ```cpp
-listener(io_context& context, endpoint endpoint, listen_options options = {});
-~listener();
-listener(listener&& other) noexcept;
-listener& operator=(listener&& other) noexcept;
-listener(const listener&) = delete;
-listener& operator=(const listener&) = delete;
-
-task<stream> accept();
-endpoint local_endpoint() const;
-io_context& context() const noexcept;
-native_socket_type native_handle() const noexcept;
 void close() noexcept;
 ```
 
-Construction synchronously creates, binds and listens on a nonblocking socket.
-Address/option validation and native socket errors can throw; failed construction
-closes any created handle. `local_endpoint()` returns an owned numeric address
-and actual bound port and throws on a closed/invalid native socket. Access it
-before run or on the owner without concurrent close/move.
+Cancels the stream's pending waits and closes the native handle; `is_open()` becomes `false`. Idempotent. Suspended
+operations are resumed with `std::errc::operation_canceled` (or `bad_file_descriptor`) afterwards, so the `stream`
+object itself must stay alive until they have finished. Destruction calls `close()`.
 
-`accept()` waits for one connection and returns a new owning `stream` bound to the
-**listener's context**. Accepted sockets are configured nonblocking. Certain
-transient aborted/reset accepts are retried. Temporary descriptor or socket
-buffer exhaustion backs off before retrying. The reactor can run other work
-between batches of successful accepts. Other failures propagate. There is
-one outstanding accept per listener. The listener must stay alive and unmoved
-while accept is suspended. There is no accepted-socket context-rebinding API.
+#### Accessors
 
-Listener move, destruction, `context`, `native_handle` and `close` follow the same
-ownership/affinity rules as the stream equivalents. Closing a listener cancels
-its accept wait; it does not close already accepted streams. A listener has no
-`is_open()` member; compare its handle with `pace::invalid_socket` if needed.
+| Member | Result |
+|:--|:--|
+| `native_handle()` | The borrowed native socket. Do not close it or change its blocking mode |
+| `context()` | The owning `io_context` |
+| `is_open()` | Whether the stream owns a handle; says nothing about the connection's health |
+| `local_endpoint()` | The bound local address and port, from the native socket |
+| `remote_endpoint()` | The connected peer's address and port; requires a connected stream |
 
-## Error and cancellation behavior
+`local_endpoint()` and `remote_endpoint()` throw `std::system_error`: `bad_file_descriptor` on a closed stream,
+`operation_canceled` on a stopped context, or the native error (for example when the peer address is not
+available).
 
-TCP operation bodies check stopped context first (`operation_canceled`), then
-closed handle (`bad_file_descriptor`), and reject execution under a different
-running PACE context with `logic_error`. Readiness registration also requires the
-owning context. This is not a guarantee that every misuse from an unrelated
-thread is detected; obey the affinity contract regardless of checks.
+### `listener`
 
-Socket failures use `std::system_error`: native errors use `generic_category` on
-POSIX and `system_category` on Windows. Library cancellation and invalid-state
-errors use portable `std::errc` codes. Compare conditions such as
-`error.code() == std::errc::operation_canceled`; do not assume numeric errno values
-on Windows. POSIX sends suppress `SIGPIPE` through supported per-send/per-socket
-mechanisms. The caller must catch expected per-peer errors so one disconnected
-client does not become an unhandled root failure.
+```cpp
+class listener
+{
+public:
+    listener(io_context& context, endpoint endpoint, listen_options options = {});
+    ~listener();
+    listener(listener&& other) noexcept;
+    listener& operator=(listener&& other) noexcept;
+    listener(const listener&) = delete;
+    listener& operator=(const listener&) = delete;
 
-See the [TCP tutorial](../../tutorial/05-tcp.md) for complete client and server code.
+    task<stream> accept();
+    [[nodiscard]] endpoint local_endpoint() const;
+    [[nodiscard]] io_context& context() const noexcept;
+    [[nodiscard]] native_socket_type native_handle() const noexcept;
+    void close() noexcept;
+};
+```
+
+A move-only listening socket. The constructor creates, binds and listens synchronously, and may run before the
+context runs. Validation errors throw `std::invalid_argument`, OS errors `std::system_error`; a failed constructor
+closes any handle it created. Port `0` binds a free port; read it back with `local_endpoint()`. `0.0.0.0` binds
+every IPv4 interface and `::` every IPv6 interface.
+
+`accept()` waits for one connection and returns a new connected `stream` owned by the listener's context. Accepted
+sockets are nonblocking. Connections aborted or reset before they were accepted are skipped. When the process runs
+out of descriptors or socket buffers, `accept()` backs off for 50 ms and retries instead of failing. After 64
+accepts in a row it yields to the reactor so other work runs. Other errors throw `std::system_error`.
+
+`close()` cancels a pending `accept()`, which then throws `std::system_error` with `operation_canceled` or
+`bad_file_descriptor`. Streams already accepted are not affected. A listener has no `is_open()`; compare
+`native_handle()` with `pace::invalid_socket` if needed. `local_endpoint()`, `context()`, `native_handle()`, moves and
+destruction follow the `stream` rules.
+
+## Functions
+
+### `connect`
+
+```cpp
+task<stream> connect(io_context& context, endpoint destination);
+task<stream> connect(endpoint destination);
+```
+
+Creates a stream, connects it to `destination` and returns it. The overload without a context uses the context
+that runs the task, read when the task starts. The stream belongs to that context; do not let it outlive the
+context (for example by returning it from `pace::run`).
+
+### `listen`
+
+```cpp
+listener listen(io_context& io, endpoint local, listen_options options = {});
+listener listen(endpoint local, listen_options options = {});
+```
+
+Constructs a `listener`: binds and listens immediately. The overload without a context calls
+`pace::this_context()` at the call, so it must be called from a task or callback on a running context; use the
+explicit-context overload to create a listener before `io.run()`.
+
+### `exchange` and `async_exchange`
+
+```cpp
+task<std::string> async_exchange(
+    io_context& io,
+    endpoint peer,
+    std::string request,
+    std::size_t reply_size,
+    std::size_t maximum = std::size_t{1024} * 1024
+);
+task<std::string> async_exchange(
+    endpoint peer,
+    std::string request,
+    std::size_t reply_size,
+    std::size_t maximum = std::size_t{1024} * 1024
+);
+std::string exchange(
+    endpoint peer,
+    std::string request,
+    std::size_t reply_size,
+    blocking_options options = {},
+    std::size_t maximum = std::size_t{1024} * 1024
+);
+```
+
+One connection, one request, one reply of exactly `reply_size` bytes: connect to `peer`, write `request`, read
+exactly `reply_size` bytes, close gracefully (with the default 100 ms / 64 KiB bounds) and return the reply. There is
+no pooling or reuse.
+
+- `reply_size` is an exact framing contract, not a maximum: fewer bytes followed by EOF is an error. `0` is allowed;
+  the request is still sent.
+- `reply_size > maximum` throws `std::length_error` before connecting.
+- Request and reply strings may contain zero bytes.
+- `async_exchange` runs on an existing context (the running one for the overload without `io`) and adds no
+  deadline of its own; it inherits the awaiting task's cancellation and deadline.
+- `exchange` blocks the calling thread: it runs the exchange on a fresh context with
+  [`blocking_options`](../runtime/run.md) and returns the result. Its `timeout` (30 s by default) or `deadline`
+  bounds the whole call, including the graceful close; on expiry the call cancels its work and throws
+  `std::system_error` with `std::errc::timed_out`. A non-positive `timeout` throws `std::invalid_argument`.
+  Calling it from inside a PACE context throws `std::logic_error` before any I/O.
+
+For persistent connections, other framing (delimiters, length prefixes) or reusable buffers, use `connect`,
+`pace::write` and `pace::read_exact` on an owned stream.
+
+## Errors
+
+| Condition | Exception |
+|:--|:--|
+| Malformed endpoint, host name, `%zone`, family or scope mismatch | `std::invalid_argument` |
+| `listen_options::backlog <= 0`, or `ipv6_only = false` on an IPv4 endpoint | `std::invalid_argument` |
+| `connect` to the other family on a stream created with an explicit family | `std::system_error` (`address_family_not_supported`) |
+| Second `connect` on one stream | `std::logic_error` |
+| OS socket error (refused, reset, unreachable, …) | `std::system_error` with the native code |
+| EOF inside `read_exact` / `exchange` | `std::system_error` (`connection_reset`) |
+| `read_exact` / `exchange` size above `maximum` | `std::length_error` |
+| Operation on a closed stream or listener | `std::system_error` (`bad_file_descriptor`) |
+| Context stopped, stream closed during the wait, or task canceled | `std::system_error` (`operation_canceled`) |
+| Deadline of the awaiting task, or `exchange` budget, expired | `std::system_error` (`timed_out`) |
+| Operation run on a different running `io_context` | `std::logic_error` |
+| Second outstanding operation in one direction | `std::logic_error` |
+| `reuse_port` where unsupported | `std::system_error` (`operation_not_supported`) |
+
+Native errors use `std::generic_category()` on POSIX and `std::system_category()` on Windows; PACE's own
+conditions use portable `std::errc` codes. Compare with conditions, for example
+`error.code() == std::errc::operation_canceled`, not with numeric `errno` values. Catch per-connection errors in
+the connection's task so one failing peer does not end the program.
+
+## Threads and concurrency
+
+- Run every operation, `set_no_delay`, `close` and the accessors on the owning context's thread, or before the
+  context runs or after it has stopped. To close a stream from another thread, `post` the call to its context.
+  PACE checks some misuse (an operation run on a different running context throws `std::logic_error`) but not all.
+- A stream allows one outstanding read (`read_some`, `read_exact`) and one outstanding write (`write_all`,
+  `connect`) at the same time, so a reader task and a writer task may share a stream. Two operations in the same
+  direction are not supported; when the second one has to wait it throws `std::logic_error`.
+- A listener allows one outstanding `accept()`.
+- `close_gracefully()` requires that nothing else is outstanding.
+
+## Lifetime and ownership
+
+- The `io_context` must outlive every stream and listener created on it.
+- Keep a stream or listener alive, and at the same address, while any of its operations is suspended. Closing
+  resumes them, but destroying the object before they have finished is undefined behaviour.
+- Buffers passed to `read_some`, `read_exact` (span overloads) and `write_all` are borrowed until the operation
+  completes. `connect` and the helpers taking `std::string` own their arguments.
+- Move a stream or listener only when no operation is outstanding. A move leaves the source without a handle (but
+  still bound to its context); move assignment closes the destination's previous socket first.
+- An accepted stream belongs to the listener's context; there is no way to rebind it to another context.
+
+## Limits and defaults
+
+| Item | Default or bound |
+|:--|:--|
+| `endpoint::address` / `port` / `family` / `scope_id` | `"127.0.0.1"` / `0` / `unspecified` / `0` |
+| `listen_options::backlog` | 1024 (must be > 0; the OS may cap it) |
+| `listen_options::reuse_port` / `ipv6_only` | `false` / `true` |
+| `close_gracefully` timeout / discard limit | 100 ms / 64 KiB |
+| `read_exact`, `exchange` `maximum` | 1 MiB |
+| `exchange` timeout (`blocking_options::timeout`) | 30 s |
+| `write_all` bytes sent before yielding to the reactor | 1 MiB |
+| `accept()` consecutive accepts before yielding | 64 |
+| `accept()` back-off on descriptor or buffer exhaustion | 50 ms |
+| Connect timeout, read or write timeout | none; use a deadline |
+
+## See also
+
+- [Networking overview](README.md), [UDP](udp.md)
+- [TLS](../tls/README.md) over TCP, [DNS](../dns/README.md) for host names
+- [I/O context](../runtime/io-context.md), [running a program](../runtime/run.md),
+  [structured concurrency](../runtime/structured-concurrency.md)
+- Tutorial: [TCP](../../tutorial/05-tcp.md), [graceful shutdown](../../tutorial/09-graceful-shutdown.md)
+- Guide: [protocol tuning](../../guides/protocol-tuning.md)

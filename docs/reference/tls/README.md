@@ -1,38 +1,108 @@
-# TLS with OpenSSL
+# TLS (`pace/tls.hpp`)
 
-Short forms and owning helpers: [component conveniences](../component-conveniences.md).
+[简体中文](README.zh.md) · [Reference](../README.md)
 
-[简体中文](README.zh.md) · [WebSocket](../websocket/README.md)
+## Overview
 
-Enable `--tls=y` and include `<pace/tls.hpp>`. The build exports `PACE_HAS_TLS`
-and links OpenSSL `ssl` and `crypto`; without that option this header does not
-declare TLS types. OpenSSL 1.1.1 or newer is required; use a supported OpenSSL 3.x
-release for deployments. TLS 1.2 is the minimum protocol version. Obsolete SSL,
-TLS 1.0/1.1, compression and renegotiation are disabled.
+The TLS module runs TLS over a TCP stream or any other PACE byte stream with OpenSSL, for verified clients, servers
+with per-name certificates, STARTTLS and ClientHello routing.
+
+| Header | Target | Build option |
+|:--|:--|:--|
+| `<pace/tls.hpp>` | `pace_tls` | `--tls=y` |
+
+`<pace/tls.hpp>` includes `<pace/tls/stream.hpp>`, which also includes `<pace/net/tcp.hpp>`. The build option
+defines `PACE_HAS_TLS` and links OpenSSL `ssl` and `crypto`; without it the header declares nothing and no other
+module depends on OpenSSL for TLS. With `--modules=y` the names are exported by `import pace.tls;`.
+
+OpenSSL 1.1.1 or newer is required; deploy with a supported OpenSSL 3.x release. TLS 1.2 is the minimum protocol
+version; SSL, TLS 1.0 and 1.1, compression and renegotiation are disabled. Linux, macOS, Windows and FreeBSD use the
+same nonblocking OpenSSL state machine.
+
+The checked-in example `examples/tutorial_tls.cpp` verifies a loopback TLS connection with test certificates from
+`tests/certs`. Those certificates and keys are public test fixtures, never deployment credentials; the test CA is
+loaded only into the example's client configuration.
 
 ```sh
 xmake f -m release --tls=y --examples=y --tests=y -y
 xmake -y
-xmake test -v
 xmake run tutorial_tls
 ```
 
-The [complete example](../../../examples/tutorial_tls.cpp) verifies a local TLS
-connection and exits. Its checked-in certificate and private key are public test
-fixtures, never deployment credentials. The test CA is loaded only into that
-client configuration, without modifying the operating system trust store.
-
-## Configuration
+## Synopsis
 
 ```cpp
-namespace pace::tls {
-enum class role { client, server };
-enum class trust_source { system, application };
-enum class sni_policy { use_default, reject };
-enum class pin_type { leaf_certificate, subject_public_key_info };
+#include <pace/net.hpp>
+#include <pace/runtime.hpp>
+#include <pace/tls.hpp>
+
+#include <iostream>
+
+// Server: wrap each accepted TCP stream and complete the handshake.
+pace::task<void> serve_one(pace::tcp::listener& listener, const pace::tls::context& server)
+{
+    auto connection = co_await pace::tls::accept(co_await listener.accept(), server);
+    co_await pace::write(connection, "hello\n");
+    co_await connection.shutdown();
+}
+
+// Client: verify the certificate for "api.example.com" against the system trust store.
+pace::task<void> client(pace::tcp::endpoint address)
+{
+    pace::tls::context configuration;
+    configuration.set_alpn_protocols({"http/1.1"});
+    auto connection = co_await pace::tls::connect(configuration, address, "api.example.com");
+    std::cout << "ALPN: " << connection.selected_protocol() << '\n';
+    std::cout << co_await pace::read_exact(connection, 6);
+    co_await connection.shutdown();
+}
+```
+
+## Types
+
+### Enumerations and aliases
+
+```cpp
+enum class role
+{
+    client,
+    server
+};
+enum class trust_source
+{
+    system,
+    application
+};
+enum class sni_policy
+{
+    use_default,
+    reject
+};
+enum class pin_type
+{
+    leaf_certificate,
+    subject_public_key_info
+};
 using sha256_digest = std::array<std::byte, 32>;
 using verification_callback = std::function<bool(std::span<const std::string>)>;
-class context {
+using client_hello_callback = std::function<client_hello_action(const client_hello&)>;
+```
+
+| Name | Meaning |
+|:--|:--|
+| `role` | Whether a `context` configures clients or servers |
+| `trust_source` | `system` loads OpenSSL's default trust paths; `application` starts with an empty trust store |
+| `sni_policy` | For a server with SNI routing: `use_default` serves the default certificate, `reject` fails the handshake |
+| `pin_type` | What a pin hashes: the leaf certificate's DER encoding, or its DER SubjectPublicKeyInfo |
+| `sha256_digest` | 32 raw SHA-256 bytes |
+| `verification_callback` | Receives the peer's DER certificates in wire order, leaf first; returns `true` to accept |
+| `client_hello_callback` | Inspects a server's incoming ClientHello and decides what to do with it |
+
+### `context`
+
+```cpp
+class context
+{
 public:
     explicit context(role mode = role::client, trust_source trust = trust_source::system);
     ~context();
@@ -40,111 +110,98 @@ public:
     context& operator=(context&&) noexcept;
     context(const context&) = delete;
     context& operator=(const context&) = delete;
+
     void load_verify_file(const std::string& pem_file);
     void load_verify_pem(std::string_view certificates);
     void set_verify_pin(pin_type type, sha256_digest digest);
     void set_verify_callback(verification_callback verifier);
     void insecure_skip_verify();
-    void use_certificate_chain(const std::string& certificate_chain_file,
-                               const std::string& private_key_file);
+    void use_certificate_chain(const std::string& certificate_chain_file, const std::string& private_key_file);
     void set_alpn_protocols(const std::vector<std::string>& protocols);
     void add_server_name(std::string name, const context& configuration);
     void set_server_name_policy(sni_policy missing, sni_policy unrecognized);
     void set_client_hello_callback(client_hello_callback callback);
 };
-}
 ```
 
-`tls::context` is TLS configuration, separate from an `io_context` reactor.
-Configuration freezes when the first stream is constructed from it, when it is
-registered as an SNI target or when a ClientHello callback selects it. Later
-mutation is rejected with `logic_error`,
-even after those streams have closed. Configure certificates, trust and ALPN
-before that boundary; use a new context to change them. Setters and freezing are
-serialized internally. Once configured, a context can create independent streams
-on multiple reactors; moving or destroying the public object must not race with
-access to that object. A moved-from configuration cannot configure new streams.
+A TLS configuration: role, trust, verification policy, certificate, ALPN and server-name routing. It is separate
+from the `io_context` reactor, and one configuration can serve streams on several reactors.
 
-Streams share ownership of the configuration and its entire SNI target table.
-Public context objects may be moved or destroyed after stream construction;
-certificates, trust roots and callback state remain alive until the last owning
-stream/context is destroyed.
+**Freezing.** A context freezes when the first stream is constructed from it, when it is registered as an SNI target,
+or when a ClientHello callback selects it. After that every setter throws `std::logic_error`, even once those
+streams have closed; create a new context to change the configuration. Setters and freezing are serialized
+internally. Moving or destroying the `context` object must not race with other use of that object; a moved-from
+context throws `std::logic_error` from its setters and cannot create streams.
 
-Clients default to verifying the certificate chain and expected DNS/IP identity.
-The default `trust_source::system` loads OpenSSL's default trust paths during
-construction; a loading error throws. `trust_source::application` instead starts
-with an empty trust store and **never calls default-path loading**. This permits
-explicit trust configuration even when a deployment's OpenSSL defaults are
-unavailable. In CA mode, a suitable root is required for the handshake.
+**Shared ownership.** Streams share ownership of their configuration and of its whole SNI table. The `context`
+object may be moved or destroyed once streams exist: certificates, trust roots and callbacks stay alive until the
+last stream or context using them is gone.
 
-`load_verify_file` adds roots from an explicit PEM file. `load_verify_pem` adds one
-or more in-memory `CERTIFICATE` PEM blocks, separated by whitespace. It copies
-the certificates into the context-owned store; the input can be destroyed as soon
-as the call returns. Duplicate certificates are accepted. Empty, malformed or
-mixed-content bundles throw; the entire bundle is parsed before any roots are
-added. Both methods populate the trust store used by CA verification.
+#### Trust
+
+The constructor with `trust_source::system` (the default) loads OpenSSL's default trust paths on a client context
+and throws `std::system_error` if that fails. `trust_source::application` starts with no trusted roots and never
+loads the default paths, so a client can be configured even where the OpenSSL defaults are unavailable. Clients
+verify the certificate chain and the expected DNS name or IP address by default.
+
+- `load_verify_file(pem_file)` adds the roots of a PEM file.
+- `load_verify_pem(certificates)` adds one or more in-memory `CERTIFICATE` PEM blocks separated by whitespace. It
+  parses the whole input before adding anything and copies the certificates into the context, so the input may be
+  released as soon as the call returns. Empty, malformed or mixed-content input throws `std::invalid_argument` (or
+  `std::system_error` when OpenSSL rejects a block); duplicates are accepted.
 
 ```cpp
-pace::tls::context client(pace::tls::role::client,
-                          pace::tls::trust_source::application);
-client.load_verify_pem(application_ca_bundle); // Owned/copied roots, still verified.
-pace::tls::stream connection(io, client);
-co_await connection.connect({"192.0.2.1", 443}, "api.example.com");
+pace::tls::context client(pace::tls::role::client, pace::tls::trust_source::application);
+client.load_verify_pem(application_ca_bundle); // Copied roots; the chain is still verified.
 ```
 
-PACE does not automatically import Windows native roots or the macOS Keychain.
-Applications can export their chosen platform certificates to in-memory PEM and
-pass that bundle, or supply an explicit CA file. Wrong hostnames, untrusted roots
-and expired certificates remain handshake errors with either trust source.
+PACE does not import the Windows certificate store or the macOS Keychain. Export the platform certificates you
+want to trust to PEM and pass them in, or supply a CA file. Wrong names, untrusted roots and expired certificates are
+handshake errors with either trust source.
 
-Server contexts require a certificate chain and matching unencrypted PEM private
-key. The chain file starts with the leaf followed by its intermediates. Loading
-is synchronous and checks key correspondence before installing the new pair, so
-a missing/mismatched key does not replace an earlier valid certificate. Encrypted keys fail without a
-terminal password prompt. A server does not require client certificates in this API.
+#### Client verification modes
 
-ALPN identifiers are nonempty strings of 1–255 bytes with a total encoded length
-of at most 65535 bytes. The server selects the first protocol in its configured
-preference list that the client offers. An offered list without overlap fails the
-handshake. An empty configured list disables ALPN; a peer that does not send ALPN
-can complete without a selected protocol. Applications requiring `h2` must check
-`selected_protocol() == "h2"` before exchanging HTTP/2 frames. ALPN negotiation
-alone does not implement the selected application protocol.
+Each of these setters replaces CA verification with one other mode. They are for client contexts only (a server
+context throws `std::invalid_argument`); use `trust_source::application` when the mode needs no system trust.
 
-## Client verification modes
+- `set_verify_pin(pin_type::leaf_certificate, digest)` accepts the peer when the SHA-256 of its leaf certificate's
+  DER encoding equals `digest`; `pin_type::subject_public_key_info` hashes the leaf's DER SubjectPublicKeyInfo. A
+  matching pin accepts an untrusted or self-signed leaf: the pin replaces chain and validity checks.
+- `set_verify_callback(verifier)` passes the peer's unverified DER certificates, leaf first, to `verifier`, which
+  decides whether to trust the chain and may implement its own CA and pin checks. Returning `false` or throwing
+  fails the handshake. The certificates are borrowed for the call. The callback runs synchronously on the stream's
+  reactor, and concurrently when the context is shared across reactors. An empty function throws
+  `std::invalid_argument`.
+- `insecure_skip_verify()` disables certificate and name verification, for tests and interoperability only: the
+  connection is encrypted but the peer is not authenticated.
 
-Choose a policy on a client context before constructing streams. Each policy
-setter selects a single verification mode. Use `trust_source::application`
-when the policy needs no system trust paths.
-
-- `set_verify_pin(pin_type::leaf_certificate, digest)` matches the SHA-256 of
-  the leaf certificate's DER encoding. `pin_type::subject_public_key_info`
-  hashes the leaf's full DER SubjectPublicKeyInfo. Both take 32 raw digest bytes
-  and accept an untrusted or self-signed leaf when the pin matches. The pin
-  replaces CA chain and validity checks.
-- `set_verify_callback(verifier)` supplies the peer's unverified DER certificates
-  in wire order, with the leaf first. The callback decides whether to trust the
-  chain and may implement its own CA and pin checks. Returning `false` or
-  throwing fails the handshake. The data is borrowed for the call. The callback
-  runs synchronously on the owning reactor and must support concurrent
-  invocation if the context is shared across reactors.
-- `insecure_skip_verify()` disables certificate and peer-name verification for
-  testing and interoperability. The connection is encrypted with an
-  unauthenticated peer.
-
-Pin and callback modes also check the certificate's DNS/IP identity when
-`peer_name` is supplied. Pass an empty `peer_name` to rely on the pin or
-application verification policy for identity.
+Pin and callback modes still check the certificate's DNS or IP identity when a nonempty peer name is passed to
+`connect` or `handshake`; pass an empty peer name to rely on the pin or callback alone.
 
 ```cpp
-pace::tls::context client(pace::tls::role::client,
-                          pace::tls::trust_source::application);
+pace::tls::context client(pace::tls::role::client, pace::tls::trust_source::application);
 client.set_verify_pin(pace::tls::pin_type::subject_public_key_info, expected_spki_sha256);
 pace::tls::stream connection(io, client);
 co_await connection.connect({"192.0.2.1", 443}, "", "relay.example.com");
 ```
 
-## Independent server certificates with SNI
+#### Server certificate
+
+`use_certificate_chain(certificate_chain_file, private_key_file)` loads a PEM chain (leaf first, then
+intermediates) and its unencrypted PEM private key. Loading is synchronous and checks that the key matches before
+installing the pair, so a missing or mismatched key leaves an earlier valid pair in place. Encrypted keys fail
+instead of prompting for a password. A server serves this certificate unless SNI routing or a ClientHello callback
+selects another context. This API does not request client certificates.
+
+#### ALPN
+
+`set_alpn_protocols(protocols)` sets the protocols to offer (client) or accept, in preference order (server). Each
+identifier is 1–255 bytes and the encoded list at most 65535 bytes, otherwise `std::invalid_argument`. The server
+picks its first protocol that the client offers; an offered list without overlap fails the handshake. An empty list
+disables ALPN, and a peer that sends no ALPN completes with no selected protocol. Clients must check
+`selected_protocol()` (for example `== "h2"`) before speaking the protocol; ALPN does not implement it.
+
+#### Server name routing (SNI)
 
 ```cpp
 pace::tls::context domain_a(pace::tls::role::server);
@@ -159,182 +216,232 @@ server.use_certificate_chain("default-fullchain.pem", "default-key.pem");
 server.set_alpn_protocols({"http/1.1"});
 server.add_server_name("a.example", domain_a); // Freezes and retains domain_a.
 server.add_server_name("b.example", domain_b);
-server.set_server_name_policy(pace::tls::sni_policy::use_default,
-                              pace::tls::sni_policy::reject);
+server.set_server_name_policy(pace::tls::sni_policy::use_default, pace::tls::sni_policy::reject);
 // Missing SNI uses the default; unknown SNI fails this handshake.
 ```
 
-Names match exactly, ignoring ASCII case. Supply ASCII DNS labels (IDNs as
-A-labels); wildcards, IP literals, trailing dots, empty/invalid labels, duplicate
-names, client contexts and self-references are rejected. Targets must not contain
-another SNI routing table; their certificate and ALPN configuration is selected
-directly. A target can be shared by multiple names or server contexts.
+`add_server_name(name, configuration)` routes ClientHellos whose SNI equals `name` to the server context
+`configuration`, which supplies the certificate chain and ALPN policy for that connection. Names match exactly,
+ignoring ASCII case; use ASCII labels (A-labels for IDNs). Wildcards, IP literals, trailing dots, empty or invalid
+labels, duplicate names, client contexts, the context itself and targets that have their own SNI table throw
+`std::invalid_argument`. One target may serve several names or several routing contexts.
 
-Missing and unrecognized SNI have independent policies; both initially
-`use_default`. A numeric client peer name sends no SNI and follows the missing
-policy. Malformed DNS SNI is rejected. With `use_default`, clients still check
-the fallback certificate against their requested identity. A selected target
-that cannot complete a handshake fails only that connection and **never falls
-back** to the default. Catch its exception before continuing to serve peers.
+`set_server_name_policy(missing, unrecognized)` chooses what happens without SNI and with an unknown name; both start
+as `use_default`. A client whose peer name is an IP address sends no SNI and falls under `missing`. Malformed SNI is
+rejected. With `use_default`, the client still checks the default certificate against the name it asked for. A
+selected target that cannot complete the handshake fails that connection; it never falls back to the default.
+Server contexts only.
 
-Selection runs synchronously inside the owning reactor's handshake. It only
-looks up the frozen table and changes that connection's `SSL` context; it never
-replaces a certificate on a shared default context or loads files during a
-handshake. The selected context supplies its certificate chain and ALPN policy.
-The same behavior applies to implicit TLS and TCP streams upgraded with STARTTLS.
+Selection runs synchronously inside the handshake on the owning reactor. It only looks up the frozen table; it never
+changes a shared context or loads files during a handshake. It applies equally to implicit TLS and to TCP streams
+upgraded with STARTTLS. Contexts with an SNI table disable the session cache and session tickets (including TLS 1.3
+tickets), because OpenSSL's servername callback runs after session resumption and resumption would bypass the
+per-connection selection.
 
-SNI routing contexts disable session caches and tickets, including TLS 1.3
-tickets, so session resumption cannot bypass per-connection selection. This is
-necessary because OpenSSL's servername callback runs after session-resumption
-processing. Its callback runs before ALPN selection. See the official
-[OpenSSL SNI callback contract](https://docs.openssl.org/3.0/man3/SSL_CTX_set_tlsext_servername_callback/).
+#### ClientHello callback
 
-## Inspect and route the ClientHello
-
-Set `context::set_client_hello_callback` on a server before constructing streams.
-It runs synchronously once per connection, on the first ClientHello and before
-certificate selection. Shared contexts may invoke it concurrently on different
-reactors. The callback receives the offered SNI, ALPN protocols, supported
-versions, cipher suite IDs, key shares, legacy version, session ID and exact
-handshake message (including its four-byte handshake header). Lists preserve
-wire order. Views borrow memory for the call. The raw handshake message spans
-TLS record boundaries and excludes record headers.
-
-- `client_hello_action::proceed()` applies the entry context's normal SNI policy.
-- `client_hello_action::select(context)` freezes and retains the selected server
-  context for its certificate and ALPN. The selection takes precedence over SNI
-  routing, and a failed handshake closes the connection.
-- `client_hello_action::reject()` sends a fatal handshake alert. A thrown
-  exception also fails the handshake.
-- `client_hello_action::handoff()` suspends TLS before sending any response.
-  Call `handshake_with_handoff()` to recover the original transport.
+`set_client_hello_callback(callback)` installs a server-side callback that runs once per connection on the first
+ClientHello, before SNI and certificate selection. It runs synchronously on the reactor, and concurrently on
+several reactors when the context is shared. Its `client_hello_action` result decides what happens next; throwing
+aborts the handshake. An empty function or a client context throws `std::invalid_argument`. Contexts with this
+callback disable session resumption and tickets, so certificate selection is made afresh on each connection.
 
 ```cpp
-server.set_client_hello_callback([](const pace::tls::client_hello& hello) {
-    if (hello.server_name == "upstream.example.com")
-        return pace::tls::client_hello_action::handoff();
-    return pace::tls::client_hello_action::proceed();
-});
-
-pace::tls::stream session(co_await listener.accept(), server);
-if (auto handoff = co_await session.handshake_with_handoff()) {
-    // Process pre_read in wire order before reading any more from the transport.
-    co_await route_to_upstream(std::move(handoff->transport), std::move(handoff->pre_read));
-} else {
-    co_await handle_https(session);
-}
+server.set_client_hello_callback(
+    [](const pace::tls::client_hello& hello)
+    {
+        if (hello.server_name == "upstream.example.com")
+        {
+            return pace::tls::client_hello_action::handoff();
+        }
+        return pace::tls::client_hello_action::proceed();
+    }
+);
 ```
 
-`handshake_with_handoff<Transport>()` defaults to `tcp::stream`. For a custom
-transport or QUIC stream, supply its original type. An empty result means the
-TLS handshake completed. A handoff transfers the open transport and every byte
-already read, including the constructor's prefix and any bytes read past the
-ClientHello, and leaves the TLS stream moved-from. Capture is limited to 1 MiB
-of additional reads before the callback. On the existing `handshake()` and
-`accept()` paths, a handoff request closes the transport silently and reports a
-protocol error. Contexts with this callback disable session resumption and tickets
-so certificate selection is independent on each connection.
-
-## Streams and handshakes
+### `client_hello` and `client_hello_key_share`
 
 ```cpp
-stream(io_context& io, const tls::context& configuration);
-stream(tcp::stream transport, const tls::context& configuration);
-stream(tcp::stream transport, const tls::context& configuration, std::string_view pre_read);
-~stream();
-stream(stream&&) noexcept;
-stream& operator=(stream&&) noexcept;
+struct client_hello_key_share
+{
+    std::uint16_t group = 0;
+    std::string_view key_exchange;
+};
 
+struct client_hello
+{
+    std::string_view server_name;
+    std::vector<std::string_view> alpn_protocols;
+    std::vector<std::uint16_t> supported_versions;
+    std::vector<std::uint16_t> cipher_suites;
+    std::vector<client_hello_key_share> key_shares;
+    std::uint16_t legacy_version = 0;
+    std::string_view session_id;
+    std::string_view raw_message;
+};
+```
+
+The parsed ClientHello passed to the callback. Lists keep wire order and wire IDs. An absent SNI, ALPN or
+supported_versions extension gives an empty field. `raw_message` is the exact handshake message, including its
+four-byte handshake header; it may have spanned several TLS records and excludes record headers. Every view borrows
+memory that is valid only until the callback returns.
+
+### `client_hello_action`
+
+```cpp
+class client_hello_action
+{
+public:
+    static client_hello_action proceed() noexcept;
+    static client_hello_action select(const context& configuration);
+    static client_hello_action reject() noexcept;
+    static client_hello_action handoff() noexcept;
+};
+```
+
+| Action | Effect |
+|:--|:--|
+| `proceed()` | Continue with this context's normal SNI policy and certificate |
+| `select(configuration)` | Use the server context `configuration` (frozen and retained) for the certificate and ALPN. Takes precedence over SNI routing; a failed handshake closes the connection |
+| `reject()` | Send a fatal handshake alert |
+| `handoff()` | Stop before sending anything, so `handshake_with_handoff()` can return the transport |
+
+`select` with a client context throws `std::invalid_argument`.
+
+### `client_hello_handoff`
+
+```cpp
+template <class Transport>
+struct client_hello_handoff
+{
+    Transport transport;
+    std::string pre_read;
+};
+```
+
+The result of a handoff: the original, still-open transport, and every byte read from it so far in wire order,
+including the constructor's `pre_read` prefix and any bytes read past the ClientHello. Process `pre_read` before
+reading more from `transport`.
+
+### `stream`
+
+```cpp
+class stream
+{
+public:
+    stream(io_context& io, const tls::context& configuration);
+    stream(tcp::stream transport, const tls::context& configuration);
+    stream(tcp::stream transport, const tls::context& configuration, std::string_view pre_read);
+    template <tls_byte_stream Transport>
+    requires(!std::same_as<Transport, tcp::stream>)
+    stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {});
+    ~stream();
+    stream(stream&&) noexcept;
+    stream& operator=(stream&&) noexcept;
+    stream(const stream&) = delete;
+    stream& operator=(const stream&) = delete;
+
+    task<void> connect(tcp::endpoint endpoint, std::string peer_name);
+    task<void> connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name);
+    task<void> handshake(std::string peer_name = {});
+    task<void> handshake(std::string peer_name, std::string server_name);
+    template <tls_byte_stream Transport = tcp::stream>
+    task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff();
+
+    task<std::size_t> read_some(std::span<char> buffer);
+    task<std::size_t> read_some(std::span<std::byte> buffer);
+    task<void> write_all(std::string_view bytes);
+    task<void> write_all(std::span<const std::byte> bytes);
+
+    task<void> shutdown(std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
+    task<void> close_gracefully(std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
+    void close() noexcept;
+    void set_no_delay(bool enabled = true);
+    [[nodiscard]] bool is_open() const noexcept;
+    [[nodiscard]] io_context& context() const noexcept;
+    [[nodiscard]] std::string selected_protocol() const;
+};
+```
+
+A move-only TLS session over a transport it owns. Construction freezes the configuration.
+
+#### Construction
+
+| Constructor | Transport |
+|:--|:--|
+| `stream(io, configuration)` | A new, unconnected TCP socket on `io`; call `connect` |
+| `stream(tcp_stream, configuration)` | An accepted or connected TCP stream, moved in; call `handshake` |
+| `stream(tcp_stream, configuration, pre_read)` | As above, after TLS bytes were already read from the socket |
+| `stream(transport, configuration, pre_read = {})` | Any other connected byte stream satisfying [`tls_byte_stream`](#custom-transports), moved in |
+
+Do not use a transport for plaintext I/O after moving it in. `pre_read` is for TLS bytes that protocol detection or
+STARTTLS negotiation already consumed: the stream copies them before the constructor returns and replays them, in
+wire order, before reading from the transport. The prefix may hold a complete ClientHello or end anywhere inside a
+record.
+
+#### Handshakes
+
+```cpp
 task<void> connect(tcp::endpoint endpoint, std::string peer_name);
 task<void> connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name);
 task<void> handshake(std::string peer_name = {});
 task<void> handshake(std::string peer_name, std::string server_name);
-io_context& context() const noexcept;
-bool is_open() const noexcept;
-std::string selected_protocol() const;
-void set_no_delay(bool enabled = true);
-void close() noexcept;
 ```
 
-For TCP, construct with an `io_context` for a new
-socket, or move an accepted/connected TCP stream into the second constructor.
-Do not use the moved transport for plaintext I/O. `context()` returns the reactor,
-and `selected_protocol()` returns an owned copy of the negotiated ALPN identifier
-or an empty string. `is_open()` checks the owned transport, not handshake success.
+`connect` (client, TCP-backed streams only) connects the TCP socket to the numeric `endpoint` and performs the
+handshake. `handshake` performs only the handshake on an already-connected transport: a client passes the peer name,
+a server passes nothing.
 
-For clients, `connect(endpoint, peer_name)` performs TCP connection and TLS
-handshake. TCP endpoints use numeric IPv4 or IPv6; the name is the expected
-certificate identity, independently of that address. For example:
+`peer_name` is the identity expected in the certificate, independent of the address: a DNS name is checked against
+the DNS names of the certificate and is also sent as SNI; an IP address is checked against its IP addresses and
+sends no SNI. CA verification requires a nonempty `peer_name`. The `server_name` overloads send a separate ASCII DNS
+name as SNI, or none when `server_name` is empty. Resolve host names first with the [DNS module](../dns/README.md).
 
 ```cpp
-pace::tls::context configuration; // Verified clients by default.
+pace::tls::context configuration; // A verifying client by default.
 pace::tls::stream connection(io, configuration);
 co_await connection.connect({"192.0.2.1", 443}, "api.example.com");
 ```
 
-The example address above is reserved for documentation. Use your service's
-resolved address. By default a DNS `peer_name` is also sent as SNI and an IP
-`peer_name` checks the IP SAN. The overloads taking `server_name` let you send a
-separate ASCII DNS name for SNI or pass an empty string to suppress SNI. CA
-verification still requires a nonempty `peer_name`. On an already-connected
-client stream use the corresponding `handshake` overload.
-
-For STARTTLS, finish the protocol's plaintext negotiation on the TCP stream,
-then move it into `tls::stream` and call `handshake(peer_name)` on the client or
-`handshake()` on the server. If protocol detection or negotiation already
-consumed TLS bytes, pass those bytes in wire order to the constructor as
-`pre_read`. The stream copies the prefix before the constructor returns and
-replays it before reading from TCP. The prefix may contain a complete
-ClientHello or end anywhere within a TLS record.
-
-On the server, wrap the accepted stream and call `handshake()` without a name:
+For STARTTLS, finish the plaintext negotiation on the `tcp::stream`, move it into a `tls::stream` (with any TLS
+bytes already read as `pre_read`) and call `handshake(peer_name)` on the client or `handshake()` on the server:
 
 ```cpp
 pace::tls::stream connection(co_await listener.accept(), server_configuration);
 co_await connection.handshake();
 ```
 
-The TCP handshake suspends on socket readiness. Handshake failure
-or cancellation closes the transport. There is no individual handshake deadline;
-an application may request reactor stop or arrange lifetime-safe stream closure.
+The handshake suspends on transport readiness. A failed or canceled handshake closes the transport. There is no
+handshake timeout of its own; use a [deadline](../runtime/structured-concurrency.md) or close the stream.
 
-## TLS over an asynchronous byte stream
-
-`tls::stream(transport, configuration, pre_read = {})` also accepts an already
-connected, ordered bidirectional byte stream. It owns the supplied transport.
-Move in a `quic::stream` opened bidirectionally, an already-handshaken
-`tls::stream`, or an application byte-stream adapter. Then call
-`handshake(peer_name)` as a client or `handshake()` as a server. Forward any TLS
-bytes consumed before wrapping as `pre_read`, in wire order.
+#### `handshake_with_handoff`
 
 ```cpp
-auto bytes = co_await quic_connection.open_stream(pace::quic::stream_type::bidirectional);
-pace::tls::stream inner(std::move(bytes), tls_configuration);
-co_await inner.handshake("relay.example.com");
+template <tls_byte_stream Transport = tcp::stream>
+task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff();
 ```
 
-Keep the parent QUIC connection alive through the TLS stream's lifetime. A
-custom transport supplies `context() const noexcept` returning `io_context&`,
-`read_some(std::span<char>) -> task<std::size_t>` and
-`write_all(std::string_view) -> task<void>`. Reads return zero at byte-stream EOF.
-Writes accept all supplied bytes before returning. Supply `close() noexcept` or
-the QUIC-style pair `finish_write()` and `reset() noexcept`. Close or reset
-must cancel outstanding operations with `operation_canceled`. An optional
-`is_open() const noexcept` lets TLS observe closure of the underlying stream.
-During shutdown, TLS can run one transport read and one transport write at the
-same time to exchange alerts when buffers are full. A serialized adapter can
-implement `bool supports_concurrent_io() const noexcept` and return `false`.
-For nested TLS, each SSL session processes records serially. The underlying
-byte stream can send ciphertext while the sessions read the peer's close notifications.
+Server handshake that honours `client_hello_action::handoff()`. It returns an empty optional when the TLS handshake
+completed. On a handoff it returns the original transport and every byte read so far, and leaves this stream
+moved-from. `Transport` defaults to `tcp::stream`; for any other transport name the type passed to the constructor.
+On a client context, or with a different `Transport` type, it throws `std::logic_error`. On `handshake()` and
+`tls::accept()`, a handoff request instead closes the transport and throws a protocol error. While a ClientHello
+callback may still ask for a handoff, reads are captured up to 1 MiB; beyond that the handshake fails.
 
-TLS exchanges ciphertext in bounded buffers through those asynchronous methods.
-Servers on asynchronous transports suppress TLS 1.3 session tickets so a
-bounded transport can start exchanging application data after the handshake.
-Each transport stays on the same reactor throughout use. `connect()` and
-`set_no_delay()` require direct TCP. PACE's HTTP/2 multiplexing driver over TLS
-likewise requires direct TCP.
+```cpp
+pace::tls::stream session(co_await listener.accept(), server);
+if (auto handoff = co_await session.handshake_with_handoff())
+{
+    // Process pre_read in wire order before reading any more from the transport.
+    co_await route_to_upstream(std::move(handoff->transport), std::move(handoff->pre_read));
+}
+else
+{
+    co_await handle_https(session);
+}
+```
 
-## Records, ownership and concurrency
+#### Reading and writing
 
 ```cpp
 task<std::size_t> read_some(std::span<char> buffer);
@@ -343,58 +450,188 @@ task<void> write_all(std::string_view bytes);
 task<void> write_all(std::span<const std::byte> bytes);
 ```
 
-Await operations on the stream's owning reactor after a successful handshake.
-**Exactly one asynchronous TLS operation may be outstanding at a time**, including
-read versus write, handshake and shutdown. Overlap throws `logic_error` without
-canceling the existing operation. This initial interface is suitable for
-sequential request/response flows; independent reader/writer coroutines must not
-share one TLS stream. OpenSSL's WANT_READ/WANT_WRITE transitions can require either
-direction for an operation, so TCP's independent read/write contract does not
-apply here.
+Available after a successful handshake (`std::logic_error` before). `read_some` returns decrypted bytes, possibly
+fewer than requested. With a nonempty buffer, `0` means the peer sent a verified `close_notify`; a transport EOF
+without it is a protocol error, so truncated TLS traffic is never taken as a clean end. An empty buffer returns `0`
+without reading. `write_all` encrypts and sends the whole view, handling partial writes, and completes once the
+ciphertext has been handed to the transport. Buffers are borrowed until the operation completes. The generic
+[`pace::write` and `pace::read_exact`](../net/README.md#functions) helpers work on `tls::stream`.
 
-Keep the stream object at a stable address, with its reactor alive, until each
-operation completes. Move only while idle. Buffers/views borrow application
-memory throughout suspension. `write_all` handles partial encrypted writes and
-finishes after passing the ciphertext to the underlying transport. `read_some`
-returns decrypted bytes, possibly fewer than requested.
-With a nonempty buffer, zero means a verified TLS `close_notify`. Transport EOF
-without that alert is a protocol error, preventing silent acceptance of truncated
-TLS traffic. An empty buffer returns zero without reading.
-
-TLS failures use `std::system_error` with `std::errc::protocol_error` and OpenSSL
-diagnostic text. Reactor cancellation uses `operation_canceled`; TCP connect
-errors retain TCP error codes. Invalid arguments and operation-state violations
-use `invalid_argument`/`logic_error`. A failed active operation closes the transport,
-except that a rejected overlapping operation leaves the existing operation alone.
-Catch expected per-connection failures so an unhandled root does not stop peers.
-
-## Closing
+#### Shutdown and close
 
 ```cpp
 task<void> shutdown(std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
 task<void> close_gracefully(std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
+void close() noexcept;
 ```
 
-`shutdown` sends `close_notify`, waits cooperatively for its peer's notification,
-then closes the transport. For a custom transport with `close()`, TLS runs any
-`shutdown(std::chrono::milliseconds) -> task<void>` cleanup hook before calling
-`close()`. A QUIC-style stream sends FIN with `finish_write()` and waits for
-the peer's FIN.
-`close_gracefully` is an alias for TLS shutdown. A cancellable reactor timer bounds
-the operation. Reaching the timeout closes normally, while a TLS error or
-cancellation closes and propagates. A nonpositive timeout makes one TCP shutdown
-attempt and closes other transports immediately. The bound cannot
-preempt blocking application code or guarantee peer receipt. No other TLS
-operation may be active during shutdown. Its scoped timer is removed immediately
-when shutdown finishes; no polling task or delayed callback outlives the operation.
+`shutdown` sends `close_notify`, waits for the peer's `close_notify`, then closes the transport. `close_gracefully` is
+the same operation under the name `tcp::stream` uses. It requires a completed handshake (`std::logic_error`
+otherwise; use `close()` to abandon a connection that never completed one).
 
-`close()` immediately cancels waits and closes or resets the transport; it
-does not send `close_notify` or wait for suspended members. Retain the C++ stream
-until those members resume and finish. Destruction also closes immediately.
-As with TCP, close on the owning reactor or while it is not running. After moving,
-only destruction, assignment, `close()` and `is_open()` are supported on the source.
+- A cancellable reactor timer bounds the operation; reaching `timeout` closes normally without promising the peer
+  received anything. A TLS error or cancellation closes the transport and propagates.
+- A non-positive `timeout` makes one attempt on a TCP transport and closes other transports immediately.
+- On a custom transport with `close()`, a `shutdown(std::chrono::milliseconds) -> task<void>` member, if present, runs
+  before `close()`. A QUIC-style transport sends FIN with `finish_write()` and waits for the peer's FIN.
+- No other TLS operation may be active during shutdown. The timer is removed as soon as shutdown finishes.
 
-Linux, macOS, Windows and FreeBSD use the same nonblocking OpenSSL state machine.
-A custom socket BIO preserves full-width Winsock handles and uses SIGPIPE-safe
-sends on supported POSIX targets. TLS is optional and adds no OpenSSL dependency
-to builds that leave it disabled.
+`close()` closes or resets the transport immediately, cancelling waits; it sends no `close_notify` and does not wait.
+Suspended operations then finish with an error, so keep the `stream` alive until they have. The destructor also
+closes immediately.
+
+#### Accessors
+
+| Member | Result |
+|:--|:--|
+| `context()` | The reactor of the transport |
+| `is_open()` | Whether the transport is open; not whether the handshake succeeded. `false` on a moved-from stream |
+| `selected_protocol()` | An owned copy of the negotiated ALPN protocol, or an empty string |
+| `set_no_delay(enabled)` | Sets `TCP_NODELAY` on a TCP transport; `std::logic_error` on other transports |
+
+After a move, the source supports only destruction, assignment, `close()` and `is_open()`; the other members throw
+`std::logic_error` (and `context()` must not be called).
+
+### Custom transports
+
+```cpp
+template <class Transport>
+concept tls_closeable = requires(Transport& transport) {
+    { transport.close() } noexcept -> std::same_as<void>;
+};
+
+template <class Transport>
+concept tls_resettable = requires(Transport& transport) {
+    { transport.finish_write() } -> std::same_as<void>;
+    { transport.reset() } noexcept -> std::same_as<void>;
+};
+
+template <class Transport>
+concept tls_byte_stream =
+    (tls_closeable<Transport> || tls_resettable<Transport>)
+    && requires(Transport& transport, const Transport& owner, std::span<char> input, std::string_view output) {
+           { owner.context() } noexcept -> std::same_as<io_context&>;
+           { transport.read_some(input) } -> std::same_as<task<std::size_t>>;
+           { transport.write_all(output) } -> std::same_as<task<void>>;
+       };
+```
+
+`tls::stream` can run over any connected, ordered, bidirectional byte stream that satisfies `tls_byte_stream`:
+a bidirectional `quic::stream`, another `tls::stream` (nested TLS), or an application adapter. The stream owns the
+transport it is given. Requirements:
+
+- `context()` returns the reactor; the transport stays on it for its whole life.
+- `read_some` returns `0` only at EOF; `write_all` accepts every byte before completing.
+- Either `close() noexcept`, or the QUIC-style pair `finish_write()` and `reset() noexcept`. Closing or resetting
+  must cancel outstanding operations with `operation_canceled`.
+- Optional: `is_open() const noexcept` lets TLS observe that the transport closed.
+- During shutdown TLS may run one transport read and one transport write at the same time to exchange alerts when
+  buffers are full. An adapter that serializes I/O declares `bool supports_concurrent_io() const noexcept`
+  returning `false`.
+
+```cpp
+auto bytes = co_await quic_connection.open_stream(pace::quic::stream_type::bidirectional);
+pace::tls::stream inner(std::move(bytes), tls_configuration);
+co_await inner.handshake("relay.example.com");
+```
+
+Keep a QUIC transport's parent connection alive for the whole life of the TLS stream. Ciphertext moves through
+bounded 64 KiB buffers. Servers on such transports send no TLS 1.3 session tickets, so a bounded transport can carry
+application data right after the handshake. `connect()` and `set_no_delay()` need a TCP transport, and so does
+PACE's HTTP/2 driver over TLS. In nested TLS each session processes records one at a time.
+
+`tls_transport` and `tls_transport_model` in the header are the type erasure behind this constructor; they are not
+part of the API and are not exported by `import pace.tls;`.
+
+## Functions
+
+### `connect`
+
+```cpp
+task<stream> connect(io_context& io, const context& configuration, tcp::endpoint peer, std::string expected_name);
+task<stream> connect(const context& configuration, tcp::endpoint peer, std::string expected_name);
+task<stream> connect(io_context& io, tcp::endpoint peer, std::string expected_name);
+task<stream> connect(tcp::endpoint peer, std::string expected_name);
+```
+
+Creates a stream, connects to the numeric `peer`, completes the handshake checking `expected_name` (as `peer_name`
+above) and returns the stream. The overloads without `configuration` use a client context with system trust,
+CA and name verification and no ALPN. A supplied `configuration` is borrowed until the task completes, so a stored
+lazy task must not refer to a destroyed context; the returned stream shares the configuration's state. The
+overloads without `io` use the context that runs the task, read when the task starts.
+
+### `accept`
+
+```cpp
+task<stream> accept(tcp::stream transport, const context& configuration);
+```
+
+Wraps an accepted TCP stream (owned by the task) in a server stream and completes the handshake. `configuration` is
+borrowed until the task completes.
+
+## Errors
+
+| Condition | Exception |
+|:--|:--|
+| Handshake failure, certificate or name mismatch, unclean EOF, OpenSSL error | `std::system_error` with `std::errc::protocol_error` and OpenSSL's diagnostic text |
+| Failure to load default trust paths, a trust file or a certificate | `std::system_error` (`protocol_error`) |
+| TCP connect failure in `connect` | The TCP `std::system_error`, unchanged |
+| Invalid argument: empty path, bad PEM, bad ALPN list, invalid SNI name, empty callback, CA client without a peer name, a peer name passed to a server handshake | `std::invalid_argument` |
+| Verification setter on a server context; SNI or ClientHello setter on a client context | `std::invalid_argument` |
+| Setter on a frozen or moved-from context | `std::logic_error` |
+| A second operation while one is active | `std::logic_error`; the active operation is not affected |
+| Read, write or shutdown before the handshake; a second handshake; `connect` on a non-TCP stream or with a server context; `set_no_delay` on a non-TCP stream; handoff misuse; moved-from stream | `std::logic_error` |
+| Operation run on a context other than the transport's | `std::logic_error` |
+| Context stopped, stream closed, task canceled | `std::system_error` (`operation_canceled`) |
+| Deadline of the awaiting task expired | `std::system_error` (`timed_out`) |
+| Operation on a closed transport | `std::system_error` (`bad_file_descriptor`) |
+
+A failed operation closes the transport, except a rejected overlapping operation. Catch per-connection failures in
+the connection's task so one peer cannot end the server.
+
+## Threads and concurrency
+
+- Run every stream operation on the reactor that owns the transport. `close()` and destruction must run there too,
+  or while it is not running.
+- **One asynchronous operation at a time per stream**, counting reads, writes, handshakes and shutdown together.
+  OpenSSL may need either direction for any operation, so the TCP rule of one read plus one write does not apply;
+  independent reader and writer tasks must not share one TLS stream.
+- A `context` may be used by streams on several reactors at once. Its verification and ClientHello callbacks then
+  run concurrently and must be thread-safe. Configure it on one thread before the first stream.
+
+## Lifetime and ownership
+
+- A stream owns its transport and shares ownership of its configuration. The `context` object itself may be
+  destroyed after the streams are created, except while a `tls::connect` or `tls::accept` task that borrows it is
+  still running.
+- Keep the stream at the same address, its reactor alive, and its buffers valid until each operation completes.
+  Move it only while idle.
+- `pre_read` is copied by the constructor. ClientHello views and verification-callback certificates are valid only
+  during the callback.
+- A handoff transfers the transport and its bytes to the caller and leaves the stream moved-from.
+
+## Limits and defaults
+
+| Item | Default or bound |
+|:--|:--|
+| `context` role / trust source | `client` / `system` |
+| Client verification | CA chain plus DNS or IP name |
+| Protocol versions | TLS 1.2 and 1.3 |
+| SNI policies | `use_default` for missing and unrecognized |
+| ALPN identifier length / encoded list | 1–255 bytes / at most 65535 bytes |
+| SNI name length | at most 253 bytes, labels at most 63 |
+| `shutdown` / `close_gracefully` timeout | 100 ms |
+| Handoff capture of reads before the ClientHello decision | 1 MiB |
+| Ciphertext buffers on non-TCP transports | 64 KiB per direction |
+| Active operations per stream | 1 |
+| Handshake timeout | none; use a deadline |
+
+## See also
+
+- [Networking](../net/README.md), [TCP](../net/tcp.md), [DNS](../dns/README.md)
+- [QUIC](../quic/README.md), [WebSocket](../websocket/README.md), [HTTP/1](../http1/README.md),
+  [HTTP/2](../http2/README.md)
+- [Structured concurrency](../runtime/structured-concurrency.md) for deadlines
+- Tutorial: [TLS and DNS](../../tutorial/10-tls-and-dns.md)
+- Guide: [HTTP recipes](../../guides/http-recipes.md)
+- OpenSSL: [SNI callback contract](https://docs.openssl.org/3.0/man3/SSL_CTX_set_tlsext_servername_callback/)
