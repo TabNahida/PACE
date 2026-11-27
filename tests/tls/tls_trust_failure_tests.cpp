@@ -34,7 +34,7 @@ pace::task<void> read_exact(Stream& stream, std::span<char> bytes)
 {
     while (!bytes.empty())
     {
-        const auto count = co_await stream.read_some(bytes);
+        const auto count = co_await stream.read_some(pace::as_writable_bytes(bytes));
         require(count != 0, "early EOF in trust failure regression");
         bytes = bytes.subspan(count);
     }
@@ -54,7 +54,7 @@ pace::task<void> server(
         std::array<char, 10> command{};
         co_await read_exact(transport, command);
         require(std::string_view(command.data(), command.size()) == "STARTTLS\r\n", "bad STARTTLS command");
-        co_await transport.write_all("220 ready\r\n");
+        co_await transport.write_all(pace::as_bytes("220 ready\r\n"));
     }
     pace::tls::stream stream(std::move(transport), configuration);
     bool accepted = false;
@@ -70,7 +70,7 @@ pace::task<void> server(
     require(accepted == should_accept, "unexpected server trust decision");
     if (accepted)
     {
-        co_await stream.write_all("verified");
+        co_await stream.write_all(pace::as_bytes("verified"));
         co_await stream.shutdown();
     }
     done.arrive();
@@ -91,7 +91,7 @@ pace::task<void> client(
     if (starttls)
     {
         co_await transport.connect(endpoint);
-        co_await transport.write_all("STARTTLS\r\n");
+        co_await transport.write_all(pace::as_bytes("STARTTLS\r\n"));
         std::array<char, 11> ready{};
         co_await read_exact(transport, ready);
         require(std::string_view(ready.data(), ready.size()) == "220 ready\r\n", "bad STARTTLS reply");

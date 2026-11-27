@@ -1625,15 +1625,15 @@ task<std::size_t> stream::read_some(std::span<std::byte> buffer)
     }
 }
 
-task<void> stream::write_all(std::span<const std::byte> data)
+task<void> stream::write_all(std::span<const std::byte> bytes)
 {
     auto state = state_;
     guard operation(state->writing);
-    auto bytes = as_text(data);
-    while (!bytes.empty())
+    auto remaining = as_text(bytes);
+    while (!remaining.empty())
     {
-        const auto count = write(*state, bytes);
-        bytes.remove_prefix(count);
+        const auto count = write(*state, remaining);
+        remaining.remove_prefix(count);
         if (!count)
         {
             co_await state->owner->events.wait();

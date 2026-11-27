@@ -304,7 +304,10 @@ TEST_CASE("signal sets in different contexts and threads each see a delivery")
     {
         contexts.push_back(std::make_unique<pace::io_context>());
         sets.push_back(
-            std::make_unique<pace::signal_set>(*contexts.back(), std::initializer_list{process_signal::user1})
+            std::make_unique<pace::signal_set>(
+                *contexts.back(),
+                std::initializer_list<process_signal>{process_signal::user1}
+            )
         );
         contexts.back()->spawn(
             [](pace::signal_set& set,
@@ -405,7 +408,8 @@ TEST_CASE("the previous disposition is restored when the last set goes")
     };
     {
         pace::io_context io;
-        auto first = std::make_unique<pace::signal_set>(io, std::initializer_list{process_signal::user2});
+        auto first =
+            std::make_unique<pace::signal_set>(io, std::initializer_list<process_signal>{process_signal::user2});
         require(current() != &custom_handler, "PACE owns the disposition while subscribed");
         {
             pace::signal_set second(io, {process_signal::user2});

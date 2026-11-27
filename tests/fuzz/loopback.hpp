@@ -37,7 +37,7 @@ inline task<void> drain(tcp::stream& stream, std::size_t limit = max_reply_bytes
     {
         while (total < limit)
         {
-            const auto read = co_await stream.read_some(std::span<char>(buffer));
+            const auto read = co_await stream.read_some(pace::as_writable_bytes(std::span<char>(buffer)));
             if (read == 0)
             {
                 break;
@@ -78,7 +78,7 @@ void feed_server(std::string_view input, Serve serve)
             auto client = co_await tcp::connect(io, endpoint);
             try
             {
-                co_await client.write_all(input);
+                co_await client.write_all(pace::as_bytes(input));
                 co_await client.close_gracefully(std::chrono::milliseconds(200), max_reply_bytes);
             }
             catch (const std::exception&)
@@ -107,14 +107,14 @@ void feed_client(std::string_view input, Talk talk)
                     char buffer[4096];
                     while (request.find("\r\n\r\n") == std::string::npos && request.size() < 64 * 1024)
                     {
-                        const auto read = co_await peer.read_some(std::span<char>(buffer));
+                        const auto read = co_await peer.read_some(pace::as_writable_bytes(std::span<char>(buffer)));
                         if (read == 0)
                         {
                             break;
                         }
                         request.append(buffer, read);
                     }
-                    co_await peer.write_all(answer);
+                    co_await peer.write_all(pace::as_bytes(answer));
                     co_await peer.close_gracefully(std::chrono::milliseconds(200), max_reply_bytes);
                 }
                 catch (const std::exception&)
