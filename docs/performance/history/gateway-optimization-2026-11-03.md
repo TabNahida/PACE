@@ -210,5 +210,5 @@ configs are in each trial. The comparison measures these complete configured pat
 CPU is `/proc` process-tree accounting sampled around the measured phase. Summed
 VmHWM includes startup/warmup, may double-count shared nginx pages, and excludes
 page cache; it cannot establish allocator efficiency. See the
-[original methodology](../http-gateway.md#what-the-test-measures) for remaining
+[original methodology](gateway-matrix-2026-11-03.md#what-the-test-measures) for remaining
 limits and the archived TCP/Asio/libuv study for that separate workload.

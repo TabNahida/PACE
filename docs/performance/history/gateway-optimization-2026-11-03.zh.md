@@ -1,4 +1,4 @@
-<!-- source-hash: 20e453735e11 -->
+<!-- source-hash: 6c9f61743b1d -->
 # 网关优化 · 本地 Linux · 2026 年 11 月 3 日
 
 [English](gateway-optimization-2026-11-03.md) · [文档](../../README.zh.md) · [网关 API 与限制](../../reference/gateway/README.zh.md) · [较早的 nginx 对比](../http-gateway.zh.md) · [TCP/Asio/libuv 结果](../README.zh.md)
@@ -169,4 +169,4 @@ nginx 静态文件的 `open_file_cache` 保留描述符/元数据，数据则在
 
 CPU 是在被测阶段前后采样的 `/proc` 进程树统计。VmHWM 之和包含启动和预热阶段，可能重复计算 nginx 的共享页面，
 且不包含页缓存；它无法证明内存分配器的效率。其余局限请参阅
-[原始方法说明](../http-gateway.zh.md#测试测量的内容)，那项独立的工作负载请参阅已归档的 TCP/Asio/libuv 研究。
+[原始方法说明](gateway-matrix-2026-11-03.zh.md#测试测量的内容)，那项独立的工作负载请参阅已归档的 TCP/Asio/libuv 研究。

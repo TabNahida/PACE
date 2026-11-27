@@ -1,9 +1,9 @@
-<!-- source-hash: 802fb901d3f4 -->
+<!-- source-hash: 11be6c31819b -->
 # 本地 Linux 网关与 nginx 对比
 
-[English](http-gateway.md) · [性能](README.zh.md)
+[English](gateway-matrix-2026-11-03.md) · [性能](../README.zh.md)
 
-最新的单工作线程 优化、优化前后对比和争用诊断见[网关优化](history/gateway-optimization-2026-11-03.zh.md)。本页保留较早的测量结果。
+最新的单工作线程 优化、优化前后对比和争用诊断见[网关优化](gateway-optimization-2026-11-03.zh.md)。本页保留较早的测量结果。
 
 测量于 2026-11-03，在一台**共享的本地 Linux / WSL2 主机**上进行。第一次运行恰逢大量
 CPU 密集型后台任务。这些任务结束后，我们在后台负载较低的情况下把同一套完整矩阵重跑了一遍，
@@ -11,10 +11,10 @@ CPU 密集型后台任务。这些任务结束后，我们在后台负载较低�
 两次运行都不是隔离裸机上的峰值，也不是生产环境的容量保证。
 本页没有使用任何远程 runner 的性能数据。
 
-![所有网关场景](assets/gateway-performance.svg)
+![所有网关场景](../assets/gateway-performance.svg)
 
-[较低负载下的原始试验数据和完整指标](../../benchmarks/results/linux-gateway-2026-11-03/nginx.json) ·
-[较早的争用运行，全部 120 次试验](../../benchmarks/results/linux-gateway-2026-11-03/nginx-contended.json)
+[较低负载下的原始试验数据和完整指标](../../../benchmarks/results/linux-gateway-2026-11-03/nginx.json) ·
+[较早的争用运行，全部 120 次试验](../../../benchmarks/results/linux-gateway-2026-11-03/nginx-contended.json)
 
 每次完整运行都完成了 120 次试验，并校验了全部 1920 万个被测响应。
 nginx 在单工作线程 静态文件吞吐量上领先，在两种工作线程数下的无缓存代理吞吐量上也领先。
@@ -89,13 +89,13 @@ nginx 由官方 1.30.6 源码包编译，参数为
 
 做容量规划时请使用空闲、受控的主机。各实现之间要保持相同的 release 编译选项、连接数、
 负载大小、CPU 分配和缓存状态。请查看所有场景和各个延迟百分位，而不要只挑出胜出的那根吞吐量柱子。
-[网关契约与当前限制](../reference/gateway/README.zh.md)说明了已实现的内容；它并不是 nginx 功能或性能上的完整替代品。
+[网关契约与当前限制](../../reference/gateway/README.zh.md)说明了已实现的内容；它并不是 nginx 功能或性能上的完整替代品。
 
 ## 描述符布局 A/B 实验
 
 另一个 release 二进制只把 `src/runtime/io_context.cpp` 改回了之前基于节点的描述符映射表，
 两者使用相同的缓存、HTTP 代码和 epoll。
-[确切的基线补丁](../../benchmarks/results/linux-gateway-2026-11-03/layout-baseline.patch)
+[确切的基线补丁](../../../benchmarks/results/linux-gateway-2026-11-03/layout-baseline.patch)
 可以在单独的检出目录中应用到本分支。用相同的 release 选项构建，并通过
 `--baseline PATH --backends baseline,epoll` 传入。
 
@@ -104,8 +104,8 @@ nginx 由官方 1.30.6 源码包编译，参数为
 | 32 | 114.9 | 138.2 | 1.112 |
 | 256 | 217.9 | 217.5 | 0.969 |
 
-[32 连接原始试验数据](../../benchmarks/results/linux-gateway-2026-11-03/layout-32.json) ·
-[256 连接原始试验数据](../../benchmarks/results/linux-gateway-2026-11-03/layout-256.json)。
+[32 连接原始试验数据](../../../benchmarks/results/linux-gateway-2026-11-03/layout-32.json) ·
+[256 连接原始试验数据](../../../benchmarks/results/linux-gateway-2026-11-03/layout-256.json)。
 每组都使用一个工作线程、静态响应缓存、4 KiB 负载和五个轮换顺序的配对。这些运行期间主机的后台负载逐渐减弱，
 导致结果波动很大，其中包括一个 2.24× 的离群配对。**本实验不能证明布局改动带来了普遍的加速。**
 这项实现去掉了一次哈希查找和每个描述符的节点分配，但没有测量 CPU 缓存未命中，而且在更高并发下
