@@ -1,0 +1,56 @@
+name: Static analysis
+# clang-tidy on the lines a change touches, with every protocol enabled on Linux. Existing code is
+# held to the same rules once someone edits it; see .clang-tidy for the checks and the reasons for
+# the ones that are off.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pace-tidy-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  clang-tidy:
+    name: clang-tidy (changed lines)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the pinned clang-tidy
+        run: python -m pip install clang-tidy==22.1.8
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.1.1'
+          actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: tidy
+      - name: Configure every protocol and export compile commands
+        run: |
+          xmake f -c -m debug --tls=y --dns=y --quic=y --http2=y --http3=y --tests=y --examples=y -y
+          xmake project -k compile_commands build/cdb
+      - name: Find the base revision
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            echo "sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != 0000000000000000000000000000000000000000 ]; then
+            echo "sha=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$(git rev-parse HEAD~1)" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run clang-tidy on the changed lines
+        run: |
+          git diff -U0 "${{ steps.base.outputs.sha }}" HEAD -- include src \
+            | clang-tidy-diff.py -p1 -path build/cdb -iregex '.*\.(cpp|hpp)' -quiet -j 4 | tee tidy.txt
+          if grep -E "^(include|src|/).*: (warning|error):" tidy.txt; then
+            echo "::error::clang-tidy reported problems on changed lines"
+            exit 1
+          fi
