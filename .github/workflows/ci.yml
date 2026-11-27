@@ -63,6 +63,18 @@ jobs:
       - name: Run all supported protocol tests and tutorials
         id: tests
         run: xmake test -v
+      # Creating a TUN device needs CAP_NET_ADMIN: run those tests as root in a throwaway network namespace, where a
+      # skip is a failure. Without privileges (the step above) they report a skip.
+      - name: Run the TUN tests as root in a private network namespace
+        if: runner.os == 'Linux'
+        run: |
+          test_binary=$(find build/ci -type f -name pace_handles_tests | head -n 1)
+          sudo env PACE_REQUIRE_TUN=1 PACE_IO_BACKEND="$PACE_IO_BACKEND" unshare --net -- "$test_binary" --test-case='*TUN*,*MULTI_QUEUE*'
+      - name: Run the utun test as root
+        if: runner.os == 'macOS'
+        run: |
+          test_binary=$(find build/ci -type f -name pace_handles_tests | head -n 1)
+          sudo env PACE_IO_BACKEND="$PACE_IO_BACKEND" "$test_binary" --test-case='*TUN*'
       - name: Write JUnit reports for the failed test run
         if: failure() && steps.tests.outcome == 'failure'
         run: python scripts/junit_tests.py --build-dir build/ci --output ci-results/junit
@@ -131,6 +143,11 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1
+      - name: Run the TUN tests with sanitizers as root in a private network namespace
+        run: |
+          test_binary=$(find build/ci-sanitizers -type f -name pace_handles_tests | head -n 1)
+          sudo env PACE_REQUIRE_TUN=1 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+            unshare --net -- "$test_binary" --test-case='*TUN*,*MULTI_QUEUE*'
   protocol-layers:
     name: Linux / each module on its own
     runs-on: ubuntu-24.04

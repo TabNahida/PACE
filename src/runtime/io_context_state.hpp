@@ -421,6 +421,17 @@ struct io_context::implementation
 
     std::shared_ptr<callback_timers> callbacks;
 
+#ifdef _WIN32
+    // Pending wait_handle operations by key. A thread-pool callback reports a signaled handle by posting its key;
+    // a key that is no longer here (cancelled or stopped meanwhile) is ignored.
+    std::unordered_map<std::uint64_t, handle_awaiter*> handle_waits;
+    std::uint64_t next_handle_wait = 0;
+
+    static void CALLBACK handle_signaled(PTP_CALLBACK_INSTANCE, PVOID, PTP_WAIT, TP_WAIT_RESULT) noexcept;
+    void complete_handle_wait(std::uint64_t id) noexcept;
+    void cancel_handle_wait(handle_awaiter& operation, std::error_code error) noexcept;
+#endif
+
     fd_state* find_descriptor(std::uint64_t token) noexcept
     {
         const auto index = static_cast<std::uint32_t>(token);
@@ -514,6 +525,12 @@ struct io_context::implementation
         descriptor_count = 0;
         tokens.clear();
         dirty_descriptors.clear();
+#ifdef _WIN32
+        while (!handle_waits.empty())
+        {
+            cancel_handle_wait(*handle_waits.begin()->second, canceled());
+        }
+#endif
         while (!timers.empty())
         {
             auto* timer = timers.top();

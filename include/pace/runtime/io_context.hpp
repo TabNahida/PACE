@@ -59,7 +59,8 @@ public:
     bool stopped() const noexcept;
     /// The context running on the calling thread, or nullptr.
     static io_context* current() noexcept;
-    /// cancel(fd), then drops the backend registration. Call immediately before closing a raw socket yourself.
+    /// cancel(fd), then drops the backend registration. Call immediately before closing a raw socket or any other
+    /// awaited descriptor yourself.
     /// Must run on the owning thread, or while no thread runs the context.
     void release_socket(native_socket_type fd) noexcept;
     /// Resumes the descriptor's pending waits with operation_canceled; the descriptor stays open and usable.
@@ -164,7 +165,9 @@ public:
     };
 
     /// Suspends until `fd` is readable, at end of stream or in error. Transfers no bytes; retry the nonblocking
-    /// call afterwards. One pending wait per descriptor and direction (std::logic_error otherwise).
+    /// call afterwards. One pending wait per descriptor and direction (std::logic_error otherwise). On POSIX `fd`
+    /// may be any descriptor the backend can poll (socket, pipe, terminal, TUN device, eventfd); a descriptor the
+    /// poller rejects throws std::system_error. On Windows it must be a Winsock socket; see wait_handle.
     io_awaiter wait_readable(native_socket_type fd) noexcept
     {
         return {*this, fd, false, {}, {}};
@@ -181,6 +184,55 @@ public:
     {
         return {*this, fd, false, {}, {}, true};
     }
+
+#ifdef _WIN32
+    /// A wait for a Windows kernel object, from wait_handle: await once, immediately, on the owning context; do not
+    /// move or modify it while suspended. Fails with the task token's error, operation_canceled on stop, or
+    /// bad_file_descriptor for a null or INVALID_HANDLE_VALUE handle.
+    struct handle_awaiter
+    {
+        io_context& context;
+        HANDLE object;
+        std::error_code error;
+        std::coroutine_handle<> continuation;
+        cancellation_token token{};
+        cancellation_handle registration{};
+        /// The thread-pool wait (a PTP_WAIT) and its reactor key while suspended.
+        void* wait = nullptr;
+        std::uint64_t id = 0;
+        bool await_ready() noexcept;
+
+        template <class P>
+        bool await_suspend(std::coroutine_handle<P> waiting)
+        {
+            if constexpr (requires { waiting.promise().cancellation; })
+            {
+                token = waiting.promise().cancellation;
+            }
+            if (token.stop_possible())
+            {
+                if (auto e = token.error())
+                {
+                    error = e;
+                    return false;
+                }
+                registration = context.on_cancel(token, [this](std::error_code e) { context.cancel_wait(*this, e); });
+            }
+            return context.arm(*this, waiting);
+        }
+
+        void await_resume();
+    };
+
+    /// Suspends until `object` (an event, semaphore, process, thread, waitable timer or similar kernel object; not a
+    /// mutex) is signaled, consuming an auto-reset signal like WaitForSingleObject. A thread-pool wait observes the
+    /// handle and wakes the reactor; any number of waits may target one handle. The handle must stay open until the
+    /// wait ends. Windows only: on POSIX, wait_readable on a descriptor (eventfd, pidfd, pipe) is the equivalent.
+    handle_awaiter wait_handle(HANDLE object) noexcept
+    {
+        return {*this, object, {}, {}};
+    }
+#endif
 
     /// A timer wait from sleep_for: await once, immediately, on the owning context. Fails with the task token's
     /// error or operation_canceled on stop.
@@ -278,6 +330,10 @@ private:
     std::unique_ptr<implementation> impl_;
     bool arm(io_awaiter&, std::coroutine_handle<>);
     bool arm(timer_awaiter&, std::coroutine_handle<>);
+#ifdef _WIN32
+    void cancel_wait(handle_awaiter&, std::error_code);
+    bool arm(handle_awaiter&, std::coroutine_handle<>);
+#endif
     void schedule(std::coroutine_handle<>);
     static void completed(void*, std::coroutine_handle<>) noexcept;
 };

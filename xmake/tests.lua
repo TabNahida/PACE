@@ -15,7 +15,7 @@ end
 
 -- Tests live in tests/<module>/<name>_tests.cpp.
 local test_modules = {
-    runtime = "runtime", backend = "runtime", structured = "runtime",
+    runtime = "runtime", backend = "runtime", structured = "runtime", handles = "runtime",
     network = "net", udp = "net", direct_client = "net",
     tls = "tls", dns = "dns", quic = "quic",
     unified_client = "http", http_extended = "http1", http_services = "gateway",
@@ -36,7 +36,7 @@ if has_config("tests") then
             add_tests("default")
         target_end()
     end
-    local test_names = {"runtime", "backend", "network", "udp", "direct_client", "structured"}
+    local test_names = {"runtime", "backend", "network", "udp", "direct_client", "structured", "handles"}
     if has_config("http1") or has_config("http2") or has_config("http3") then table.insert(test_names, "unified_client") end
     if has_config("http1") then
         table.insert(test_names, "http_extended")
