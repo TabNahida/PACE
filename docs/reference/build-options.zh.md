@@ -1,4 +1,4 @@
-<!-- source-hash: 8913c1d0b0bc -->
+<!-- source-hash: 4fd5b76edbbf -->
 # 构建选项
 
 [English](build-options.md) · [参考](README.zh.md)
@@ -100,7 +100,7 @@ Windows ARM64 和 FreeBSD 分别为 OpenSSL 和 ngtcp2 使用仓库内的包定�
 | `pace_http2` | static | HTTP/2 | `pace_net`、`pace_http`，启用时加 `pace_tls`、`pace_dns` | nghttp2 |
 | `pace_http3` | static | HTTP/3 | `pace_net`、`pace_http`、`pace_quic`，启用时加 `pace_dns` | nghttp3 |
 | `pace_websocket` | static | WebSocket | `pace_net`，启用时加 `pace_tls` | — |
-| `pace` | phony | 所有启用的模块 | 上述已启用的全部目标 | — |
+| `pace` | 仅头文件 | 所有启用的模块，以及 `<pace/pace.hpp>` | 上述已启用的全部目标 | — |
 | `pace_module` | static | C++ 命名模块（`--modules=y` 时） | `pace` | — |
 
 模块目标只编译 `src/<module>/`，只安装自己的头文件（`include/pace/<module>/` 和总头文件 `<pace/<module>.hpp>`），

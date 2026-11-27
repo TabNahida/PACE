@@ -144,6 +144,8 @@ private:
     bool automatic_family_ = true;
     bool connect_started_ = false;
     bool no_delay_ = false;
+    bool reading_ = false;
+    bool writing_ = false;
 };
 
 /// Connects a new stream to a numeric endpoint; the returned stream belongs to the supplied loop.
@@ -193,6 +195,7 @@ private:
     address_family family_ = address_family::ipv4;
     unsigned accept_attempts_ = 0;
     cancellation_source* accept_backoff_ = nullptr;
+    bool accepting_ = false;
 };
 
 /// Bind immediately. Current-context form is for a running task/callback.

@@ -13,11 +13,7 @@ export module pace.net;
 export namespace pace
 {
 using ::pace::address_family;
-using ::pace::ipv4_endpoint;
-using ::pace::listen_options;
 using ::pace::read_exact;
-using ::pace::tcp_listener;
-using ::pace::tcp_stream;
 using ::pace::write;
 } // namespace pace
 

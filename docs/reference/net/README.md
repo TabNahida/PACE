@@ -19,7 +19,6 @@ any PACE byte stream (TCP, TLS and QUIC streams).
 | `<pace/net/stream_io.hpp>` | `pace::write`, `pace::read_exact` for byte streams | this page |
 | `<pace/net/tcp.hpp>` | `pace::tcp`: `endpoint`, `stream`, `listener`, `connect`, `listen`, `exchange` | [TCP](tcp.md) |
 | `<pace/net/udp.hpp>` | `pace::udp`: `endpoint`, `socket`, `datagram`, `packet`, `open`, `bind`, `exchange`, `send` | [UDP](udp.md) |
-| `<pace/net/aliases.hpp>` | Deprecated aliases (`tcp_stream`, …) | this page |
 
 `pace_net` depends on `pace_runtime` and on nothing outside the C++ standard library and the operating system's
 socket API. With `--modules=y`, `import pace.net;` exports the names on these pages; also `import pace.runtime;`
@@ -88,22 +87,6 @@ The address family of a TCP or UDP endpoint or socket.
 
 An explicit family that does not match the address throws `std::invalid_argument`. `local_endpoint()`,
 `remote_endpoint()` and received datagram senders always report the concrete family of the native socket address.
-
-### Deprecated aliases
-
-```cpp
-// <pace/net/aliases.hpp>
-namespace pace
-{
-using tcp_stream = tcp::stream;
-using tcp_listener = tcp::listener;
-using ipv4_endpoint = tcp::endpoint;
-using listen_options = tcp::listen_options;
-}
-```
-
-These names are deprecated and will be removed. Use the `pace::tcp` names in new code. `ipv4_endpoint`
-is the full `tcp::endpoint` and accepts IPv6 too.
 
 ## Functions
 

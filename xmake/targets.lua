@@ -15,8 +15,6 @@ target("pace_runtime")
     set_kind("static")
     add_files(path.join(pace_root, "src/runtime/*.cpp"))
     module_headers("runtime")
-    -- The aggregate header includes whichever modules the consumer links.
-    add_headerfiles(path.join(pace_root, "include/(pace/pace.hpp)"))
     add_includedirs(path.join(pace_root, "include"), {public = true})
     if has_config("uring") and is_plat("linux") then
         add_packages("liburing", {public = true})
@@ -110,6 +108,8 @@ end
 
 -- Every enabled module: add_deps("pace").
 target("pace")
-    set_kind("phony")
+    set_kind("headeronly")
     for _, name in ipairs(modules) do add_deps(name, {public = true}) end
+    -- The aggregate header includes every enabled module, so it belongs to the target that links them all.
+    add_headerfiles(path.join(pace_root, "include/(pace/pace.hpp)"))
 target_end()

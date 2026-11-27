@@ -1647,11 +1647,13 @@ stream::stream(tcp::stream transport, const tls::context& config)
 
 stream::stream(tcp::stream transport, const tls::context& config, std::string_view pre_read)
     : impl_(std::make_unique<implementation>(std::move(transport), config.impl_, pre_read))
+    , context_(&impl_->context())
 {
 }
 
 stream::stream(std::unique_ptr<tls_transport> transport, const tls::context& config, std::string_view pre_read)
     : impl_(std::make_unique<implementation>(std::move(transport), config.impl_, pre_read))
+    , context_(&impl_->context())
 {
 }
 
@@ -1661,7 +1663,7 @@ stream& stream::operator=(stream&&) noexcept = default;
 
 io_context& stream::context() const noexcept
 {
-    return impl_->context();
+    return *context_;
 }
 
 bool stream::is_open() const noexcept

@@ -1,4 +1,4 @@
-<!-- source-hash: 024a7e8567f0 -->
+<!-- source-hash: 2318f65d63a5 -->
 # 网络（`pace/net.hpp`）
 
 [English](README.md) · [参考手册](../README.zh.md)
@@ -19,7 +19,6 @@ net 模块在 PACE 反应器之上提供非阻塞的 TCP 与 UDP 套接字，以
 | `<pace/net/stream_io.hpp>` | 面向字节流的 `pace::write`、`pace::read_exact` | 本页 |
 | `<pace/net/tcp.hpp>` | `pace::tcp`：`endpoint`、`stream`、`listener`、`connect`、`listen`、`exchange` | [TCP](tcp.zh.md) |
 | `<pace/net/udp.hpp>` | `pace::udp`：`endpoint`、`socket`、`datagram`、`packet`、`open`、`bind`、`exchange`、`send` | [UDP](udp.zh.md) |
-| `<pace/net/aliases.hpp>` | 已弃用的别名（`tcp_stream` 等） | 本页 |
 
 `pace_net` 依赖 `pace_runtime`，除 C++ 标准库和操作系统的套接字 API 之外没有其他依赖。启用 `--modules=y` 时，
 `import pace.net;` 导出这些页面中的名字；`io_context`、`task`、`run` 还需要 `import pace.runtime;`，或者直接用
@@ -86,22 +85,6 @@ TCP、UDP 端点或套接字的地址族。
 
 显式指定的地址族与地址不符时抛出 `std::invalid_argument`。`local_endpoint()`、`remote_endpoint()` 和收到的数据报
 发送方总是报告原生套接字地址的具体地址族。
-
-### 已弃用的别名
-
-```cpp
-// <pace/net/aliases.hpp>
-namespace pace
-{
-using tcp_stream = tcp::stream;
-using tcp_listener = tcp::listener;
-using ipv4_endpoint = tcp::endpoint;
-using listen_options = tcp::listen_options;
-}
-```
-
-这些名字已弃用，将被移除。新代码请使用 `pace::tcp` 中的名字。`ipv4_endpoint` 就是完整的 `tcp::endpoint`，也接受
-IPv6。
 
 ## 函数
 

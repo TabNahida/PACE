@@ -1,4 +1,4 @@
-<!-- source-hash: c1758484f2c9 -->
+<!-- source-hash: f36fbfd887dc -->
 # 架构与执行契约
 
 [English](architecture.md) · [原理阐释](README.zh.md)
@@ -35,7 +35,7 @@ flowchart BT
 内容；实现只从 `src/<module>/` 编译；模块的 xmake 目标只安装自己的头文件，只链接自己依赖的模块，因此
 `xmake build pace_tls` 只构建运行时、网络和 TLS。只供实现使用的头文件放在实现旁边的 `src/<module>/` 中，
 既不安装，也不属于 API；公开头文件中没有 `detail` 命名空间或目录。`<pace/pace.hpp>` 包含本次构建启用的全部
-模块，伪目标 `pace` 链接全部模块。它不会生成一个整体的 `libpace.a`：应用通过 xmake 的依赖图链接各个静态库。
+模块，仅头文件的目标 `pace` 链接全部模块并安装 `<pace/pace.hpp>`。它不会生成一个整体的 `libpace.a`：应用通过 xmake 的依赖图链接各个静态库。
 只需要一部分功能的使用者可以写 `add_deps("pace_net")` 并包含 `<pace/net.hpp>`。
 
 `pace_http` 包含 HTTP/1、HTTP/2 和 HTTP/3 共用的部分：`<pace/http/types.hpp>` 中的消息类型，以及
@@ -183,8 +183,7 @@ stop 是协作式的，不是强制中断线程。从不挂起也不返回的应
 
 TCP 头文件是 `<pace/net/tcp.hpp>`，由 `<pace/net.hpp>` 包含。它声明了 `pace::tcp::listener`、`pace::tcp::stream`、
 `pace::tcp::endpoint` 和 `pace::tcp::listen_options`；`endpoint` 表示数字形式的 IPv4/IPv6 地址、端口、地址族
-以及可选的数字 IPv6 scope。同样由 `<pace/net.hpp>` 包含的 `<pace/net/aliases.hpp>` 把旧的顶层名字
-（`pace::tcp_stream`、`pace::tcp_listener` 等）保留为别名。
+以及可选的数字 IPv6 scope。
 
 TCP 使用非阻塞的数字 IPv4/IPv6 socket。IPv6 listener 默认只接受 IPv6；应用需要显式选择双栈绑定。操作先尝试
 原生调用；会阻塞时，就等待相应的就绪事件后重试。`write_all()` 在整个缓冲区发送完之前一直借用其输入视图。

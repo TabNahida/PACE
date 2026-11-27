@@ -12,7 +12,6 @@ pace::http::response module_header_response(pace::http::request);
 
 int main()
 {
-    static_assert(std::is_same_v<pace::tcp_stream, pace::tcp::stream>);
     static_assert(!std::is_copy_constructible_v<pace::task<int>>);
     static_assert(std::is_same_v<pace::http1::request, pace::http::request>);
     pace::runtime workers(2);

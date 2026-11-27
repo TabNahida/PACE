@@ -110,23 +110,6 @@ declarations are on the [`io_context`](runtime/io-context.md) page. The platform
   (Windows 10) and links `ws2_32` and `bcrypt` for its dependents. In your own platform code, include Winsock
   headers before any header that pulls in the legacy `<winsock.h>`.
 
-## Compatibility aliases
-
-`<pace/net.hpp>` includes `<pace/net/aliases.hpp>`, which keeps the earlier names of the TCP types:
-
-```cpp
-namespace pace
-{
-using tcp_stream = tcp::stream;
-using tcp_listener = tcp::listener;
-using ipv4_endpoint = tcp::endpoint;
-using listen_options = tcp::listen_options;
-}
-```
-
-They are exact aliases with the same behavior on every platform, and they are deprecated: new code uses
-`pace::tcp::*`. See [networking](net/README.md).
-
 ## See also
 
 - [Build options](build-options.md)

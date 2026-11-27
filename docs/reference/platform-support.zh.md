@@ -1,4 +1,4 @@
-<!-- source-hash: d28710fc4be9 -->
+<!-- source-hash: 34022da3d098 -->
 # 平台支持
 
 [English](platform-support.md) · [参考](README.zh.md)
@@ -105,22 +105,6 @@ C++ 命名模块（`--modules=y`）还需要 Clang 或 GCC 16；见[构建选项
   `WIN32_LEAN_AND_MEAN` 尚未定义时定义它们。`pace_runtime` 目标还为依赖它的目标定义 `_WIN32_WINNT=0x0A00`
   （Windows 10），并链接 `ws2_32` 和 `bcrypt`。在你自己的平台相关代码中，先包含 Winsock 头文件，再包含任何会引入
   旧式 `<winsock.h>` 的头文件。
-
-## 兼容别名
-
-`<pace/net.hpp>` 包含 `<pace/net/aliases.hpp>`，其中保留了 TCP 类型的旧名称：
-
-```cpp
-namespace pace
-{
-using tcp_stream = tcp::stream;
-using tcp_listener = tcp::listener;
-using ipv4_endpoint = tcp::endpoint;
-using listen_options = tcp::listen_options;
-}
-```
-
-它们是完全等价的别名，在所有平台上行为相同，并且已被弃用：新代码使用 `pace::tcp::*`。见[网络](net/README.zh.md)。
 
 ## 参见
 

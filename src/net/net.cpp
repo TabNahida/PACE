@@ -303,6 +303,7 @@ task<void> stream::connect(endpoint endpoint)
 task<std::size_t> stream::read_some(std::span<char> buffer)
 {
     check_operation(*context_, fd_);
+    net::pending_operation guard(reading_, "another TCP read is pending");
     if (buffer.empty())
     {
         co_return 0;
@@ -345,6 +346,7 @@ task<void> stream::write_all(std::string_view bytes)
 {
     constexpr std::size_t write_quantum = std::size_t{1024} * 1024;
     auto budget = write_quantum;
+    net::pending_operation guard(writing_, "another TCP write is pending");
     for (;;)
     {
         check_operation(*context_, fd_);
@@ -436,6 +438,7 @@ task<void> stream::close_gracefully(std::chrono::milliseconds timeout, std::size
     try
     {
         check_operation(*context_, fd_);
+        net::pending_operation guard(reading_, "another TCP read is pending");
 #if defined(_WIN32)
         constexpr int send_side = SD_SEND;
 #else
@@ -627,10 +630,7 @@ task<stream> listener::accept()
 {
     constexpr unsigned accept_quantum = 64;
     constexpr auto resource_backoff = std::chrono::milliseconds(50);
-    if (accept_backoff_)
-    {
-        throw std::logic_error("another TCP accept is pending");
-    }
+    net::pending_operation guard(accepting_, "another TCP accept is pending");
     for (;;)
     {
         check_operation(*context_, fd_);

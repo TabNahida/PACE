@@ -12,6 +12,16 @@
 - Implementation helpers that were left in public namespaces when `detail` was removed are gathered into
   `entry_access`, `operation_access`, `group_access` and `pace::http::handler_access`. They were never part of the
   API; code that named `invoke_entry`, `scoped_operation`, `call_handler` or similar must stop doing so.
+- **Breaking:** the 0.x names `pace::tcp_stream`, `pace::tcp_listener`, `pace::ipv4_endpoint`,
+  `pace::listen_options` and `<pace/net/aliases.hpp>` are removed; use the `pace::tcp` names.
+- A second TCP read, write or accept started while one in the same direction is suspended throws
+  `std::logic_error` immediately, as UDP already did; it could otherwise take the first read's data or interleave
+  its bytes with the first write.
+- `tls::stream::context()` on a moved-from stream returns the context the stream belonged to instead of
+  dereferencing null.
+- The `pace.runtime` named module exports `blocking_call` and `operation_result`. `<pace/pace.hpp>` is installed
+  with the `pace` target (now header-only, so that it installs it), which links every module the header
+  includes, instead of with `pace_runtime`.
 
 ## 1.0.0-alpha.1 — 2026-11-27
 

@@ -392,9 +392,10 @@ the connection's task so one failing peer does not end the program.
   context runs or after it has stopped. To close a stream from another thread, `post` the call to its context.
   PACE checks some misuse (an operation run on a different running context throws `std::logic_error`) but not all.
 - A stream allows one outstanding read (`read_some`, `read_exact`) and one outstanding write (`write_all`,
-  `connect`) at the same time, so a reader task and a writer task may share a stream. Two operations in the same
-  direction are not supported; when the second one has to wait it throws `std::logic_error`.
-- A listener allows one outstanding `accept()`.
+  `connect`) at the same time, so a reader task and a writer task may share a stream. A second read or write
+  started while one in the same direction is suspended throws `std::logic_error` at once, before it touches the
+  socket, so it can neither take the first read's data nor interleave its bytes with the first write.
+- A listener allows one outstanding `accept()`; a second one throws `std::logic_error` at once.
 - `close_gracefully()` requires that nothing else is outstanding.
 
 ## Lifetime and ownership

@@ -484,7 +484,7 @@ closes immediately.
 
 | Member | Result |
 |:--|:--|
-| `context()` | The reactor of the transport |
+| `context()` | The reactor of the transport; on a moved-from stream, the reactor it belonged to |
 | `is_open()` | Whether the transport is open; not whether the handshake succeeded. `false` on a moved-from stream |
 | `selected_protocol()` | An owned copy of the negotiated ALPN protocol, or an empty string |
 | `set_no_delay(enabled)` | Sets `TCP_NODELAY` on a TCP transport; `std::logic_error` on other transports |

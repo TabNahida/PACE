@@ -22,11 +22,6 @@
 #include <type_traits>
 #include <vector>
 
-static_assert(std::is_same_v<pace::tcp_stream, pace::tcp::stream>);
-static_assert(std::is_same_v<pace::tcp_listener, pace::tcp::listener>);
-static_assert(std::is_same_v<pace::ipv4_endpoint, pace::tcp::endpoint>);
-static_assert(std::is_same_v<pace::listen_options, pace::tcp::listen_options>);
-
 namespace
 {
 using namespace std::chrono_literals;
@@ -80,7 +75,7 @@ pace::task<void> tcp_roundtrip(pace::io_context& context)
         received.append(buffer.data(), size);
     }
     require(received == payload, "binary TCP roundtrip mismatch");
-    pace::tcp_stream legacy(std::move(client));
+    pace::tcp::stream legacy(std::move(client));
     pace::tcp::stream moved(std::move(legacy));
     require(
         !client.is_open() && !legacy.is_open() && moved.is_open(),
@@ -705,6 +700,81 @@ pace::task<void> stop_pending_read(pace::io_context& context)
     require(canceled, "stop must cancel a suspended read");
 }
 
+pace::task<void> read_into(std::shared_ptr<pace::tcp::stream> stream, std::shared_ptr<std::string> received)
+{
+    std::array<char, 8> buffer{};
+    const auto count = co_await stream->read_some(buffer);
+    received->assign(buffer.data(), count);
+}
+
+pace::task<void> accept_into(std::shared_ptr<pace::tcp::listener> listener, std::shared_ptr<bool> accepted)
+{
+    (void)co_await listener->accept();
+    *accepted = true;
+}
+
+// A second operation in the same direction is rejected up front, before it can take data or a connection that
+// belongs to the suspended first one.
+pace::task<void> second_operation_rejected(pace::io_context& context)
+{
+    auto listener = std::make_shared<pace::tcp::listener>(context, pace::tcp::endpoint{"127.0.0.1", 0});
+    pace::tcp::stream client(context);
+    co_await client.connect(listener->local_endpoint());
+    auto server = std::make_shared<pace::tcp::stream>(co_await listener->accept());
+
+    auto received = std::make_shared<std::string>();
+    context.spawn(read_into(server, received));
+    co_await context.yield(); // the first read runs until it waits for data
+    co_await client.write_all("x");
+    // Wait until the byte has reached the server (loopback delivery can be asynchronous), so that an unguarded
+    // second read would find it instead of waiting.
+    for (;;)
+    {
+        char peeked = 0;
+        if (::recv(server->native_handle(), &peeked, 1, MSG_PEEK) == 1)
+        {
+            break;
+        }
+        co_await context.yield();
+    }
+    bool read_rejected = false;
+    try
+    {
+        std::array<char, 8> buffer{};
+        (void)co_await server->read_some(buffer);
+    }
+    catch (const std::logic_error&)
+    {
+        read_rejected = true;
+    }
+    require(read_rejected, "a second TCP read was not rejected");
+    while (received->empty())
+    {
+        co_await context.yield();
+    }
+    require(*received == "x", "the first read lost its data");
+
+    auto accepted = std::make_shared<bool>(false);
+    context.spawn(accept_into(listener, accepted));
+    co_await context.yield();
+    bool accept_rejected = false;
+    try
+    {
+        (void)co_await listener->accept();
+    }
+    catch (const std::logic_error&)
+    {
+        accept_rejected = true;
+    }
+    require(accept_rejected, "a second TCP accept was not rejected");
+    pace::tcp::stream another(context);
+    co_await another.connect(listener->local_endpoint());
+    while (!*accepted)
+    {
+        co_await context.yield();
+    }
+}
+
 pace::task<void> close_soon(std::shared_ptr<pace::tcp::stream> stream)
 {
     co_await stream->context().sleep_for(5ms);
@@ -998,6 +1068,11 @@ TEST_CASE("HTTP framing, fragmentation, limits and keep-alive")
     run_test(http_protocol);
 }
 #endif
+
+TEST_CASE("a second read or accept is rejected while the first is pending")
+{
+    run_test(second_operation_rejected);
+}
 
 TEST_CASE("stop cancels pending accept")
 {

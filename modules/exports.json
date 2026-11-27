@@ -6,7 +6,19 @@
       "feature": null,
       "exports": [
         {
+          "name": "pace::ascii::iequals",
+          "requires": null
+        },
+        {
+          "name": "pace::ascii::to_lower",
+          "requires": null
+        },
+        {
           "name": "pace::backend_name",
+          "requires": null
+        },
+        {
+          "name": "pace::blocking_call",
           "requires": null
         },
         {
@@ -50,6 +62,10 @@
           "requires": null
         },
         {
+          "name": "pace::operation_result",
+          "requires": null
+        },
+        {
           "name": "pace::run",
           "requires": null
         },
@@ -78,6 +94,10 @@
           "requires": null
         },
         {
+          "name": "pace::this_task::cancellation",
+          "requires": null
+        },
+        {
           "name": "pace::with_cancellation",
           "requires": null
         },
@@ -96,18 +116,6 @@
         {
           "name": "pace::yield",
           "requires": null
-        },
-        {
-          "name": "pace::this_task::cancellation",
-          "requires": null
-        },
-        {
-          "name": "pace::ascii::iequals",
-          "requires": null
-        },
-        {
-          "name": "pace::ascii::to_lower",
-          "requires": null
         }
       ]
     },
@@ -123,23 +131,7 @@
           "requires": null
         },
         {
-          "name": "pace::ipv4_endpoint",
-          "requires": null
-        },
-        {
-          "name": "pace::listen_options",
-          "requires": null
-        },
-        {
           "name": "pace::read_exact",
-          "requires": null
-        },
-        {
-          "name": "pace::tcp_listener",
-          "requires": null
-        },
-        {
-          "name": "pace::tcp_stream",
           "requires": null
         },
         {

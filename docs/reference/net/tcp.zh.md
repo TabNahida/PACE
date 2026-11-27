@@ -1,4 +1,4 @@
-<!-- source-hash: 244105390d11 -->
+<!-- source-hash: 831a0e188223 -->
 # TCP（`pace::tcp`）
 
 [English](tcp.md) · [网络](README.zh.md)
@@ -371,9 +371,9 @@ std::string exchange(
   其他线程关闭流，请把调用 `post` 到它的上下文。PACE 会检查部分误用（在另一个正在运行的上下文上执行操作会抛出
   `std::logic_error`），但并非全部。
 - 一个流同时允许一个未完成的读操作（`read_some`、`read_exact`）和一个未完成的写操作（`write_all`、`connect`），所以
-  一个读任务和一个写任务可以共享同一个流。同一方向上的两个操作不受支持；第二个操作需要等待时会抛出
-  `std::logic_error`。
-- 一个监听器同时只允许一个未完成的 `accept()`。
+  一个读任务和一个写任务可以共享同一个流。同一方向上已有操作挂起时再发起读或写，会在触碰套接字之前立即抛出
+  `std::logic_error`，因此它既不会拿走第一个读操作的数据，也不会与第一个写操作的数据交错。
+- 一个监听器同时只允许一个未完成的 `accept()`；第二个会立即抛出 `std::logic_error`。
 - `close_gracefully()` 要求没有其他未完成操作。
 
 ## 生命周期与所有权

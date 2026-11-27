@@ -37,7 +37,7 @@ umbrella header `<pace/<module>.hpp>` that includes them all; its implementation
 `xmake build pace_tls` builds the runtime, networking and TLS and nothing else. Headers used only by the
 implementation live next to it in `src/<module>/`; they are not installed and not part of the API, and there is
 no `detail` namespace or directory in the public headers. `<pace/pace.hpp>` includes every module enabled in the
-build, and the phony target `pace` links all of them. It does not produce one monolithic `libpace.a`:
+build, and the header-only target `pace` links all of them and installs `<pace/pace.hpp>`. It does not produce one monolithic `libpace.a`:
 applications link the individual static libraries through xmake's dependency graph. Narrow consumers use, for
 example, `add_deps("pace_net")` with `<pace/net.hpp>`.
 
@@ -157,7 +157,7 @@ Stop is cooperative, not a forced thread interruption. An application coroutine 
 
 ## TCP and HTTP
 
-The TCP header is `<pace/net/tcp.hpp>`, included by `<pace/net.hpp>`. It declares `pace::tcp::listener`, `pace::tcp::stream`, `pace::tcp::endpoint`, and `pace::tcp::listen_options`; `endpoint` represents a numeric IPv4/IPv6 address, port, address family and optional numeric IPv6 scope. `<pace/net/aliases.hpp>`, also included by `<pace/net.hpp>`, keeps the older top-level names (`pace::tcp_stream`, `pace::tcp_listener`, …) as aliases.
+The TCP header is `<pace/net/tcp.hpp>`, included by `<pace/net.hpp>`. It declares `pace::tcp::listener`, `pace::tcp::stream`, `pace::tcp::endpoint`, and `pace::tcp::listen_options`; `endpoint` represents a numeric IPv4/IPv6 address, port, address family and optional numeric IPv6 scope.
 
 TCP uses nonblocking numeric IPv4/IPv6 sockets. IPv6 listeners default to IPv6-only; applications explicitly opt into dual-stack binding. Operations first attempt the native call; when it would block, they await the relevant readiness event and retry. `write_all()` retains its input view until the complete buffer has been sent. Socket errors use `std::system_error`. Linux sends suppress `SIGPIPE` per operation; platforms with `SO_NOSIGPIPE` configure it on the socket.
 After a short TCP read, the next nonempty read waits for level readiness before

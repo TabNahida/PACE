@@ -50,29 +50,6 @@ void check(io_context& context, native_socket_type fd, bool asynchronous = false
     }
 }
 
-struct pending_operation
-{
-    bool& active;
-
-    explicit pending_operation(bool& value)
-        : active(value)
-    {
-        if (active)
-        {
-            throw std::logic_error("another UDP operation is pending in this direction");
-        }
-        active = true;
-    }
-
-    pending_operation(const pending_operation&) = delete;
-    pending_operation& operator=(const pending_operation&) = delete;
-
-    ~pending_operation()
-    {
-        active = false;
-    }
-};
-
 native_socket_type create_socket(address_family family)
 {
     initialize_sockets();
@@ -259,7 +236,7 @@ task<std::size_t> socket::send_to(std::string_view bytes, endpoint destination)
         target = net::map_ipv4_address(target);
     }
     select_family(target.family());
-    pending_operation guard(sending_);
+    net::pending_operation guard(sending_, "another UDP operation is pending in this direction");
     family_selected_ = true;
     for (;;)
     {
@@ -296,7 +273,7 @@ task<std::size_t> socket::send_to(std::string_view bytes, endpoint destination)
 task<datagram> socket::receive_from(std::span<char> buffer)
 {
     check(*context_, fd_, true);
-    pending_operation guard(receiving_);
+    net::pending_operation guard(receiving_, "another UDP operation is pending in this direction");
     if (buffer.empty())
     {
         throw std::invalid_argument("UDP receive buffer must not be empty");

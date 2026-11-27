@@ -12,6 +12,7 @@
 #include <unistd.h>
 #endif
 
+#include <stdexcept>
 #include <system_error>
 
 namespace pace::net
@@ -77,4 +78,32 @@ inline std::error_code socket_error_code(int error)
 {
     throw std::system_error(socket_error_code(last_socket_error()), operation);
 }
+
+// Marks one direction of a socket busy for the lifetime of an operation. A second operation in the same direction
+// is rejected before it touches the socket: once the first one is suspended, a second reader could otherwise take
+// the data the first is waiting for, and a second writer could interleave its bytes when the first yields.
+class pending_operation
+{
+public:
+    pending_operation(bool& active, const char* message)
+        : active_(active)
+    {
+        if (active_)
+        {
+            throw std::logic_error(message);
+        }
+        active_ = true;
+    }
+
+    pending_operation(const pending_operation&) = delete;
+    pending_operation& operator=(const pending_operation&) = delete;
+
+    ~pending_operation()
+    {
+        active_ = false;
+    }
+
+private:
+    bool& active_;
+};
 } // namespace pace::net

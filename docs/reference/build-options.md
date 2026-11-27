@@ -101,7 +101,7 @@ Windows ARM64 and FreeBSD use repository-local package definitions for OpenSSL a
 | `pace_http2` | static | HTTP/2 | `pace_net`, `pace_http`, and `pace_tls`, `pace_dns` when enabled | nghttp2 |
 | `pace_http3` | static | HTTP/3 | `pace_net`, `pace_http`, `pace_quic`, and `pace_dns` when enabled | nghttp3 |
 | `pace_websocket` | static | WebSocket | `pace_net`, and `pace_tls` when enabled | — |
-| `pace` | phony | Every enabled module | all of the above that are enabled | — |
+| `pace` | header-only | Every enabled module, and `<pace/pace.hpp>` | all of the above that are enabled | — |
 | `pace_module` | static | C++ named modules (with `--modules=y`) | `pace` | — |
 
 A module target compiles only `src/<module>/`, installs only its own headers (`include/pace/<module>/` and the

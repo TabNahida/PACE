@@ -485,7 +485,7 @@ public:
     void set_no_delay(bool enabled = true);
     /// Whether the transport is open (not whether the handshake succeeded); false when moved-from.
     [[nodiscard]] bool is_open() const noexcept;
-    /// The transport's reactor. Not available on a moved-from stream.
+    /// The transport's reactor; a moved-from stream still reports the reactor it belonged to.
     [[nodiscard]] io_context& context() const noexcept;
     /// The negotiated ALPN protocol, or an empty string.
     [[nodiscard]] std::string selected_protocol() const;
@@ -493,6 +493,8 @@ public:
 private:
     struct implementation;
     std::unique_ptr<implementation> impl_;
+    // Kept outside impl_ so that a moved-from stream still answers context() (noexcept, as byte streams require).
+    io_context* context_;
     stream(std::unique_ptr<tls_transport> transport, const tls::context& configuration, std::string_view pre_read);
     friend class tls_driver;
     friend struct tls::context::implementation;

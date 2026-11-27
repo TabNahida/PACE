@@ -10,9 +10,16 @@ module;
 
 export module pace.runtime;
 
+export namespace pace::ascii
+{
+using ::pace::ascii::iequals;
+using ::pace::ascii::to_lower;
+} // namespace pace::ascii
+
 export namespace pace
 {
 using ::pace::backend_name;
+using ::pace::blocking_call;
 using ::pace::blocking_options;
 using ::pace::cancellation_source;
 using ::pace::cancellation_token;
@@ -23,6 +30,7 @@ using ::pace::io_context;
 using ::pace::join_handle;
 using ::pace::native_socket_type;
 using ::pace::operation_options;
+using ::pace::operation_result;
 using ::pace::run;
 using ::pace::runtime;
 using ::pace::shield;
@@ -30,11 +38,6 @@ using ::pace::sleep_for;
 using ::pace::task;
 using ::pace::task_group;
 using ::pace::this_context;
-using ::pace::with_cancellation;
-using ::pace::with_deadline;
-using ::pace::with_options;
-using ::pace::with_task_group;
-using ::pace::yield;
 } // namespace pace
 
 export namespace pace::this_task
@@ -42,8 +45,11 @@ export namespace pace::this_task
 using ::pace::this_task::cancellation;
 } // namespace pace::this_task
 
-export namespace pace::ascii
+export namespace pace
 {
-using ::pace::ascii::iequals;
-using ::pace::ascii::to_lower;
-} // namespace pace::ascii
+using ::pace::with_cancellation;
+using ::pace::with_deadline;
+using ::pace::with_options;
+using ::pace::with_task_group;
+using ::pace::yield;
+} // namespace pace

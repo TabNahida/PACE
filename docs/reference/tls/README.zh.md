@@ -1,4 +1,4 @@
-<!-- source-hash: ffe90df98f12 -->
+<!-- source-hash: 0685e11d8875 -->
 # TLS（`pace/tls.hpp`）
 
 [English](README.md) · [参考手册](../README.zh.md)
@@ -459,7 +459,7 @@ void close() noexcept;
 
 | 成员 | 结果 |
 |:--|:--|
-| `context()` | 传输层的反应器 |
+| `context()` | 传输层的反应器；被移动后的流返回它原先所属的反应器 |
 | `is_open()` | 传输层是否打开；不表示握手是否成功。被移走的流返回 `false` |
 | `selected_protocol()` | 协商出的 ALPN 协议的自有副本，或空字符串 |
 | `set_no_delay(enabled)` | 在 TCP 传输层上设置 `TCP_NODELAY`；其他传输层抛出 `std::logic_error` |
