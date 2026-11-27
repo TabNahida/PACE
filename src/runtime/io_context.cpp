@@ -211,7 +211,7 @@ void io_context::run()
     p.has_run = true;
     active_context = this;
     profiling::scope run_timing(profiling::stage::reactor_run);
-    auto record_error = [&](std::exception_ptr error)
+    auto record_error = [&](const std::exception_ptr& error)
     {
         try
         {

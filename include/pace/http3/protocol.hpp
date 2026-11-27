@@ -96,13 +96,13 @@ inline http::response fetch(std::string url, http::request request, blocking_opt
 {
     return blocking_call(
         [&](io_context& io) { return async_fetch(io, std::move(url), std::move(request), bounds); },
-        wait
+        std::move(wait)
     );
 }
 
 inline http::response get(std::string url, blocking_options wait = {}, limits bounds = {})
 {
-    return blocking_call([&](io_context& io) { return async_get(io, std::move(url), bounds); }, wait);
+    return blocking_call([&](io_context& io) { return async_get(io, std::move(url), bounds); }, std::move(wait));
 }
 
 inline http::response post(
@@ -116,7 +116,7 @@ inline http::response post(
     return blocking_call(
         [&](io_context& io)
         { return async_post(io, std::move(url), std::move(body), std::move(content_type), bounds); },
-        wait
+        std::move(wait)
     );
 }
 
@@ -139,13 +139,13 @@ inline http::response fetch(
 {
     return blocking_call(
         [&](io_context& io) { return async_fetch(io, trust, std::move(url), std::move(request), bounds); },
-        wait
+        std::move(wait)
     );
 }
 
 inline http::response get(const quic::context& trust, std::string url, blocking_options wait = {}, limits bounds = {})
 {
-    return blocking_call([&](io_context& io) { return async_get(io, trust, std::move(url), bounds); }, wait);
+    return blocking_call([&](io_context& io) { return async_get(io, trust, std::move(url), bounds); }, std::move(wait));
 }
 } // namespace pace::http3
 #endif

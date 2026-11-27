@@ -81,15 +81,21 @@ task<response> send_url(
 }
 } // namespace
 
-task<response> async_fetch(io_context& io, std::string url, request outgoing, limits bounds, client_options options)
+task<response> async_fetch(
+    io_context& context,
+    std::string url,
+    request outgoing,
+    limits bounds,
+    client_options options
+)
 {
-    return send_url(io, std::move(url), std::move(outgoing), bounds, options);
+    return send_url(context, std::move(url), std::move(outgoing), bounds, options);
 }
 
-task<response> async_get(io_context& io, std::string url, limits bounds, client_options options)
+task<response> async_get(io_context& context, std::string url, limits bounds, client_options options)
 {
     return async_fetch(
-        io,
+        context,
         std::move(url),
         request{.method = "GET", .target = {}, .version = "HTTP/1.1", .body = {}},
         bounds,
@@ -98,7 +104,7 @@ task<response> async_get(io_context& io, std::string url, limits bounds, client_
 }
 
 task<response> async_post(
-    io_context& io,
+    io_context& context,
     std::string url,
     std::string body,
     std::string type,
@@ -107,7 +113,7 @@ task<response> async_post(
 )
 {
     return async_fetch(
-        io,
+        context,
         std::move(url),
         request{
             .method = "POST",
@@ -137,7 +143,7 @@ task<response> async_post(std::string url, std::string body, std::string type, l
 }
 #ifdef PACE_HAS_TLS
 task<response> async_fetch(
-    io_context& io,
+    io_context& context,
     const tls::context& configuration,
     std::string url,
     request outgoing,
@@ -145,11 +151,11 @@ task<response> async_fetch(
     client_options options
 )
 {
-    return send_url(io, std::move(url), std::move(outgoing), bounds, options, &configuration);
+    return send_url(context, std::move(url), std::move(outgoing), bounds, options, &configuration);
 }
 
 task<response> async_get(
-    io_context& io,
+    io_context& context,
     const tls::context& configuration,
     std::string url,
     limits bounds,
@@ -157,7 +163,7 @@ task<response> async_get(
 )
 {
     return async_fetch(
-        io,
+        context,
         configuration,
         std::move(url),
         request{.method = "GET", .target = {}, .version = "HTTP/1.1", .body = {}},

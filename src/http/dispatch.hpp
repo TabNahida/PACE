@@ -36,7 +36,7 @@ struct http_dispatch : std::enable_shared_from_this<http_dispatch>
         , handle(std::move(handler))
         , source(parent.expires())
     {
-        source.link(parent);
+        source.link(std::move(parent));
     }
 
     void close() noexcept

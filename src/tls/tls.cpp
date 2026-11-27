@@ -924,10 +924,10 @@ void context::insecure_skip_verify()
     impl_->set_verification(verification::insecure);
 }
 
-void context::use_certificate_chain(const std::string& certificate, const std::string& key)
+void context::use_certificate_chain(const std::string& certificate_chain_file, const std::string& private_key_file)
 {
-    check_path(certificate);
-    check_path(key);
+    check_path(certificate_chain_file);
+    check_path(private_key_file);
     if (!impl_)
     {
         throw std::logic_error("moved-from TLS context");
@@ -943,8 +943,8 @@ void context::use_certificate_chain(const std::string& certificate, const std::s
         tls_error("create TLS certificate staging context");
     }
     SSL_CTX_set_default_passwd_cb(staged.get(), [](char*, int, int, void*) { return 0; });
-    if (SSL_CTX_use_certificate_chain_file(staged.get(), certificate.c_str()) != 1
-        || SSL_CTX_use_PrivateKey_file(staged.get(), key.c_str(), SSL_FILETYPE_PEM) != 1
+    if (SSL_CTX_use_certificate_chain_file(staged.get(), certificate_chain_file.c_str()) != 1
+        || SSL_CTX_use_PrivateKey_file(staged.get(), private_key_file.c_str(), SSL_FILETYPE_PEM) != 1
         || SSL_CTX_check_private_key(staged.get()) != 1)
     {
         tls_error("load TLS certificate/private key");

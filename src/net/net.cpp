@@ -531,6 +531,7 @@ void stream::close() noexcept
     }
 }
 
+// NOLINTNEXTLINE(performance-unnecessary-value-param): public API; the by-value signature is kept for ABI stability
 listener::listener(io_context& context, endpoint endpoint, listen_options options)
     : context_(&context)
 {

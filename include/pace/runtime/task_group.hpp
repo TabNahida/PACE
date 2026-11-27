@@ -24,7 +24,7 @@ struct group_state
         : io(owner)
         , source(parent.expires())
     {
-        source.link(parent);
+        source.link(std::move(parent));
     }
 
     void check() const
@@ -39,7 +39,7 @@ struct group_state
     {
         if (!failure)
         {
-            failure = error;
+            failure = std::move(error);
         }
         source.request_cancellation();
     }

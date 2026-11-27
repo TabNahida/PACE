@@ -55,6 +55,7 @@ auto with_deadline(pace::deadline when, Work work)
 }
 
 template <class Work>
+// NOLINTNEXTLINE(performance-unnecessary-value-param): token is moved; tidy misses the designated-initializer move
 auto with_cancellation(cancellation_token token, Work work)
 {
     return with_options(std::move(work), {.cancellation = std::move(token)});

@@ -1203,7 +1203,7 @@ struct reverse_proxy::implementation
     std::vector<destination> upstreams;
     response_cache cache;
 
-    implementation(std::string p, std::vector<std::string> urls, proxy_options o)
+    implementation(std::string p, const std::vector<std::string>& urls, proxy_options o)
         : prefix(prefix_path(std::move(p)))
         , options(o)
         , cache(o.cache)
@@ -1450,8 +1450,9 @@ struct reverse_proxy::implementation
     }
 };
 
+// NOLINTNEXTLINE(performance-unnecessary-value-param): public API; the by-value signature is kept for ABI stability
 reverse_proxy::reverse_proxy(std::string prefix, std::vector<std::string> upstreams, proxy_options options)
-    : impl_(std::make_shared<implementation>(std::move(prefix), std::move(upstreams), options))
+    : impl_(std::make_shared<implementation>(std::move(prefix), upstreams, options))
 {
 }
 

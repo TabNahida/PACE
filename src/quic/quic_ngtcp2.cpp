@@ -1275,9 +1275,9 @@ void context::load_verify_file(const std::string& path)
     required(SSL_CTX_load_verify_locations(state_->ssl, path.c_str(), nullptr), "QUIC trust file");
 }
 
-void context::use_certificate_chain(const std::string& cert, const std::string& key)
+void context::use_certificate_chain(const std::string& chain, const std::string& key)
 {
-    required(SSL_CTX_use_certificate_chain_file(state_->ssl, cert.c_str()), "QUIC certificate");
+    required(SSL_CTX_use_certificate_chain_file(state_->ssl, chain.c_str()), "QUIC certificate");
     required(SSL_CTX_use_PrivateKey_file(state_->ssl, key.c_str(), SSL_FILETYPE_PEM), "QUIC private key");
     required(SSL_CTX_check_private_key(state_->ssl), "QUIC certificate/key mismatch");
 }
@@ -1463,7 +1463,7 @@ std::string connection::selected_protocol() const
     return size ? std::string(reinterpret_cast<const char*>(bytes), size) : std::string{};
 }
 
-void connection::close(std::uint64_t code) noexcept
+void connection::close(std::uint64_t application_error) noexcept
 {
     auto state = state_;
     if (!state || !state->open)
@@ -1472,7 +1472,7 @@ void connection::close(std::uint64_t code) noexcept
     }
     ngtcp2_ccerr reason{};
     ngtcp2_ccerr_default(&reason);
-    ngtcp2_ccerr_set_application_error(&reason, code, nullptr, 0);
+    ngtcp2_ccerr_set_application_error(&reason, application_error, nullptr, 0);
     state->close_packet(reason);
     state->stop();
     if (!state->server())
@@ -1594,10 +1594,10 @@ io_context& stream::context() const noexcept
     return state_->owner->owner->io;
 }
 
-std::optional<std::size_t> stream::try_read(std::span<char> bytes)
+std::optional<std::size_t> stream::try_read(std::span<char> buffer)
 {
     guard operation(state_->reading);
-    return read(*state_, bytes);
+    return read(*state_, buffer);
 }
 
 std::size_t stream::try_write(std::string_view bytes)
@@ -1606,13 +1606,13 @@ std::size_t stream::try_write(std::string_view bytes)
     return write(*state_, bytes);
 }
 
-task<std::size_t> stream::read_some(std::span<char> bytes)
+task<std::size_t> stream::read_some(std::span<char> buffer)
 {
     auto state = state_;
     guard operation(state->reading);
     for (;;)
     {
-        if (auto count = read(*state, bytes))
+        if (auto count = read(*state, buffer))
         {
             co_return *count;
         }
@@ -1669,7 +1669,7 @@ void stream::finish_write()
     state_->owner->schedule();
 }
 
-void stream::reset(std::uint64_t code) noexcept
+void stream::reset(std::uint64_t application_error) noexcept
 {
     auto state = state_;
     if (!state)
@@ -1679,7 +1679,7 @@ void stream::reset(std::uint64_t code) noexcept
     state->buffer.reset = true;
     if (state->owner->conn && state->owner->open)
     {
-        ngtcp2_conn_shutdown_stream(state->owner->conn, 0, state->buffer.id, code);
+        ngtcp2_conn_shutdown_stream(state->owner->conn, 0, state->buffer.id, application_error);
     }
     try
     {

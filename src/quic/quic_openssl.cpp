@@ -598,9 +598,9 @@ void context::load_verify_file(const std::string& path)
     required(SSL_CTX_load_verify_locations(state_->ssl, path.c_str(), nullptr), "QUIC trust file");
 }
 
-void context::use_certificate_chain(const std::string& cert, const std::string& key)
+void context::use_certificate_chain(const std::string& chain, const std::string& key)
 {
-    required(SSL_CTX_use_certificate_chain_file(state_->ssl, cert.c_str()), "QUIC certificate");
+    required(SSL_CTX_use_certificate_chain_file(state_->ssl, chain.c_str()), "QUIC certificate");
     required(SSL_CTX_use_PrivateKey_file(state_->ssl, key.c_str(), SSL_FILETYPE_PEM), "QUIC private key");
     required(SSL_CTX_check_private_key(state_->ssl), "QUIC certificate/key mismatch");
 }
@@ -679,7 +679,7 @@ std::string connection::selected_protocol() const
     return size ? std::string(reinterpret_cast<const char*>(bytes), size) : std::string{};
 }
 
-void connection::close(std::uint64_t code) noexcept
+void connection::close(std::uint64_t application_error) noexcept
 {
     // Waking an operation may destroy its public connection/stream handle.
     // Retain the state until every cancellation callback has unwound.
@@ -690,7 +690,7 @@ void connection::close(std::uint64_t code) noexcept
     }
     // Immediate close abandons pending application bytes. RAPID alone still
     // waits for stream ACKs before sending CONNECTION_CLOSE.
-    SSL_SHUTDOWN_EX_ARGS args{code, nullptr};
+    SSL_SHUTDOWN_EX_ARGS args{application_error, nullptr};
     SSL_shutdown_ex(
         state->ssl,
         SSL_SHUTDOWN_FLAG_RAPID | SSL_SHUTDOWN_FLAG_NO_BLOCK | SSL_SHUTDOWN_FLAG_NO_STREAM_FLUSH,
@@ -912,10 +912,10 @@ io_context& stream::context() const noexcept
     return state_->owner->owner->io;
 }
 
-std::optional<std::size_t> stream::try_read(std::span<char> bytes)
+std::optional<std::size_t> stream::try_read(std::span<char> buffer)
 {
     guard operation(state_->reading);
-    return read(*state_, bytes);
+    return read(*state_, buffer);
 }
 
 std::size_t stream::try_write(std::string_view bytes)
@@ -924,13 +924,13 @@ std::size_t stream::try_write(std::string_view bytes)
     return write(*state_, bytes);
 }
 
-task<std::size_t> stream::read_some(std::span<char> bytes)
+task<std::size_t> stream::read_some(std::span<char> buffer)
 {
     auto state = state_;
     guard operation(state->reading);
     for (;;)
     {
-        if (auto count = read(*state, bytes))
+        if (auto count = read(*state, buffer))
         {
             co_return *count;
         }
@@ -985,14 +985,14 @@ void stream::finish_write()
     state_->owner->owner->schedule_tick();
 }
 
-void stream::reset(std::uint64_t code) noexcept
+void stream::reset(std::uint64_t application_error) noexcept
 {
     auto state = state_;
     if (!state)
     {
         return;
     }
-    SSL_STREAM_RESET_ARGS args{code};
+    SSL_STREAM_RESET_ARGS args{application_error};
     SSL_stream_reset(state->ssl, &args, sizeof(args));
     state->reset = true;
     try

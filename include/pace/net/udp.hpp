@@ -165,7 +165,7 @@ inline packet exchange(endpoint peer, std::string request, blocking_options opti
 {
     return blocking_call(
         [&](io_context& io) { return async_exchange(io, std::move(peer), std::move(request), capacity); },
-        options
+        std::move(options)
     );
 }
 

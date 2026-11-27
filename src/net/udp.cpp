@@ -186,6 +186,7 @@ void socket::select_family(address_family family)
     family_ = family;
 }
 
+// NOLINTNEXTLINE(performance-unnecessary-value-param): public API; the by-value signature is kept for ABI stability
 void socket::bind(endpoint local, bind_options options)
 {
     check(*context_, fd_);
@@ -400,7 +401,7 @@ std::size_t send(endpoint peer, std::string message, blocking_options options)
             auto socket = open(io);
             co_return co_await socket.send(std::move(message), std::move(peer));
         },
-        options
+        std::move(options)
     );
 }
 } // namespace pace::udp

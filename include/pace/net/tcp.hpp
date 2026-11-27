@@ -205,7 +205,7 @@ inline std::string exchange(
 {
     return blocking_call(
         [&](io_context& io) { return async_exchange(io, std::move(peer), std::move(request), reply_size, maximum); },
-        options
+        std::move(options)
     );
 }
 } // namespace pace::tcp

@@ -11,6 +11,7 @@ struct blocking_options
 };
 
 template <class Factory>
+// NOLINTNEXTLINE(performance-unnecessary-value-param): sink; tidy misses the move of options.cancellation
 auto blocking_call(Factory&& factory, blocking_options options)
 {
     if (io_context::current())

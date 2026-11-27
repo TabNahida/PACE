@@ -166,6 +166,7 @@ bool cancellation_source::request_timeout() const noexcept
     return state_->request(std::errc::timed_out);
 }
 
+// NOLINTNEXTLINE(performance-unnecessary-value-param): public API; the by-value signature is kept for ABI stability
 void cancellation_source::link(cancellation_token parent)
 {
     if (!parent.stop_possible())
