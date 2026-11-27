@@ -30,4 +30,16 @@ inline void require(bool value, std::string_view what, std::source_location wher
         throw failure(std::string(where.file_name()) + ":" + std::to_string(where.line()) + ": " + std::string(what));
     }
 }
+
+// A test executable can also act as an interop peer (for example `pace_quic_tests --interop-server`).
+// Register the mode at namespace scope; when argv[1] equals `flag`, main() calls `run` with the full
+// argv instead of running doctest, and exits with its return value.
+//
+//     const pace::test::command interop_server{"--interop-server", run_interop_peer};
+using command_handler = int (*)(int argc, char** argv);
+
+struct command
+{
+    command(const char* flag, command_handler run);
+};
 } // namespace pace::test

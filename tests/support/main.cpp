@@ -1,11 +1,15 @@
 // doctest entry point for every PACE test executable, plus a per-test-case watchdog.
 //
 // doctest's `timeout` decorator only reports a slow test after it returns, so a deadlocked
-// test would hang CI. The watchdog aborts the process when one test case runs longer than its
-// limit and names the test case first. The limit is the test case's `doctest::timeout(seconds)`
-// decorator when it has one, otherwise PACE_TEST_TIMEOUT seconds (default 60).
+// test would hang CI. The watchdog ends the process with exit status 124 when one test case runs
+// longer than its limit and names the test case first. The limit is the test case's
+// `doctest::timeout(seconds)` decorator when it has one, otherwise PACE_TEST_TIMEOUT seconds (default 60).
+//
+// Executables that double as interop peers register a pace::test::command; see pace_test.hpp.
 
 #define DOCTEST_CONFIG_IMPLEMENT
+#include "support/pace_test.hpp"
+
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -13,13 +17,22 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include <doctest/doctest.h>
 
 namespace
 {
 using clock_type = std::chrono::steady_clock;
+
+std::vector<std::pair<std::string_view, pace::test::command_handler>>& commands()
+{
+    static std::vector<std::pair<std::string_view, pace::test::command_handler>> registered;
+    return registered;
+}
 
 class watchdog
 {
@@ -185,8 +198,23 @@ struct watchdog_listener : doctest::IReporter
 REGISTER_LISTENER("pace_watchdog", 1, watchdog_listener);
 } // namespace
 
+pace::test::command::command(const char* flag, command_handler run)
+{
+    commands().emplace_back(flag, run);
+}
+
 int main(int argc, char** argv)
 {
+    if (argc > 1)
+    {
+        for (const auto& [flag, run] : commands())
+        {
+            if (argv[1] == flag)
+            {
+                return run(argc, argv);
+            }
+        }
+    }
     global_watchdog();
     doctest::Context context(argc, argv);
     return context.run();
