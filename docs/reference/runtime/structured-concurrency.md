@@ -251,22 +251,22 @@ struct group_access
     struct state;                                  // the group's shared state
     template <class T> struct child;               // one child's shared state
     template <class Factory> struct owned_child;   // child state plus its owned factory
-    template <class Factory>
-    static task<void> run_child(std::shared_ptr<state> group, std::shared_ptr<owned_child<Factory>> owned);
     struct wait;                                   // waits until no child is running
-    static task<void> drain(std::shared_ptr<state> group, bool boundary = false);
 };
 
-struct operation_access
-{
-    template <class Factory>
-    static task<operation_result<Factory>> scoped(Factory factory, operation_options options);  // with_options
-};
+template <class Factory>
+task<void> run_group_child(std::shared_ptr<group_access::state> group,
+                           std::shared_ptr<group_access::owned_child<Factory>> owned);
+task<void> drain_group(std::shared_ptr<group_access::state> group, bool boundary = false);
+template <class Factory>
+task<operation_result<Factory>> scoped_operation(Factory factory, operation_options options);  // with_options
 ```
 
-Declared in the public headers because the templates above use them, gathered in two structs so that they add two
-names to `pace`: the shared state of a group and of each child, the root task that runs a child, the wait for a
-group to drain, and the coroutine behind `with_options`. They are not part of the API. `operation_result<Factory>` is the result type a boundary or `spawn` returns for `Factory`.
+Declared in the public headers because the templates above use them: the shared state of a group and of each child
+(gathered in `group_access`), the root task that runs a child, the task that waits for a group to drain, and the
+coroutine behind `with_options`. The coroutines are namespace-scope functions rather than members of
+`group_access` because GCC 16 cannot read class-scope coroutines back from a named-module interface. None of this is
+part of the API. `operation_result<Factory>` is the result type a boundary or `spawn` returns for `Factory`.
 
 ## Functions
 

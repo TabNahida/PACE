@@ -10,8 +10,8 @@
 
 namespace pace::http
 {
-/// Implementation support for make_handler and router: invoking a handler callable and an already-built
-/// response as a task. Not part of the API.
+/// Implementation support for make_handler: invoking a handler callable with or without the request. Not part of
+/// the API.
 struct handler_access
 {
     /// Calls `function` with the request when it accepts one, else with no arguments.
@@ -27,46 +27,52 @@ struct handler_access
             return std::invoke(function);
         }
     }
-
-    /// For stateful callables, kept alive by `function` until the task completes.
-    template <class Function>
-    static task<response> invoke_shared(std::shared_ptr<Function> function, request incoming)
-    {
-        using result = decltype(call(*function, std::move(incoming)));
-        if constexpr (std::is_same_v<result, response>)
-        {
-            co_return call(*function, std::move(incoming));
-        }
-        else
-        {
-            co_return co_await call(*function, std::move(incoming));
-        }
-    }
-
-    /// For function pointers and stateless callables, copied into the task.
-    // Stateless trivial callables and function pointers need no shared owner.
-    // The coroutine frame owns its copy, including across a nested coroutine call.
-    // Keep invocation lazy and exceptions inside the returned task.
-    template <class Function>
-    static task<response> invoke_copied(Function function, request incoming)
-    {
-        using result = decltype(call(function, std::move(incoming)));
-        if constexpr (std::is_same_v<result, response>)
-        {
-            co_return call(function, std::move(incoming));
-        }
-        else
-        {
-            co_return co_await call(function, std::move(incoming));
-        }
-    }
-
-    /// A task that returns `outgoing`.
-    static task<response> immediate(response outgoing)
-    {
-        co_return outgoing;
-    }
 };
+
+// Coroutines in public headers stay namespace-scope functions: GCC 16 cannot read a class-scope coroutine back
+// from a named-module interface ("failed to read compiled module cluster"), so these are not members of the
+// handler_access struct above.
+
+/// Implementation support for make_handler: a stateful callable, kept alive by `function` until the task
+/// completes. Not part of the API.
+template <class Function>
+task<response> invoke_shared_handler(std::shared_ptr<Function> function, request incoming)
+{
+    using result = decltype(handler_access::call(*function, std::move(incoming)));
+    if constexpr (std::is_same_v<result, response>)
+    {
+        co_return handler_access::call(*function, std::move(incoming));
+    }
+    else
+    {
+        co_return co_await handler_access::call(*function, std::move(incoming));
+    }
+}
+
+/// Implementation support for make_handler: a function pointer or stateless callable, copied into the task. Not
+/// part of the API.
+// Stateless trivial callables and function pointers need no shared owner.
+// The coroutine frame owns its copy, including across a nested coroutine call.
+// Keep invocation lazy and exceptions inside the returned task.
+template <class Function>
+task<response> invoke_copied_handler(Function function, request incoming)
+{
+    using result = decltype(handler_access::call(function, std::move(incoming)));
+    if constexpr (std::is_same_v<result, response>)
+    {
+        co_return handler_access::call(function, std::move(incoming));
+    }
+    else
+    {
+        co_return co_await handler_access::call(function, std::move(incoming));
+    }
+}
+
+/// Implementation support for router: a task that returns `outgoing`. Not part of the API.
+inline task<response> immediate_response(response outgoing)
+{
+    co_return outgoing;
+}
 
 /// Adapts a callable taking `request` (or nothing) and returning `response` or `task<response>` to `handler`.
 /// The callable, move-only captures included, stays alive through every started invocation, even if the
@@ -87,13 +93,13 @@ handler make_handler(Function&& function)
     )
     {
         return [owned = owned_type(std::forward<Function>(function))](request incoming)
-        { return handler_access::invoke_copied(owned, std::move(incoming)); };
+        { return invoke_copied_handler(owned, std::move(incoming)); };
     }
     else
     {
         auto owned = std::make_shared<owned_type>(std::forward<Function>(function));
         return [owned = std::move(owned)](request incoming)
-        { return handler_access::invoke_shared(owned, std::move(incoming)); };
+        { return invoke_shared_handler(owned, std::move(incoming)); };
     }
 }
 
@@ -249,7 +255,7 @@ public:
     {
         if (!routes_)
         {
-            return handler_access::immediate({.status = 404, .body = "Not Found\n"});
+            return immediate_response({.status = 404, .body = "Not Found\n"});
         }
         const auto path = std::string_view(incoming.target).substr(0, incoming.target.find('?'));
         const handler* get_fallback = nullptr;
@@ -295,7 +301,7 @@ public:
         }
         if (first == last)
         {
-            return handler_access::immediate({.status = 404, .body = "Not Found\n"});
+            return immediate_response({.status = 404, .body = "Not Found\n"});
         }
         std::string allow;
         for (auto it = first; it != last; ++it)
@@ -311,7 +317,7 @@ public:
                 allow += ", HEAD";
             }
         }
-        return handler_access::immediate(
+        return immediate_response(
             {.status = 405, .body = "Method Not Allowed\n", .headers = {{"Allow", std::move(allow)}}}
         );
     }

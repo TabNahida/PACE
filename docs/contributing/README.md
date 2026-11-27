@@ -47,7 +47,9 @@ must include what it uses.
 - Names follow the standard library: `lower_case` for types, functions and variables, a trailing `_` on private
   data members, `CamelCase` template parameters, `PACE_` macros.
 - Public declarations carry `///` comments; implementation comments say why, not what.
-- Headers that only `.cpp` files use go in `src/<module>/`, not in `include/`.
+- Headers that only `.cpp` files use go in `src/<module>/`, not in `include/`. Helpers that templates in public
+  headers need go into a `*_access` struct, except coroutines: those stay namespace-scope functions, because GCC 16
+  cannot read class-scope coroutines back from a named-module interface.
 - A change to the hot paths in `src/runtime/` or `src/net/` needs a paired benchmark comparison
   (`scripts/compare_runtime_perf.py`); innocent-looking signature changes have changed the generated code before.
 

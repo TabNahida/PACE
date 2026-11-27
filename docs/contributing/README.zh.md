@@ -1,4 +1,4 @@
-<!-- source-hash: 7cd6f5e11d3f -->
+<!-- source-hash: e90c9e4ff36f -->
 # 参与开发
 
 [English](README.md) · [文档](../README.zh.md)
@@ -46,7 +46,8 @@ CI 还会单独构建每个模块，并单独编译每个公开头文件（`--he
 - 命名遵循标准库：类型、函数和变量用 `lower_case`，私有数据成员带后缀 `_`，模板参数用 `CamelCase`，宏以 `PACE_`
   开头。
 - 公开声明带 `///` 注释；实现内部的注释说明“为什么”，而不是“做了什么”。
-- 只有 `.cpp` 文件使用的头文件放在 `src/<module>/`，不放进 `include/`。
+- 只有 `.cpp` 文件使用的头文件放在 `src/<module>/`，不放进 `include/`。公开头文件中的模板所需的辅助放进一个
+  `*_access` 结构体，但协程除外：协程保持为命名空间作用域的函数，因为 GCC 16 无法从具名模块接口中读回类作用域的协程。
 - 修改 `src/runtime/` 或 `src/net/` 中的热路径时，需要附上成对的基准测试对比（`scripts/compare_runtime_perf.py`）；
   看似无害的签名改动以前就改变过生成的代码。
 

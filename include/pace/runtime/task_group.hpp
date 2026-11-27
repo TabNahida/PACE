@@ -6,8 +6,8 @@
 
 namespace pace
 {
-/// Implementation support for task_group and join_handle: the group's and children's shared state, the coroutine
-/// that runs a child, and the wait for a group to drain. Not part of the API.
+/// Implementation support for task_group and join_handle: the group's and children's shared state and the wait for a
+/// group to drain. Not part of the API.
 struct group_access
 {
     struct wait;
@@ -112,38 +112,6 @@ struct group_access
         }
     };
 
-    /// The root task that runs one child and records its outcome.
-    template <class Factory>
-    static task<void> run_child(std::shared_ptr<state> group, std::shared_ptr<owned_child<Factory>> owned)
-    {
-        try
-        {
-            // spawn() constructs the child with its factory; only this coroutine resets it, below.
-            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged until the reset after this block
-            auto work = task_access::bind(entry_access::invoke(*owned->factory, group->io), group->source.token());
-            if constexpr (std::is_void_v<operation_result<Factory>>)
-            {
-                co_await std::move(work);
-            }
-            else
-            {
-                owned->value.emplace(co_await std::move(work));
-            }
-        }
-        catch (...)
-        {
-            owned->failure = std::current_exception();
-            group->failed(owned->failure);
-        }
-        owned->factory.reset(); // Destroy owned captures before a join can finish.
-        owned->done = true;
-        if (auto waiter = std::exchange(owned->waiter, {}))
-        {
-            scheduler_access::schedule(group->io, waiter);
-        }
-        group->child_finished();
-    }
-
     /// Waits until a group has no running children.
     struct wait
     {
@@ -209,39 +177,6 @@ struct group_access
             }
         }
     };
-
-    /// Waits for a closed group's children (uncancellable at the scope boundary).
-    static task<void> drain(std::shared_ptr<state> group, bool boundary = false)
-    {
-        struct reset
-        {
-            state& group;
-            bool boundary;
-
-            reset(state& owner, bool at_boundary) noexcept
-                : group(owner)
-                , boundary(at_boundary)
-            {
-            }
-
-            reset(const reset&) = delete;
-            reset& operator=(const reset&) = delete;
-
-            ~reset()
-            {
-                if (!boundary)
-                {
-                    group.joining = false;
-                }
-            }
-        } guard{*group, boundary};
-
-        if (!boundary)
-        {
-            group->joining = true;
-        }
-        co_await wait(*group, !boundary);
-    }
 };
 
 template <>
@@ -257,6 +192,79 @@ struct group_access::child<void>
     {
     }
 };
+
+// Coroutines in public headers stay namespace-scope functions: GCC 16 cannot read a class-scope coroutine back
+// from a named-module interface ("failed to read compiled module cluster"), so these are not members of the
+// *_access struct above.
+
+/// Implementation support: the root task that runs one child and records its outcome. Not part of the API.
+template <class Factory>
+task<void> run_group_child(
+    std::shared_ptr<group_access::state> group,
+    std::shared_ptr<group_access::owned_child<Factory>> owned
+)
+{
+    try
+    {
+        // spawn() constructs the child with its factory; only this coroutine resets it, below.
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged until the reset after this block
+        auto work = task_access::bind(entry_access::invoke(*owned->factory, group->io), group->source.token());
+        if constexpr (std::is_void_v<operation_result<Factory>>)
+        {
+            co_await std::move(work);
+        }
+        else
+        {
+            owned->value.emplace(co_await std::move(work));
+        }
+    }
+    catch (...)
+    {
+        owned->failure = std::current_exception();
+        group->failed(owned->failure);
+    }
+    owned->factory.reset(); // Destroy owned captures before a join can finish.
+    owned->done = true;
+    if (auto waiter = std::exchange(owned->waiter, {}))
+    {
+        scheduler_access::schedule(group->io, waiter);
+    }
+    group->child_finished();
+}
+
+/// Implementation support: waits for a closed group's children (uncancellable at the scope boundary). Not part of
+/// the API.
+inline task<void> drain_group(std::shared_ptr<group_access::state> group, bool boundary = false)
+{
+    struct reset
+    {
+        group_access::state& group;
+        bool boundary;
+
+        reset(group_access::state& owner, bool at_boundary) noexcept
+            : group(owner)
+            , boundary(at_boundary)
+        {
+        }
+
+        reset(const reset&) = delete;
+        reset& operator=(const reset&) = delete;
+
+        ~reset()
+        {
+            if (!boundary)
+            {
+                group.joining = false;
+            }
+        }
+    } guard{*group, boundary};
+
+    if (!boundary)
+    {
+        group->joining = true;
+    }
+    co_await group_access::wait(*group, !boundary);
+}
 
 /// The move-only result of one child. co_await returns its value or rethrows its exception. Await at most once, on
 /// the group's context (std::logic_error otherwise). Destroying it neither detaches nor cancels the child.
@@ -364,7 +372,7 @@ public:
         ++state_->pending;
         try
         {
-            state_->io.spawn(group_access::run_child(state_, child));
+            state_->io.spawn(run_group_child(state_, child));
         }
         catch (...)
         {
@@ -427,7 +435,7 @@ public:
         // Close the group here, not in the task: awaiting a task bound to an already-cancelled token throws before
         // its body runs, and the group must be closed either way.
         state_->accepting = false;
-        return task_access::bind(group_access::drain(state_), state_->source.token());
+        return task_access::bind(drain_group(state_), state_->source.token());
     }
 
     /// The scope: runs factory(group) as the body, joins every child, destroys own() storage, then rethrows the
@@ -464,7 +472,7 @@ public:
             );
         }
         state->accepting = false;
-        co_await task_access::bind(group_access::drain(state, true), {});
+        co_await task_access::bind(drain_group(state, true), {});
         state->resources.clear();
         if (state->failure)
         {

@@ -1,4 +1,4 @@
-<!-- source-hash: 3c8a961a4e77 -->
+<!-- source-hash: cb95a6beac79 -->
 # `pace::run` 与当前 context
 
 [English](run.md) · [运行时](README.zh.md)
@@ -78,14 +78,16 @@ struct entry_access
     using result = /* T for task<T> */;
     template <class T>
     struct state;                  // value (absent for void), failure, completed
-    template <class T, class Factory>
-    static task<void> run(io_context& io, Factory& factory, state<T>& outcome);
 };
+
+template <class T, class Factory>
+task<void> run_entry(io_context& io, Factory& factory, entry_access::state<T>& outcome);
 ```
 
-`run`、操作边界和任务组共用的实现支持，集中在一个结构体里，只在 `pace` 中占用一个名字。`factory(io)` 合法时
-`invoke` 调用它，否则调用 `factory()`。`result` 给出工厂所返回 task 的结果类型。`run` 是 `pace::run` spawn 的
-根任务：它 await 工厂的 task，把值或异常记录到 `outcome`，结束时停止 `io`。不属于 API；应用代码请使用 `pace::run`。
+`run`、操作边界和任务组共用的实现支持。`factory(io)` 合法时 `entry_access::invoke` 调用它，否则调用 `factory()`；
+`entry_access::result` 给出工厂所返回 task 的结果类型。`run_entry` 是 `pace::run` spawn 的根任务：它 await 工厂的
+task，把值或异常记录到 `outcome`，结束时停止 `io`；它是命名空间作用域的函数，因为 GCC 16 无法从具名模块接口中读回
+类作用域的协程。不属于 API；应用代码请使用 `pace::run`。
 
 ## 函数
 

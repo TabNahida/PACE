@@ -1,4 +1,4 @@
-<!-- source-hash: 1657d77e4a5b -->
+<!-- source-hash: e346edb18da1 -->
 # 结构化并发、取消与截止时间
 
 [English](structured-concurrency.md) · [运行时](README.zh.md)
@@ -246,21 +246,20 @@ struct group_access
     struct state;                                  // the group's shared state
     template <class T> struct child;               // one child's shared state
     template <class Factory> struct owned_child;   // child state plus its owned factory
-    template <class Factory>
-    static task<void> run_child(std::shared_ptr<state> group, std::shared_ptr<owned_child<Factory>> owned);
     struct wait;                                   // waits until no child is running
-    static task<void> drain(std::shared_ptr<state> group, bool boundary = false);
 };
 
-struct operation_access
-{
-    template <class Factory>
-    static task<operation_result<Factory>> scoped(Factory factory, operation_options options);  // with_options
-};
+template <class Factory>
+task<void> run_group_child(std::shared_ptr<group_access::state> group,
+                           std::shared_ptr<group_access::owned_child<Factory>> owned);
+task<void> drain_group(std::shared_ptr<group_access::state> group, bool boundary = false);
+template <class Factory>
+task<operation_result<Factory>> scoped_operation(Factory factory, operation_options options);  // with_options
 ```
 
-因为上面的模板要用到它们，所以声明在公开头文件中，集中在两个结构体里，只在 `pace` 中占用两个名字：任务组和
-每个子任务的共享状态、运行子任务的根任务、等待任务组排空的操作，以及 `with_options` 背后的协程。它们不属于 API。`operation_result<Factory>` 是边界或 `spawn` 针对
+因为上面的模板要用到它们，所以声明在公开头文件中：任务组和每个子任务的共享状态（集中在 `group_access` 中）、
+运行子任务的根任务、等待任务组排空的 task，以及 `with_options` 背后的协程。这些协程是命名空间作用域的函数，而不是
+`group_access` 的成员，因为 GCC 16 无法从具名模块接口中读回类作用域的协程。它们都不属于 API。`operation_result<Factory>` 是边界或 `spawn` 针对
 `Factory` 返回的结果类型。
 
 ## 函数

@@ -1,4 +1,4 @@
-<!-- source-hash: 820554423823 -->
+<!-- source-hash: bde07c5cbe44 -->
 # HTTP 路由
 
 [English](router.md) · [HTTP](README.zh.md)
@@ -98,7 +98,7 @@ handler make_handler(Function&& function);
 
 调用是惰性的：`function` 在返回的 task 第一次恢复时才运行，它抛出的异常保存在 task 中，并在 `co_await` 时重新抛出。返回 `response` 的函数在服务器的事件循环上同步运行，不得阻塞。
 
-`<pace/http/router.hpp>` 还声明了 `handler_access`，其中是 `make_handler` 和 `router` 的实现。它不由 `pace.http` 模块导出，不属于 API。
+`<pace/http/router.hpp>` 还声明了 `handler_access`、`invoke_shared_handler`、`invoke_copied_handler` 和 `immediate_response`，它们是 `make_handler` 和 `router` 的实现，不由 `pace.http` 模块导出，不属于 API。
 
 ## 错误
 

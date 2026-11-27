@@ -78,16 +78,17 @@ struct entry_access
     using result = /* T for task<T> */;
     template <class T>
     struct state;                  // value (absent for void), failure, completed
-    template <class T, class Factory>
-    static task<void> run(io_context& io, Factory& factory, state<T>& outcome);
 };
+
+template <class T, class Factory>
+task<void> run_entry(io_context& io, Factory& factory, entry_access::state<T>& outcome);
 ```
 
-Implementation support shared by `run`, operation boundaries and task groups, gathered in one struct so that it
-adds a single name to `pace`. `invoke` calls `factory(io)` if that is well-formed and `factory()` otherwise.
-`result` names the result type of a factory's task. `run` is the root task `pace::run` spawns: it awaits the
-factory's task, records the value or exception in `outcome`, and stops `io` when it finishes. Not part of the API;
-applications use `pace::run`.
+Implementation support shared by `run`, operation boundaries and task groups. `entry_access::invoke` calls
+`factory(io)` if that is well-formed and `factory()` otherwise, and `entry_access::result` names the result type of a
+factory's task. `run_entry` is the root task `pace::run` spawns: it awaits the factory's task, records the value or
+exception in `outcome`, and stops `io` when it finishes; it is a namespace-scope function because GCC 16 cannot read
+class-scope coroutines back from a named-module interface. Not part of the API; applications use `pace::run`.
 
 ## Functions
 

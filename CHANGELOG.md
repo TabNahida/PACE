@@ -10,8 +10,10 @@
 - `task_group::join()` closes the group as soon as it is called, even when it then throws because the group is
   already cancelled.
 - Implementation helpers that were left in public namespaces when `detail` was removed are gathered into
-  `entry_access`, `operation_access`, `group_access` and `pace::http::handler_access`. They were never part of the
-  API; code that named `invoke_entry`, `scoped_operation`, `call_handler` or similar must stop doing so.
+  `entry_access`, `group_access` and `pace::http::handler_access`; the helper coroutines stay namespace-scope
+  functions (`run_entry`, `scoped_operation`, `run_group_child`, `drain_group`, `invoke_shared_handler`,
+  `invoke_copied_handler`, `immediate_response`) because GCC 16 cannot read class-scope coroutines back from a
+  named-module interface. None of them is part of the API.
 - **Breaking:** the 0.x names `pace::tcp_stream`, `pace::tcp_listener`, `pace::ipv4_endpoint`,
   `pace::listen_options` and `<pace/net/aliases.hpp>` are removed; use the `pace::tcp` names.
 - A second TCP read, write or accept started while one in the same direction is suspended throws

@@ -9,37 +9,32 @@ using operation_result =
     entry_access::result<decltype(entry_access::invoke(std::declval<Factory&>(), std::declval<io_context&>()))>;
 
 /// Implementation support: the coroutine behind with_options. Not part of the API.
-struct operation_access
+template <class Factory>
+task<operation_result<Factory>> scoped_operation(Factory factory, operation_options options)
 {
-    template <class Factory>
-    static task<operation_result<Factory>> scoped(Factory factory, operation_options options)
+    auto parent = co_await this_task::cancellation();
+    cancellation_source source(earlier(earlier(parent.expires(), options.cancellation.expires()), options.deadline));
+    source.link(parent);
+    source.link(options.cancellation);
+    source.token().throw_if_cancelled();
+    auto& io = this_context();
+    io_context::timer_handle timer;
+    if (source.token().expires().time() != deadline::clock::time_point::max())
     {
-        auto parent = co_await this_task::cancellation();
-        cancellation_source source(
-            earlier(earlier(parent.expires(), options.cancellation.expires()), options.deadline)
-        );
-        source.link(parent);
-        source.link(options.cancellation);
-        source.token().throw_if_cancelled();
-        auto& io = this_context();
-        io_context::timer_handle timer;
-        if (source.token().expires().time() != deadline::clock::time_point::max())
-        {
-            timer = io.call_at(source.token().expires().time(), [source] { source.request_timeout(); });
-        }
-        if constexpr (std::is_void_v<operation_result<Factory>>)
-        {
-            co_await task_access::bind(entry_access::invoke(factory, io), source.token());
-            source.token().throw_if_cancelled();
-        }
-        else
-        {
-            auto result = co_await task_access::bind(entry_access::invoke(factory, io), source.token());
-            source.token().throw_if_cancelled();
-            co_return result;
-        }
+        timer = io.call_at(source.token().expires().time(), [source] { source.request_timeout(); });
     }
-};
+    if constexpr (std::is_void_v<operation_result<Factory>>)
+    {
+        co_await task_access::bind(entry_access::invoke(factory, io), source.token());
+        source.token().throw_if_cancelled();
+    }
+    else
+    {
+        auto result = co_await task_access::bind(entry_access::invoke(factory, io), source.token());
+        source.token().throw_if_cancelled();
+        co_return result;
+    }
+}
 
 /// An operation boundary: runs the factory's task under a new token linked to the inherited one and to
 /// `options.cancellation`, with the earliest of the inherited deadline and the options' deadlines; a nested boundary
@@ -48,7 +43,7 @@ struct operation_access
 template <class Factory>
 auto with_options(Factory factory, operation_options options)
 {
-    return operation_access::scoped(std::move(factory), std::move(options));
+    return scoped_operation(std::move(factory), std::move(options));
 }
 
 /// with_options for an already-created task; what the task borrowed stays borrowed.
