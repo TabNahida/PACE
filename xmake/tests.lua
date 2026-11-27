@@ -37,8 +37,9 @@ if has_config("tests") then
             add_tests("default")
         target_end()
     end
-    runtime = "runtime", backend = "runtime", structured = "runtime", handles = "runtime", signal = "runtime",
-    cross_context = "runtime",
+    local test_names = {
+        "runtime", "backend", "network", "udp", "direct_client", "structured", "handles", "signal", "cross_context"
+    }
     if has_config("http1") or has_config("http2") or has_config("http3") then table.insert(test_names, "unified_client") end
     if has_config("http1") then
         table.insert(test_names, "http_extended")

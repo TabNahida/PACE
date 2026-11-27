@@ -85,31 +85,6 @@ struct on_access
         }
     };
 
-    /// The root task on the target: runs the factory's task under the operation's token.
-    template <class T, class Factory>
-    static task<void> run(owned<T, Factory> work)
-    {
-        auto& op = *work.state;
-        try
-        {
-            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged until ~owned
-            auto child = task_access::bind(entry_access::invoke(*work.factory, this_context()), op.source.token());
-            if constexpr (std::is_void_v<T>)
-            {
-                co_await std::move(child);
-            }
-            else
-            {
-                op.outcome.value.emplace(co_await std::move(child));
-            }
-            op.outcome.completed = true;
-        }
-        catch (...)
-        {
-            op.outcome.failure = std::current_exception();
-        }
-    }
-
     /// Suspends the caller until the work has finished.
     template <class T>
     struct wait
@@ -137,60 +112,89 @@ struct on_access
         {
         }
     };
+};
 
-    /// The caller's side of on().
-    template <class Factory>
-    static task<operation_result<Factory>> call(io_context& target, Factory factory)
+// Coroutines in public headers stay namespace-scope functions: GCC 16 cannot read a class-scope coroutine back
+// from a named-module interface, so these are not members of on_access.
+
+/// Implementation support for on(), not part of the API: the root task on the target, runs the factory's task under the
+/// operation's token.
+template <class T, class Factory>
+task<void> run_on_target(on_access::owned<T, Factory> work)
+{
+    auto& op = *work.state;
+    try
     {
-        using result = operation_result<Factory>;
-        auto& here = this_context();
-        if (&target == &here)
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged until ~owned
+        auto child = task_access::bind(entry_access::invoke(*work.factory, this_context()), op.source.token());
+        if constexpr (std::is_void_v<T>)
         {
-            if constexpr (std::is_void_v<result>)
+            co_await std::move(child);
+        }
+        else
+        {
+            op.outcome.value.emplace(co_await std::move(child));
+        }
+        op.outcome.completed = true;
+    }
+    catch (...)
+    {
+        op.outcome.failure = std::current_exception();
+    }
+}
+
+/// Implementation support for on(), not part of the API: the caller's side.
+template <class Factory>
+task<operation_result<Factory>> call_on(io_context& target, Factory factory)
+{
+    using result = operation_result<Factory>;
+    auto& here = this_context();
+    if (&target == &here)
+    {
+        if constexpr (std::is_void_v<result>)
+        {
+            co_await entry_access::invoke(factory, here);
+            co_return;
+        }
+        else
+        {
+            co_return co_await entry_access::invoke(factory, here);
+        }
+    }
+    auto token = co_await this_task::cancellation();
+    token.throw_if_cancelled();
+    auto op = std::make_shared<on_access::operation<result>>(token.expires());
+    op->source.link(token);
+    op->anchor = remote_access::anchor_of(here);
+    // The token reaches the work through link() at once; this registration adds the caller's own stop.
+    auto registration = remote_access::on_cancel_or_stop(
+        here,
+        token,
+        [state = op.get()](std::error_code reason)
+        {
+            if (reason == std::errc::timed_out)
             {
-                co_await entry_access::invoke(factory, here);
-                co_return;
+                state->source.request_timeout();
             }
             else
             {
-                co_return co_await entry_access::invoke(factory, here);
+                state->source.request_cancellation();
             }
         }
-        auto token = co_await this_task::cancellation();
-        token.throw_if_cancelled();
-        auto op = std::make_shared<operation<result>>(token.expires());
-        op->source.link(token);
-        op->anchor = remote_access::anchor_of(here);
-        // The token reaches the work through link() at once; this registration adds the caller's own stop.
-        auto registration = remote_access::on_cancel_or_stop(
-            here,
-            token,
-            [state = op.get()](std::error_code reason)
-            {
-                if (reason == std::errc::timed_out)
-                {
-                    state->source.request_timeout();
-                }
-                else
-                {
-                    state->source.request_cancellation();
-                }
-            }
-        );
-        target.spawn(run(owned<result, Factory>(op, std::move(factory))));
-        co_await wait<result>{*op};
-        registration.cancel();
-        if (op->outcome.failure)
-        {
-            std::rethrow_exception(op->outcome.failure);
-        }
-        if constexpr (!std::is_void_v<result>)
-        {
-            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): completed without failure, so the value is set
-            co_return std::move(*op->outcome.value);
-        }
+    );
+    target.spawn(run_on_target(on_access::owned<result, Factory>(op, std::move(factory))));
+    co_await on_access::wait<result>{*op};
+    registration.cancel();
+    if (op->outcome.failure)
+    {
+        std::rethrow_exception(op->outcome.failure);
     }
-};
+    if constexpr (!std::is_void_v<result>)
+    {
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): completed without failure, so the value is set
+        co_return std::move(*op->outcome.value);
+    }
+}
 
 /// Runs the factory's task on `target` and resumes the caller on its own context with the result or exception.
 /// The factory (taking io_context& or nothing) is moved to and invoked on `target`, owned until the work finishes,
@@ -203,7 +207,7 @@ template <class Factory>
 requires(std::is_invocable_v<Factory&, io_context&> || std::is_invocable_v<Factory&>)
 auto on(io_context& target, Factory factory)
 {
-    return on_access::call(target, std::move(factory));
+    return call_on(target, std::move(factory));
 }
 
 /// on() for an already-created task: the task's frame moves to `target`; what it borrowed stays borrowed and must
