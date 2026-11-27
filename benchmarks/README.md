@@ -1,13 +1,13 @@
 # Reproducible TCP echo comparison
 
-[Complete performance results](../docs/performance.md) · [Worker/execution scaling](scaling.md)
+[Complete performance results](../docs/performance/README.md) · [Worker/execution scaling](scaling.md)
 
 For the November router and inbox changes, see the
 [paired hot-path measurements](results/module-hotpaths-2026-11-16/README.md).
 `--components=y` also builds `pace_router_bench` and `pace_inbox_allocations`;
 the latter counts allocations separately from timing measurements.
 
-[HTTP/WebSocket protocol investigation](../docs/protocol-performance.md) uses
+[HTTP/WebSocket protocol investigation](../docs/performance/protocols.md) uses
 separate probes for response completion, frame processing and multiplexed handlers:
 
 ```sh
@@ -179,10 +179,10 @@ allocation and scheduling strategies remain part of the comparison.
 
 ## HTTP gateway versus nginx
 
-[Gateway results and reproduction](../docs/gateway-performance.md) cover directory mounts, static caching, two-upstream proxies and response caching with 1/4 workers. `run_gateway_benchmarks.py` uses an independent Linux epoll client and preserves all trials; `plot_gateway_benchmarks.py` renders the complete throughput chart. `--baseline /path/to/alternate-pace --backends baseline,epoll` supports controlled PACE A/B experiments.
+[Gateway results and reproduction](../docs/performance/http-gateway.md) cover directory mounts, static caching, two-upstream proxies and response caching with 1/4 workers. `run_gateway_benchmarks.py` uses an independent Linux epoll client and preserves all trials; `plot_gateway_benchmarks.py` renders the complete throughput chart. `--baseline /path/to/alternate-pace --backends baseline,epoll` supports controlled PACE A/B experiments.
 
 
-The [latest optimization report](../docs/gateway-optimization.md) compares the same
+The [latest optimization report](../docs/performance/history/gateway-optimization-2026-11-03.md) compares the same
 session's old/new PACE binaries and nginx, including regressions. The homepage
 renderer is `plot_gateway_optimization.py` (add `--all-backends` for io_uring).
 `pace_gateway_components` and `run_gateway_components.py` isolate 4 KiB content

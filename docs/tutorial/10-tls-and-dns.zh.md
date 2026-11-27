@@ -1,6 +1,6 @@
 # 8. 把域名解析和 TLS 身份验证接起来
 
-[English](08-dns-tls.md) · [上一章：UDP](07-udp.zh-CN.md) · [下一章：WebSocket](09-websocket.zh-CN.md)
+[English](10-tls-and-dns.md) · [上一章：UDP](06-udp.zh.md) · [下一章：WebSocket](11-websocket.zh.md)
 
 网络地址回答“连接到哪里”，TLS peer name 回答“验证对方是谁”。
 解析得到 IP 后仍应保留原域名，不能把两者混为一谈。
@@ -89,14 +89,14 @@ xmake run tutorial_dns
 在你自己的副本中把 peer name 换成不相干域名，确认握手被拒绝；
 这正是身份验证的效果，不应通过关闭验证来消除它。
 
-HTTPS 可以直接复用这些配置，见[第四章](04-http.zh-CN.md#启用-https)。
-[DNS 参考](../reference/dns.md) · [TLS 参考](../reference/tls.md)
+HTTPS 可以直接复用这些配置，见[第四章](03-http-server.zh.md#启用-https)。
+[DNS 参考](../reference/dns/README.md) · [TLS 参考](../reference/tls/README.md)
 
 使用系统信任且不需要自定义 ALPN 时，可省略客户端配置：
 `co_await pace::tls::connect(endpoint, hostname)`，仍要保留原始 DNS 名用于证书验证。
 在事件循环外只做一次解析，可以直接写
 `auto addresses = pace::run(pace::dns::resolve("127.0.0.1"));`。
 
-[便捷接口契约](../reference/component-conveniences.zh-CN.md)和
-[配置复用、ALPN 调优](../reference/protocol-tuning.zh-CN.md#dns-与-tls)介绍后续细节。
+[便捷接口契约](../reference/component-conveniences.zh.md)和
+[配置复用、ALPN 调优](../guides/protocol-tuning.zh.md#dns-与-tls)介绍后续细节。
 本章新增 helper 需要 PACE v0.3.1 或更新版本。

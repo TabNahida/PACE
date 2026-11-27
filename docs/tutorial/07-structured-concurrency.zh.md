@@ -1,6 +1,6 @@
 # 12. 一起启动任务，一起等待结束
 
-[English](12-structured-concurrency.md) · [学习路线](README.zh-CN.md) · [参考](../reference/structured-concurrency.zh-CN.md)
+[English](07-structured-concurrency.md) · [学习路线](README.zh.md) · [参考](../reference/runtime/structured-concurrency.zh.md)
 
 单次请求仍然直接写 `http::get(url)`。多个异步操作需要共享生命周期时，再使用任务组。
 本章需要 PACE 0.4.0 或更新版本，并链接 `pace_runtime`。
@@ -64,7 +64,7 @@ int main() {
 ```
 
 两个请求使用独立连接，继承任务组的取消和 deadline。启用对应模块并准备匹配的服务端后，
-`http2::async_get`、`http3::async_get` 使用相同写法，见[统一 HTTP 客户端](../reference/http-clients.zh-CN.md)。
+`http2::async_get`、`http3::async_get` 使用相同写法，见[统一 HTTP 客户端](../reference/http/clients.zh.md)。
 
 ## 3. 只取消一个操作，不停止事件循环
 
@@ -108,4 +108,4 @@ co_await pace::with_task_group([](pace::task_group& group) -> pace::task<void> {
 不要立即调用临时 lambda 后再传入借用该临时对象的 task。不要返回借用组内存储的 socket 或 view。
 
 仓库配套程序为 `xmake run tutorial_structured`。清理时的 shield、错误优先级、自定义 awaiter
-和并发约定放在[参考文档](../reference/structured-concurrency.zh-CN.md)。
+和并发约定放在[参考文档](../reference/runtime/structured-concurrency.zh.md)。

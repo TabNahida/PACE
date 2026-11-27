@@ -173,8 +173,8 @@ Yield's `await_ready` is always false; its suspend operation enqueues the
 continuation and its resume operation checks stop. These protocol functions are
 not a supported way to resume an unrelated coroutine from another thread.
 
-See [execution choices](../tutorial/05-execution.md) and
-[shutdown](../tutorial/06-shutdown.md) for complete examples.
+See [execution choices](../../tutorial/08-workers-and-threads.md) and
+[shutdown](../../tutorial/09-graceful-shutdown.md) for complete examples.
 
 [Backend selection](io-backends.md) describes constructor/environment precedence.
 `local_state(shared_ptr<const void> key, factory)` stores lazily constructed shared service state on one reactor. It is reactor-affine, rejects a stopped context, retains the key/value until context destruction and releases values after owned roots are destroyed. It is intended for bounded per-service pools, not per-request data.

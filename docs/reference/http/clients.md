@@ -1,6 +1,6 @@
 # Unified HTTP clients
 
-[中文](http-clients.zh-CN.md) · [Deadlines and concurrency](structured-concurrency.md)
+[中文](clients.zh.md) · [Deadlines and concurrency](../runtime/structured-concurrency.md)
 
 These APIs require PACE 0.4.0 or newer. `pace::http1` is an alias of
 `pace::http`; HTTP/1, HTTP/2 and HTTP/3 share `http::request` and `http::response`.
@@ -52,7 +52,7 @@ Results preserve input order; any incomplete/reset response fails the batch.
 
 Old transport-based `http2::get` / `http3::get` are `async_get`; old `exchange`
 becomes `async_exchange`, with arguments unchanged. The unprefixed URL calls are
-synchronous. [HTTP/1 migration](direct-clients.md#migrate-from-031) covers its
+synchronous. [HTTP/1 migration](../direct-clients.md#migrate-from-031) covers its
 previous renames. TCP/QUIC `connect`, socket methods and server route registration
 names are unchanged.
 
@@ -62,4 +62,4 @@ threads. `serve_connection` cancels and joins handlers before it exits. `serve`
 owns accepted tasks and cancels/joins them when acceptance ends. Closing a
 listener therefore ends its owned connection scope. For a custom graceful drain
 policy, own the accept loop and connection children in `with_task_group`.
-See the [complete concurrency matrix](structured-concurrency.md#protocol-concurrency-and-server-lifetime).
+See the [complete concurrency matrix](../runtime/structured-concurrency.md#protocol-concurrency-and-server-lifetime).

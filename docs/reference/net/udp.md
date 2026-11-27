@@ -1,8 +1,8 @@
 # UDP
 
-For one-call `exchange` / `async_exchange` clients, see [direct clients](direct-clients.md).
+For one-call `exchange` / `async_exchange` clients, see [direct clients](../direct-clients.md).
 
-Short forms and owning helpers: [component conveniences](component-conveniences.md).
+Short forms and owning helpers: [component conveniences](../component-conveniences.md).
 
 Send one datagram and read it back locally:
 
@@ -27,7 +27,7 @@ int main() {
 }
 ```
 
-Run the [checked-in example](../../examples/tutorial_udp.cpp):
+Run the [checked-in example](../../../examples/tutorial_udp.cpp):
 
 ```sh
 xmake
@@ -85,7 +85,7 @@ An unspecified input family is inferred from the numeric address; an explicit
 `ipv4` or `ipv6` must match. Local and sender endpoints report the concrete
 family. `::1` is IPv6 loopback; `::` is the IPv6 wildcard. IPv6 addresses are
 unbracketed. Hostnames and malformed addresses throw `invalid_argument`.
-Resolve hostnames with the separate [DNS extension](dns.md).
+Resolve hostnames with the separate [DNS extension](../dns/README.md).
 
 Use a numeric interface index in `scope_id` for scoped IPv6 addresses. Native
 sender/local inspection preserves it separately from the address string.
@@ -127,8 +127,8 @@ socket. Auto-selection does not change the socket's context or ownership rules.
 同一 socket 可同时挂起一次发送和一次接收；同方向重复操作会报错。协程操作在
 socket 所属的 `io_context` 上执行，完成前要保留 socket 和缓冲区，不能移动它。
 `close()` 或停止 context 会取消等待。地址支持数字形式的 IPv4/IPv6，主机名可先用
-独立的 [DNS 扩展](dns.md)解析。IPv6 默认只接收 IPv6；在 `::` 上绑定时显式设置
+独立的 [DNS 扩展](../dns/README.md)解析。IPv6 默认只接收 IPv6；在 `::` 上绑定时显式设置
 `{.ipv6_only = false}` 可启用双栈。IPv4 来源保留为 `::ffff:...` 映射地址，方便直接回复。
 作用域使用独立的数字 `scope_id`，不接受 `%接口名` 或 `%数字` 后缀。尚无加入组播组的接口。
 
-[Tutorials](../tutorial/README.md) · [Reference index](README.md)
+[Tutorials](../../tutorial/README.md) · [Reference index](../README.md)

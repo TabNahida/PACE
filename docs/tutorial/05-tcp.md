@@ -1,6 +1,6 @@
 # 3. Send a TCP request with one call
 
-[中文](03-tcp.zh-CN.md) · [Learning path](README.md) · [Next: HTTP](04-http.md)
+[中文](05-tcp.zh.md) · [Learning path](README.md) · [Next: HTTP](03-http-server.md)
 
 Use PACE 0.4.0 or newer and chapter 1's source setup; link `pace_net`. Our protocol is four request bytes and four
 reply bytes, using a numeric loopback address.
@@ -110,6 +110,6 @@ lifetime. The async helper does not add the blocking helper's total deadline.
 
 [Direct-client bounds and errors](../reference/direct-clients.md) ·
 [Buffers, IPv6 and concurrency](../reference/component-conveniences.md) ·
-[Tuning](../reference/protocol-tuning.md) · [Shutdown](06-shutdown.md)
+[Tuning](../guides/protocol-tuning.md) · [Shutdown](09-graceful-shutdown.md)
 
 The repository's `xmake run tutorial_tcp` is a self-contained asynchronous echo exercise.

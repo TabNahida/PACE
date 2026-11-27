@@ -1,6 +1,6 @@
 # HTTP and WebSocket performance investigation
 
-[TCP comparison](performance.md) · [CI architecture coverage](ci.md)
+[TCP comparison](README.md) · [CI architecture coverage](../contributing/ci.md)
 
 These measurements use local Linux. HTTP/1 and WebSocket compare PACE with its
 own v0.1.1 behavior; the HTTP/2 and HTTP/3 experiment compares handler limits in
@@ -36,7 +36,7 @@ throughput multiplier. Both endpoints set TCP_NODELAY. An initial diagnostic
 without that setting is retained separately because delayed ACK/Nagle behavior
 confounded its TLS timings.
 
-[Complete HTTP data, configuration and build provenance](../benchmarks/results/http-close-linux-2026-10-23/README.md).
+[Complete HTTP data, configuration and build provenance](../../benchmarks/results/http-close-linux-2026-10-23/README.md).
 
 ## WebSocket frame processing
 
@@ -63,7 +63,7 @@ Median roundtrips per second from ten alternating trials per workload:
 | 16 KiB / single frame | 44,342 | 158,337 | +257.1% |
 | 64 KiB / 1 KiB fragments | 3,339 | 6,252 | +87.2% |
 
-[WebSocket measurements and reproducible commands](../benchmarks/results/websocket-linux-2026-10-23/README.md)
+[WebSocket measurements and reproducible commands](../../benchmarks/results/websocket-linux-2026-10-23/README.md)
 include ten alternating trials per fixed workload and separate syscall-count
 diagnostics. Both peers share a single reactor and thread. Every binary message
 has an incrementing sequence and its entire echoed payload is verified. TLS,
@@ -96,7 +96,7 @@ binary and excluding connect/handshake, produced these medians:
 All responses and observed handler peaks were validated. The approximately
 eightfold improvement is the expected overlap of this synthetic asynchronous
 work, not a general throughput result or a direct old/new binary comparison.
-[Raw batches, environment and reproduction](../benchmarks/results/protocol-multiplex-linux-2026-10-23/README.md).
+[Raw batches, environment and reproduction](../../benchmarks/results/protocol-multiplex-linux-2026-10-23/README.md).
 
 HTTP/2 uses nonblocking TCP/TLS progress with explicit readiness wakeups and
 preserves TLS retry buffers. It also batches generated frames at a 64 KiB
@@ -110,7 +110,7 @@ integration change and the ngtcp2 backend have functional coverage, but have
 not been benchmarked against those historical results. Setting the handler
 limit to one retains sequential application dispatch.
 
-See the [HTTP/2](reference/http2.md) and [HTTP/3](reference/http3.md) references
+See the [HTTP/2](../reference/http2/README.md) and [HTTP/3](../reference/http3/README.md) references
 for bounds, handler lifetime and cancellation contracts. Regression tests cover
 overlapping handlers, stream limits, out-of-order completion, large responses,
 TLS backpressure and completion after a disconnected peer.

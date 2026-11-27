@@ -1,6 +1,6 @@
 # 10. Make your first HTTP/2 request
 
-[中文](10-http2.zh-CN.md) · [Previous: WebSocket](09-websocket.md) · [Next: QUIC/HTTP3](11-quic-http3.md)
+[中文](12-http2.zh.md) · [Previous: WebSocket](11-websocket.md) · [Next: QUIC/HTTP3](13-quic-and-http3.md)
 
 Enable `--http2=y` and link `pace_http2` in chapter 1's current-source project.
 Create `h2_server` and `h2_client` targets as in chapter 3. Start with cleartext
@@ -56,7 +56,7 @@ int main() {
 
 `http2::get(url)` returns the response directly, with a default 30-second budget.
 In a coroutine write `co_await http2::async_get(url)`. Hostnames need `dns=y`;
-HTTPS needs `tls=y`. See [unified clients](../reference/http-clients.md).
+HTTPS needs `tls=y`. See [unified clients](../reference/http/clients.md).
 
 ## 3. Verify, then add more requests
 
@@ -66,8 +66,8 @@ its 404 response. The repository's `xmake run tutorial_http2` checks GET and a
 multi-request batch locally.
 
 For several concurrent requests on one connection, move to
-[`async_exchange` and handler limits](../reference/protocol-tuning.md#http2-and-http3).
+[`async_exchange` and handler limits](../guides/protocol-tuning.md#http2-and-http3).
 A loop of single GETs creates separate batches and misses that multiplexing benefit.
 For verified TLS, use chapter 8's helpers with ALPN `h2` on both sides; pass the
 handshaken TLS stream to the transport `async_get` helper. See the
-[HTTP/2 reference](../reference/http2.md) for TLS server overloads and flow control.
+[HTTP/2 reference](../reference/http2/README.md) for TLS server overloads and flow control.

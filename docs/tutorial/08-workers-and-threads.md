@@ -1,6 +1,6 @@
 # 5. Execution and worker selection
 
-[中文](05-execution.zh-CN.md) · [Previous: HTTP](04-http.md) · [Next: shutdown](06-shutdown.md)
+[中文](08-workers-and-threads.zh.md) · [Previous: HTTP](03-http-server.md) · [Next: shutdown](09-graceful-shutdown.md)
 
 So far a single caller thread ran the reactor. This chapter assigns independent
 work to two reactors, then shows how to use application-owned threads. Change
@@ -79,7 +79,7 @@ context. A root failure stops peer contexts and is rethrown after worker joins.
 
 ## Run without a runtime
 
-The [task tutorial](02-tasks-timers.md) distinguishes the entry runner from the manual model:
+The [task tutorial](04-tasks-and-timers.md) distinguishes the entry runner from the manual model:
 one context and `io.run()` on the caller. A context can instead run on a thread
 owned by your application. This replacement for the first tutorial's main body
 wraps the named `lesson` coroutine from the task exercise so manual execution has a stop path:
@@ -144,7 +144,7 @@ zero parallel within that context. It only creates other independent reactors.
 Neither `co_await io.yield()` nor awaiting a child task offloads a computation.
 
 Worker counts, reuse-port listeners and measurement guidance are in the
-[reference tuning guide](../reference/protocol-tuning.md#worker-placement).
+[reference tuning guide](../guides/protocol-tuning.md#worker-placement).
 
-Reference: [`runtime`](../reference/runtime.md), [`io_context`](../reference/io-context.md).
-Next: [orderly shutdown](06-shutdown.md).
+Reference: [`runtime`](../reference/runtime/runtime.md), [`io_context`](../reference/runtime/io-context.md).
+Next: [orderly shutdown](09-graceful-shutdown.md).

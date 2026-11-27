@@ -1,6 +1,6 @@
 # 0. 一次调用，拿到响应
 
-[English](00-quick-start.md) · [学习路线](README.zh-CN.md) · [构建细节](01-build.zh-CN.md)
+[English](02-http-client.md) · [学习路线](README.zh.md) · [构建细节](01-install-and-first-program.zh.md)
 
 先从普通 C++ 开始。单次客户端请求不需要协程、事件循环配置，也不需要 `run`。
 本教程需要 **PACE 0.4.0 或更新版本**，包含直接客户端和 HTTP 的 `async_` 命名；
@@ -85,7 +85,7 @@ xmake run server
 ```
 
 另开终端执行 `xmake run client`，应输出 `200 ok` 后退出。服务端继续等待下次请求。
-[第一章](01-build.zh-CN.md)解释模块选择和仓库内配套 example 的构建。
+[第一章](01-install-and-first-program.zh.md)解释模块选择和仓库内配套 example 的构建。
 
 ## 4. 发送 body 或设置超时
 
@@ -103,17 +103,17 @@ auto reply = pace::http::get("http://127.0.0.1:8080/health",
 ```
 
 域名 URL 需要配置 `--dns=y`，HTTPS 需要 `--tls=y`。HTTPS 默认通过系统信任根验证 URL
-中的主机名。其他方法和自定义信任见 [HTTP 章节](04-http.zh-CN.md)。请求不会自动重定向或重试。
+中的主机名。其他方法和自定义信任见 [HTTP 章节](03-http-server.zh.md)。请求不会自动重定向或重试。
 
 ## 5. TCP、UDP 也从一行开始
 
-连接[第三章](03-tcp.zh-CN.md)的四字节 TCP 回显服务端：
+连接[第三章](05-tcp.zh.md)的四字节 TCP 回显服务端：
 
 ```cpp
 auto reply = pace::tcp::exchange({"127.0.0.1", 9090}, "ping", 4);
 ```
 
-连接[第七章](07-udp.zh-CN.md)的 UDP 回显服务端：
+连接[第七章](06-udp.zh.md)的 UDP 回显服务端：
 
 ```cpp
 auto packet = pace::udp::exchange({"127.0.0.1", 9091}, "hello");
@@ -138,8 +138,8 @@ pace::run([]() -> pace::task<void> {
 直接客户端会拒绝在运行中的 PACE context 内调用；处理函数里使用异步版本。
 异步调用不会自动获得直接客户端的 30 秒总超时。
 
-接着按需要阅读 [HTTP](04-http.zh-CN.md)、[TCP](03-tcp.zh-CN.md) 或 [UDP](07-udp.zh-CN.md)，
-需要异步组合时再读[任务与定时器](02-tasks-timers.zh-CN.md)。精确约定、调优和 0.3.1
-迁移表见[直接客户端参考](../reference/direct-clients.zh-CN.md)。
+接着按需要阅读 [HTTP](03-http-server.zh.md)、[TCP](05-tcp.zh.md) 或 [UDP](06-udp.zh.md)，
+需要异步组合时再读[任务与定时器](04-tasks-and-timers.zh.md)。精确约定、调优和 0.3.1
+迁移表见[直接客户端参考](../reference/direct-clients.zh.md)。
 
-[下一步：并发多个请求，共用一个 deadline](12-structured-concurrency.zh-CN.md)。
+[下一步：并发多个请求，共用一个 deadline](07-structured-concurrency.zh.md)。

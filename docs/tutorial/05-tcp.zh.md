@@ -1,6 +1,6 @@
 # 3. 一次调用完成 TCP 请求
 
-[English](03-tcp.md) · [学习路线](README.zh-CN.md) · [下一章：HTTP](04-http.zh-CN.md)
+[English](05-tcp.md) · [学习路线](README.zh.md) · [下一章：HTTP](03-http-server.zh.md)
 
 使用 PACE 0.4.0 或更新版本和第一章的源码构建方式，链接 `pace_net`。
 本章约定请求四字节、回复四字节，使用数字回环地址。
@@ -102,8 +102,8 @@ co_await socket.close_gracefully();
 `pace::write` 在挂起期间持有字符串，`read_exact` 返回独立字符串，默认分配上限为 1 MiB。
 socket 不能超出所属 context 的生命周期。异步助手不会自动增加直接客户端的总超时。
 
-[直接客户端的限制与错误](../reference/direct-clients.zh-CN.md) ·
-[缓冲区、IPv6 与并发](../reference/component-conveniences.zh-CN.md) ·
-[调优](../reference/protocol-tuning.zh-CN.md) · [关闭](06-shutdown.zh-CN.md)
+[直接客户端的限制与错误](../reference/direct-clients.zh.md) ·
+[缓冲区、IPv6 与并发](../reference/component-conveniences.zh.md) ·
+[调优](../guides/protocol-tuning.zh.md) · [关闭](09-graceful-shutdown.zh.md)
 
 仓库中的 `xmake run tutorial_tcp` 是可以独立运行的异步回显练习。

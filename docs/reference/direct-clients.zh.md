@@ -1,6 +1,6 @@
 # 直接客户端与 HTTP 命名迁移
 
-[English](direct-clients.md) · [快速入门](../tutorial/00-quick-start.zh-CN.md)
+[English](direct-clients.md) · [快速入门](../tutorial/02-http-client.zh.md)
 
 本页 API 需要 **PACE 0.4.0 或更新版本**。HTTP 自由函数的命名有意发生变化；
 `app.get`、`router.get` 和持久客户端的 `send` 不变。
@@ -74,7 +74,7 @@ task<packet> async_exchange(endpoint, std::string request, std::size_t capacity 
 超时无法撤回已发送的数据或对端已执行的操作。库不会自动重试请求。
 
 `async_` 版本沿用原有异步约定，**不会附加此总超时**。它们继承当前任务的取消与 deadline；
-用 [with_options / with_deadline](structured-concurrency.zh-CN.md) 设置局部边界。socket 成员函数仍然是异步的，不要求名字带 `async_`。
+用 [with_options / with_deadline](runtime/structured-concurrency.zh.md) 设置局部边界。socket 成员函数仍然是异步的，不要求名字带 `async_`。
 
 ## HTTP 与验证过的 HTTPS
 
@@ -90,7 +90,7 @@ auto reply = pace::http::get(trust, "https://localhost:8443/health");
 
 自定义信任的 POST 可设置 `request.method`、`request.body` 和 Content-Type header，再调用
 `fetch(trust, url, request)`。库负责分帧头，URL 助手生成 Host 与 target。
-单次调用不自动重定向、代理、解压或复用连接；持久连接见 [HTTP 配方](http-recipes.zh-CN.md)。
+单次调用不自动重定向、代理、解压或复用连接；持久连接见 [HTTP 配方](../guides/http-recipes.zh.md)。
 
 ## TCP 分帧
 
@@ -99,7 +99,7 @@ auto reply = pace::http::get(trust, "https://localhost:8443/health");
 
 读取回复后半关闭发送方向，并按已有的 100 ms / 64 KiB 界限排空；关闭也受总超时约束。
 需要持久连接、分隔符或长度前缀、其他关闭策略、复用缓冲区时，使用 `tcp::connect`、`pace::write`
-和 `pace::read_exact` 管理 stream。参见[协议调优](protocol-tuning.zh-CN.md)。
+和 `pace::read_exact` 管理 stream。参见[协议调优](../guides/protocol-tuning.zh.md)。
 
 ## UDP 来源过滤与容量
 
@@ -129,5 +129,5 @@ auto reply = pace::http::get(trust, "https://localhost:8443/health");
 注意新增的超时参数位置。
 
 HTTP/2、3 现在采用同样的命名：URL get/post/fetch 同步返回，async_ 前缀为异步；原 transport
-形式的 get/exchange 改成 async_get/async_exchange。见[统一客户端](http-clients.zh-CN.md)。
+形式的 get/exchange 改成 async_get/async_exchange。见[统一客户端](http/clients.zh.md)。
 TCP/QUIC connect 和 socket 成员方法名字不变。

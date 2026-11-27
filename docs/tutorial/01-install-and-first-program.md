@@ -57,10 +57,10 @@ xmake -y my_application
 xmake run my_application
 ```
 
-Keep the [quick start's server](00-quick-start.md) running in another terminal.
+Keep the [quick start's server](02-http-client.md) running in another terminal.
 Expect `200 ok` and client exit. `get` directly returns a response; no coroutine
-setup is needed. Continue with [HTTP](04-http.md), [TCP](03-tcp.md) or [UDP](07-udp.md).
-[Chapter 2](02-tasks-timers.md) introduces tasks when you need async composition.
+setup is needed. Continue with [HTTP](03-http-server.md), [TCP](05-tcp.md) or [UDP](06-udp.md).
+[Chapter 2](04-tasks-and-timers.md) introduces tasks when you need async composition.
 
 If a header cannot be found, check the `includes` path and dependency. If a
 protocol target is missing, enable its option before building. A connection error
@@ -110,9 +110,9 @@ Change your application's `add_deps` and reconfigure before building. HTTP/3 ena
 QUIC, which embeds its own TLS and currently requires POSIX. Enabling optional
 modules can download dependencies. Do not use the public test certificates in deployment.
 
-[Full build configuration](../reference/build-configuration.md) covers all flags,
+[Full build configuration](../reference/build-options.md) covers all flags,
 C++ standard selection, sanitizers, profiling, vendoring and isolated builds.
-Next: [tasks and timers](02-tasks-timers.md).
+Next: [tasks and timers](04-tasks-and-timers.md).
 
 ## C++ named module (`import pace`)
 

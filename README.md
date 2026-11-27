@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/project-card.svg" alt="PACE — C++20 coroutine networking. Your threads. Your pace." width="100%">
+  <img src="docs/performance/assets/project-card.svg" alt="PACE — C++20 coroutine networking. Your threads. Your pace." width="100%">
 </p>
 
 <p align="center">
@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-70dfc3" alt="MIT license"></a>
 </p>
 
-<p align="center">English · <a href="README.zh-CN.md">简体中文</a> · <a href="docs/README.md">Documentation</a> · <a href="docs/reference/README.md">API</a></p>
+<p align="center">English · <a href="README.zh.md">简体中文</a> · <a href="docs/README.md">Documentation</a> · <a href="docs/reference/README.md">API</a></p>
 
 **C++20 coroutine networking, from sockets to HTTP/3.** PACE (Parallel Async Coroutine Engine) runs on one thread, a fixed worker pool, or threads your application owns.
 
@@ -16,23 +16,23 @@
 - **Build only what you use.** A core without third-party runtime dependencies, with optional protocol modules above it.
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
+  <a href="docs/performance/README.md"><img src="docs/performance/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
 </p>
 
-<p align="center"><a href="docs/performance.md">Full benchmark results, methodology &amp; raw data →</a></p>
+<p align="center"><a href="docs/performance/README.md">Full benchmark results, methodology &amp; raw data →</a></p>
 
 ## Four layers. Your stack.
 
 | Layer | Modules | xmake targets |
 |:--|:--|:--|
-| **3 · Applications** | [HTTP/1.1](docs/reference/http.md) · [HTTP/2](docs/reference/http2.md) · [HTTP/3](docs/reference/http3.md) · [WebSocket](docs/reference/websocket.md) | `pace_http1` · `pace_http2` · `pace_http3` · `pace_websocket` |
-| **2 · Extensions** | [TLS](docs/reference/tls.md) · [DNS](docs/reference/dns.md) · [QUIC](docs/reference/quic.md) | `pace_tls` · `pace_dns` · `pace_quic` |
-| **1 · Networking** | [TCP](docs/reference/tcp.md) · [UDP](docs/reference/udp.md) · Socket API | `pace_net` |
+| **3 · Applications** | [HTTP/1.1](docs/reference/http1/README.md) · [HTTP/2](docs/reference/http2/README.md) · [HTTP/3](docs/reference/http3/README.md) · [WebSocket](docs/reference/websocket/README.md) | `pace_http1` · `pace_http2` · `pace_http3` · `pace_websocket` |
+| **2 · Extensions** | [TLS](docs/reference/tls/README.md) · [DNS](docs/reference/dns/README.md) · [QUIC](docs/reference/quic/README.md) | `pace_tls` · `pace_dns` · `pace_quic` |
+| **1 · Networking** | [TCP](docs/reference/net/tcp.md) · [UDP](docs/reference/net/udp.md) · Socket API | `pace_net` |
 | **0 · Runtime** | Event loop · Native polling · Tasks · Timers · Workers | `pace_runtime` |
 
-Link individual modules, each with its own header such as `<pace/tls.hpp>`, or `pace` and `<pace/pace.hpp>` for the enabled stack. HTTP/1.1 and WebSocket are enabled by default; TLS, DNS, QUIC, HTTP/2 and HTTP/3 are opt-in. QUIC and HTTP/3 require POSIX; see the [platform matrix](docs/reference/platform.md).
+Link individual modules, each with its own header such as `<pace/tls.hpp>`, or `pace` and `<pace/pace.hpp>` for the enabled stack. HTTP/1.1 and WebSocket are enabled by default; TLS, DNS, QUIC, HTTP/2 and HTTP/3 are opt-in. QUIC and HTTP/3 require POSIX; see the [platform matrix](docs/reference/platform-support.md).
 
-[Architecture →](docs/architecture.md) · [Build options & integration →](docs/tutorial/01-build.md)
+[Architecture →](docs/explanation/architecture.md) · [Build options & integration →](docs/tutorial/01-install-and-first-program.md)
 
 ## A direct HTTP client
 
@@ -43,10 +43,10 @@ auto reply = pace::http::get("http://127.0.0.1:8080/health");
 One call returns an owned response; no `run` is needed. It blocks this thread,
 with a default 30-second deadline. In a coroutine use
 `co_await pace::http::async_get(url)`. HTTP/2 and HTTP/3 use the same URL names. TCP and UDP offer `exchange` / `async_exchange`.
-Use [structured task groups](docs/tutorial/12-structured-concurrency.md) to join
+Use [structured task groups](docs/tutorial/07-structured-concurrency.md) to join
 concurrent work and share one cancellation token and deadline.
 
-[Write your first client →](docs/tutorial/00-quick-start.md) ·
+[Write your first client →](docs/tutorial/02-http-client.md) ·
 [Signatures and migration from 0.3.1 →](docs/reference/direct-clients.md)
 
 These client APIs require PACE 0.4.0 or newer.
@@ -63,9 +63,9 @@ int main() {
 }
 ```
 
-Link with `add_deps("pace_http1")`. [Write the client and server step by step →](docs/tutorial/00-quick-start.md)
+Link with `add_deps("pace_http1")`. [Write the client and server step by step →](docs/tutorial/02-http-client.md)
 
-Continue step by step: [TCP](docs/tutorial/03-tcp.md) · [UDP](docs/tutorial/07-udp.md) · [DNS](docs/tutorial/08-dns-tls.md) · [QUIC](docs/tutorial/11-quic-http3.md) · [HTTP/3](docs/tutorial/11-quic-http3.md) · [WebSocket](docs/tutorial/09-websocket.md)
+Continue step by step: [TCP](docs/tutorial/05-tcp.md) · [UDP](docs/tutorial/06-udp.md) · [DNS](docs/tutorial/10-tls-and-dns.md) · [QUIC](docs/tutorial/13-quic-and-http3.md) · [HTTP/3](docs/tutorial/13-quic-and-http3.md) · [WebSocket](docs/tutorial/11-websocket.md)
 
 ## Files and reverse proxies
 
@@ -77,8 +77,8 @@ app.run_workers(4, {"0.0.0.0", 8080});
 
 Optional bounded caches, per-worker connection pools and round-robin or
 least-connections balancing. Available since PACE 0.5.0.
-[Walk through a gateway →](docs/tutorial/13-gateway.md) ·
-[nginx comparison →](docs/performance.md#http-gateways--pace-and-nginx) · [I/O backends →](docs/reference/io-backends.md)
+[Walk through a gateway →](docs/tutorial/14-gateway.md) ·
+[nginx comparison →](docs/performance/README.md#http-gateways--pace-and-nginx) · [I/O backends →](docs/reference/runtime/io-backends.md)
 
 ## Get started
 
@@ -102,11 +102,11 @@ xmake f -m release --tls=y --dns=y --quic=y --http2=y --http3=y -y
 xmake -y
 ```
 
-For a sockets-only build, disable the default application protocols with `--http1=n --websocket=n`. See the [build guide](docs/tutorial/01-build.md) for dependencies and per-module targets.
+For a sockets-only build, disable the default application protocols with `--http1=n --websocket=n`. See the [build guide](docs/tutorial/01-install-and-first-program.md) for dependencies and per-module targets.
 
 </details>
 
-Optional **C++20 named module** support is available with `--modules=y` and `add_deps("pace_module")`: use `import pace;`. See the [build guide](docs/tutorial/01-build.md#c-named-module-import-pace) for validated toolchains and setup.
+Optional **C++20 named module** support is available with `--modules=y` and `add_deps("pace_module")`: use `import pace;`. See the [build guide](docs/tutorial/01-install-and-first-program.md#c-named-module-import-pace) for validated toolchains and setup.
 
 ## Explore
 
@@ -114,12 +114,12 @@ Optional **C++20 named module** support is available with `--modules=y` and `add
 |:--|:--|
 | [Tutorials](docs/tutorial/README.md) | Tasks, protocols, workers and graceful shutdown |
 | [API reference](docs/reference/README.md) | Signatures, ownership, errors and protocol limits |
-| [Execution models](docs/tutorial/05-execution.md) | Calling thread, fixed workers and application-owned threads |
-| [Platform support](docs/reference/platform.md) | Linux, macOS, FreeBSD and Windows backends |
-| [Performance](docs/performance.md) | Local Linux measurements, tradeoffs and reproduction |
+| [Execution models](docs/tutorial/08-workers-and-threads.md) | Calling thread, fixed workers and application-owned threads |
+| [Platform support](docs/reference/platform-support.md) | Linux, macOS, FreeBSD and Windows backends |
+| [Performance](docs/performance/README.md) | Local Linux measurements, tradeoffs and reproduction |
 
 PACE is under active development; APIs and protocol coverage are evolving. See the [reference](docs/reference/README.md) for current limits.
 
 [MIT](LICENSE) · © 2026 Tab Nahida
 
-QUIC uses ngtcp2 by default. Select the native OpenSSL backend with `--quic_backend=openssl`. Both expose the same QUIC/HTTP3 API. See the [QUIC reference](docs/reference/quic.md).
+QUIC uses ngtcp2 by default. Select the native OpenSSL backend with `--quic_backend=openssl`. Both expose the same QUIC/HTTP3 API. See the [QUIC reference](docs/reference/quic/README.md).

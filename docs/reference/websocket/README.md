@@ -1,8 +1,8 @@
 # WebSocket clients and servers
 
-Short forms and owning helpers: [component conveniences](component-conveniences.md).
+Short forms and owning helpers: [component conveniences](../component-conveniences.md).
 
-[简体中文](websocket.zh-CN.md) · [TLS](tls.md) · [Runnable example](../../examples/tutorial_websocket.cpp)
+[简体中文](README.zh.md) · [TLS](../tls/README.md) · [Runnable example](../../../examples/tutorial_websocket.cpp)
 
 `<pace/websocket.hpp>` provides RFC 6455 WebSocket streams over TCP and, with
 `--tls=y`, over verified TLS. The plain WebSocket implementation has no OpenSSL
@@ -91,7 +91,7 @@ co_await socket.handshake("chat.example.com", "/chat");
 The address is reserved for documentation; substitute your resolved server IP.
 TLS verifies both the certificate chain and hostname. The server equivalent
 wraps an accepted TCP stream in `tls::stream`, awaits `handshake()`, then moves it
-into `secure_stream` with `role::server` and calls `accept()`. See [TLS](tls.md)
+into `secure_stream` with `role::server` and calls `accept()`. See [TLS](../tls/README.md)
 for certificate loading and the test-fixture example. ALPN must be empty or
 `http/1.1`; negotiating `h2` is rejected because RFC 8441 Extended CONNECT is
 not implemented. WebSocket does not add a URL parser or DNS resolver.

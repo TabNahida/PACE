@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/project-card.svg" alt="PACE — C++20 协程网络库，由你掌控线程与执行节奏。" width="100%">
+  <img src="docs/performance/assets/project-card.svg" alt="PACE — C++20 协程网络库，由你掌控线程与执行节奏。" width="100%">
 </p>
 
 <p align="center">
@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-70dfc3" alt="MIT 许可证"></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · 简体中文 · <a href="docs/README.zh-CN.md">文档</a> · <a href="docs/reference/README.zh-CN.md">API</a></p>
+<p align="center"><a href="README.md">English</a> · 简体中文 · <a href="docs/README.zh.md">文档</a> · <a href="docs/reference/README.zh.md">API</a></p>
 
 **从 Socket 到 HTTP/3 的 C++20 协程网络库。** PACE（Parallel Async Coroutine Engine）支持单线程、固定工作线程池，也可以运行在应用自己管理的线程上。
 
@@ -16,26 +16,26 @@
 - **只构建需要的模块。** 核心没有第三方运行时依赖，协议模块按需启用。
 
 <p align="center">
-  <a href="docs/performance.md"><img src="docs/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
+  <a href="docs/performance/README.md"><img src="docs/performance/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
 </p>
 
-<p align="center"><a href="docs/performance.md">完整性能数据、测试方法与原始记录 →</a></p>
+<p align="center"><a href="docs/performance/README.md">完整性能数据、测试方法与原始记录 →</a></p>
 
 ## 四层架构，按需组合
 
 | 层级 | 模块 | xmake 目标 |
 |:--|:--|:--|
-| **3 · 应用协议** | [HTTP/1.1](docs/reference/http.md) · [HTTP/2](docs/reference/http2.md) · [HTTP/3](docs/reference/http3.md) · [WebSocket](docs/reference/websocket.zh-CN.md) | `pace_http1` · `pace_http2` · `pace_http3` · `pace_websocket` |
-| **2 · 基础协议扩展** | [TLS](docs/reference/tls.zh-CN.md) · [DNS](docs/reference/dns.md) · [QUIC](docs/reference/quic.md) | `pace_tls` · `pace_dns` · `pace_quic` |
-| **1 · 网络核心** | [TCP](docs/reference/tcp.md) · [UDP](docs/reference/udp.md) · Socket API | `pace_net` |
+| **3 · 应用协议** | [HTTP/1.1](docs/reference/http1/README.md) · [HTTP/2](docs/reference/http2/README.md) · [HTTP/3](docs/reference/http3/README.md) · [WebSocket](docs/reference/websocket/README.zh.md) | `pace_http1` · `pace_http2` · `pace_http3` · `pace_websocket` |
+| **2 · 基础协议扩展** | [TLS](docs/reference/tls/README.zh.md) · [DNS](docs/reference/dns/README.md) · [QUIC](docs/reference/quic/README.md) | `pace_tls` · `pace_dns` · `pace_quic` |
+| **1 · 网络核心** | [TCP](docs/reference/net/tcp.md) · [UDP](docs/reference/net/udp.md) · Socket API | `pace_net` |
 | **0 · 运行时** | 事件循环 · 原生轮询 · 任务 · 定时器 · 工作线程 | `pace_runtime` |
 
-可以只链接单个模块（各有自己的头文件，如 `<pace/tls.hpp>`），或通过 `pace` 与 `<pace/pace.hpp>` 使用已启用的完整协议栈。HTTP/1.1 与 WebSocket 默认启用；TLS、DNS、QUIC、HTTP/2 和 HTTP/3 按需开启。QUIC 与 HTTP/3 要求 POSIX，Windows 暂不支持，详见[平台矩阵](docs/reference/platform.md)。
+可以只链接单个模块（各有自己的头文件，如 `<pace/tls.hpp>`），或通过 `pace` 与 `<pace/pace.hpp>` 使用已启用的完整协议栈。HTTP/1.1 与 WebSocket 默认启用；TLS、DNS、QUIC、HTTP/2 和 HTTP/3 按需开启。QUIC 与 HTTP/3 要求 POSIX，Windows 暂不支持，详见[平台矩阵](docs/reference/platform-support.md)。
 
-[架构设计 →](docs/architecture.md) · [构建选项与项目集成 →](docs/tutorial/01-build.md)
+[架构设计 →](docs/explanation/architecture.md) · [构建选项与项目集成 →](docs/tutorial/01-install-and-first-program.md)
 
-[结构化任务组](docs/tutorial/12-structured-concurrency.zh-CN.md)让并发子任务自动汇合，
-共享局部取消与 deadline；HTTP/1、2、3 使用[统一 URL 接口](docs/reference/http-clients.zh-CN.md)。
+[结构化任务组](docs/tutorial/07-structured-concurrency.zh.md)让并发子任务自动汇合，
+共享局部取消与 deadline；HTTP/1、2、3 使用[统一 URL 接口](docs/reference/http/clients.zh.md)。
 
 ## 直接获取 HTTP 响应
 
@@ -46,8 +46,8 @@ auto reply = pace::http::get("http://127.0.0.1:8080/health");
 一次调用直接返回响应，不需要 `run`，阻塞当前线程，默认总超时 30 秒。
 协程里使用 `co_await pace::http::async_get(url)`。TCP、UDP 也提供 `exchange` / `async_exchange`。
 
-[从第一个客户端开始 →](docs/tutorial/00-quick-start.zh-CN.md) ·
-[接口与 0.3.1 迁移说明 →](docs/reference/direct-clients.zh-CN.md)
+[从第一个客户端开始 →](docs/tutorial/02-http-client.zh.md) ·
+[接口与 0.3.1 迁移说明 →](docs/reference/direct-clients.zh.md)
 
 这些客户端接口需要 PACE 0.4.0 或更新版本。
 
@@ -63,9 +63,9 @@ int main() {
 }
 ```
 
-使用 `add_deps("pace_http1")` 链接。[一步步写出这个 HTTP 服务 →](docs/tutorial/00-quick-start.zh-CN.md)
+使用 `add_deps("pace_http1")` 链接。[一步步写出这个 HTTP 服务 →](docs/tutorial/02-http-client.zh.md)
 
-继续学习：[TCP](docs/tutorial/03-tcp.zh-CN.md) · [UDP](docs/tutorial/07-udp.zh-CN.md) · [DNS](docs/tutorial/08-dns-tls.zh-CN.md) · [QUIC](docs/tutorial/11-quic-http3.zh-CN.md) · [HTTP/3](docs/tutorial/11-quic-http3.zh-CN.md) · [WebSocket](docs/tutorial/09-websocket.zh-CN.md)
+继续学习：[TCP](docs/tutorial/05-tcp.zh.md) · [UDP](docs/tutorial/06-udp.zh.md) · [DNS](docs/tutorial/10-tls-and-dns.zh.md) · [QUIC](docs/tutorial/13-quic-and-http3.zh.md) · [HTTP/3](docs/tutorial/13-quic-and-http3.zh.md) · [WebSocket](docs/tutorial/11-websocket.zh.md)
 
 ## 快速开始
 
@@ -89,7 +89,7 @@ xmake f -m release --tls=y --dns=y --quic=y --http2=y --http3=y -y
 xmake -y
 ```
 
-只需要 Socket 时，通过 `--http1=n --websocket=n` 关闭默认应用协议。依赖与各模块目标见[构建指南](docs/tutorial/01-build.md)。
+只需要 Socket 时，通过 `--http1=n --websocket=n` 关闭默认应用协议。依赖与各模块目标见[构建指南](docs/tutorial/01-install-and-first-program.md)。
 
 </details>
 
@@ -102,23 +102,23 @@ app.run_workers(4, {"0.0.0.0", 8080});
 ```
 
 按需配置有界缓存、每 worker 连接池、轮询或最少连接数分配。适用于 PACE 0.5.0 或更新版本。
-[一步步搭建网关 →](docs/tutorial/13-gateway.zh-CN.md) ·
-[nginx 性能对照 →](docs/performance.md#http-gateways--pace-and-nginx) · [I/O 后端 →](docs/reference/io-backends.md)
+[一步步搭建网关 →](docs/tutorial/14-gateway.zh.md) ·
+[nginx 性能对照 →](docs/performance/README.md#http-gateways--pace-and-nginx) · [I/O 后端 →](docs/reference/runtime/io-backends.md)
 
 ## 继续探索
 
 | | |
 |:--|:--|
-| [教程](docs/tutorial/README.zh-CN.md) | 任务、协议、工作线程与优雅退出 |
-| [API 参考](docs/reference/README.zh-CN.md) | 接口、所有权、错误处理与协议限制 |
-| [执行模型](docs/tutorial/05-execution.md) | 当前线程、固定工作线程与应用自有线程 |
-| [平台支持](docs/reference/platform.md) | Linux、macOS、FreeBSD 与 Windows 后端 |
-| [性能数据](docs/performance.md) | 本地 Linux 测量、取舍与复现步骤 |
+| [教程](docs/tutorial/README.zh.md) | 任务、协议、工作线程与优雅退出 |
+| [API 参考](docs/reference/README.zh.md) | 接口、所有权、错误处理与协议限制 |
+| [执行模型](docs/tutorial/08-workers-and-threads.md) | 当前线程、固定工作线程与应用自有线程 |
+| [平台支持](docs/reference/platform-support.md) | Linux、macOS、FreeBSD 与 Windows 后端 |
+| [性能数据](docs/performance/README.md) | 本地 Linux 测量、取舍与复现步骤 |
 
-PACE 正在积极开发，API 与协议覆盖仍在演进。当前限制请参阅 [API 文档](docs/reference/README.zh-CN.md)。
+PACE 正在积极开发，API 与协议覆盖仍在演进。当前限制请参阅 [API 文档](docs/reference/README.zh.md)。
 
 [MIT](LICENSE) · © 2026 Tab Nahida
 
-可选的 **C++20 命名模块**支持：开启 `--modules=y`，依赖 `pace_module`，即可使用 `import pace;`。已验证工具链与使用方法见[构建指南](docs/tutorial/01-build.zh-CN.md)。
+可选的 **C++20 命名模块**支持：开启 `--modules=y`，依赖 `pace_module`，即可使用 `import pace;`。已验证工具链与使用方法见[构建指南](docs/tutorial/01-install-and-first-program.zh.md)。
 
-QUIC 默认使用 ngtcp2，可通过 `--quic_backend=openssl` 切换到 OpenSSL。两者共用 QUIC/HTTP3 API。参见 [QUIC 文档](docs/reference/quic.md)。
+QUIC 默认使用 ngtcp2，可通过 `--quic_backend=openssl` 切换到 OpenSSL。两者共用 QUIC/HTTP3 API。参见 [QUIC 文档](docs/reference/quic/README.md)。

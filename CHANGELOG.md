@@ -88,5 +88,5 @@ linkable runtime, networking, base extensions and application protocols.
 QUIC and HTTP/3 require POSIX and are unavailable on Windows. Transport endpoints
 currently use IPv4; DNS also resolves AAAA records. HTTP bodies are buffered.
 HTTP/3 does not expose server push, CONNECT, WebTransport or 0-RTT. The 0.x API is
-still evolving. See [platform support](docs/reference/platform.md), the protocol
-references and [complete performance results](docs/performance.md).
+still evolving. See [platform support](docs/reference/platform-support.md), the protocol
+references and [complete performance results](docs/performance/README.md).

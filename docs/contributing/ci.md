@@ -33,7 +33,7 @@ emulation.
 HTTP3 remain unsupported; Windows jobs check the explicit configuration error.
 MinGW is an additional compiler/backend check without optional third-party
 protocol dependencies, rather than a second full dependency matrix.
-Windows ARM64 uses a scoped [OpenSSL build correction](diagnostics/windows-arm64-openssl.md)
+Windows ARM64 uses a scoped [OpenSSL build correction](windows-arm64-openssl.md)
 validated by independent memory-BIO handshakes and the ordinary protocol tests.
 
 Linux retains all-protocol ASan/UBSan/leak checks, a dependency-free core build,

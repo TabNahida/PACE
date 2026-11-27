@@ -1,16 +1,16 @@
 # Gateway optimization · local Linux · 3 November 2026
 
-[Documentation](README.md) · [Gateway API and limits](reference/http-gateway.md) · [Earlier nginx comparison](gateway-performance.md) · [TCP/Asio/libuv results](performance.md)
+[Documentation](../../README.md) · [Gateway API and limits](../../reference/gateway/README.md) · [Earlier nginx comparison](../http-gateway.md) · [TCP/Asio/libuv results](../README.md)
 
 This is a same-session, rotating **before/after** comparison on local Linux / WSL2,
 not a comparison against numbers from another run. This earlier optimization
-report retains its frozen before/after evidence. The [0.5.0 full results](performance.md)
+report retains its frozen before/after evidence. The [0.5.0 full results](../README.md)
 contain the newer proxy work and the homepage PACE/Asio/libuv comparison.
 All four gateway scenarios and both worker counts are shown here.
 
-![Gateway optimization, all backends](assets/gateway-latest-all.svg)
+![Gateway optimization, all backends](../assets/gateway-latest-all.svg)
 
-[All 160 trials, latency percentiles, CPU, memory and source/binary fingerprints](../benchmarks/results/linux-gateway-2026-11-03/optimized.json).
+[All 160 trials, latency percentiles, CPU, memory and source/binary fingerprints](../../../benchmarks/results/linux-gateway-2026-11-03/optimized.json).
 The complete matrix validated **25.6 million measured responses** byte for byte.
 
 ## Results and limits
@@ -33,7 +33,7 @@ We retain this limitation rather than claiming universal scaling gains. Both PAC
 cached-proxy medians in the complete matrix still exceed nginx's corresponding
 medians. io_uring remains mixed and Linux's automatic backend remains epoll.
 
-[Longer cached-proxy confirmation, all 28 trials](../benchmarks/results/linux-gateway-2026-11-03/proxy-cache-confirmation.json).
+[Longer cached-proxy confirmation, all 28 trials](../../../benchmarks/results/linux-gateway-2026-11-03/proxy-cache-confirmation.json).
 Each trial measures 640,000 requests (20,000 per connection), rather than the main
 matrix's 160,000. No results from this longer run replace bars in the main chart.
 
@@ -112,8 +112,8 @@ shards; alternating keys miss the one-entry local memo; service-task ownership
 still uses shared reference counts; networking, allocation and the kernel have
 other shared state. A separate per-reactor service-ownership experiment added a
 lookup and did not provide a stable net improvement (single-worker median worsened),
-so it was **not shipped**. Its [raw results](../benchmarks/results/linux-gateway-2026-11-03/ownership-experiment.json)
-and [exact experimental patch](../benchmarks/results/linux-gateway-2026-11-03/ownership-experiment.patch)
+so it was **not shipped**. Its [raw results](../../../benchmarks/results/linux-gateway-2026-11-03/ownership-experiment.json)
+and [exact experimental patch](../../../benchmarks/results/linux-gateway-2026-11-03/ownership-experiment.patch)
 are retained to make that decision reviewable.
 
 Each reactor can pin one evicted snapshot per cache until its next cache lookup or
@@ -122,7 +122,7 @@ metadata. This is additional retained memory, not extra stored cache entries.
 Contexts retain cache internals until destruction, so services should be created
 once per mount, not once per request. The cache's configured budget is not an RSS cap. Bodies are still copied, and
 uncached file reads still run synchronously on the reactor. These tradeoffs are
-spelled out in the [reference](reference/http-gateway.md#reactor-local-cache-hits).
+spelled out in the [reference](../../reference/gateway/README.md#reactor-local-cache-hits).
 
 ## Isolated contention and hashing diagnostics
 
@@ -145,7 +145,7 @@ XXH64 6.379 million hashes/s (19.4×). The input changes each iteration to
 prevent loop-invariant hoisting. This isolates the dependent byte loop; the
 end-to-end static improvement is much smaller because open/read/HTTP/socket work remains.
 
-[All component trials, checksums and CPU time](../benchmarks/results/linux-gateway-2026-11-03/components-optimized.json).
+[All component trials, checksums and CPU time](../../../benchmarks/results/linux-gateway-2026-11-03/components-optimized.json).
 The cache result measures the combined removal of shared locks, reference traffic
 and metadata writes; it does not isolate a speedup attributable only to padding.
 Hardware `cache-misses` counters are unavailable here (`perf_event_open` returned
@@ -172,7 +172,7 @@ and 5000 measured requests per connection. It rotates four implementations for
 five repeats, with fresh processes/caches each time. Observed host one-minute load
 ranged from 1.48 to 5.03; this is a shared host, not an isolated capacity test.
 The earlier screening run experienced a load surge and remains linked as
-[diagnostic data](../benchmarks/results/linux-gateway-2026-11-03/optimization-screen-contended.json),
+[diagnostic data](../../../benchmarks/results/linux-gateway-2026-11-03/optimization-screen-contended.json),
 not substituted into the main table.
 
 The old binary is built from `94ed51dd6ca0b8407cf554bce72bcfe0fc37e3d7` and the optimized
@@ -210,5 +210,5 @@ configs are in each trial. The comparison measures these complete configured pat
 CPU is `/proc` process-tree accounting sampled around the measured phase. Summed
 VmHWM includes startup/warmup, may double-count shared nginx pages, and excludes
 page cache; it cannot establish allocator efficiency. See the
-[original methodology](gateway-performance.md#what-the-test-measures) for remaining
+[original methodology](../http-gateway.md#what-the-test-measures) for remaining
 limits and the archived TCP/Asio/libuv study for that separate workload.

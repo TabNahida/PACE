@@ -115,7 +115,7 @@ Passing `std::string` or a `tcp::stream` by value to a named coroutine can trans
 ownership into its frame. Passing `std::string_view`, `std::span`, `T&` or a pointer
 does not extend the referenced object's lifetime. A temporary capturing coroutine
 lambda can leave its coroutine referring to a destroyed closure. Prefer the
-named-function pattern in [tasks and timers](../tutorial/02-tasks-timers.md).
+named-function pattern in [tasks and timers](../../tutorial/04-tasks-and-timers.md).
 
 ## Cancellation inheritance
 

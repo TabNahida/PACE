@@ -1,8 +1,8 @@
 # TLS with OpenSSL
 
-Short forms and owning helpers: [component conveniences](component-conveniences.md).
+Short forms and owning helpers: [component conveniences](../component-conveniences.md).
 
-[简体中文](tls.zh-CN.md) · [WebSocket](websocket.md)
+[简体中文](README.zh.md) · [WebSocket](../websocket/README.md)
 
 Enable `--tls=y` and include `<pace/tls.hpp>`. The build exports `PACE_HAS_TLS`
 and links OpenSSL `ssl` and `crypto`; without that option this header does not
@@ -17,7 +17,7 @@ xmake test -v
 xmake run tutorial_tls
 ```
 
-The [complete example](../../examples/tutorial_tls.cpp) verifies a local TLS
+The [complete example](../../../examples/tutorial_tls.cpp) verifies a local TLS
 connection and exits. Its checked-in certificate and private key are public test
 fixtures, never deployment credentials. The test CA is loaded only into that
 client configuration, without modifying the operating system trust store.

@@ -1,6 +1,6 @@
 # 12. Start tasks together and finish them together
 
-[中文](12-structured-concurrency.zh-CN.md) · [Learning path](README.md) · [Reference](../reference/structured-concurrency.md)
+[中文](07-structured-concurrency.zh.md) · [Learning path](README.md) · [Reference](../reference/runtime/structured-concurrency.md)
 
 A direct `http::get(url)` is still the shortest way to get one response. Use a task
 group when several asynchronous operations must share a lifetime. This chapter
@@ -70,7 +70,7 @@ replace the group body with:
 
 Both requests own separate connections and inherit the group's cancellation and
 deadline. The same names work with `http2::async_get` or `http3::async_get` when
-those modules and compatible servers are enabled. See [unified HTTP clients](../reference/http-clients.md).
+those modules and compatible servers are enabled. See [unified HTTP clients](../reference/http/clients.md).
 
 ## 3. Cancel one operation without stopping the loop
 
@@ -118,4 +118,4 @@ borrowed task. Do not return sockets/views that borrow group-owned storage.
 
 The repository companion is `xmake run tutorial_structured`. Cleanup shielding,
 error precedence, custom awaiters and concurrency contracts belong in
-[the reference](../reference/structured-concurrency.md).
+[the reference](../reference/runtime/structured-concurrency.md).

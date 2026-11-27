@@ -119,7 +119,7 @@ def render(source, env, rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", type=Path, default=SOURCE)
-    parser.add_argument("--output", type=Path, default=ROOT / "docs/assets/readme-performance.svg")
+    parser.add_argument("--output", type=Path, default=ROOT / "docs/performance/assets/readme-performance.svg")
     args = parser.parse_args()
     source, output = args.evidence.resolve(), args.output.resolve()
     if output == source or output.suffix.lower() != ".svg":

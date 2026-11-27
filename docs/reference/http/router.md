@@ -1,6 +1,6 @@
 # HTTP handler adapters and exact routing
 
-[0.3.0 convenience additions](convenience.md)
+[0.3.0 convenience additions](../convenience.md)
 
 Header: `<pace/http.hpp>`; also included by `<pace/http1.hpp>`. The header uses
 shared HTTP messages and works with HTTP/1, HTTP/2 and HTTP/3 handlers. It adds no
@@ -61,4 +61,4 @@ immediate bind errors, an ephemeral port's actual endpoint, TLS, admission,
 streaming responses or separately closing acceptance. All original overloads
 remain available.
 
-[Build a service step by step](../tutorial/04-http.md) · [中文教程](../tutorial/04-http.zh-CN.md)
+[Build a service step by step](../../tutorial/03-http-server.md) · [中文教程](../../tutorial/03-http-server.zh.md)

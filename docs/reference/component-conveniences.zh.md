@@ -1,9 +1,9 @@
 # 组件便捷接口（0.3.1）
 
-[English / 完整签名](component-conveniences.md) · [教程](../tutorial/README.zh-CN.md) · [调优](protocol-tuning.zh-CN.md)
+[English / 完整签名](component-conveniences.md) · [教程](../tutorial/README.zh.md) · [调优](../guides/protocol-tuning.zh.md)
 
 以下新增接口需要 **PACE v0.3.1 或更新版本**。
-可按[快速入门](../tutorial/00-quick-start.zh-CN.md)安装包，或用[第一章](../tutorial/01-build.zh-CN.md)的源码依赖方式。原有底层接口仍然可用，
+可按[快速入门](../tutorial/02-http-client.zh.md)安装包，或用[第一章](../tutorial/01-install-and-first-program.zh.md)的源码依赖方式。原有底层接口仍然可用，
 可选协议继续使用各自的构建开关与模块依赖。
 
 ## Context 与生命周期
@@ -36,7 +36,7 @@ co_await pace::read_exact(stream, std::span<char>(buffer));
 
 `tcp::listen([io,] endpoint, options)` 立即绑定并返回 listener；已有的
 `tcp::connect([io,] endpoint)` 返回已连接 stream。省略 io 使用当前 context。
-endpoint 是数字 IPv4/IPv6，不隐含 DNS。原有成员 read_exact 保留。[TCP 契约](tcp.md)。
+endpoint 是数字 IPv4/IPv6，不隐含 DNS。原有成员 read_exact 保留。[TCP 契约](net/tcp.md)。
 
 ## UDP
 
@@ -56,7 +56,7 @@ open 返回未绑定 socket，首次发送选择地址族；bind 立即绑定，
 默认容量不承诺网络能承载 64 KiB 数据报。零长度数据报有效。
 
 同一个 socket 可同时一发一收，不可同时两发或两收。关闭取消等待，但要等操作退栈后
-再销毁对象。send_to/receive_from 仍借用调用方缓冲区，适合复用。[UDP 契约](udp.md)。
+再销毁对象。send_to/receive_from 仍借用调用方缓冲区，适合复用。[UDP 契约](net/udp.md)。
 
 ## DNS
 
@@ -65,7 +65,7 @@ open 返回未绑定 socket，首次发送选择地址族；bind 立即绑定，
 返回与 resolver::resolve 相同的 result。默认系统 nameserver、5 秒完整查询期限、两次尝试。
 数字地址不需要 nameserver；context.stop 会取消等待，DNS 原始错误类别保留。
 需要单独 cancel() 句柄时使用显式 resolver。它不选择端口、不连接、不自动尝试多个地址。
-[DNS 契约](dns.md)。
+[DNS 契约](dns/README.md)。
 
 ## TLS
 
@@ -79,7 +79,7 @@ open 返回未绑定 socket，首次发送选择地址族；bind 立即绑定，
 返回的 stream 持有共享配置状态。显式传入的 config 决定客户端验证策略和 ALPN，
 包括仅用于测试和互操作的 `insecure_skip_verify()`。请在首次使用前完成配置。
 证书身份与数字 endpoint 分开传入，DNS 名还会设置 SNI。
-同一个 TLS stream 最多一个异步操作，读写也不能并行。[客户端验证模式](tls.zh-CN.md#客户端验证模式)。
+同一个 TLS stream 最多一个异步操作，读写也不能并行。[客户端验证模式](tls/README.zh.md#客户端验证模式)。
 
 ## WebSocket
 
@@ -94,7 +94,7 @@ TLS 传输还需要 --tls=y。
 authority 是 Host，可带端口；不是 URL，不解析 ws://，不隐含 DNS。
 省略 authorize 意味着没有业务授权检查。需要完整升级元数据时，使用返回 upgrade_request
 的成员 accept；便捷函数只返回 socket。一个 stream 只允许一个活动异步操作，包括收发
-及关闭。[WebSocket 契约](websocket.md)。
+及关闭。[WebSocket 契约](websocket/README.md)。
 
 ## QUIC
 
@@ -104,7 +104,7 @@ authority 是 Host，可带端口；不是 URL，不解析 ws://，不隐含 DNS
 `quic::listen([io,] endpoint, server_config)` 同步绑定，返回持有共享配置的 listener。
 timeout 只覆盖建立连接，不是 stream 或请求期限；非正值允许一次立即握手尝试。
 连接必须保持打开直到其 stream 操作结束，服务端 listener 也要保持到连接结束。
-[QUIC 契约](quic.md)。
+[QUIC 契约](quic/README.md)。
 
 ## HTTP/2 与 HTTP/3
 
@@ -116,4 +116,4 @@ HTTP/2 接受 prior-knowledge TCP 或 ALPN 为 h2 的已验证 TLS；HTTP/3 接�
 的已验证 QUIC。这里是 authority/路径接口，没有 URL 解析、DNS 或协议回退。
 正文完整缓冲，原有限额不变。自定义头、其他方法及多个并发请求使用 exchange。
 GET 完成后调用方不能再使用已经转移的连接。
-[HTTP/2](http2.md) · [HTTP/3](http3.md)。
+[HTTP/2](http2/README.md) · [HTTP/3](http3/README.md)。

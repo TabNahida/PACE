@@ -1,6 +1,6 @@
 # 7. 一次调用完成 UDP 收发
 
-[English](07-udp.md) · [学习路线](README.zh-CN.md) · [下一章：DNS/TLS](08-dns-tls.zh-CN.md)
+[English](06-udp.md) · [学习路线](README.zh.md) · [下一章：DNS/TLS](10-tls-and-dns.zh.md)
 
 使用 PACE 0.4.0 或更新版本和第一章的源码构建方式，链接 `pace_net`。
 UDP 保留数据报边界，但不保证送达或顺序。
@@ -96,8 +96,8 @@ auto packet = co_await pace::udp::async_exchange({"127.0.0.1", 9091}, "hello");
 异步版本不附加总超时。要复用 socket，或接受其他地址的回复，再像服务端一样在协程里使用
 `udp::open()` / `udp::bind()`、`socket.send` 和 `socket.receive`。
 
-[来源过滤、超时与错误](../reference/direct-clients.zh-CN.md) ·
-[容量与所有权](../reference/component-conveniences.zh-CN.md) ·
-[缓冲区复用与调优](../reference/protocol-tuning.zh-CN.md)
+[来源过滤、超时与错误](../reference/direct-clients.zh.md) ·
+[容量与所有权](../reference/component-conveniences.zh.md) ·
+[缓冲区复用与调优](../guides/protocol-tuning.zh.md)
 
 仓库内的 `xmake run tutorial_udp` 是一个独立的本地异步练习。

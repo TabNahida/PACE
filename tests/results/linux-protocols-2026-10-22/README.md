@@ -28,7 +28,7 @@ includes runtime/TCP sanitizer checks and exact baseline/final rebuilds.
 Third-party static dependencies themselves were not rebuilt with sanitizers.
 
 Reproduce the three build configurations with the commands in
-[the build guide](../../../docs/tutorial/01-build.md). For HTTP3-only:
+[the build guide](../../../docs/tutorial/01-install-and-first-program.md). For HTTP3-only:
 
 ```sh
 xmake f -c -m release --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=y -y

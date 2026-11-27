@@ -1,6 +1,6 @@
 # 9. 连接并交换 WebSocket 消息
 
-[English](09-websocket.md) · [上一章：DNS/TLS](08-dns-tls.zh-CN.md) · [下一章：HTTP/2](10-http2.zh-CN.md)
+[English](11-websocket.md) · [上一章：DNS/TLS](10-tls-and-dns.zh.md) · [下一章：HTTP/2](12-http2.zh.md)
 
 使用当前 checkout，启用 `--websocket=y`，依赖 `pace_websocket`。
 沿用第三章的两个 target 写法，文件与目标分别命名为 `ws_server`、`ws_client`。
@@ -82,5 +82,5 @@ int main() {
 
 增加加密时，用第八章的 `tls::connect` 返回的已验证连接调用 `websocket::upgrade`；
 服务端 `accept` 同样接受 TLS stream。
-[接口签名](../reference/component-conveniences.zh-CN.md#websocket) ·
-[分片、限额与关闭预算](../reference/protocol-tuning.zh-CN.md#websocket)
+[接口签名](../reference/component-conveniences.zh.md#websocket) ·
+[分片、限额与关闭预算](../guides/protocol-tuning.zh.md#websocket)

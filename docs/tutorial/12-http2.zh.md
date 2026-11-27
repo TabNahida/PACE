@@ -1,6 +1,6 @@
 # 10. 发出第一个 HTTP/2 请求
 
-[English](10-http2.md) · [上一章：WebSocket](09-websocket.zh-CN.md) · [下一章：QUIC/HTTP3](11-quic-http3.zh-CN.md)
+[English](12-http2.md) · [上一章：WebSocket](11-websocket.zh.md) · [下一章：QUIC/HTTP3](13-quic-and-http3.zh.md)
 
 在第一章的当前源码工程启用 `--http2=y`，依赖 `pace_http2`。
 沿用第三章的 target 写法，创建 `h2_server`、`h2_client`。
@@ -55,7 +55,7 @@ int main() {
 
 `http2::get(url)` 直接返回响应，默认预算 30 秒。协程内写
 `co_await http2::async_get(url)`。域名需要 dns=y，HTTPS 需要 tls=y。
-详见[统一客户端](../reference/http-clients.zh-CN.md)。
+详见[统一客户端](../reference/http/clients.zh.md)。
 
 ## 第三步：核对，再增加请求
 
@@ -64,7 +64,7 @@ int main() {
 仓库的 `xmake run tutorial_http2` 会同时检查单次 GET 和批量请求。
 
 要在一条连接上并发多个请求，再使用
-[`async_exchange` 与 handler 限额](../reference/protocol-tuning.zh-CN.md#http2-与-http3)。
+[`async_exchange` 与 handler 限额](../guides/protocol-tuning.zh.md#http2-与-http3)。
 循环发单次 GET 会建立独立批次，无法获得同连接多路复用的好处。
 增加 TLS 时，按第八章在两端配置 ALPN `h2`，把验证握手后的 TLS stream 交给 transport 形式的 async_get。
-服务端 TLS 重载与流控见 [HTTP/2 参考](../reference/http2.md)。
+服务端 TLS 重载与流控见 [HTTP/2 参考](../reference/http2/README.md)。

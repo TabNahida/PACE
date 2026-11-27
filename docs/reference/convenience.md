@@ -1,6 +1,6 @@
 # Application conveniences
 
-[Quick start](../tutorial/00-quick-start.md) · [中文入门](../tutorial/00-quick-start.zh-CN.md)
+[Quick start](../tutorial/02-http-client.md) · [中文入门](../tutorial/02-http-client.zh.md)
 
 These helpers use the existing reactor, without extra worker threads. HTTP free
 functions now use `async_` names; [direct clients and migration](direct-clients.md)
@@ -12,7 +12,7 @@ describe their blocking counterparts and the source change from 0.3.1.
 no arguments. If both signatures are invocable, the context form wins. Factories
 are owned until shutdown. A task passed directly must already own its data: do
 not immediately invoke a temporary capturing coroutine lambda and pass its task.
-Pass the lambda itself. See [run](run.md) for result, cancellation and lifetime rules.
+Pass the lambda itself. See [run](runtime/run.md) for result, cancellation and lifetime rules.
 
 Header `<pace/runtime.hpp>` exports `this_context()`, `sleep_for(duration)`
 and `yield()`. They resolve the running context when called, throw `logic_error`
@@ -54,7 +54,7 @@ remain directly editable.
 
 `make_handler`, `router` and `app` accept either a callable taking `request` or a
 callable with no parameters, returning `response` or `task<response>`. The request
-form takes precedence if both work. The existing [owned callable contract](http-router.md)
+form takes precedence if both work. The existing [owned callable contract](http/router.md)
 applies to both, including move-only captures. Mutable captures shared across
 workers still require synchronization. Synchronous callbacks run on the reactor.
 
@@ -123,4 +123,4 @@ TLS context to `async_get(io, tls_configuration, url, ...)` or
 verification policy and ALPN settings. This includes an explicit
 `insecure_skip_verify()` for testing and interoperability. The context must
 outlive the lazy task, and the URL must use HTTPS. The HTTP/1.1 client still
-checks the negotiated ALPN. [TLS verification modes](tls.md#client-verification-modes).
+checks the negotiated ALPN. [TLS verification modes](tls/README.md#client-verification-modes).

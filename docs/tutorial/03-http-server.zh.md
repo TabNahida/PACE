@@ -1,6 +1,6 @@
 # 4. 先获取 HTTP 响应，再编写服务
 
-[English](04-http.md) · [学习路线](README.zh-CN.md)
+[English](03-http-server.md) · [学习路线](README.zh.md)
 
 使用第一章的当前源码构建，链接 `pace_http1` 并配置 `--http1=y`。
 本章的直接调用和 `async_` 命名需要 PACE 0.4.0 或更新版本。
@@ -42,7 +42,7 @@ auto reply = pace::http::fetch("http://127.0.0.1:8080/health", std::move(request
 ```
 
 数字 HTTP 地址只需默认 HTTP/1 模块；域名需要 `--dns=y`，HTTPS 需要 `--tls=y`。
-总超时、自定义 CA 和旧代码迁移见[直接客户端参考](../reference/direct-clients.zh-CN.md)。
+总超时、自定义 CA 和旧代码迁移见[直接客户端参考](../reference/direct-clients.zh.md)。
 
 ## 准备本地服务
 
@@ -132,9 +132,9 @@ app.get("/proxy", []() -> pace::task<http::response> {
 
 ## 启用 HTTPS
 
-先按[第八章](08-dns-tls.zh-CN.md)验证本地 TLS 对端，再参考
-[HTTPS 配置](../reference/http-recipes.zh-CN.md#启用-https)加入证书。
+先按[第八章](10-tls-and-dns.zh.md)验证本地 TLS 对端，再参考
+[HTTPS 配置](../guides/http-recipes.zh.md#启用-https)加入证书。
 连接复用、期限、请求准入、流式响应及关闭策略统一放在
-[HTTP 进阶参考](../reference/http-recipes.zh-CN.md)，按应用需要逐项引入。
+[HTTP 进阶参考](../guides/http-recipes.zh.md)，按应用需要逐项引入。
 
-下一章：[执行方式](05-execution.zh-CN.md)。
+下一章：[执行方式](08-workers-and-threads.zh.md)。

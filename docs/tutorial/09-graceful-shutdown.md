@@ -1,6 +1,6 @@
 # 6. Orderly shutdown
 
-[中文](06-shutdown.zh-CN.md) · [Previous: execution](05-execution.md) · [Next: UDP](07-udp.md)
+[中文](09-graceful-shutdown.zh.md) · [Previous: execution](08-workers-and-threads.md) · [Next: UDP](06-udp.md)
 
 Before making a long-lived server, build a small cancellation experiment. Replace
 `main.cpp` with this complete program, link `pace_runtime`, then build and run it:
@@ -49,7 +49,7 @@ cleanup ran before `run()` returned.
 
 
 For one operation or a related set of tasks, prefer [local cancellation and
-structured groups](12-structured-concurrency.md). `io.stop()` is whole-context
+structured groups](07-structured-concurrency.md). `io.stop()` is whole-context
 shutdown. Closing a raw listener only cancels accept; the HTTP `serve` helpers
 add a structured scope and cancel/join their accepted connections before returning.
 
@@ -142,5 +142,5 @@ still must join that outer thread before destroying the runtime. Standalone
 Join any application blocking workers too, so they cannot submit results into a
 destroyed context.
 
-Reference: [`io_context`](../reference/io-context.md), [`runtime`](../reference/runtime.md),
-[`tcp::stream::close_gracefully`](../reference/tcp.md#bounded-graceful-close).
+Reference: [`io_context`](../reference/runtime/io-context.md), [`runtime`](../reference/runtime/runtime.md),
+[`tcp::stream::close_gracefully`](../reference/net/tcp.md#bounded-graceful-close).

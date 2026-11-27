@@ -1,8 +1,8 @@
 # HTTP/3
 
-URL get/post/fetch and async forms: [unified client contract](http-clients.md).
+URL get/post/fetch and async forms: [unified client contract](../http/clients.md).
 
-Short forms and owning helpers: [component conveniences](component-conveniences.md).
+Short forms and owning helpers: [component conveniences](../component-conveniences.md).
 
 `<pace/http3.hpp>` is an optional application protocol module. It implements
 RFC 9114 framing and RFC 9204 QPACK through nghttp3 on top of PACE QUIC; it does
@@ -14,7 +14,7 @@ with QUIC support, and nghttp3 (the local Linux validation uses 1.18.0). Both QU
 contexts must advertise ALPN `{"h3"}`; the application entry points reject an
 established connection that negotiated any other protocol. Clients verify the
 certificate chain and the expected server hostname during QUIC connection setup.
-The QUIC backend targets POSIX; see the [platform matrix](platform.md) for
+The QUIC backend targets POSIX; see the [platform matrix](../platform-support.md) for
 functional CI coverage.
 
 ```cpp
@@ -57,7 +57,7 @@ interleaving. Responses may finish out of order; batch results preserve request
 order. Connection exit discards queued requests, cancels active handlers locally,
 and joins them before returning. Their PACE waits inherit the token; custom
 awaiters must participate. Closing a listener cancels and joins accepted
-connections before `serve` returns. See [structured scopes](structured-concurrency.md).
+connections before `serve` returns. See [structured scopes](../runtime/structured-concurrency.md).
 
 Each connection binds its own control stream and QPACK encoder/decoder streams.
 SETTINGS, request and response HEADERS/DATA, trailers, and stream FIN travel over

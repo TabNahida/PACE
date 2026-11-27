@@ -37,7 +37,7 @@ local isolated components, not end-to-end network throughput.
   buffers, bounded packet batches and bounded send/receive windows. Its connection
   routing table borrows reactor-affine states (removed on destruction), avoiding
   a weak-pointer lock on each received packet. Background pumps use weak references. This is a scheduling and
-  ownership change. The [transport comparison](../benchmarks/results/quic-backends-2026-11-18/README.md) measures both backends.
+  ownership change. The [transport comparison](../../../benchmarks/results/quic-backends-2026-11-18/README.md) measures both backends.
 
 ## Ownership retained deliberately
 
@@ -59,7 +59,7 @@ These were inspected but are not established as dominant bottlenecks in this
 change. Further changes need workload-specific measurements:
 
 - The root-task registry and cancellation of sleeping tasks were measured in the
-  [runtime and socket follow-up](../benchmarks/results/runtime-network-2026-11-18/README.md).
+  [runtime and socket follow-up](../../../benchmarks/results/runtime-network-2026-11-18/README.md).
 - DNS initialization reads resolver/hosts configuration synchronously. Sharing
   initialized resolver channels would change cancellation and concurrency
   semantics; large lookup workloads should measure this cost separately.
@@ -81,7 +81,7 @@ change. Further changes need workload-specific measurements:
   protocols, including header/import cross-translation-unit calls. GCC 13's
   export-using import limitation is recorded in the build guide.
 
-See [raw measurements and reproduction](../benchmarks/results/module-hotpaths-2026-11-16/README.md).
+See [raw measurements and reproduction](../../../benchmarks/results/module-hotpaths-2026-11-16/README.md).
 
 ### QUIC backend and modern compiler follow-up
 
@@ -105,5 +105,5 @@ See [raw measurements and reproduction](../benchmarks/results/module-hotpaths-20
   existing compiler requirements. The upstream fix is described in the build guide.
 - The [0.6.0 module checks](https://github.com/TabNahida/PACE/actions/runs/44238306831)
   cover both QUIC backends using the GCC 16.2 release and Clang 21.
-- The [QUIC transport comparison](../benchmarks/results/quic-backends-2026-11-18/README.md)
+- The [QUIC transport comparison](../../../benchmarks/results/quic-backends-2026-11-18/README.md)
   measures bulk goodput, short-message RTT and peak RSS for both backends and the 0.5.0 scheduler.

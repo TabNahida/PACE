@@ -1,6 +1,6 @@
 # Protocol tuning and explicit control
 
-[中文](protocol-tuning.zh-CN.md) · [Beginner tutorials](../tutorial/README.md) · [Convenience contracts](component-conveniences.md)
+[中文](protocol-tuning.zh.md) · [Beginner tutorials](../tutorial/README.md) · [Convenience contracts](../reference/component-conveniences.md)
 
 Start with the guided API, then measure the workload before changing these knobs.
 Convenience wrappers preserve transport behavior; their owning allocations are
@@ -27,7 +27,7 @@ TCP's one-read-plus-one-write allowance does not apply to TLS or WebSocket.
 and traffic pattern. IPv6 listeners are IPv6-only unless configured otherwise;
 use port zero and `local_endpoint` for tests. Tune backlog explicitly through
 `tcp::listen_options`, not by adding a new loop for each connection.
-[TCP](tcp.md) · [UDP](udp.md) · [Cancellation](../tutorial/06-shutdown.md).
+[TCP](../reference/net/tcp.md) · [UDP](../reference/net/udp.md) · [Cancellation](../tutorial/09-graceful-shutdown.md).
 
 ## DNS and TLS
 
@@ -37,7 +37,7 @@ a persistent DNS cache or pooled channel from that reuse. One resolver supports
 one active lookup. Options select numeric nameservers, tries and whole-lookup
 expiry, not a connect deadline. Independent resolver instances can overlap waits.
 System resolver/hosts setup can perform synchronous work; there is no helper
-thread that makes every setup step asynchronous. [DNS details](dns.md).
+thread that makes every setup step asynchronous. [DNS details](../reference/dns/README.md).
 
 Reuse a configured `tls::context` across connections rather than loading trust
 roots for every default `tls::connect`. Configuration freezes on first stream
@@ -45,7 +45,7 @@ construction or SNI registration. Streams retain shared state, but lazy helpers
 borrow custom config objects until their await completes. SNI routing and
 application-only trust stores remain explicit. Configure ALPN `h2` for HTTP/2,
 `http/1.1` for HTTP/1 when negotiated, and your own protocol for raw TLS.
-Do not disable certificate verification to resolve mismatches. [TLS details](tls.md).
+Do not disable certificate verification to resolve mismatches. [TLS details](../reference/tls/README.md).
 
 ## WebSocket
 
@@ -61,7 +61,7 @@ have different internal rules; these do not grant application calls duplex acces
 `close_gracefully` returns false if its budget expires and always closes transport;
 bare EOF is not a successful WebSocket closing handshake. Use an authorization
 callback for upgrade policy; the simple helper does not install one for you.
-[Limits and closing contract](websocket.md).
+[Limits and closing contract](../reference/websocket/README.md).
 
 ## HTTP/1
 
@@ -99,11 +99,11 @@ memory and simultaneous downstream work; it does not add CPU threads. Use
 explicit runtime workers for CPU parallelism, and synchronize shared handler state.
 Connection exit cancels and joins active handlers before returning; closing a
 listener cancels and joins accepted connections. Reference lifetimes end at that
-boundary. See [local cancellation and shielding](structured-concurrency.md).
+boundary. See [local cancellation and shielding](../reference/runtime/structured-concurrency.md).
 
 HTTP/2 over TLS requires verified ALPN `h2`; HTTP/3 requires `h3`. A mismatch fails
-rather than falling back. Review [HTTP/2 flow control](http2.md) and
-[HTTP/3 limits](http3.md) before changing transport windows or message bounds.
+rather than falling back. Review [HTTP/2 flow control](../reference/http2/README.md) and
+[HTTP/3 limits](../reference/http3/README.md) before changing transport windows or message bounds.
 
 ## QUIC
 
@@ -118,7 +118,7 @@ Immediate `connection.close()` is best-effort, not delivery confirmation.
 
 HTTP/3 owns its transferred QUIC connection, including control and QPACK streams;
 do not also open application streams on it. This API does not expose 0-RTT,
-WebTransport, CONNECT or server push. [QUIC details](quic.md).
+WebTransport, CONNECT or server push. [QUIC details](../reference/quic/README.md).
 
 ## Worker placement
 

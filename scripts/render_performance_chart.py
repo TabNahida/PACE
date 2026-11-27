@@ -67,7 +67,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", required=True, type=Path, help="New combined JSON report or directory of reports")
     parser.add_argument("--platform", default="ubuntu-latest-cxx20", help="Report basename when --evidence is a directory")
-    parser.add_argument("--output", type=Path, default=ROOT / "docs/assets/selected-performance.svg")
+    parser.add_argument("--output", type=Path, default=ROOT / "docs/performance/assets/selected-performance.svg")
     parser.add_argument("--preview", type=Path, help="Optional local PNG preview")
     args = parser.parse_args()
     source = args.evidence / (args.platform + ".json") if args.evidence.is_dir() else args.evidence

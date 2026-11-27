@@ -1,8 +1,8 @@
 # WebSocket 客户端与服务端
 
-简化写法与拥有数据的 helper：[组件便捷接口](component-conveniences.zh-CN.md)。
+简化写法与拥有数据的 helper：[组件便捷接口](../component-conveniences.zh.md)。
 
-[English API reference](websocket.md) · [TLS 中文指南](tls.zh-CN.md) · [完整示例](../../examples/tutorial_websocket.cpp)
+[English API reference](README.md) · [TLS 中文指南](../tls/README.zh.md) · [完整示例](../../../examples/tutorial_websocket.cpp)
 
 包含 `<pace/websocket.hpp>` 即可使用 RFC 6455 WebSocket。普通 `ws` 不依赖
 OpenSSL；启用 `--tls=y` 后可通过 `secure_stream` 使用经过证书验证的 `wss`。
@@ -59,7 +59,7 @@ co_await socket.handshake("chat.example.com", "/chat");
 示例地址仅用于文档，实际使用时换成已解析的服务器地址。TLS 验证证书链和目标
 主机名。服务端先包装已接受的 TCP 流并完成 TLS `handshake()`，再包装成
 `secure_stream` 并调用 `accept()`。ALPN 只允许空值或 `http/1.1`，不支持
-HTTP/2 Extended CONNECT。证书配置见 [TLS 指南](tls.zh-CN.md)。
+HTTP/2 Extended CONNECT。证书配置见 [TLS 指南](../tls/README.zh.md)。
 
 ## 消息、并发与生命周期
 

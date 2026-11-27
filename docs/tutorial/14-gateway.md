@@ -1,6 +1,6 @@
 # 13. Serve files and proxy an API
 
-[中文](13-gateway.zh-CN.md) · [Learning path](README.md)
+[中文](14-gateway.zh.md) · [Learning path](README.md)
 
 This chapter uses the gateway APIs available since PACE 0.5.0.
 Build from this checkout with HTTP/1 enabled (the default).
@@ -19,7 +19,7 @@ int main() {
 }
 ```
 
-Use the xmake project from [chapter 1](01-build.md), linking `pace_http1`.
+Use the xmake project from [chapter 1](01-install-and-first-program.md), linking `pace_http1`.
 Run it from the directory containing `public`, then visit `http://127.0.0.1:8080/`.
 `/index.html` returns the same file. Mounting at `/assets` instead maps
 `/assets/index.html` to `public/index.html`. Files outside that directory are not
@@ -100,11 +100,11 @@ app.run_workers(4, {"0.0.0.0", 8080});
 Each worker owns a reactor, listener and upstream connection pool. This helper
 blocks until shutdown and uses `SO_REUSEPORT`; Windows currently supports one
 worker through this helper. For application-controlled shutdown, use
-`app.serve(listener)` in your existing runtime as in [chapter 6](06-shutdown.md).
+`app.serve(listener)` in your existing runtime as in [chapter 6](09-graceful-shutdown.md).
 
 Try changing the mount prefix, then send a HEAD request and a byte-range request
 with curl. Compare `files.cache.max_bytes = 0` with caching enabled. The
-[reference](../reference/http-gateway.md) explains validators, invalidation,
+[reference](../reference/gateway/README.md) explains validators, invalidation,
 concurrency, limits and the differences from a full nginx deployment.
-[Backend selection](../reference/io-backends.md) and [local nginx measurements](../gateway-performance.md)
+[Backend selection](../reference/runtime/io-backends.md) and [local nginx measurements](../performance/http-gateway.md)
 cover the next tuning steps.

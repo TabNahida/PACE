@@ -1,6 +1,6 @@
 # HTTP 网关接口与调优
 
-[循序渐进教程](../tutorial/13-gateway.zh-CN.md) · [完整英文契约](http-gateway.md)
+[循序渐进教程](../../tutorial/14-gateway.zh.md) · [完整英文契约](README.md)
 
 包含 `<pace/http1.hpp>`，链接 `pace_http1`。这些接口需要 PACE 0.5.0 或更新版本。
 `app.mount(prefix, directory, options)` 挂载目录，`app.proxy(prefix, upstreams, options)`
@@ -81,7 +81,7 @@ Set-Cookie、Vary、private/no-cache/no-store、Content-Range 和不认识的缓
 
 采用分片锁、连续 slot 的 CLOCK 替换、不可变快照和锁外响应复制，减少每次命中修改链式 LRU 的开销。
 连接池按 reactor 隔离；事件分发用带 generation 的密集描述符 slot，省掉第二次哈希查找并过滤复用后的旧事件。
-没有绑定本机 CPU cache 大小或亲和性。[性能报告](../gateway-performance.md)给出全部本地场景和局限。
+没有绑定本机 CPU cache 大小或亲和性。[性能报告](../../performance/http-gateway.md)给出全部本地场景和局限。
 
 ## Reactor 本地缓存命中
 

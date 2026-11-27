@@ -1,6 +1,6 @@
 # Performance · PACE 0.5.0 · local Linux
 
-[Documentation](README.md) · [TCP methodology](../benchmarks/README.md) · [Gateway API](reference/http-gateway.md)
+[Documentation](../README.md) · [TCP methodology](../../benchmarks/README.md) · [Gateway API](../reference/gateway/README.md)
 
 This report contains two separate comparisons on the final 0.5.0 production
 source: **PACE / standalone Asio / libuv TCP echo**, and **PACE / nginx HTTP
@@ -26,7 +26,7 @@ PACE throughput is 4.2% above Asio and 8.7% above libuv in this session. Its p50
 
 All table values are trial medians. Latency values are medians of per-trial percentiles, not pooled percentiles. Whiskers show observed trial min–max, not confidence intervals. Peak Linux VmHWM includes the server, client threads and stored latency samples, including startup/warmup; it does not isolate library memory.
 
-[Every TCP trial, environment and commands](../benchmarks/results/linux-release-0.5.0/tcp/report.json) · [Raw JSONL](../benchmarks/results/linux-release-0.5.0/tcp/raw.jsonl) · [Earlier TCP analysis](performance-2026-10-22.md)
+[Every TCP trial, environment and commands](../../benchmarks/results/linux-release-0.5.0/tcp/report.json) · [Raw JSONL](../../benchmarks/results/linux-release-0.5.0/tcp/raw.jsonl) · [Earlier TCP analysis](history/2026-10-22.md)
 
 ## HTTP gateways — PACE and nginx
 
@@ -100,7 +100,7 @@ After the complete matrix, the same frozen binaries were compared in seven alter
 | 1 | 250,183 | 268,423 | +7.3% | 1.009 |
 | 4 | 284,432 | 295,179 | +3.8% | 1.038 |
 
-The single-worker drop from the original matrix does not recur in this longer window; multicore throughput remains close and variable. This does not establish a universal improvement or eliminate the observed tail-latency regressions. Both sessions remain public. [All confirmation trials](../benchmarks/results/linux-release-0.5.0/proxy-cache-confirmation.json).
+The single-worker drop from the original matrix does not recur in this longer window; multicore throughput remains close and variable. This does not establish a universal improvement or eliminate the observed tail-latency regressions. Both sessions remain public. [All confirmation trials](../../benchmarks/results/linux-release-0.5.0/proxy-cache-confirmation.json).
 
 ### Why reverse proxy still trails nginx
 
@@ -126,12 +126,12 @@ coroutine. A separate Linux/glibc allocation census finds **62.03 → 52.04
 allocation calls per exchange (16.1% fewer)** on one frontend thread. It includes
 startup/warmup and is intrusive; its timings are discarded. It measures calls,
 not allocated bytes, peak memory, cache misses or nginx allocation behavior.
-[Allocation counters](../benchmarks/results/linux-release-0.5.0/proxy-allocations.json)
-and [probe source](../benchmarks/diagnostics/allocation_probe.c) are preserved.
+[Allocation counters](../../benchmarks/results/linux-release-0.5.0/proxy-allocations.json)
+and [probe source](../../benchmarks/diagnostics/allocation_probe.c) are preserved.
 
 Per-worker pools/cursors remain reactor-owned. The earlier reactor-local cache
 snapshot, isolated hit counters and generation invalidation reduce shared
-hot-key writes; see the [cache investigation](gateway-optimization.md). Shared
+hot-key writes; see the [cache investigation](history/gateway-optimization-2026-11-03.md). Shared
 cache misses/mutations still lock shards, and service ownership still has shared
 reference counts. No hardware cache-miss or false-sharing improvement is
 claimed: this WSL2 host does not expose the needed PMU counters. The earlier
@@ -156,9 +156,9 @@ page cache and is not comparable to the TCP executable’s memory figure. This
 closed-loop workload does not correct coordinated omission or predict WAN,
 TLS, large-body or overloaded-service latency.
 
-[Every gateway trial and configuration](../benchmarks/results/linux-release-0.5.0/gateway.json) ·
-[Reproduction and exploratory results](../benchmarks/results/linux-release-0.5.0/README.md) ·
-[Earlier nginx matrix](gateway-performance.md) ·
-[HTTP/WebSocket/HTTP2/HTTP3 investigations](protocol-performance.md)
+[Every gateway trial and configuration](../../benchmarks/results/linux-release-0.5.0/gateway.json) ·
+[Reproduction and exploratory results](../../benchmarks/results/linux-release-0.5.0/README.md) ·
+[Earlier nginx matrix](http-gateway.md) ·
+[HTTP/WebSocket/HTTP2/HTTP3 investigations](protocols.md)
 
-[Ownership and router measurements](ownership-performance-review.md) · [QUIC backend comparison](../benchmarks/results/quic-backends-2026-11-18/README.md)
+[Ownership and router measurements](history/ownership-review-2026-11.md) · [QUIC backend comparison](../../benchmarks/results/quic-backends-2026-11-18/README.md)

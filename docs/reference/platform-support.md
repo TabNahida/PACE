@@ -80,10 +80,10 @@ canonical TCP types. New documentation uses `pace::tcp::*`. There is no
 
 Linux defaults to epoll and optionally supports io_uring; 64-bit macOS/FreeBSD use kqueue.
 Windows selects IOCP socket notifications where supported, with WSAPoll compatibility.
-See [backend selection and capability boundaries](io-backends.md). OS support
+See [backend selection and capability boundaries](runtime/io-backends.md). OS support
 does not imply equal scaling or measured performance. Same-port listener reuse
 is platform-dependent; the worker runtime itself is available independently of
-that listener strategy. See [architecture](../architecture.md) and the
+that listener strategy. See [architecture](../explanation/architecture.md) and the
 [benchmark methodology](../../benchmarks/README.md) for implementation and evidence.
 
 
@@ -108,7 +108,7 @@ kernel and do not establish native-hardware support or performance. Android
 their network runtime, application integration and device restrictions remain
 unverified.
 
-The [CI coverage guide](../ci.md) lists exact runners, dependencies and evidence
+The [CI coverage guide](../contributing/ci.md) lists exact runners, dependencies and evidence
 limits. [Main workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml)
 and [portability results](https://github.com/TabNahida/PACE/actions/workflows/portability.yml)
 record which revisions passed. CI benchmark executables run short correctness

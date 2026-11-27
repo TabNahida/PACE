@@ -1,6 +1,6 @@
 # 9. Connect and exchange WebSocket messages
 
-[中文](09-websocket.zh-CN.md) · [Previous: DNS/TLS](08-dns-tls.md) · [Next: HTTP/2](10-http2.md)
+[中文](11-websocket.zh.md) · [Previous: DNS/TLS](10-tls-and-dns.md) · [Next: HTTP/2](12-http2.md)
 
 With the current checkout, enable `--websocket=y` and link `pace_websocket`.
 Follow chapter 3's two-target layout, naming the files/targets `ws_server` and
@@ -86,4 +86,4 @@ shutdown, see `xmake run tutorial_websocket serve` and its [source](../../exampl
 To add encryption, replace TCP connect with verified `tls::connect` from chapter 8
 and pass the result to `websocket::upgrade`; server-side `accept` also accepts TLS.
 [Exact signatures](../reference/component-conveniences.md#websocket) ·
-[Fragments, limits and close budgets](../reference/protocol-tuning.md#websocket)
+[Fragments, limits and close budgets](../guides/protocol-tuning.md#websocket)

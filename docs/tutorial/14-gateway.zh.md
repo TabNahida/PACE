@@ -1,6 +1,6 @@
 # 13. 挂载静态目录与代理 API
 
-[English](13-gateway.md) · [学习路线](README.zh-CN.md)
+[English](14-gateway.md) · [学习路线](README.zh.md)
 
 本章使用 PACE 0.5.0 的网关接口，保留默认开启的 HTTP/1。
 
@@ -17,7 +17,7 @@ int main() {
 }
 ```
 
-沿用[第 1 章](01-build.zh-CN.md)的 xmake 工程，链接 `pace_http1`。
+沿用[第 1 章](01-install-and-first-program.zh.md)的 xmake 工程，链接 `pace_http1`。
 在包含 `public` 的目录运行，打开 `http://127.0.0.1:8080/`，即可看到页面。
 改成 `app.mount("/assets", "./public")` 后，访问 `/assets/index.html`。
 服务不会列出目录，也不会开放挂载目录之外的文件。
@@ -92,8 +92,8 @@ app.run_workers(4, {"0.0.0.0", 8080});
 
 每个 worker 拥有独立 reactor、监听器和上游连接池。该辅助入口通过 `SO_REUSEPORT`
 监听并阻塞运行；Windows 上目前只支持一个 worker。需要自己控制停止时，按照
-[第 6 章](06-shutdown.zh-CN.md)把 `app.serve(listener)` 放进已有 runtime。
+[第 6 章](09-graceful-shutdown.zh.md)把 `app.serve(listener)` 放进已有 runtime。
 
 练习：改变目录前缀，用 curl 发送 HEAD 和 Range 请求，再比较开启与关闭缓存的行为。
-缓存失效、路径规则、并发契约与各项调优参数放在[网关 reference](../reference/http-gateway.zh-CN.md)。
-继续阅读 [I/O 后端选择](../reference/io-backends.md)和 [nginx 本地性能对照](../gateway-performance.md)。
+缓存失效、路径规则、并发契约与各项调优参数放在[网关 reference](../reference/gateway/README.zh.md)。
+继续阅读 [I/O 后端选择](../reference/runtime/io-backends.md)和 [nginx 本地性能对照](../performance/http-gateway.md)。

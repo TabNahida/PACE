@@ -1,6 +1,6 @@
 # HTTP configuration and advanced recipes
 
-[Guided HTTP tutorial](../tutorial/04-http.md) · [中文](http-recipes.zh-CN.md)
+[Guided HTTP tutorial](../tutorial/03-http-server.md) · [中文](http-recipes.zh.md)
 
 ## Response completion and close
 
@@ -25,7 +25,7 @@ auto response = co_await pace::http::async_get(io, endpoint, "/health", {}, clos
 only attempts local notification; negative values are rejected. This is not a
 request/read timeout. The default `no_wait` ignores the budget. Server final
 response draining remains unchanged, including early request rejection.
-See [close-policy semantics](../reference/http.md#final-response-close-policy).
+See [close-policy semantics](../reference/http1/README.md#final-response-close-policy).
 
 ## Keep an explicit listener when you need control
 
@@ -46,7 +46,7 @@ io.run();
 The router also converts to the shared handler accepted by HTTP/2 and HTTP/3.
 For one synchronous callback without routes, use `http::make_handler(callback)`.
 Keep mutable state synchronized across worker threads. Read the
-[router contract](../reference/http-router.md) before adding shared captures.
+[router contract](../reference/http/router.md) before adding shared captures.
 
 ## Add HTTPS
 
@@ -63,7 +63,7 @@ auto response = co_await pace::http::async_get(io, trust, {"127.0.0.1", 8443},
 `localhost` is checked against the certificate independently of the numeric TCP
 address. The TLS configuration must remain alive while this lazy helper uses it.
 The task owns endpoint, peer name and target values.
-See [TLS trust setup](../reference/tls.md#configuration) if your OpenSSL installation
+See [TLS trust setup](../reference/tls/README.md#configuration) if your OpenSSL installation
 needs an explicit CA file.
 
 For an HTTPS server, configure a certificate/private key before accepting:
@@ -126,8 +126,8 @@ These limits bound individual messages and parsing metadata. The opt-in server
 options below add receive/write deadlines; global memory and connection-count
 policy remain application responsibilities. Endpoint overloads do not resolve names. The URL client can use the optional DNS
 module; redirects, retries and decompression are absent. HTTP/2,
-[HTTP/3](../reference/http3.md) and WebSocket have separate APIs. Hostnames can
-be resolved explicitly with the optional [DNS extension](../reference/dns.md).
+[HTTP/3](../reference/http3/README.md) and WebSocket have separate APIs. Hostnames can
+be resolved explicitly with the optional [DNS extension](../reference/dns/README.md).
 
 ## Check headers before accepting a body
 
@@ -161,14 +161,14 @@ The same handler can return `streaming_response` with an owned `body_source` and
 a known `content_length`. PACE calls `source->read(span<char>)` with a bounded
 buffer, waits for each chunk to be written, then asks for another. Disconnect,
 cancellation or write expiry releases the source. See the
-[open-file producer example](../reference/http.md#bounded-response-producers)
+[open-file producer example](../reference/http1/README.md#bounded-response-producers)
 for serving a snapshot without loading the whole file into memory.
 
 Request/write timeouts are absolute budgets for their receive/send phases;
 they exclude the final handler and TLS handshake. Expiry closes the transport.
 The request budget ends on early rejection and the write budget then covers its
 reply. Producer/admission calls are synchronous and must return promptly.
-[Deadline details](../reference/http.md#server-deadlines) describe these boundaries.
+[Deadline details](../reference/http1/README.md#server-deadlines) describe these boundaries.
 
-Reference: [HTTP/1.1 and HTTPS API](../reference/http.md).
-Next: [execution and worker selection](../tutorial/05-execution.md).
+Reference: [HTTP/1.1 and HTTPS API](../reference/http1/README.md).
+Next: [execution and worker selection](../tutorial/08-workers-and-threads.md).

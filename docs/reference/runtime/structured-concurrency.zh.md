@@ -1,6 +1,6 @@
 # 结构化并发、局部取消与统一 deadline
 
-[English / 完整签名与约定](structured-concurrency.md) · [逐步教程](../tutorial/12-structured-concurrency.zh-CN.md)
+[English / 完整签名与约定](structured-concurrency.md) · [逐步教程](../../tutorial/07-structured-concurrency.zh.md)
 
 包含 `<pace/runtime.hpp>`，链接 `pace_runtime`，无需第三方依赖。这些接口需要 PACE 0.4.0 或更新版本。
 

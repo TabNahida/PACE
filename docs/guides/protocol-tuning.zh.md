@@ -1,6 +1,6 @@
 # 协议调优与显式控制
 
-[English](protocol-tuning.md) · [入门教程](../tutorial/README.zh-CN.md) · [便捷接口契约](component-conveniences.zh-CN.md)
+[English](protocol-tuning.md) · [入门教程](../tutorial/README.zh.md) · [便捷接口契约](../reference/component-conveniences.zh.md)
 
 先用教程跑通应用，再根据实际负载调整。便捷包装保留传输语义，持有数据所增加的分配
 本身不是性能优化。比较性能时记录正文大小、连接数、线程数、编译选项和多次测量波动，
@@ -21,7 +21,7 @@ TCP 不能同时两读或两写，UDP 不能同时两发或两收。TCP 的一�
 TLS 与 WebSocket。set_no_delay 在合包和延迟之间取舍，应按负载测量。
 IPv6 listener 默认只接受 IPv6；测试使用端口 0 配合 local_endpoint。
 backlog 由 tcp::listen_options 指定，不要为每条连接创建新事件循环。
-[TCP](tcp.md) · [UDP](udp.md) · [取消与关闭](../tutorial/06-shutdown.zh-CN.md)。
+[TCP](../reference/net/tcp.md) · [UDP](../reference/net/udp.md) · [取消与关闭](../tutorial/09-graceful-shutdown.zh.md)。
 
 ## DNS 与 TLS
 
@@ -29,13 +29,13 @@ backlog 由 tcp::listen_options 指定，不要为每条连接创建新事件循
 不能据此推断存在持久 DNS 缓存或 channel 池。每个 resolver 同时一个查询，独立实例可以
 重叠等待。options 配置数字 nameserver、重试与完整查询期限，不是 connect 期限。
 系统 resolver/hosts 配置可能有同步读取，不存在 helper 线程自动把所有初始化变成异步。
-[DNS 细节](dns.md)。
+[DNS 细节](../reference/dns/README.md)。
 
 多条 TLS 连接可复用已经配置的 context，避免每次默认 connect 都载入信任根。
 配置在首次构造 stream 或注册 SNI 目标后冻结；stream 持有共享状态，惰性 helper 则
 借用自定义配置对象到 await 完成。SNI 与仅使用应用信任库仍需显式设置。
 HTTP/2 使用 ALPN h2，HTTP/1 协商时用 http/1.1，裸 TLS 则设置自己的协议。
-不要用关闭证书验证处理身份不匹配。[TLS 细节](tls.md)。
+不要用关闭证书验证处理身份不匹配。[TLS 细节](../reference/tls/README.md)。
 
 ## WebSocket
 
@@ -46,7 +46,7 @@ send_text/send_binary 持有正文，fragment_bytes 为 0 时使用帧上限；�
 同一 stream 的收、发、控制帧、关闭总共最多一个活动操作，不能启动独立读写任务。
 内部协议 driver 的规则不代表应用能双向并发调用公共 TLS/WebSocket 方法。
 close_gracefully 超时返回 false，并始终关闭传输；裸 EOF 不等于成功关闭握手。
-升级授权使用回调，便捷入口不会默认替应用检查身份。[限额与关闭契约](websocket.md)。
+升级授权使用回调，便捷入口不会默认替应用检查身份。[限额与关闭契约](../reference/websocket/README.md)。
 
 ## HTTP1
 
@@ -54,7 +54,7 @@ close_gracefully 超时返回 false，并始终关闭传输；裸 EOF 不等于�
 同时只能有一个 send。进阶 handler 可以在头验证后决定准入、设置每条路由的 body 上限、
 设置收发阶段期限并按块生成响应。这些不等于全局连接数/内存上限，也不能抢占同步业务代码。
 默认客户端在完整响应分帧后不再等待对端 FIN；确有需要时才启用有界 graceful 关闭。
-[HTTP 配置与进阶用法](http-recipes.zh-CN.md)。
+[HTTP 配置与进阶用法](http-recipes.zh.md)。
 
 ## HTTP2 与 HTTP3
 
@@ -76,10 +76,10 @@ HTTP/3 形式相同，使用已验证的 QUIC connection。结果保持输入顺
 设 handler 上限为 1 可顺序处理；调高可能增加内存与下游负载，并不会增加 CPU 线程。
 CPU 并行使用显式 runtime worker，并同步共享状态。连接退出会取消并等待已启动的 handler；
 关闭 listener 会取消并等待已接受的连接。引用必须存活到对应边界结束。
-详见[局部取消与清理屏蔽](structured-concurrency.zh-CN.md)。
+详见[局部取消与清理屏蔽](../reference/runtime/structured-concurrency.zh.md)。
 
 HTTP/2 TLS 必须验证 ALPN h2，HTTP/3 为 h3，不匹配则失败而不是自动回退。
-调整流控和消息边界前查阅 [HTTP/2](http2.md) 与 [HTTP/3](http3.md)。
+调整流控和消息边界前查阅 [HTTP/2](../reference/http2/README.md) 与 [HTTP/3](../reference/http3/README.md)。
 
 ## QUIC
 
@@ -91,7 +91,7 @@ pace::write/write_all 完成只表示交给传输，不表示确认收到。销�
 立即 connection.close 是尽力发送的关闭，不是送达确认。
 
 HTTP/3 接管 QUIC 连接，包括控制流和 QPACK，不能再在转移后的连接上自行开业务流。
-当前未公开 0-RTT、WebTransport、CONNECT 或 server push。[QUIC 细节](quic.md)。
+当前未公开 0-RTT、WebTransport、CONNECT 或 server push。[QUIC 细节](../reference/quic/README.md)。
 
 本地 QUIC 交换中，客户端读到回复 FIN 后仍保持存活，直到服务端观察到确认包。
 配套程序通过等待 connection 事件保留客户端到两端完成；收到 FIN 不等于远端发送任务已经结束。

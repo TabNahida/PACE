@@ -1,6 +1,6 @@
 # QUIC transport
 
-Short forms and owning helpers: [component conveniences](component-conveniences.md).
+Short forms and owning helpers: [component conveniences](../component-conveniences.md).
 
 Enable `--quic=y` and include `<pace/quic.hpp>`. Select the transport with
 `--quic_backend=ngtcp2` (default) or `--quic_backend=openssl`. Both implement the
@@ -16,7 +16,7 @@ xmake run pace_quic_tests
 xmake run tutorial_quic
 ```
 
-The [complete example](../../examples/tutorial_quic.cpp) exchanges data over a
+The [complete example](../../../examples/tutorial_quic.cpp) exchanges data over a
 verified local connection. The checked-in CA and private key are public test
 fixtures and must not be deployed.
 
@@ -128,7 +128,7 @@ expire after 10 seconds even without an application accept. The initial backend
 uses 1200-byte packets and disables active migration and PMTU discovery.
 
 Windows QUIC/HTTP3 is not implemented and enabling it produces a build diagnostic.
-The [platform matrix](platform.md) documents platform validation; the new ngtcp2
+The [platform matrix](../platform-support.md) documents platform validation; the new ngtcp2
 backend currently has Linux validation. Core networking and other optional
 protocols retain their existing platform support.
 

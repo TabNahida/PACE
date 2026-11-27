@@ -1,6 +1,6 @@
 # 6. 从请求停止到安全销毁
 
-[English](06-shutdown.md) · [上一章：执行方式](05-execution.zh-CN.md) · [下一章：UDP](07-udp.zh-CN.md)
+[English](09-graceful-shutdown.md) · [上一章：执行方式](08-workers-and-threads.zh.md) · [下一章：UDP](06-udp.zh.md)
 
 这一章先亲眼验证取消，再把它用于服务器。依赖 `pace_runtime`，
 将下面完整程序保存到 `main.cpp` 并构建运行：
@@ -40,7 +40,7 @@ int main() {
 `canceled` 在任务外面，一直活到 run 返回，所以取消时仍能安全写入。
 
 
-单个操作或一组相关任务优先使用[局部取消与结构化任务组](12-structured-concurrency.zh-CN.md)。
+单个操作或一组相关任务优先使用[局部取消与结构化任务组](07-structured-concurrency.zh.md)。
 io.stop 是整个 context 的关闭。原始 listener.close 只取消 accept；HTTP serve 便捷接口
 增加了结构化作用域，会在返回前取消并等待其接受的连接。
 
@@ -66,7 +66,7 @@ io.stop 是整个 context 的关闭。原始 listener.close 只取消 accept；H
 
 当前库没有公开的连接计数/join handle。需要精确 drain 时，写自己的 accept 包装，
 给每个连接用 RAII 维护活动计数，配合有界宽限期。
-[完整 drain 示例](06-shutdown.md#stop-accepting-before-stopping-the-reactor)
+[完整 drain 示例](09-graceful-shutdown.md#stop-accepting-before-stopping-the-reactor)
 解释了计数和监听对象必须保持多久；不要把立即 stop 宣称为优雅排空。
 
 ## 第三步：等待成员协程退栈后再销毁对象

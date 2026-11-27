@@ -1,6 +1,6 @@
 # 4. Get an HTTP response, then build a service
 
-[中文](04-http.zh-CN.md) · [Learning path](README.md)
+[中文](03-http-server.zh.md) · [Learning path](README.md)
 
 Use chapter 1's current source setup, link `pace_http1` and configure `--http1=y`.
 The direct calls and `async_` names in this chapter require PACE 0.4.0 or newer.
@@ -142,10 +142,10 @@ companion also demonstrates bounded signal shutdown.
 
 ## Add HTTPS
 
-First follow [DNS/TLS](08-dns-tls.md) to verify a local peer. Then use the
-[HTTPS recipe](../reference/http-recipes.md#add-https) for certificate configuration.
+First follow [DNS/TLS](10-tls-and-dns.md) to verify a local peer. Then use the
+[HTTPS recipe](../guides/http-recipes.md#add-https) for certificate configuration.
 Connection reuse, deadlines, body admission, response producers and close-policy
-settings live in [HTTP recipes](../reference/http-recipes.md), so they can be
+settings live in [HTTP recipes](../guides/http-recipes.md), so they can be
 introduced when your application needs them.
 
-Next: [execution and worker selection](05-execution.md).
+Next: [execution and worker selection](08-workers-and-threads.md).

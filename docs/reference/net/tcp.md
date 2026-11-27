@@ -1,13 +1,13 @@
 # `pace::tcp`
 
-For one-call `exchange` / `async_exchange` clients, see [direct clients](direct-clients.md).
+For one-call `exchange` / `async_exchange` clients, see [direct clients](../direct-clients.md).
 
-Short forms and owning helpers: [component conveniences](component-conveniences.md).
+Short forms and owning helpers: [component conveniences](../component-conveniences.md).
 
-[0.3.0 convenience additions](convenience.md)
+[0.3.0 convenience additions](../convenience.md)
 
 Include `<pace/net.hpp>`. TCP sockets are nonblocking, move-only and tied to an
-`io_context`. Operations return lazy [tasks](task.md). Keep the context alive
+`io_context`. Operations return lazy [tasks](../runtime/task.md). Keep the context alive
 longer than its sockets and listeners, and keep each socket object and operation
 buffer alive until the operation completes.
 
@@ -35,7 +35,7 @@ declared in `<pace/net.hpp>`, has `unspecified`, `ipv4` and `ipv6` values. Input
 defaults to automatic inference; an explicit family must match the address.
 Endpoint inspection always returns the concrete family. Hostnames, brackets,
 embedded NUL bytes and malformed addresses throw `std::invalid_argument`.
-Resolve hostnames explicitly with the [DNS extension](dns.md).
+Resolve hostnames explicitly with the [DNS extension](../dns/README.md).
 
 For scoped IPv6, set `scope_id` to the numeric interface index; native endpoint
 inspection preserves that index separately from the address string. A nonzero
@@ -234,4 +234,4 @@ on Windows. POSIX sends suppress `SIGPIPE` through supported per-send/per-socket
 mechanisms. The caller must catch expected per-peer errors so one disconnected
 client does not become an unhandled root failure.
 
-See the [TCP tutorial](../tutorial/03-tcp.md) for complete client and server code.
+See the [TCP tutorial](../../tutorial/05-tcp.md) for complete client and server code.

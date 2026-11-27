@@ -1,8 +1,8 @@
 # HTTP/2
 
-URL get/post/fetch and async forms: [unified client contract](http-clients.md).
+URL get/post/fetch and async forms: [unified client contract](../http/clients.md).
 
-Short forms and owning helpers: [component conveniences](component-conveniences.md).
+Short forms and owning helpers: [component conveniences](../component-conveniences.md).
 
 Run two requests over one connection:
 
@@ -12,7 +12,7 @@ xmake
 xmake run tutorial_http2
 ```
 
-The [complete example](../../examples/tutorial_http2.cpp) starts both peers locally.
+The [complete example](../../../examples/tutorial_http2.cpp) starts both peers locally.
 Its client uses a connected TCP stream:
 
 ```cpp
@@ -66,7 +66,7 @@ waiting indefinitely. Handler-completion waits do not poll the EOF socket.
 Aborting a connection discards queued requests, requests local cancellation of
 active handlers, and joins them before returning. Handler PACE waits inherit this
 token automatically. Captures must remain valid through serve_connection; custom
-awaiters must participate in cancellation. See [structured scopes](structured-concurrency.md).
+awaiters must participate in cancellation. See [structured scopes](../runtime/structured-concurrency.md).
 An application exception produces HTTP 500. Direct `serve_connection` and
 `async_exchange` calls propagate connection cancellation and errors; `serve` isolates
 accepted-connection failures and returns normally when its listener is closed or
@@ -99,7 +99,7 @@ For the server, load its certificate/key and call
 `serve(listener, server_config, handler)`. This overload performs each handshake.
 The direct TLS `serve_connection` and `async_exchange` overloads require an already
 completed handshake whose selected protocol is `h2`; they reject other protocols.
-See [TLS setup](tls.md).
+See [TLS setup](../tls/README.md).
 
 The TLS driver stages ciphertext when the socket is backpressured, so two peers
 can keep reading while their outbound records wait for space. Each application
@@ -161,8 +161,8 @@ concurrency. Network operations inherit the context's cancellation behavior.
 
 Cleartext is HTTP/2 **prior knowledge**: connect directly with the HTTP/2 preface.
 HTTP/1.1 `Upgrade: h2c`, CONNECT tunnels, server push, HTTP/3 and a persistent
-incremental client API are not provided. Use [HTTP/1.1](http.md) or
-[WebSocket](websocket.md) for those separate message APIs.
+incremental client API are not provided. Use [HTTP/1.1](../http1/README.md) or
+[WebSocket](../websocket/README.md) for those separate message APIs.
 
 ## 中文：从批量请求开始
 
@@ -190,4 +190,4 @@ body 上限为零时只允许空 body。HTTP/1 专用的 keep_alive、chunked、
 当前明文方式需要 HTTP/2 prior knowledge，不支持 HTTP/1.1 升级、CONNECT、
 服务器推送或 HTTP/3。
 
-[Runnable example](../../examples/tutorial_http2.cpp) · [Reference index](README.md)
+[Runnable example](../../../examples/tutorial_http2.cpp) · [Reference index](../README.md)

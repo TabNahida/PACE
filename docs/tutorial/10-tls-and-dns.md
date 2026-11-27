@@ -1,6 +1,6 @@
 # 8. Resolve a host and verify a TLS peer
 
-[中文](08-dns-tls.zh-CN.md) · [Previous: UDP](07-udp.md) · [Next: WebSocket](09-websocket.md)
+[中文](10-tls-and-dns.zh.md) · [Previous: UDP](06-udp.md) · [Next: WebSocket](11-websocket.md)
 
 A network address tells you where to connect. A TLS peer name tells you which
 identity to verify. Keep these separate rather than treating a resolved IP as a
@@ -99,8 +99,8 @@ the expected peer name to an unrelated host and verify that the handshake fails.
 Do not turn verification off to hide that expected failure.
 
 For HTTP, reuse this configuration with the HTTPS `http::get`/`serve` overloads
-in [chapter 4](04-http.md#add-https). [DNS reference](../reference/dns.md) and
-[TLS reference](../reference/tls.md) describe timeout, trust, SNI and ownership details.
+in [chapter 4](03-http-server.md#add-https). [DNS reference](../reference/dns/README.md) and
+[TLS reference](../reference/tls/README.md) describe timeout, trust, SNI and ownership details.
 
 For a service using system trust and no custom ALPN, the client can omit the config:
 `co_await pace::tls::connect(endpoint, hostname)`. Keep the original DNS hostname
@@ -108,5 +108,5 @@ for verification. For a one-off lookup outside a running context, use
 `auto addresses = pace::run(pace::dns::resolve("127.0.0.1"));`.
 
 [Helper contracts](../reference/component-conveniences.md) and
-[configuration reuse and ALPN](../reference/protocol-tuning.md#dns-and-tls) cover
+[configuration reuse and ALPN](../guides/protocol-tuning.md#dns-and-tls) cover
 the next steps after this local exercise. These helpers require PACE v0.3.1 or newer.

@@ -1,6 +1,6 @@
 # Structured concurrency, cancellation and deadlines
 
-[中文](structured-concurrency.zh-CN.md) · [Guided tutorial](../tutorial/12-structured-concurrency.md)
+[中文](structured-concurrency.zh.md) · [Guided tutorial](../../tutorial/07-structured-concurrency.md)
 
 Include `<pace/runtime.hpp>` for groups, `<pace/runtime.hpp>` for operation
 boundaries, or `<pace/runtime.hpp>` for sources/tokens/deadlines. All link to

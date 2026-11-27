@@ -1,6 +1,6 @@
 # HTTP 配置与进阶用法
 
-[HTTP 入门教程](../tutorial/04-http.zh-CN.md) · [English](http-recipes.md)
+[HTTP 入门教程](../tutorial/03-http-server.zh.md) · [English](http-recipes.md)
 
 ## 完整响应与连接关闭
 
@@ -23,7 +23,7 @@ auto response = co_await pace::http::async_get(io, endpoint, "/health", {}, clos
 `graceful` 等待对端关闭或预算耗尽，并传播清理错误和取消。预算为 0 时只尝试本端通知，
 负数会被拒绝；默认 `no_wait` 不使用这个预算。它不是请求或读取超时。截断 body、未完成
 chunk、非法 trailer 仍会失败。服务端发送最终响应后的有界 drain 保持不变，包括提前拒绝
-尚未收完的请求 body。[完整语义](../reference/http.md#final-response-close-policy)。
+尚未收完的请求 body。[完整语义](../reference/http1/README.md#final-response-close-policy)。
 
 ## 需要独立控制监听时，显式持有 listener
 
@@ -42,7 +42,7 @@ io.run();
 
 router 也能作为 HTTP/2、HTTP/3 的共享 handler 使用。
 只有一个普通回调、不需要路由时，用 `http::make_handler(callback)` 即可。
-不同 worker 共享的可变状态仍需同步；[接口契约](../reference/http-router.md)
+不同 worker 共享的可变状态仍需同步；[接口契约](../reference/http/router.md)
 说明了闭包所有权、线性查找和适用边界。
 
 ## 启用 HTTPS
@@ -59,7 +59,7 @@ auto response = co_await pace::http::async_get(io, trust, {"127.0.0.1", 8443},
 TCP 连接地址和证书身份是分开的：上例连接本机地址，但必须验证证书中的 `localhost`。
 TLS 配置必须保持有效，直到这个惰性任务使用结束。
 如果 OpenSSL 安装没有可用的默认根证书，需要显式提供 CA 文件，详见
-[TLS 配置说明](../reference/tls.zh-CN.md#配置与连接)。
+[TLS 配置说明](../reference/tls/README.zh.md#配置与连接)。
 
 HTTPS 服务端先配置证书链及对应私钥：
 
@@ -87,8 +87,8 @@ io.run();
 trailer、字段数量、chunk 行长、chunk 数量等上限。默认 body 上限为 1 MiB；
 歧义 Content-Length/Transfer-Encoding、非法 chunk 或危险 trailer 都会被拒绝并关闭连接。
 这些限额不是全局连接数或全局内存策略。下方可选服务端 API 另提供超时和流式响应。
-Expect、CONNECT、流式请求 body、HTTP/3 不在这个接口范围内；HTTP/2、[HTTP/3](../reference/http3.md) 和 WebSocket
-使用各自独立接口。主机名可先用可选的 [DNS 扩展](../reference/dns.md)显式解析。
+Expect、CONNECT、流式请求 body、HTTP/3 不在这个接口范围内；HTTP/2、[HTTP/3](../reference/http3/README.md) 和 WebSocket
+使用各自独立接口。主机名可先用可选的 [DNS 扩展](../reference/dns/README.md)显式解析。
 
 
 ## 先检查请求头，再决定是否收取 body
@@ -121,7 +121,7 @@ io.spawn(pace::http::serve(listener, admitted_route, options));
 响应也可返回 `streaming_response`，提供已知的 `content_length` 和独占的 `body_source`。
 PACE 给 `read(span<char>)` 的缓冲区默认最多 64 KiB；上一块写完才继续读取。断连、取消或
 写超时会停止后续读取并释放 source。可把已经打开的文件句柄放进 source，使发送期间一直
-持有同一个快照，避免把整个归档载入内存。详见[已打开文件的完整示例](../reference/http.md#bounded-response-producers)。
+持有同一个快照，避免把整个归档载入内存。详见[已打开文件的完整示例](../reference/http1/README.md#bounded-response-producers)。
 
 请求超时覆盖每次请求头和 body 的接收（含 keep-alive 等待），写超时覆盖响应头和 body 的
 发送；两者均为绝对期限，收到少量数据不会重新计时。提前拒绝后撤销请求定时器，响应使用

@@ -1,6 +1,6 @@
 # 2. Write an asynchronous program
 
-[中文](02-tasks-timers.zh-CN.md) · [Previous: build](01-build.md) · [Next: TCP](03-tcp.md)
+[中文](04-tasks-and-timers.zh.md) · [Previous: build](01-install-and-first-program.md) · [Next: TCP](05-tcp.md)
 
 By the end of this chapter you will write a function that suspends for a timer,
 returns a value to `main`, and propagates failures through ordinary C++ exceptions.
@@ -121,4 +121,4 @@ failure and exits instead of hanging. Then run `xmake run tutorial_tasks` for th
 [extended exercise](../../examples/tutorial_tasks.cpp), which also checks child
 exceptions and task ownership.
 
-[Entry-runner contract](../reference/run.md) · [Task contract](../reference/task.md)
+[Entry-runner contract](../reference/runtime/run.md) · [Task contract](../reference/runtime/task.md)

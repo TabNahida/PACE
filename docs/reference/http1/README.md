@@ -1,8 +1,8 @@
 # `pace::http`: HTTP/1.1 and HTTPS
 
-[Direct clients and migration](direct-clients.md) · [Async conveniences](convenience.md)
+[Direct clients and migration](../direct-clients.md) · [Async conveniences](../convenience.md)
 
-For exact routes, ordinary response callbacks and the owning-listener serve overload, see [handler adapters and routing](http-router.md).
+For exact routes, ordinary response callbacks and the owning-listener serve overload, see [handler adapters and routing](../http/router.md).
 
 Include `<pace/http1.hpp>`. PACE supplies an HTTP/1.0–1.1 server and client,
 with Content-Length, chunked transfer, trailers, persistence and strict framing
@@ -15,7 +15,7 @@ negotiates protocol upgrades nor implements CONNECT or HTTP/3.
 
 From ordinary code, `auto reply = pace::http::get(url);` returns a response.
 It blocks this thread and defaults to a 30-second total deadline. For a running
-coroutine, use the async APIs below. See [direct clients](direct-clients.md) for
+coroutine, use the async APIs below. See [direct clients](../direct-clients.md) for
 POST, fetch, options and migration.
 
 ```cpp
@@ -32,8 +32,8 @@ The TLS example needs a trusted certificate for `localhost`; configure a private
 CA with `trust.load_verify_file(...)` before starting the request. The numeric
 address determines where to connect. `peer_name` determines the expected certificate
 identity, DNS SNI and default Host. The supplied TLS context sets the
-[client verification policy](tls.md#client-verification-modes).
-See the [HTTP/HTTPS tutorial](../tutorial/04-http.md) for a complete local example.
+[client verification policy](../tls/README.md#client-verification-modes).
+See the [HTTP/HTTPS tutorial](../../tutorial/03-http-server.md) for a complete local example.
 
 ## Owned messages
 
@@ -536,7 +536,7 @@ streamed server responses. It does not claim every HTTP feature: no content-codi
 decompression, Expect handshake, CONNECT tunnel, server informational emission,
 streamed request bodies, automatic redirect/retry, proxy or HTTP/3 within this
 HTTP/1 module.
-HTTP/2, [HTTP/3](http3.md) and WebSocket use their own APIs; explicit hostname
-resolution is available through the optional [DNS extension](dns.md).
+HTTP/2, [HTTP/3](../http3/README.md) and WebSocket use their own APIs; explicit hostname
+resolution is available through the optional [DNS extension](../dns/README.md).
 EOF-delimited TLS responses additionally require a clean TLS close_notify; TLS
 truncation is a transport failure, not successful EOF.

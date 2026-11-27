@@ -1,6 +1,6 @@
 # 统一 HTTP 客户端
 
-[English](http-clients.md) · [取消与并发契约](structured-concurrency.zh-CN.md)
+[English](clients.md) · [取消与并发契约](../runtime/structured-concurrency.zh.md)
 
 以下 API 需要 PACE 0.4.0 或更新版本。`pace::http1` 是 `pace::http` 的别名；
 HTTP/1、2、3 共用 `http::request` 和 `http::response`。
@@ -44,9 +44,9 @@ HTTP/2、3 同连接多路复用使用 `async_exchange(owned_transport, authorit
 
 原 transport 形式的 `http2::get` / `http3::get` 改名为 `async_get`；`exchange` 改为
 `async_exchange`，参数不变。不带前缀的 URL 调用是同步的。
-[HTTP/1 迁移](direct-clients.zh-CN.md)说明其之前的重命名；TCP/QUIC connect、socket 成员和路由注册名字不变。
+[HTTP/1 迁移](../direct-clients.zh.md)说明其之前的重命名；TCP/QUIC connect、socket 成员和路由注册名字不变。
 
 每批只有一个连接 driver，handler 可以在其 context 上交错执行；nghttp2/nghttp3 与传输不被多个线程
 同时驱动。serve_connection 退出前取消并等待 handler；serve 停止接收时取消并等待其拥有的连接。
 因此关闭 listener 会结束整个所属连接作用域。需要定制优雅排空时，用 with_task_group 自行管理
-accept 循环和连接子任务。完整限制见[并发契约](structured-concurrency.zh-CN.md)。
+accept 循环和连接子任务。完整限制见[并发契约](../runtime/structured-concurrency.zh.md)。

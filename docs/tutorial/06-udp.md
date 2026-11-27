@@ -1,6 +1,6 @@
 # 7. Exchange a UDP packet with one call
 
-[中文](07-udp.zh-CN.md) · [Learning path](README.md) · [Next: DNS/TLS](08-dns-tls.md)
+[中文](06-udp.zh.md) · [Learning path](README.md) · [Next: DNS/TLS](10-tls-and-dns.md)
 
 Use PACE 0.4.0 or newer with chapter 1's source setup and link `pace_net`. UDP preserves datagram boundaries,
 but does not promise delivery or ordering.
@@ -102,6 +102,6 @@ from other addresses, use `udp::open()` / `udp::bind()`, `socket.send` and
 
 [Filtering, deadlines and errors](../reference/direct-clients.md) ·
 [Capacity and ownership](../reference/component-conveniences.md#udp) ·
-[Reusable buffers and tuning](../reference/protocol-tuning.md#tcp-and-udp)
+[Reusable buffers and tuning](../guides/protocol-tuning.md#tcp-and-udp)
 
 The repository's `xmake run tutorial_udp` runs an independent local async exercise.

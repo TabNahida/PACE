@@ -1,6 +1,6 @@
 # Direct clients and HTTP name migration
 
-[中文](direct-clients.zh-CN.md) · [Quick start](../tutorial/00-quick-start.md)
+[中文](direct-clients.zh.md) · [Quick start](../tutorial/02-http-client.md)
 
 These APIs require **PACE 0.4.0 or newer**.
 They intentionally change the HTTP free-function names. Server registrations such
@@ -84,7 +84,7 @@ is automatic.
 
 The `async_` forms preserve the underlying asynchronous contracts and **do not add
 this total deadline**. They inherit the task token and deadline; use
-[with_options or with_deadline](structured-concurrency.md) for a local boundary. Socket member methods remain asynchronous regardless of whether
+[with_options or with_deadline](runtime/structured-concurrency.md) for a local boundary. Socket member methods remain asynchronous regardless of whether
 the name includes `async_`.
 
 ## HTTP and verified HTTPS
@@ -105,7 +105,7 @@ For POST with custom trust, set `request.method`, `request.body` and a Content-T
 header, then call `fetch(trust, url, request)`. HTTP still owns framing headers;
 URL helpers supply Host and target. There is no redirect following, proxy,
 decompression or connection reuse in a one-shot call. For persistent connections,
-see [HTTP recipes](http-recipes.md).
+see [HTTP recipes](../guides/http-recipes.md).
 
 ## TCP framing
 
@@ -118,7 +118,7 @@ After the reply, graceful close half-closes the send direction and drains with t
 existing 100 ms / 64 KiB close bounds, still inside the blocking total budget.
 For persistent sessions, delimiter/length-prefix framing, a different close policy
 or reusable buffers, use `tcp::connect`, `pace::write` and `pace::read_exact` on the
-owned stream. See [protocol tuning](protocol-tuning.md).
+owned stream. See [protocol tuning](../guides/protocol-tuning.md).
 
 ## UDP filtering and capacity
 
@@ -156,5 +156,5 @@ no direct overload takes an `io_context&`. When moving an old synchronous
 
 HTTP/2 and HTTP/3 now follow the same naming: URL `get/post/fetch` are direct,
 `async_get/async_post/async_fetch` are asynchronous; owned-transport `get` and
-`exchange` become `async_get` and `async_exchange`. See [unified clients](http-clients.md).
+`exchange` become `async_get` and `async_exchange`. See [unified clients](http/clients.md).
 TCP/QUIC connect and socket member names are unchanged.

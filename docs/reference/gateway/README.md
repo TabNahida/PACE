@@ -1,6 +1,6 @@
 # HTTP gateway services
 
-[Guided tutorial](../tutorial/13-gateway.md) · [中文](http-gateway.zh-CN.md)
+[Guided tutorial](../../tutorial/14-gateway.md) · [中文](README.zh.md)
 
 Include `<pace/http1.hpp>` and link `pace_http1`. These APIs require PACE 0.5.0 or newer.
 The implementation is an embedded, buffered HTTP gateway, with no configuration
@@ -163,7 +163,7 @@ lookup avoids temporary keys in `get`, and response copies happen after releasin
 the lock. Per-reactor pools avoid a global connection mutex. Reactor descriptors
 also use dense generation-checked slots, eliminating a second event-dispatch hash
 lookup and rejecting late events after slot reuse. None uses CPU-model-specific
-cache sizes or affinity. See [measurements and limitations](../gateway-performance.md).
+cache sizes or affinity. See [measurements and limitations](../../performance/http-gateway.md).
 
 ## Reactor-local cache hits
 

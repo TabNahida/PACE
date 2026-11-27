@@ -1,6 +1,6 @@
 # 11. 从 QUIC stream 走到 HTTP/3
 
-[English](11-quic-http3.md) · [上一章：HTTP/2](10-http2.zh-CN.md) · [学习路线](README.zh-CN.md)
+[English](13-quic-and-http3.md) · [上一章：HTTP/2](12-http2.zh.md) · [学习路线](README.zh.md)
 
 QUIC 在 UDP 上提供经过认证的可靠多路流；HTTP/3 再增加 HTTP 分帧和 QPACK。
 先完成 QUIC 流，再交给 HTTP/3 适配层，不要把裸 UDP 数据报当成 QUIC，
@@ -24,7 +24,7 @@ int main() {
 
 本地测试证书需创建 quic::context trust，加载测试 CA，设置 h3 ALPN，调用
 `http3::get(trust, url)`。协程中使用 `co_await http3::async_get(url)`。
-选项见[统一客户端](../reference/http-clients.zh-CN.md)。下面建立本地服务，再解释底层 QUIC 流；
+选项见[统一客户端](../reference/http/clients.zh.md)。下面建立本地服务，再解释底层 QUIC 流；
 只发 URL 请求不需要手动创建流。
 
 ## 第一步：先配置身份和应用协议
@@ -60,7 +60,7 @@ stream.finish_write();
 FIN 针对一个 stream，不是关闭连接上的全部流。连接对象要活得比流的操作久。
 
 `pace::write` 完成不等于对端已经确认收到；关闭发送方前，应遵守
-[送达与 FIN 约定](../reference/protocol-tuning.zh-CN.md#quic)，下方配套程序也演示了这一点。
+[送达与 FIN 约定](../guides/protocol-tuning.zh.md#quic)，下方配套程序也演示了这一点。
 [QUIC 配套程序](../../examples/tutorial_quic.cpp)等两端完成后才 stop，并有本地期限。
 运行 tutorial_quic 应输出 `Hello over verified QUIC!`；之后可尝试增加第二个流，
 观察第一个流结束不会自动结束第二个。
@@ -86,7 +86,7 @@ std::cout << reply.status << " " << reply.body << '\n';
 
 连接转移后，不再自行打开业务或控制流；HTTP/3 适配层持有控制流和 QPACK 状态。
 get 返回一个完整缓冲的响应。多请求时再改用 exchange；
-[批处理、并发和生命周期](../reference/protocol-tuning.zh-CN.md#http2-与-http3)放在参考页。
+[批处理、并发和生命周期](../guides/protocol-tuning.zh.md#http2-与-http3)放在参考页。
 helper 使用已有 context，不创建后台线程。这些新增 helper 需要 PACE v0.3.1 或更新版本。
 
 ## 第四步：运行并验证协议协商
@@ -103,7 +103,7 @@ xmake run tutorial_http3
 [HTTP/3 配套程序](../../examples/tutorial_http3.cpp)打印 `/one`、`/two` 两个响应。
 在副本里把一端 ALPN 改错，确认握手失败：UDP 地址能访问并不代表已建立认证 HTTP/3 会话。
 当前没有公开 server push、CONNECT、WebTransport 或 0-RTT 接口。
-边界与资源限制见 [QUIC 参考](../reference/quic.md) 和 [HTTP/3 参考](../reference/http3.md)。
+边界与资源限制见 [QUIC 参考](../reference/quic/README.md) 和 [HTTP/3 参考](../reference/http3/README.md)。
 
 ## 第五步：写出完整的单请求服务
 

@@ -22,7 +22,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--panel", action="append", nargs=3, required=True,
                         metavar=("EVIDENCE", "METRIC", "COMPARATOR"))
-    parser.add_argument("--output", type=Path, default=ROOT / "docs/assets/selected-performance.svg")
+    parser.add_argument("--output", type=Path, default=ROOT / "docs/performance/assets/selected-performance.svg")
     parser.add_argument("--preview", type=Path)
     args = parser.parse_args()
     if not 1 <= len(args.panel) <= 3:
@@ -85,7 +85,7 @@ def main():
                 transform=ax.transAxes,color="#b9c8df",fontsize=9,va="top")
     figure.text(.05,.10,"Bars: medians · whiskers: min–max · selected comparisons are not an overall ranking or statistical confidence intervals.",
                 color="#99adc9",fontsize=9)
-    figure.text(.05,.045,"See docs/performance.md for throughput, p50/p95/p99, process memory, workload details, raw evidence and regressions.",
+    figure.text(.05,.045,"See docs/performance/README.md for throughput, p50/p95/p99, process memory, workload details, raw evidence and regressions.",
                 color="#99adc9",fontsize=9)
     figure.subplots_adjust(left=.10,right=.965,bottom=.40,top=.72,wspace=.38)
     args.output.parent.mkdir(parents=True,exist_ok=True)

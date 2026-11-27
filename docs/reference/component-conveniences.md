@@ -1,10 +1,10 @@
 # Component conveniences (0.3.1)
 
-[中文](component-conveniences.zh-CN.md) · [Tutorials](../tutorial/README.md) · [Tuning](protocol-tuning.md)
+[中文](component-conveniences.zh.md) · [Tutorials](../tutorial/README.md) · [Tuning](../guides/protocol-tuning.md)
 
 These additions require **PACE v0.3.1 or newer**. Use the
-[package quick start](../tutorial/00-quick-start.md) or build from source using
-[chapter 1](../tutorial/01-build.md).
+[package quick start](../tutorial/02-http-client.md) or build from source using
+[chapter 1](../tutorial/01-install-and-first-program.md).
 Existing low-level methods remain available. Optional modules keep their existing
 build flags and dependency boundaries.
 
@@ -56,7 +56,7 @@ tcp::listener tcp::listen(tcp::endpoint, tcp::listen_options = {});
 Listeners bind immediately and retain existing backlog/family behavior. Use the
 v0.3.0 `tcp::connect([io,] endpoint)` for a connected stream. Numeric endpoints
 support IPv4/IPv6; there is no implicit name lookup. Existing member
-`tcp::stream::read_exact` remains supported. [TCP contracts](tcp.md).
+`tcp::stream::read_exact` remains supported. [TCP contracts](net/tcp.md).
 
 ## UDP
 
@@ -84,7 +84,7 @@ is an allocation bound, not a promise that the network accepts 64 KiB payloads.
 
 One send and one receive may overlap; two sends or two receives may not. Closing
 cancels pending operations, but the object must stay alive until they unwind.
-`send_to`/`receive_from` keep their borrowed-buffer behavior. [UDP contracts](udp.md).
+`send_to`/`receive_from` keep their borrowed-buffer behavior. [UDP contracts](net/udp.md).
 
 ## DNS
 
@@ -102,7 +102,7 @@ system nameservers, a 5-second whole-lookup timeout and two tries. Results and
 c-ares error codes match `resolver::resolve`; numeric lookups need no nameserver.
 Context stop cancels waits. Use an explicit `dns::resolver` when you need its
 `cancel()` handle. This does not choose a service port, connect or try multiple
-addresses. [DNS options and errors](dns.md).
+addresses. [DNS options and errors](dns/README.md).
 
 ## TLS
 
@@ -125,7 +125,7 @@ check the expected DNS/IP name. They leave ALPN unset. A supplied context select
 the client verification policy and ALPN settings. Configure both before first use.
 Pass the expected certificate name separately from the numeric endpoint. DNS
 names also set SNI. Only one asynchronous TLS stream operation may be active,
-including reads versus writes. [TLS verification modes](tls.md#client-verification-modes).
+including reads versus writes. [TLS verification modes](tls/README.md#client-verification-modes).
 
 ## WebSocket
 
@@ -155,7 +155,7 @@ means no application authorization check. Use member `accept` if you also need
 its returned upgrade metadata; the helper returns just the socket.
 
 Only one async operation per WebSocket stream is permitted, including receive,
-send and close. [WebSocket contracts](websocket.md).
+send and close. [WebSocket contracts](websocket/README.md).
 
 ## QUIC
 
@@ -176,7 +176,7 @@ verified handshake. Configure ALPN and trust explicitly before use. The timeout
 bounds connection establishment; it is not a stream/request deadline. A nonpositive
 bound permits one immediate handshake attempt, matching `connection::connect`.
 The connection must remain open while streams operate; retain the listener while
-its accepted connections operate. [QUIC contracts](quic.md).
+its accepted connections operate. [QUIC contracts](quic/README.md).
 
 ## HTTP/2 and HTTP/3
 
@@ -195,4 +195,4 @@ verified TLS with ALPN `h2`. HTTP/3 takes verified QUIC with ALPN `h3`. These ar
 path/authority APIs, not URL clients; there is no fallback or implicit DNS. Bodies
 are buffered and existing limits apply. For custom headers, other methods or
 multiple multiplexed requests use `async_exchange`. The transferred connection is not
-available for reuse by the caller after GET. [HTTP/2](http2.md) · [HTTP/3](http3.md).
+available for reuse by the caller after GET. [HTTP/2](http2/README.md) · [HTTP/3](http3/README.md).

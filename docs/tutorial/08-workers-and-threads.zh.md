@@ -1,6 +1,6 @@
 # 5. 明确工作在哪个线程上执行
 
-[English](05-execution.md) · [上一章：HTTP](04-http.zh-CN.md) · [下一章：关闭](06-shutdown.zh-CN.md)
+[English](08-workers-and-threads.md) · [上一章：HTTP](03-http-server.zh.md) · [下一章：关闭](09-graceful-shutdown.zh.md)
 
 前面的 `pace::run` 和手动 `io.run()` 都在调用线程执行。本章把两个任务分配到
 两个独立 reactor，理解“异步等待”和“多线程并行”的区别。依赖仍是 `pace_runtime`。
@@ -63,7 +63,7 @@ io.post([&io] { io.stop(); });
 
 引用的 context 必须活到回调执行，关闭期间投递可能被拒绝。
 外部线程必须在销毁 context 前 join，异常路径也一样。
-[英文完整教程](05-execution.md#run-without-a-runtime)给出了保留异常并 join 的代码。
+[英文完整教程](08-workers-and-threads.md#run-without-a-runtime)给出了保留异常并 join 的代码。
 
 ## 第四步：别把阻塞调用当成异步操作
 
@@ -84,4 +84,4 @@ context 是否就在 main 的线程上。
 
 需要多个 worker 监听同一端口时，参考各 worker 独立 listener 的 reuse-port 示例；
 该策略并非所有平台都支持，不要把活动 socket 随意移动到另一个 context。
-[执行契约](../reference/runtime.md) · [平台说明](../reference/platform.md)
+[执行契约](../reference/runtime/runtime.md) · [平台说明](../reference/platform-support.md)

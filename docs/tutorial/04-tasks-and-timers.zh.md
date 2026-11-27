@@ -1,6 +1,6 @@
 # 2. 写出第一个异步程序
 
-[English](02-tasks-timers.md) · [上一章：构建](01-build.zh-CN.md) · [下一章：TCP](03-tcp.zh-CN.md)
+[English](04-tasks-and-timers.md) · [上一章：构建](01-install-and-first-program.zh.md) · [下一章：TCP](05-tcp.zh.md)
 
 这一章从“等待一下，再返回字符串”开始。完成后你会知道任务何时执行、
 `co_await` 暂停了谁，以及结果和错误怎样回到 `main`。
@@ -110,4 +110,4 @@ io.run();             // 需要由某个控制路径显式调用 io.stop()
 最后运行 `xmake run tutorial_tasks`，对照[扩展练习源码](../../examples/tutorial_tasks.cpp)
 检查子任务异常、惰性启动和上下文归属。下一章用相同写法连接 TCP。
 
-[完整入口契约](../reference/run.md) · [task 参考](../reference/task.md)
+[完整入口契约](../reference/runtime/run.md) · [task 参考](../reference/runtime/task.md)

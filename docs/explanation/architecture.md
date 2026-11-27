@@ -37,7 +37,7 @@ all third-party protocols default off. QUIC uses ngtcp2 and OpenSSL by default.
 Both QUIC backends are independent of the TCP TLS module. HTTP/3 enables QUIC plus nghttp3, without depending on
 HTTP/1 or HTTP/2. TLS uses OpenSSL, DNS uses c-ares, and HTTP/2 uses nghttp2.
 QUIC/HTTP3 require POSIX; Windows builds reject these options until a native
-transport adapter is implemented. See the [platform matrix](reference/platform.md).
+transport adapter is implemented. See the [platform matrix](../reference/platform-support.md).
 `http_types.hpp` holds transport-independent HTTP messages and handlers, so
 HTTP/2 and HTTP/3 do not depend on the HTTP/1 parser. Core networking has no
 upward protocol dependencies. Buffer ownership remains explicit through spans,
@@ -67,7 +67,7 @@ Cross-thread submissions enter a mutex-protected inbox. The first submission aft
 
 Ready coroutine and posted-function batches are bounded at 256 items so continuously ready application work still gives the loop opportunities to inspect timers, I/O, and shutdown. A task-only loop skips a zero-timeout native poll when it has no registered descriptors. It still checks inbox submissions and timers on every turn. Once a socket has a registration, normal readiness polling continues.
 
-Optional [stage profiling](../benchmarks/profiling.md) and [component microbenchmarks](../benchmarks/components.md) separate operation cost from kernel waiting. Profiling is disabled by default and must remain disabled for comparative performance measurements.
+Optional [stage profiling](../../benchmarks/profiling.md) and [component microbenchmarks](../../benchmarks/components.md) separate operation cost from kernel waiting. Profiling is disabled by default and must remain disabled for comparative performance measurements.
 
 ## Readiness backends
 
@@ -90,7 +90,7 @@ are merged and any undelivered counterpart is disarmed. Wakeups are internal.
 
 Socket registrations have tokens independent of the native socket handle, allowing the reactor to discard stale deliveries after cancellation and handle reuse. `UINT64_MAX` is reserved for the internal wakeup token. Windows handles retain their native pointer width.
 
-[Selectable backends](reference/io-backends.md) include IOCP socket notifications and optional io_uring polling. Reads/writes still use nonblocking socket calls; these paths do not yet submit overlapped or direct io_uring data transfers. WSAPoll remains the Windows compatibility path. Performance remains workload-dependent.
+[Selectable backends](../reference/runtime/io-backends.md) include IOCP socket notifications and optional io_uring polling. Reads/writes still use nonblocking socket calls; these paths do not yet submit overlapped or direct io_uring data transfers. WSAPoll remains the Windows compatibility path. Performance remains workload-dependent.
 
 ## Tasks and object ownership
 
@@ -131,7 +131,7 @@ A context is single-use: `run()` cannot be called concurrently, nested inside an
 `tcp::stream::close()` cancels its registered read/write operations before releasing the native socket. Destroying the socket object itself while a suspended member operation still refers to it is invalid: close it on its loop, allow the operation to resume and complete, then destroy the object. A listener passed to `http::serve()` must outlive that serving task and its accepted connections. Stopping the owning context cancels both accept and accepted-connection waits.
 
 Stop is cooperative, not a forced thread interruption. An application coroutine that never suspends or returns, or application code blocked in a synchronous call, can prevent shutdown from completing. Local cancellation tokens propagate through awaited tasks and structured children;
-[operation boundaries](reference/structured-concurrency.md) compose the earliest deadline without stopping unrelated work. Scoped callback timers support cancellation on completion; HTTP/1 servers can set receive and write deadlines.
+[operation boundaries](../reference/runtime/structured-concurrency.md) compose the earliest deadline without stopping unrelated work. Scoped callback timers support cancellation on completion; HTTP/1 servers can set receive and write deadlines.
 
 ## TCP and HTTP
 
@@ -148,16 +148,16 @@ immediate-read path; the hint follows move operations.
 
 The multithreaded echo and HTTP examples create one listener per worker on the same port using `SO_REUSEPORT` where available. This lets the operating system distribute incoming connections. The current Windows implementation does not provide this listener-sharing strategy; those examples require one worker on Windows. Separate ports and outbound connections can still use multiple Windows contexts.
 
-The HTTP/1 layer supports clients and servers, Content-Length and chunked framing, trailers, and sequential persistent connections. Default limits are 16 KiB of request headers, 1 MiB of request body, and 1,000 requests per connection; field counts, trailers and chunk metadata have separate bounds. Framing headers are generated by the library. The existing API buffers bodies; opt-in request-head admission chooses per-request body limits before upload, and owned response sources stream through bounded buffers with backpressure. See the [HTTP reference](reference/http.md) for validation and response semantics.
+The HTTP/1 layer supports clients and servers, Content-Length and chunked framing, trailers, and sequential persistent connections. Default limits are 16 KiB of request headers, 1 MiB of request body, and 1,000 requests per connection; field counts, trailers and chunk metadata have separate bounds. Framing headers are generated by the library. The existing API buffers bodies; opt-in request-head admission chooses per-request body limits before upload, and owned response sources stream through bounded buffers with backpressure. See the [HTTP reference](../reference/http1/README.md) for validation and response semantics.
 
-[UDP](reference/udp.md) preserves datagram boundaries and reports source addresses and truncation. [TLS](reference/tls.md) uses optional OpenSSL with certificate-chain and hostname verification, SNI and ALPN. Its initial stream API permits one outstanding async operation total, including read versus write. It uses a custom socket BIO to preserve Windows handle width and suppress SIGPIPE on supported platforms.
+[UDP](../reference/net/udp.md) preserves datagram boundaries and reports source addresses and truncation. [TLS](../reference/tls/README.md) uses optional OpenSSL with certificate-chain and hostname verification, SNI and ALPN. Its initial stream API permits one outstanding async operation total, including read versus write. It uses a custom socket BIO to preserve Windows handle width and suppress SIGPIPE on supported platforms.
 
-[HTTP/2](reference/http2.md) uses optional nghttp2 for framing, HPACK and flow control. The client owns one connection for a batch of multiplexed requests; the server buffers bounded stream bodies and invokes completed handlers sequentially per connection. [WebSocket](reference/websocket.md) handles HTTP upgrades on its own owned transport, then validates masking, fragmentation, UTF-8 and control frames. The HTTP/1 parser does not transfer its buffered transport into another protocol.
+[HTTP/2](../reference/http2/README.md) uses optional nghttp2 for framing, HPACK and flow control. The client owns one connection for a batch of multiplexed requests; the server buffers bounded stream bodies and invokes completed handlers sequentially per connection. [WebSocket](../reference/websocket/README.md) handles HTTP upgrades on its own owned transport, then validates masking, fragmentation, UTF-8 and control frames. The HTTP/1 parser does not transfer its buffered transport into another protocol.
 
-[DNS](reference/dns.md) integrates c-ares with readiness and timers. It resolves
+[DNS](../reference/dns/README.md) integrates c-ares with readiness and timers. It resolves
 A/AAAA and CNAME records without a blocking network lookup thread.
-[QUIC](reference/quic.md) exposes bidirectional and unidirectional streams over UDP.
-Its default transport is ngtcp2 with OpenSSL for TLS 1.3. Native OpenSSL QUIC is also available. [HTTP/3](reference/http3.md)
+[QUIC](../reference/quic/README.md) exposes bidirectional and unidirectional streams over UDP.
+Its default transport is ngtcp2 with OpenSSL for TLS 1.3. Native OpenSSL QUIC is also available. [HTTP/3](../reference/http3/README.md)
 uses nghttp3 for HTTP framing and QPACK over those streams. These protocols are
 optional and are tested against local peers.
 
@@ -169,12 +169,12 @@ its deadlines, ownership and concurrency limits.
 
 ## Measurement and validation
 
-The first benchmark measures one server reactor under a closed-loop localhost TCP echo workload. PACE and Asio use coroutines; libuv uses callbacks. Payloads and completed-request counts are validated, runs are repeated in rotating backend order, and every raw result is preserved. See the [benchmark methodology](../benchmarks/README.md) for timing boundaries, limitations, and reproducible commands.
+The first benchmark measures one server reactor under a closed-loop localhost TCP echo workload. PACE and Asio use coroutines; libuv uses callbacks. Payloads and completed-request counts are validated, runs are repeated in rotating backend order, and every raw result is preserved. See the [benchmark methodology](../../benchmarks/README.md) for timing boundaries, limitations, and reproducible commands.
 
 This workload does not establish HTTP performance, multiworker scalability, open-loop tail latency, or general superiority over another library. CI runs functional builds on Linux, macOS, and Windows, plus a FreeBSD VM, and preserves correctness-check artifacts. Published performance measurements come from local Linux. Current [workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml), tests, and evidence files determine what has actually been validated.
 
-The separate [worker/execution scaling study](../benchmarks/scaling.md) keeps total clients fixed, balances them across one listening port per context, and compares runtime-managed threads, caller participation and application-owned threads. Startup, warmup, steady state and shutdown have separate timing windows. [Complete performance results](performance.md) include the README chart's unselected comparisons and negative findings.
+The separate [worker/execution scaling study](../../benchmarks/scaling.md) keeps total clients fixed, balances them across one listening port per context, and compares runtime-managed threads, caller participation and application-owned threads. Startup, warmup, steady state and shutdown have separate timing windows. [Complete performance results](../performance/README.md) include the README chart's unselected comparisons and negative findings.
 
 ## Embedded HTTP gateway
 
-Layer 3 includes [directory mounts and reverse proxies](reference/http-gateway.md). Connection pools and load-balancing counters are owned by each reactor, while bounded response caches use sharded CLOCK slots and immutable snapshots. Runtime descriptors also use generation-checked contiguous slots for event dispatch. These structures require no machine-specific cache tuning.
+Layer 3 includes [directory mounts and reverse proxies](../reference/gateway/README.md). Connection pools and load-balancing counters are owned by each reactor, while bounded response caches use sharded CLOCK slots and immutable snapshots. Runtime descriptors also use generation-checked contiguous slots for event dispatch. These structures require no machine-specific cache tuning.

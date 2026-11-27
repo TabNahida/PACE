@@ -1,6 +1,6 @@
 # 0. Get a response with one call
 
-[中文](00-quick-start.zh-CN.md) · [Learning path](README.md) · [Build details](01-build.md)
+[中文](02-http-client.zh.md) · [Learning path](README.md) · [Build details](01-install-and-first-program.md)
 
 Start with ordinary C++. No coroutine, event-loop setup or `run` is needed for a
 single client request. These guides require **PACE 0.4.0 or newer**, including direct
@@ -88,7 +88,7 @@ xmake run server
 ```
 
 In a second terminal, run `xmake run client`. Expect `200 ok` and client exit.
-The server remains available for another call. [Chapter 1](01-build.md) explains
+The server remains available for another call. [Chapter 1](01-install-and-first-program.md) explains
 module selection and the repository's companion examples.
 
 ## 4. Send a body or choose a timeout
@@ -108,18 +108,18 @@ auto reply = pace::http::get("http://127.0.0.1:8080/health",
 ```
 
 For hostnames configure `--dns=y`; for HTTPS add `--tls=y`. HTTPS verifies the URL
-hostname using system trust roots. See [HTTP](04-http.md) for other methods and
+hostname using system trust roots. See [HTTP](03-http-server.md) for other methods and
 custom trust. No redirect or request retry is automatic.
 
 ## 5. Use the same approach for TCP and UDP
 
-With a four-byte TCP echo server from [chapter 3](03-tcp.md):
+With a four-byte TCP echo server from [chapter 3](05-tcp.md):
 
 ```cpp
 auto reply = pace::tcp::exchange({"127.0.0.1", 9090}, "ping", 4);
 ```
 
-With the UDP echo server from [chapter 7](07-udp.md):
+With the UDP echo server from [chapter 7](06-udp.md):
 
 ```cpp
 auto packet = pace::udp::exchange({"127.0.0.1", 9091}, "hello");
@@ -146,9 +146,9 @@ application already runs tasks, handles connections, or manages concurrent work.
 Blocking clients reject calls from an active PACE context; use the async form in
 handlers. The direct client's 30-second deadline is not added to async calls.
 
-Continue with [HTTP](04-http.md), [TCP](03-tcp.md) or [UDP](07-udp.md) first; read
-[tasks and timers](02-tasks-timers.md) when you need async composition. Exact
+Continue with [HTTP](03-http-server.md), [TCP](05-tcp.md) or [UDP](06-udp.md) first; read
+[tasks and timers](04-tasks-and-timers.md) when you need async composition. Exact
 contracts, tuning and the 0.3.1 migration table live in
 [direct clients](../reference/direct-clients.md).
 
-[Next: compose concurrent requests with a shared deadline](12-structured-concurrency.md).
+[Next: compose concurrent requests with a shared deadline](07-structured-concurrency.md).

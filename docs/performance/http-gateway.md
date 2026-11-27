@@ -1,6 +1,6 @@
 # Local Linux gateway comparison with nginx
 
-For the latest single-worker optimization, before/after comparison and contention diagnostics, see [gateway optimization](gateway-optimization.md). This page retains the earlier measurements.
+For the latest single-worker optimization, before/after comparison and contention diagnostics, see [gateway optimization](history/gateway-optimization-2026-11-03.md). This page retains the earlier measurements.
 
 Measured 2026-11-03 on a **shared local Linux / WSL2 host**. A first run coincided
 with heavy CPU-intensive background jobs. After those jobs finished, we repeated
@@ -11,8 +11,8 @@ No remote-runner performance figures are used.
 
 ![All gateway scenarios](assets/gateway-performance.svg)
 
-[Lower-load raw trials and complete metrics](../benchmarks/results/linux-gateway-2026-11-03/nginx.json) ·
-[Earlier contended run, all 120 trials](../benchmarks/results/linux-gateway-2026-11-03/nginx-contended.json)
+[Lower-load raw trials and complete metrics](../../benchmarks/results/linux-gateway-2026-11-03/nginx.json) ·
+[Earlier contended run, all 120 trials](../../benchmarks/results/linux-gateway-2026-11-03/nginx-contended.json)
 
 Each full run completed 120 trials and validated all 19.2 million measured responses.
 nginx led single-worker static throughput and uncached proxy throughput at both
@@ -91,14 +91,14 @@ service. The exact build arguments appear in `nginx -V` in the report.
 Use an idle, controlled host for capacity planning. Keep release flags, connection
 counts, payloads, CPU allocation and cache state equal across implementations.
 Inspect all scenarios and latency percentiles, rather than selecting only a winning
-throughput bar. [Gateway contracts and current limits](reference/http-gateway.md)
+throughput bar. [Gateway contracts and current limits](../reference/gateway/README.md)
 explain what is implemented; this is not a full nginx feature/performance replacement.
 
 ## Descriptor-layout A/B experiment
 
 An alternate release binary changes only `src/runtime/io_context.cpp` back to the
 previous node-based descriptor map. Both use the same cache, HTTP code and epoll.
-[The exact baseline patch](../benchmarks/results/linux-gateway-2026-11-03/layout-baseline.patch)
+[The exact baseline patch](../../benchmarks/results/linux-gateway-2026-11-03/layout-baseline.patch)
 can be applied to this branch in a separate checkout. Build it with the same
 release options and supply it through `--baseline PATH --backends baseline,epoll`.
 
@@ -107,8 +107,8 @@ release options and supply it through `--baseline PATH --backends baseline,epoll
 | 32 | 114.9 | 138.2 | 1.112 |
 | 256 | 217.9 | 217.5 | 0.969 |
 
-[32-connection raw trials](../benchmarks/results/linux-gateway-2026-11-03/layout-32.json) ·
-[256-connection raw trials](../benchmarks/results/linux-gateway-2026-11-03/layout-256.json).
+[32-connection raw trials](../../benchmarks/results/linux-gateway-2026-11-03/layout-32.json) ·
+[256-connection raw trials](../../benchmarks/results/linux-gateway-2026-11-03/layout-256.json).
 Each uses one worker, static response caching, 4 KiB payloads and five rotated
 pairs. The host's background workload subsided during these runs, causing large
 variation, including a 2.24× outlier pair. **This experiment does not establish a

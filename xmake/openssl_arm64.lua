@@ -10,7 +10,7 @@ package("pace-openssl3-arm64")
         -- tls_parse_all_extensions. Returning then re-entered its prologue.
         -- Restore Microsoft's normal 4 KiB probe threshold; /O2, /GS and
         -- probes for large frames remain enabled. See
-        -- docs/diagnostics/windows-arm64-openssl.md.
+        -- docs/contributing/windows-arm64-openssl.md.
         local config = "Configurations/10-main.conf"
         local content = io.readfile(config)
         local corrected, count = content:gsub("/Gs0 /GF /Gy", "/Gs4096 /GF /Gy")

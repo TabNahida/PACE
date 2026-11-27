@@ -1,6 +1,6 @@
 # DNS resolver
 
-Short forms and owning helpers: [component conveniences](component-conveniences.md).
+Short forms and owning helpers: [component conveniences](../component-conveniences.md).
 
 Enable `--dns=y`, depend on `pace_dns` (or the aggregate `pace`), and include
 `<pace/dns.hpp>`. DNS is a Layer 2 extension backed by c-ares. The core TCP/UDP

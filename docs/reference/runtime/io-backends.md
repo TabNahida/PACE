@@ -37,7 +37,7 @@ These are **socket readiness backends**. The current io_uring implementation use
 operations still use nonblocking socket calls. This is not an implementation of
 io_uring direct SEND/RECV, registered buffers, zero-copy or overlapped
 WSARecv/WSASend/AcceptEx. Merely selecting a newer backend does not guarantee a
-speedup; compare your own workload and the [local Linux results](../gateway-performance.md).
+speedup; compare your own workload and the [local Linux results](../../performance/http-gateway.md).
 
 ## Linux io_uring
 

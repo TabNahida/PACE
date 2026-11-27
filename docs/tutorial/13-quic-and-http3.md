@@ -1,6 +1,6 @@
 # 11. From a QUIC stream to HTTP/3
 
-[中文](11-quic-http3.zh-CN.md) · [Previous: HTTP/2](10-http2.md) · [Learning path](README.md)
+[中文](13-quic-and-http3.zh.md) · [Previous: HTTP/2](12-http2.md) · [Learning path](README.md)
 
 QUIC adds authenticated, reliable streams above UDP. HTTP/3 then supplies HTTP
 framing and QPACK on those streams. Build one layer at a time: raw UDP datagrams
@@ -24,7 +24,7 @@ int main() {
 
 For a local test certificate, create `quic::context trust`, load the test CA,
 set ALPN `h3`, and call `http3::get(trust, url)`. In a coroutine use
-`co_await http3::async_get(url)`. See [unified clients](../reference/http-clients.md)
+`co_await http3::async_get(url)`. See [unified clients](../reference/http/clients.md)
 for trust and URL options. The following steps build the local service and then
 show the underlying QUIC streams; you need no raw stream setup for a URL request.
 
@@ -63,7 +63,7 @@ Read until that stream's EOF, write the reply, and call `finish_write()` for the
 reply direction. FIN applies to the stream, not to every stream on the connection.
 Keep the connection alive while its streams operate. Awaiting `pace::write`
 is not proof of peer receipt. Before closing a sender, follow the
-[delivery and FIN contract](../reference/protocol-tuning.md#quic), also used by
+[delivery and FIN contract](../guides/protocol-tuning.md#quic), also used by
 the companion below.
 
 The [QUIC companion](../../examples/tutorial_quic.cpp) tracks both peers before
@@ -93,7 +93,7 @@ std::cout << reply.status << " " << reply.body << '\n';
 
 Do not also open your own application/control streams on that transferred
 connection. The adapter owns HTTP/3 control and QPACK streams. `async_get` returns one buffered response. For several requests, use `async_exchange` instead;
-[batching, concurrency and lifetime](../reference/protocol-tuning.md#http2-and-http3)
+[batching, concurrency and lifetime](../guides/protocol-tuning.md#http2-and-http3)
 are covered in the reference. The helper uses your existing context and does not
 start a background thread. These helpers require PACE v0.3.1 or newer.
 
@@ -112,7 +112,7 @@ The [HTTP/3 companion](../../examples/tutorial_http3.cpp) prints responses for
 `/one` and `/two`. In your copy change the peer ALPN on one side and verify failure;
 a UDP socket being reachable does not establish an authenticated HTTP/3 session.
 This API does not expose server push, CONNECT, WebTransport or 0-RTT. Continue with
-the [QUIC](../reference/quic.md) and [HTTP/3](../reference/http3.md) references for
+the [QUIC](../reference/quic/README.md) and [HTTP/3](../reference/http3/README.md) references for
 limits and ownership rather than inferring support from the transport name.
 
 ## 5. Write a complete single-request service

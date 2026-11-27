@@ -1,6 +1,6 @@
 # Build configuration and diagnostic options
 
-[First project](../tutorial/01-build.md) · [中文入门](../tutorial/01-build.zh-CN.md)
+[First project](../tutorial/01-install-and-first-program.md) · [中文入门](../tutorial/01-install-and-first-program.zh.md)
 
 ## Select protocol modules
 
@@ -17,8 +17,8 @@ xmake run tutorial_http2
 
 xmake resolves OpenSSL 3.5.7 and nghttp2 1.70.0; first-time installation may need
 network access. HTTP/2 without TLS uses prior-knowledge cleartext TCP. HTTPS and
-HTTP/2 over TLS require certificate configuration; see [TLS](../reference/tls.md),
-[HTTP](../tutorial/04-http.md) and [HTTP/2](../reference/http2.md). Tutorial certificates in
+HTTP/2 over TLS require certificate configuration; see [TLS](tls/README.md),
+[HTTP](../tutorial/03-http-server.md) and [HTTP/2](http2/README.md). Tutorial certificates in
 `tests/certs` are public test fixtures and must never be deployment credentials.
 
 ## Select a language version or build purpose
@@ -163,8 +163,8 @@ xmake test -v
 Use a different configuration directory for another feature set. When returning
 to the repository's default configuration, unset `XMAKE_CONFIGDIR`.
 
-Next: [tasks and timers](../tutorial/02-tasks-timers.md).
+Next: [tasks and timers](../tutorial/04-tasks-and-timers.md).
 
 ## Optional Linux io_uring
 
-`--uring=y` links liburing into `pace_runtime`. Select it with `PACE_IO_BACKEND=io_uring` or an explicit constructor; enabling the build option alone preserves the epoll default. See [backend selection](io-backends.md).
+`--uring=y` links liburing into `pace_runtime`. Select it with `PACE_IO_BACKEND=io_uring` or an explicit constructor; enabling the build option alone preserves the epoll default. See [backend selection](runtime/io-backends.md).

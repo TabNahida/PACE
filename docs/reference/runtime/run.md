@@ -33,6 +33,6 @@ invoking the factory. Await a child task there instead. Empty entry tasks are
 rejected when awaited. Existing `io_context::run`, `spawn`, `post` and runtime
 worker APIs retain their original behavior.
 
-[Guided introduction](../tutorial/02-tasks-timers.md) · [中文教程](../tutorial/02-tasks-timers.zh-CN.md)
+[Guided introduction](../../tutorial/04-tasks-and-timers.md) · [中文教程](../../tutorial/04-tasks-and-timers.zh.md)
 
-Current-context helpers and direct-task lifetime rules: [convenience APIs](convenience.md).
+Current-context helpers and direct-task lifetime rules: [convenience APIs](../convenience.md).

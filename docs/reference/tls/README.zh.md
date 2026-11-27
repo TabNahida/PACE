@@ -1,8 +1,8 @@
 # TLS 使用指南
 
-简化写法与拥有数据的 helper：[组件便捷接口](component-conveniences.zh-CN.md)。
+简化写法与拥有数据的 helper：[组件便捷接口](../component-conveniences.zh.md)。
 
-[English API reference](tls.md) · [WebSocket](websocket.zh-CN.md) · [完整示例](../../examples/tutorial_tls.cpp)
+[English API reference](README.md) · [WebSocket](../websocket/README.zh.md) · [完整示例](../../../examples/tutorial_tls.cpp)
 
 启用 `--tls=y` 后包含 `<pace/tls.hpp>`，使用 OpenSSL 1.1.1 以上版本；部署时
 建议采用仍受支持的 OpenSSL 3.x。构建会导出 `PACE_HAS_TLS` 并链接 ssl/crypto。
@@ -34,7 +34,7 @@ SNI，数字 IP 则检查 IP SAN。可通过 `connect(endpoint, peer_name, serve
 或 `handshake(peer_name, server_name)` 独立指定 ASCII DNS SNI，传入空的
 `server_name` 可关闭 SNI。默认客户端加载 OpenSSL 信任路径，`load_verify_file`
 可追加 CA。
-TLS 接口不会自动解析域名，可先使用独立的 [DNS 扩展](dns.md)。
+TLS 接口不会自动解析域名，可先使用独立的 [DNS 扩展](../dns/README.md)。
 
 应用自己管理信任根时，可以完全跳过默认路径加载：
 
