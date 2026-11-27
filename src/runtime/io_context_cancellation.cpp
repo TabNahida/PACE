@@ -3,6 +3,52 @@
 
 namespace pace
 {
+void io_context::implementation::cancel_all(bool running_on_owner)
+{
+    notify_shutdown();
+    for (auto& state : descriptors)
+    {
+        if (state.fd == invalid_socket)
+        {
+            continue;
+        }
+        poller.remove(state.fd);
+        finish(state, state.reader, canceled());
+        finish(state, state.writer, canceled());
+    }
+    descriptors.clear();
+    free_descriptors.clear();
+    descriptor_count = 0;
+    tokens.clear();
+    dirty_descriptors.clear();
+#ifdef _WIN32
+    while (!handle_waits.empty())
+    {
+        cancel_handle_wait(*handle_waits.begin()->second, canceled());
+    }
+#endif
+    while (!timers.empty())
+    {
+        auto* timer = timers.top();
+        timers.pop();
+        timer->error = canceled();
+        ready.push_back(timer->continuation);
+    }
+    if (callbacks)
+    {
+        callbacks->clear();
+    }
+    cancellation_started = true;
+    if (cancellations && running_on_owner)
+    {
+        auto failure = cancellations->dispatch(true);
+        if (!first_error)
+        {
+            first_error = failure;
+        }
+    }
+}
+
 io_context::cancellation_handle::~cancellation_handle()
 {
     cancel();

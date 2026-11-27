@@ -222,6 +222,16 @@ struct io_context::cancellation_records
     }
 };
 
+// What remote_access hands out: it outlives the context, so a holder on another thread can find out whether the
+// context still accepts work instead of touching a destroyed one.
+struct remote_access::anchor
+{
+    std::mutex mutex;
+    io_context* context = nullptr; // Cleared first thing in ~io_context.
+    bool shut_down = false;        // Listeners have been notified.
+    std::vector<std::weak_ptr<listener>> listeners;
+};
+
 struct io_context::implementation
 {
     pace::poller poller;
@@ -242,6 +252,8 @@ struct io_context::implementation
     std::atomic<bool> inbox_pending{false};
     std::deque<task<void>> incoming_tasks;
     std::deque<std::function<void()>> incoming_posts;
+    // Notifies the remote_access listeners once (remote.cpp).
+    void notify_shutdown() noexcept;
 
     // Called with inbox_mutex held, after enqueue.
     bool mark_inbox() noexcept
@@ -508,50 +520,9 @@ struct io_context::implementation
         }
     }
 
-    void cancel_all(bool running_on_owner)
-    {
-        for (auto& state : descriptors)
-        {
-            if (state.fd == invalid_socket)
-            {
-                continue;
-            }
-            poller.remove(state.fd);
-            finish(state, state.reader, canceled());
-            finish(state, state.writer, canceled());
-        }
-        descriptors.clear();
-        free_descriptors.clear();
-        descriptor_count = 0;
-        tokens.clear();
-        dirty_descriptors.clear();
-#ifdef _WIN32
-        while (!handle_waits.empty())
-        {
-            cancel_handle_wait(*handle_waits.begin()->second, canceled());
-        }
-#endif
-        while (!timers.empty())
-        {
-            auto* timer = timers.top();
-            timers.pop();
-            timer->error = canceled();
-            ready.push_back(timer->continuation);
-        }
-        if (callbacks)
-        {
-            callbacks->clear();
-        }
-        cancellation_started = true;
-        if (cancellations && running_on_owner)
-        {
-            auto failure = cancellations->dispatch(true);
-            if (!first_error)
-            {
-                first_error = failure;
-            }
-        }
-    }
+    // Out of line (io_context_cancellation.cpp): run() calls it once, at shutdown. Inlined into run(), the
+    // shutdown notification it makes slowed the yield hot path by about 20% (Apple M-series, clang, kqueue).
+    void cancel_all(bool running_on_owner);
 
     void update(fd_state& state, std::uint64_t token)
     {
@@ -584,5 +555,10 @@ struct io_context::implementation
         }
         dirty_descriptors.clear();
     }
+
+    // remote_access state.
+    const std::shared_ptr<remote_access::anchor> anchor = std::make_shared<remote_access::anchor>();
+    // The never-cancelled token behind remote_access::on_cancel_or_stop, created on first use.
+    std::optional<cancellation_source> stop_only;
 };
 } // namespace pace

@@ -7,6 +7,7 @@ constinit thread_local io_context* active_context = nullptr;
 io_context::io_context(io_backend selected)
     : impl_(std::make_unique<implementation>(selected))
 {
+    impl_->anchor->context = this;
 }
 
 io_backend io_context::backend() const noexcept
@@ -19,6 +20,11 @@ io_context::~io_context()
     // Caller must join run() before destruction. Destruct user objects while the
     // entire implementation is alive, and reject reentrant submissions.
     stop();
+    {
+        // From here on remote_access::post refuses work; one already inside it finishes first.
+        std::scoped_lock lock(impl_->anchor->mutex);
+        impl_->anchor->context = nullptr;
+    }
     impl_->cancel_all(false);
     impl_->incoming_tasks.clear();
     impl_->incoming_posts.clear();

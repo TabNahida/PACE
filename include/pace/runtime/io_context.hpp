@@ -15,6 +15,7 @@
 namespace pace
 {
 struct scheduler_access;
+struct remote_access;
 
 /// One reactor run by one thread. spawn, post, stop and stopped are thread-safe; sockets, timers and waits are used
 /// only from the thread running the context. Single-use: it cannot be restarted.
@@ -324,6 +325,7 @@ public:
 
 private:
     friend struct scheduler_access;
+    friend struct remote_access;
     void cancel_wait(io_awaiter&, std::error_code);
     void cancel_wait(timer_awaiter&, std::error_code);
     struct implementation;
@@ -345,5 +347,49 @@ struct scheduler_access
     {
         io.schedule(handle);
     }
+};
+
+/// Implementation support for channel, snapshot and on(): a reference to a context that stays safe to use from any
+/// thread after the context has stopped or been destroyed, and the hooks built on it. Not part of the API.
+struct remote_access
+{
+    /// Shared between a context and everyone that holds its anchor; defined in the library.
+    struct anchor;
+
+    /// Notified once, on the context's thread, when the context starts its shutdown; or, for a context that never
+    /// shut down, while it is destroyed. Held weakly: destroying the owner of a listener unregisters it.
+    struct listener
+    {
+        void (*notify)(listener&) noexcept = nullptr;
+    };
+
+    /// The anchor of `io`. Thread-safe.
+    static std::shared_ptr<anchor> anchor_of(io_context& io);
+
+    /// The anchor of the context running on this thread, or nullptr. Comparing anchors, unlike context addresses,
+    /// cannot mistake a new context for a destroyed one: a held anchor is never reused.
+    static anchor* current() noexcept;
+
+    /// Queues `work` on the anchored context from any thread. Unlike io_context::post it is still accepted after
+    /// stop() (unless `while_stopping` is false), so a coroutine suspended there can be resumed while the context
+    /// drains. Accepted work runs if run() is running or yet to run and has not finished its drain; otherwise it is
+    /// destroyed unrun with the context, like the suspended frames it would resume. Returns false, without keeping
+    /// `work`, once the context is destroyed.
+    static bool post(anchor& target, std::function<void()> work, bool while_stopping = true);
+
+    /// Resumes `handle` on the anchored context: queued directly when called on its thread, otherwise posted.
+    /// Returns false when the context can no longer run it.
+    static bool resume(anchor& target, std::coroutine_handle<> handle);
+
+    /// Registers `subscriber`. Returns false, registering nothing, once the context has shut down. Thread-safe.
+    static bool listen(anchor& target, std::weak_ptr<listener> subscriber);
+
+    /// io_context::on_cancel(token, callback) for a token that can be cancelled; for an empty token, a registration
+    /// that only the context's stop triggers. Call on the thread running `io`.
+    static io_context::cancellation_handle on_cancel_or_stop(
+        io_context& io,
+        const cancellation_token& token,
+        std::function<void(std::error_code)> callback
+    );
 };
 } // namespace pace
