@@ -10,6 +10,8 @@
 
 namespace pace::http
 {
+/// Implementation of make_handler: calls `function` with the request when it accepts one, else with no arguments.
+/// Not exported by the pace.http module; not part of the API.
 template <class Function>
 auto call_handler(Function& function, request incoming)
 {
@@ -23,6 +25,8 @@ auto call_handler(Function& function, request incoming)
     }
 }
 
+/// Implementation of make_handler for stateful callables, kept alive by `function` until the task completes.
+/// Not exported by the pace.http module; not part of the API.
 template <class Function>
 task<response> invoke_handler(std::shared_ptr<Function> function, request incoming)
 {
@@ -37,6 +41,8 @@ task<response> invoke_handler(std::shared_ptr<Function> function, request incomi
     }
 }
 
+/// Implementation of make_handler for function pointers and stateless callables, copied into the task.
+/// Not exported by the pace.http module; not part of the API.
 // Stateless trivial callables and function pointers need no shared owner.
 // The coroutine frame owns its copy, including across a nested coroutine call.
 // Keep invocation lazy and exceptions inside the returned task.
@@ -54,14 +60,15 @@ task<response> invoke_function(Function function, request incoming)
     }
 }
 
+/// Implementation of router: a task that returns `outgoing`. Not exported by the pace.http module.
 inline task<response> immediate_response(response outgoing)
 {
     co_return outgoing;
 }
 
-// Adapt a synchronous response or task<response> callable to the shared HTTP
-// handler type. The callable (including move-only captures) is owned through
-// every invocation, even if the adapter/router is destroyed while suspended.
+/// Adapts a callable taking `request` (or nothing) and returning `response` or `task<response>` to `handler`.
+/// The callable, move-only captures included, stays alive through every started invocation, even if the
+/// adapter is destroyed meanwhile. It runs when the task is first resumed; its exceptions are stored in the task.
 template <class Function>
 handler make_handler(Function&& function)
 {
@@ -87,10 +94,10 @@ handler make_handler(Function&& function)
     }
 }
 
-// Exact, case-sensitive method/path routing for HTTP/1, HTTP/2 and HTTP/3.
-// Queries are excluded from path matching; percent escapes are not decoded.
-// Configure before serving. Copies share a table until registration detaches
-// it; stateful callable instances stay shared. Synchronize state shared across workers.
+/// Exact, case-sensitive method and path routing for HTTP/1, HTTP/2 and HTTP/3; usable as a `handler`.
+/// The query is ignored for matching and percent escapes are not decoded. Register every route before serving.
+/// Copies share one table until a registration on a copy detaches it; the callables stay shared, so state they
+/// share across worker threads must be synchronized.
 class router
 {
     struct route
@@ -118,6 +125,9 @@ class router
     }
 
 public:
+    /// Registers `function` (adapted with make_handler) for an exact method and path. Throws
+    /// std::invalid_argument for a method that is not a token, a path that does not start with '/' or contains
+    /// spaces, controls, '?' or '#', or a duplicate method and path.
     template <class Function>
     router& add(std::string method, std::string path, Function&& function)
     {
@@ -172,19 +182,23 @@ public:
         return *this;
     }
 
+    /// add("GET", path, function).
     template <class Function>
     router& get(std::string path, Function&& function)
     {
         return add("GET", std::move(path), std::forward<Function>(function));
     }
 
+    /// add("POST", path, function).
     template <class Function>
     router& post(std::string path, Function&& function)
     {
         return add("POST", std::move(path), std::forward<Function>(function));
     }
 
-    // Exact routes take priority; otherwise select the longest segment prefix.
+    /// Registers `function` for every method on paths under `prefix`, matched by whole segments. Exact paths win;
+    /// otherwise the longest prefix wins. The handler receives the full target. Trailing slashes are dropped.
+    /// Throws std::invalid_argument for an invalid or duplicate prefix.
     template <class Function>
     router& mount(std::string prefix, Function&& function)
     {
@@ -226,6 +240,8 @@ public:
         return *this;
     }
 
+    /// Dispatches one request. HEAD falls back to GET. No match is 404; a known path with another method is 405
+    /// with an Allow field. Exceptions of the selected handler propagate from the task.
     task<response> operator()(request incoming) const
     {
         if (!routes_)
