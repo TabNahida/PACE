@@ -1,70 +1,122 @@
-# Headers, platform handles and compatibility
+# Platform support
 
-## Header selection
+[简体中文](platform-support.zh.md) · [Reference](README.md)
 
-Use the narrow header for a component or include `<pace/pace.hpp>` for the full
-public surface. The umbrella includes tasks, reactors, runtime and the protocol
-APIs enabled in the build. It retains the old TCP aliases.
-`<pace/net.hpp>` is the canonical header for new TCP code.
+## Overview
 
-| Include | Purpose |
-|---|---|
-| `<pace/runtime.hpp>` | Lazy coroutine return types |
-| `<pace/runtime.hpp>` | Reactor and awaiters |
-| `<pace/runtime.hpp>` | Fixed-context worker runtime |
-| `<pace/net.hpp>` | Numeric IPv4/IPv6 TCP |
-| `<pace/net.hpp>` | Numeric IPv4/IPv6 datagrams |
-| `<pace/http1.hpp>` | HTTP/1.0–1.1 client and server; HTTPS with TLS enabled |
-| `<pace/tls.hpp>` | Verified TLS streams, with `--tls=y` |
-| `<pace/http2.hpp>` | HTTP/2 batch client and server, with `--http2=y` |
-| `<pace/dns.hpp>` | DNS resolver, with `--dns=y` |
-| `<pace/quic.hpp>` | POSIX QUIC streams, with `--quic=y` |
-| `<pace/http3.hpp>` | HTTP/3 over QUIC, with `--http3=y` |
-| `<pace/websocket.hpp>` | WebSocket client and server; wss with TLS enabled |
-| `<pace/runtime.hpp>` | Portable native socket handle types |
-| `<pace/net.hpp>` | Previous TCP naming aliases |
-| `<pace/net.hpp>` | Core runtime and sockets |
-| `<pace/pace.hpp>` | Core plus enabled Layer 2 extensions |
-| `<pace/pace.hpp>` | Shared HTTP messages plus enabled application protocols |
-| `<pace/pace.hpp>` | All enabled modules through public includes |
+PACE runs on Linux, macOS, FreeBSD and Windows. Every module is available on all four except QUIC and HTTP/3,
+which need a POSIX platform. This page lists the supported platforms and compilers, what CI checks on each, the
+I/O backend each one uses, and the platform-specific types and behavior of the public API.
 
-## Native socket values
+| Platform | Architectures run in CI | Modules | I/O backends |
+|:--|:--|:--|:--|
+| Linux | x86_64, aarch64, i386 (32-bit process) | All | epoll (default), io_uring (`--uring=y`) |
+| macOS | x86_64, arm64 | All | kqueue |
+| FreeBSD | x86_64 | All | kqueue |
+| Windows (MSVC) | x64, x86, arm64 | All except QUIC and HTTP/3 | IOCP socket notifications, WSAPoll |
+| Windows (MinGW) | x86_64 | Core, HTTP/1 and WebSocket tested; QUIC and HTTP/3 unsupported | IOCP socket notifications, WSAPoll |
 
-```cpp
-// namespace pace
-#ifdef _WIN32
-using native_socket_type = std::uintptr_t;
-#else
-using native_socket_type = int;
-#endif
-inline constexpr native_socket_type invalid_socket =
-    static_cast<native_socket_type>(-1);
-```
+## Compilers
 
-The Windows handle retains pointer width; do not store it in an `int` or call POSIX
-`close` on it. The invalid sentinel is available for borrowed-handle checks.
-`native_handle()` never transfers ownership. Raw readiness waits require a valid
-native resource whose owner coordinates cancellation and close with the context.
-On Windows readiness is for Winsock sockets, not arbitrary file handles. PACE
-does not expose a portable asynchronous file API through these aliases.
+PACE is C++20 (C++23 and later can be selected with `--cxxstandard`). The supported minimum compilers are:
 
-Windows socket initialization occurs automatically before PACE creates sockets or
-poller wake resources; consumers do not need to call WSAStartup for ordinary PACE
-use. The public platform header includes Winsock declarations and defines
-`NOMINMAX`/`WIN32_LEAN_AND_MEAN` when absent. Include Winsock headers before legacy
-Windows socket declarations in application-specific platform code.
+| Compiler | Minimum |
+|:--|:--|
+| GCC | 12 |
+| Clang | 16 |
+| Apple Clang | 15 |
+| MSVC | 19.38 (Visual Studio 2022 17.8) |
 
-`pace::detail::initialize_sockets()` and its older internal synonym
-`initialize_winsock()` are visible inline implementation helpers. They are not
-application APIs; PACE calls them itself. Other `detail` headers, including the
-poller and profiling scopes, likewise have no public compatibility contract.
+CI does not build with these minimum versions. It builds and tests with the compilers of its runners:
+
+| CI job | Compiler |
+|:--|:--|
+| Linux x86_64, aarch64, i386; C++20 and C++23 | GCC of Ubuntu 24.04 (GCC 13) |
+| Linux x86_64 | Clang of Ubuntu 24.04 (Clang 18) |
+| QUIC backends, both backends with every module | GCC 15, GCC 16.2, Clang 21 |
+| C++ named modules | Clang 18 (module jobs), GCC 16 and Clang 21 (QUIC backend jobs) |
+| macOS 15, x86_64 and arm64 | Apple Clang of the runner's default Xcode |
+| FreeBSD 14.3 | the system Clang |
+| Windows Server 2025 and Windows 11 ARM | MSVC of the runner's Visual Studio 2022 |
+| Windows MinGW | GCC of MSYS2 UCRT64 |
+| Linux armv7, riscv64, ppc64le, s390x (emulated) | Ubuntu 24.04 cross GCC |
+| Android, iOS (compile only) | NDK 27 Clang, Xcode Clang |
+
+C++ named modules (`--modules=y`) additionally need Clang or GCC 16; see [build options](build-options.md).
+
+## What CI checks
+
+The [CI coverage guide](../contributing/ci.md) lists every job; in short:
+
+- **Native execution, every module**: Linux x86_64 (GCC and Clang, C++20 and C++23, plus an io_uring job),
+  Linux aarch64, Linux i386, macOS x86_64 and arm64, FreeBSD x86_64. Each builds, runs every test and tutorial, and
+  runs independent Python WebSocket peers.
+- **Native execution, every module except QUIC and HTTP/3**: Windows x64 (IOCP), x86 (WSAPoll) and arm64 (IOCP)
+  with MSVC. These jobs also check that configuring QUIC fails with the expected error.
+- **Native execution, core, HTTP/1 and WebSocket**: Windows x86_64 with MinGW.
+- **Emulated execution, core, HTTP/1 and WebSocket**: Linux armv7, riscv64, ppc64le and s390x under QEMU user mode.
+  These run on the host kernel and say nothing about native hardware or performance.
+- **Compile only, core, HTTP/1 and WebSocket**: Android (armeabi-v7a, arm64-v8a, x86_64; API 30) and iOS arm64
+  (device and simulator). Networking, application integration and device restrictions on these platforms are
+  unverified.
+- **Linux only**: AddressSanitizer, UndefinedBehaviorSanitizer and leak checks with every module; each module
+  built and tested on its own with the [header check](build-options.md#header-self-containment-check); both QUIC
+  backends exchanging data with each other.
+
+Supported here means "built and tested as listed"; it does not imply equal performance. Published performance
+numbers come from local Linux measurements; see [performance](../performance/README.md).
+
+## I/O backends
+
+Each `io_context` uses one readiness backend. With `io_backend::automatic` (the default) it picks:
+
+| Platform | Automatic choice | Other choices |
+|:--|:--|:--|
+| Linux | epoll | io_uring, when built with `--uring=y` |
+| macOS, FreeBSD | kqueue | — |
+| Windows, 64-bit | IOCP socket notifications (`ProcessSocketNotifications`) where Windows provides them, otherwise WSAPoll | WSAPoll |
+| Windows, 32-bit | WSAPoll | — |
+
+The `PACE_IO_BACKEND` environment variable or an explicit constructor argument selects a backend; asking for one
+the platform does not have throws `std::system_error` with `std::errc::not_supported`. See
+[I/O backends](runtime/io-backends.md) for the selection rules and each backend's limits.
+
+## POSIX-only features
+
+- **QUIC and HTTP/3** need a POSIX platform (Linux, macOS, FreeBSD). Configuring `--quic=y` or `--http3=y` for
+  Windows or MinGW stops with a configuration error before any package is fetched. Everything else, including TLS,
+  DNS and HTTP/2, works on Windows.
+- **io_uring** is Linux only; `--uring=y` does nothing elsewhere.
+- **Sanitizers** (`--sanitizers=y`) are not applied with MSVC.
+
+## Native socket handles
+
+`<pace/runtime/platform.hpp>` (included by `<pace/runtime.hpp>`) declares the portable handle type; the
+declarations are on the [runtime](runtime/README.md) page. The platform facts:
+
+| | POSIX | Windows |
+|:--|:--|:--|
+| `pace::native_socket_type` | `int` (a file descriptor) | `std::uintptr_t` (a `SOCKET`) |
+| `pace::invalid_socket` | `-1` | `INVALID_SOCKET` (all bits set) |
+
+- A Windows socket is pointer-sized: do not store it in an `int` or close it with POSIX `close`.
+- `native_handle()` members lend the handle; they never transfer ownership. Raw readiness waits need a valid
+  socket whose owner coordinates cancellation and closing with the context. On Windows they work only for Winsock
+  sockets, not arbitrary handles. PACE has no portable asynchronous file API.
+- On Windows, PACE initializes Winsock (`WSAStartup` 2.2, once per process) before it creates its first socket or
+  poller; applications do not call `WSAStartup` for PACE. PACE creates overlapped, non-inheritable sockets.
+- On Windows, `<pace/runtime/platform.hpp>` includes `<winsock2.h>` and `<ws2tcpip.h>` and defines `NOMINMAX` and
+  `WIN32_LEAN_AND_MEAN` if they are not defined yet. The `pace_runtime` target also defines `_WIN32_WINNT=0x0A00`
+  (Windows 10) and links `ws2_32` and `bcrypt` for its dependents. In your own platform code, include Winsock
+  headers before any header that pulls in the legacy `<winsock.h>`.
 
 ## Compatibility aliases
 
-Including `<pace/net.hpp>` or the umbrella preserves these exact type aliases:
+`<pace/net.hpp>` includes `<pace/net/aliases.hpp>`, which keeps the earlier names of the TCP types:
 
 ```cpp
-namespace pace {
+namespace pace
+{
 using tcp_stream = tcp::stream;
 using tcp_listener = tcp::listener;
 using ipv4_endpoint = tcp::endpoint;
@@ -72,44 +124,13 @@ using listen_options = tcp::listen_options;
 }
 ```
 
-They do not wrap, copy or alter behavior; ownership and errors are those of the
-canonical TCP types. New documentation uses `pace::tcp::*`. There is no
-`pace::net` namespace or generic protocol endpoint abstraction.
+They are exact aliases with the same behavior on every platform, and they are deprecated: new code uses
+`pace::tcp::*`. See [networking](net/README.md).
 
-## Platform scope
+## See also
 
-Linux defaults to epoll and optionally supports io_uring; 64-bit macOS/FreeBSD use kqueue.
-Windows selects IOCP socket notifications where supported, with WSAPoll compatibility.
-See [backend selection and capability boundaries](runtime/io-backends.md). OS support
-does not imply equal scaling or measured performance. Same-port listener reuse
-is platform-dependent; the worker runtime itself is available independently of
-that listener strategy. See [architecture](../explanation/architecture.md) and the
-[benchmark methodology](../../benchmarks/README.md) for implementation and evidence.
-
-
-The main functional CI matrix is configured for these module groups:
-
-| Module group | Linux | macOS | FreeBSD | Windows |
-|---|:---:|:---:|:---:|:---:|
-| Runtime, TCP, UDP, HTTP/1.1, WebSocket | ✓ | ✓ | ✓ | ✓ |
-| TLS, DNS, HTTP/2 | ✓ | ✓ | ✓ | ✓ |
-| QUIC, HTTP/3 | ✓ | ✓ | ✓ | Unsupported |
-
-Native CPU coverage includes x86_64 and aarch64 on Linux, macOS and Windows,
-plus 32-bit Linux i386 and Windows x86 processes. FreeBSD uses an x86_64 VM.
-Linux also checks GCC/Clang, C++23, sanitizers and builds with all optional
-protocols disabled or only HTTP/3 enabled. An additional MinGW x86_64 job runs
-core, HTTP1 and WebSocket tests on Windows.
-
-ARMv7, RISC-V64, PowerPC64 LE and s390x Linux run core, HTTP1 and WebSocket
-functional tests through QEMU user-mode emulation. These use the host Linux
-kernel and do not establish native-hardware support or performance. Android
-(three ABIs) and iOS (arm64 device/simulator) have compile-only library checks;
-their network runtime, application integration and device restrictions remain
-unverified.
-
-The [CI coverage guide](../contributing/ci.md) lists exact runners, dependencies and evidence
-limits. [Main workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml)
-and [portability results](https://github.com/TabNahida/PACE/actions/workflows/portability.yml)
-record which revisions passed. CI benchmark executables run short correctness
-checks; published performance comparisons use local Linux measurements.
+- [Build options](build-options.md)
+- [I/O backends](runtime/io-backends.md), [runtime](runtime/README.md), [networking](net/README.md)
+- [QUIC](quic/README.md), [HTTP/3](http3/README.md)
+- [CI coverage](../contributing/ci.md), [Windows ARM64 OpenSSL](../contributing/windows-arm64-openssl.md)
+- [Architecture](../explanation/architecture.md)
