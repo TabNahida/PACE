@@ -14,7 +14,7 @@ are owned until shutdown. A task passed directly must already own its data: do
 not immediately invoke a temporary capturing coroutine lambda and pass its task.
 Pass the lambda itself. See [run](run.md) for result, cancellation and lifetime rules.
 
-Header `<pace/this_context.hpp>` exports `this_context()`, `sleep_for(duration)`
+Header `<pace/runtime.hpp>` exports `this_context()`, `sleep_for(duration)`
 and `yield()`. They resolve the running context when called, throw `logic_error`
 when none is running, and return the same awaiters as the explicit context API.
 Keep an awaiter on its original context and do not retain it beyond that context.
@@ -22,7 +22,7 @@ These helpers add no coroutine allocation. `run.hpp` also exports them.
 
 ## TCP
 
-Header `<pace/tcp.hpp>`, link `pace_net`:
+Header `<pace/net.hpp>`, link `pace_net`:
 
 ```cpp
 pace::task<pace::tcp::stream> pace::tcp::connect(pace::io_context&, pace::tcp::endpoint);
@@ -60,7 +60,7 @@ workers still require synchronization. Synchronous callbacks run on the reactor.
 
 ## HTTP application
 
-Header `<pace/http.hpp>`, link `pace_http1`:
+Header `<pace/http1.hpp>`, link `pace_http1`:
 
 ```cpp
 pace::http::app app;

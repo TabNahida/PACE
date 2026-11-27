@@ -2,7 +2,7 @@
 
 For an entry that automatically stops its own fresh context on completion, see [`pace::run`](run.md). Manual `io_context::run()` semantics remain unchanged.
 
-Include `<pace/io_context.hpp>`. A context owns one native readiness reactor,
+Include `<pace/runtime.hpp>`. A context owns one native readiness reactor,
 submission queues, ready coroutine queues and steady-clock timers. Exactly one
 thread may execute it. It is neither copyable nor movable.
 

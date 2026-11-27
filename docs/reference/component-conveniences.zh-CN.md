@@ -19,7 +19,7 @@ context 的 socket。helper 不提供额外锁、操作队列、通用期限、�
 
 ## 字节流与 TCP
 
-`<pace/stream_io.hpp>` 定义通用接口，TCP/TLS/QUIC 头文件也会包含它：
+`<pace/net.hpp>` 定义通用接口，TCP/TLS/QUIC 头文件也会包含它：
 
 ```cpp
 co_await pace::write(stream, std::string("a\0b", 3));
@@ -40,7 +40,7 @@ endpoint 是数字 IPv4/IPv6，不隐含 DNS。原有成员 read_exact 保留。
 
 ## UDP
 
-依赖 pace_net，包含 `<pace/udp.hpp>`：
+依赖 pace_net，包含 `<pace/net.hpp>`：
 
 ```cpp
 auto receiver = pace::udp::bind({"127.0.0.1", 0});

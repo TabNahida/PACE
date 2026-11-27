@@ -55,7 +55,7 @@ Timeout throws `system_error` with `errc::timed_out` after cleanup.
 
 ## 2. Replace timers with network requests
 
-Include `<pace/http.hpp>` and link `pace_http1`. With the quick-start server running,
+Include `<pace/http1.hpp>` and link `pace_http1`. With the quick-start server running,
 replace the group body with:
 
 ```cpp

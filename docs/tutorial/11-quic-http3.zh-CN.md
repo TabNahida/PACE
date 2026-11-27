@@ -68,7 +68,7 @@ FIN 针对一个 stream，不是关闭连接上的全部流。连接对象要活
 ## 第三步：让 HTTP/3 接管协议流
 
 启用 `--http3=y`，依赖 `pace_http3`；两端 ALPN 改成 `h3`。
-包含 `<pace/http3.hpp>` 和 `<pace/http_router.hpp>`，保留前面章节的路由：
+包含 `<pace/http3.hpp>` 和 `<pace/http.hpp>`，保留前面章节的路由：
 
 ```cpp
 pace::http::router app;

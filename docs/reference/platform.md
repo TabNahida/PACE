@@ -5,27 +5,27 @@
 Use the narrow header for a component or include `<pace/pace.hpp>` for the full
 public surface. The umbrella includes tasks, reactors, runtime and the protocol
 APIs enabled in the build. It retains the old TCP aliases.
-`<pace/tcp.hpp>` is the canonical header for new TCP code.
+`<pace/net.hpp>` is the canonical header for new TCP code.
 
 | Include | Purpose |
 |---|---|
-| `<pace/task.hpp>` | Lazy coroutine return types |
-| `<pace/io_context.hpp>` | Reactor and awaiters |
+| `<pace/runtime.hpp>` | Lazy coroutine return types |
+| `<pace/runtime.hpp>` | Reactor and awaiters |
 | `<pace/runtime.hpp>` | Fixed-context worker runtime |
-| `<pace/tcp.hpp>` | Numeric IPv4/IPv6 TCP |
-| `<pace/udp.hpp>` | Numeric IPv4/IPv6 datagrams |
-| `<pace/http.hpp>` | HTTP/1.0–1.1 client and server; HTTPS with TLS enabled |
+| `<pace/net.hpp>` | Numeric IPv4/IPv6 TCP |
+| `<pace/net.hpp>` | Numeric IPv4/IPv6 datagrams |
+| `<pace/http1.hpp>` | HTTP/1.0–1.1 client and server; HTTPS with TLS enabled |
 | `<pace/tls.hpp>` | Verified TLS streams, with `--tls=y` |
 | `<pace/http2.hpp>` | HTTP/2 batch client and server, with `--http2=y` |
 | `<pace/dns.hpp>` | DNS resolver, with `--dns=y` |
 | `<pace/quic.hpp>` | POSIX QUIC streams, with `--quic=y` |
 | `<pace/http3.hpp>` | HTTP/3 over QUIC, with `--http3=y` |
 | `<pace/websocket.hpp>` | WebSocket client and server; wss with TLS enabled |
-| `<pace/platform.hpp>` | Portable native socket handle types |
+| `<pace/runtime.hpp>` | Portable native socket handle types |
 | `<pace/net.hpp>` | Previous TCP naming aliases |
-| `<pace/networking.hpp>` | Core runtime and sockets |
-| `<pace/extensions.hpp>` | Core plus enabled Layer 2 extensions |
-| `<pace/application.hpp>` | Shared HTTP messages plus enabled application protocols |
+| `<pace/net.hpp>` | Core runtime and sockets |
+| `<pace/pace.hpp>` | Core plus enabled Layer 2 extensions |
+| `<pace/pace.hpp>` | Shared HTTP messages plus enabled application protocols |
 | `<pace/pace.hpp>` | All enabled modules through public includes |
 
 ## Native socket values

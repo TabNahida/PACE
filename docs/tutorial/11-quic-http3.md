@@ -82,7 +82,7 @@ app.get("/health", [](pace::http::request) { return pace::http::response{.body =
 io.spawn(pace::http3::serve(listener, app));
 ```
 
-Include `<pace/http3.hpp>` and `<pace/http_router.hpp>`. In the client, establish a
+Include `<pace/http3.hpp>` and `<pace/http.hpp>`. In the client, establish a
 verified QUIC connection with the `h3` configuration, then request one response:
 
 ```cpp

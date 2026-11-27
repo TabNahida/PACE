@@ -6,7 +6,7 @@ Short forms and owning helpers: [component conveniences](component-conveniences.
 
 [0.3.0 convenience additions](convenience.md)
 
-Include `<pace/tcp.hpp>`. TCP sockets are nonblocking, move-only and tied to an
+Include `<pace/net.hpp>`. TCP sockets are nonblocking, move-only and tied to an
 `io_context`. Operations return lazy [tasks](task.md). Keep the context alive
 longer than its sockets and listeners, and keep each socket object and operation
 buffer alive until the operation completes.
@@ -31,7 +31,7 @@ struct listen_options {
 
 An endpoint owns its numeric IPv4 or IPv6 address, such as `127.0.0.1` or `::1`.
 Existing `{address, port}` initializers remain valid. `pace::address_family`,
-declared in `<pace/ip.hpp>`, has `unspecified`, `ipv4` and `ipv6` values. Input
+declared in `<pace/net.hpp>`, has `unspecified`, `ipv4` and `ipv6` values. Input
 defaults to automatic inference; an explicit family must match the address.
 Endpoint inspection always returns the concrete family. Hostnames, brackets,
 embedded NUL bytes and malformed addresses throw `std::invalid_argument`.

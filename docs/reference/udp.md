@@ -42,7 +42,7 @@ co_await receiver.send_to("reply", packet.sender);
 
 ## API
 
-Include `<pace/udp.hpp>`. All types are in `pace::udp`.
+Include `<pace/net.hpp>`. All types are in `pace::udp`.
 
 | API | Purpose |
 |---|---|

@@ -2,7 +2,7 @@
 
 [循序渐进教程](../tutorial/13-gateway.zh-CN.md) · [完整英文契约](http-gateway.md)
 
-包含 `<pace/http.hpp>`，链接 `pace_http1`。这些接口需要 PACE 0.5.0 或更新版本。
+包含 `<pace/http1.hpp>`，链接 `pace_http1`。这些接口需要 PACE 0.5.0 或更新版本。
 `app.mount(prefix, directory, options)` 挂载目录，`app.proxy(prefix, upstreams, options)`
 代理到一个或多个固定上游。最长路径前缀优先，精确路由优先于前缀路由；匹配以路径段为界。
 

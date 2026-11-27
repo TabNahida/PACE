@@ -51,7 +51,7 @@ int main() {
 
 ## 2. 把定时器替换成网络请求
 
-包含 `<pace/http.hpp>` 并链接 `pace_http1`，保持快速入门的服务端运行，将任务组主体换成：
+包含 `<pace/http1.hpp>` 并链接 `pace_http1`，保持快速入门的服务端运行，将任务组主体换成：
 
 ```cpp
 [](pace::task_group& group) -> pace::task<std::string> {

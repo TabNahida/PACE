@@ -112,13 +112,13 @@ target("my_application")
 
 The dependency exports include paths, platform definitions and required system
 libraries. Include `<pace/pace.hpp>` for the full surface, or a narrow public
-header such as `<pace/tcp.hpp>`.
+header such as `<pace/net.hpp>`.
 
 Use `add_deps("pace_runtime")` for tasks/timers/execution, `pace_net` for TCP/UDP,
 or individual modules `pace_tls`, `pace_dns`, `pace_quic`, `pace_http1`,
 `pace_http2`, `pace_http3`, `pace_websocket`. The protocol must be enabled when
-configuring. `pace_extensions` and `pace_application` aggregate enabled modules
-in their respective layers. Selecting `pace_net` never links OpenSSL, c-ares or
+configuring. Each module installs its own headers under `include/pace/<module>/`
+with an umbrella header `<pace/<module>.hpp>`. Selecting `pace_net` never links OpenSSL, c-ares or
 HTTP code even when another target in the same project enables those features.
 
 For a standalone vendored project, include PACE's build description to preserve

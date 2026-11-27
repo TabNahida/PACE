@@ -28,14 +28,14 @@ are not detected; the call still blocks their thread.
 ## Signatures
 
 ```cpp
-// <pace/blocking.hpp>, also included by tcp.hpp, udp.hpp and http.hpp
+// <pace/runtime.hpp>, also included by tcp.hpp, udp.hpp and http.hpp
 struct pace::blocking_options {
     std::chrono::milliseconds timeout{30000};
     cancellation_token cancellation{};
     pace::deadline deadline{};
 };
 
-// <pace/http.hpp>, link pace_http1; signatures inside namespace pace::http
+// <pace/http1.hpp>, link pace_http1; signatures inside namespace pace::http
 response get(std::string url, blocking_options wait = {},
              limits bounds = {}, client_options options = {});
 response post(std::string url, std::string body,
@@ -49,7 +49,7 @@ response get(const tls::context& trust, std::string url, blocking_options wait =
 response fetch(const tls::context& trust, std::string url, request outgoing,
                blocking_options wait = {}, limits bounds = {}, client_options options = {});
 
-// <pace/tcp.hpp>, link pace_net; inside namespace pace::tcp
+// <pace/net.hpp>, link pace_net; inside namespace pace::tcp
 std::string exchange(endpoint peer, std::string request, std::size_t reply_size,
                      blocking_options options = {}, std::size_t maximum = 1024 * 1024);
 task<std::string> async_exchange(io_context&, endpoint, std::string request,
@@ -57,7 +57,7 @@ task<std::string> async_exchange(io_context&, endpoint, std::string request,
 task<std::string> async_exchange(endpoint, std::string request,
                                  std::size_t reply_size, std::size_t maximum = 1024 * 1024);
 
-// <pace/udp.hpp>, link pace_net; inside namespace pace::udp
+// <pace/net.hpp>, link pace_net; inside namespace pace::udp
 packet exchange(endpoint peer, std::string request, blocking_options options = {},
                 std::size_t capacity = 65536);
 std::size_t send(endpoint peer, std::string message, blocking_options options = {});

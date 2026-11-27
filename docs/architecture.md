@@ -20,16 +20,17 @@ flowchart BT
 |---|---|---|
 | 0, core | `pace_runtime` | `src/runtime/`: reactor, poller, execution, timers and worker runtime |
 | 1, core | `pace_net` | `src/net/`: TCP and UDP; depends only on runtime |
-| 2, optional | `pace_tls`, `pace_dns`, `pace_quic`; aggregate `pace_extensions` | `src/tls/`, `src/dns/`, `src/quic/` |
-| 3, optional | `pace_http1`, `pace_http2`, `pace_http3`, `pace_websocket`; aggregate `pace_application` | `src/http/`, `src/http1/`, `src/http2/`, `src/http3/`, `src/websocket/`, `src/gateway/` |
+| 2, optional | `pace_tls`, `pace_dns`, `pace_quic` | `src/tls/`, `src/dns/`, `src/quic/` |
+| 3, optional | `pace_http` (header-only), `pace_http1` (includes the gateway services), `pace_http2`, `pace_http3`, `pace_websocket` | `src/http/`, `src/http1/`, `src/http2/`, `src/http3/`, `src/websocket/`, `src/gateway/` |
 
-`pace` is a compatibility aggregate target exporting the enabled modules. It no
-longer produces one monolithic `libpace.a`: applications link the individual
-static libraries through xmake's dependency graph. Existing `add_deps("pace")`
-and public include paths remain supported. Narrow consumers can instead use
-`add_deps("pace_net")` with `<pace/networking.hpp>`, or select an individual
-protocol. `<pace/extensions.hpp>` and `<pace/application.hpp>` group the upper
-layers. Public protocol headers remain at their existing paths.
+`pace` is an aggregate target exporting the enabled modules. It does not
+produce one monolithic `libpace.a`: applications link the individual static
+libraries through xmake's dependency graph. Each module compiles only
+`src/<module>/`, installs its headers under `include/pace/<module>/` and has an
+umbrella header `<pace/<module>.hpp>`; `<pace/pace.hpp>` includes every enabled
+module. Narrow consumers can use `add_deps("pace_net")` with `<pace/net.hpp>`,
+or select an individual protocol module. Internal headers live in
+`src/<module>/` and are not installed.
 
 HTTP/1 and WebSocket default on for source compatibility and can be disabled;
 all third-party protocols default off. QUIC uses ngtcp2 and OpenSSL by default.
@@ -134,7 +135,7 @@ Stop is cooperative, not a forced thread interruption. An application coroutine 
 
 ## TCP and HTTP
 
-The canonical TCP header is `<pace/tcp.hpp>`. It declares `pace::tcp::listener`, `pace::tcp::stream`, `pace::tcp::endpoint`, and `pace::tcp::listen_options`; `endpoint` represents a numeric IPv4/IPv6 address, port, address family and optional numeric IPv6 scope. `<pace/net.hpp>` forwards to this header and retains the original top-level names as source compatibility aliases. The umbrella `<pace/pace.hpp>` also retains those aliases.
+The canonical TCP header is `<pace/net.hpp>`. It declares `pace::tcp::listener`, `pace::tcp::stream`, `pace::tcp::endpoint`, and `pace::tcp::listen_options`; `endpoint` represents a numeric IPv4/IPv6 address, port, address family and optional numeric IPv6 scope. `<pace/net.hpp>` forwards to this header and retains the original top-level names as source compatibility aliases. The umbrella `<pace/pace.hpp>` also retains those aliases.
 
 TCP uses nonblocking numeric IPv4/IPv6 sockets. IPv6 listeners default to IPv6-only; applications explicitly opt into dual-stack binding. Operations first attempt the native call; when it would block, they await the relevant readiness event and retry. `write_all()` retains its input view until the complete buffer has been sent. Socket errors use `std::system_error`. Linux sends suppress `SIGPIPE` per operation; platforms with `SO_NOSIGPIPE` configure it on the socket.
 After a short TCP read, the next nonempty read waits for level readiness before

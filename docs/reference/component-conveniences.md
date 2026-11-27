@@ -26,7 +26,7 @@ queue. They add no general timeout, retry, pooling or DNS policy.
 
 ## Byte streams and TCP
 
-Include `<pace/stream_io.hpp>`; TCP, TLS and QUIC headers include it too.
+Include `<pace/net.hpp>`; TCP, TLS and QUIC headers include it too.
 Supported streams are `tcp::stream`, `tls::stream` and `quic::stream`:
 
 ```cpp
@@ -46,7 +46,7 @@ complete without reading. Early EOF throws `system_error(connection_reset)`.
 Failed span reads may have modified a prefix. Cancellation and I/O errors propagate.
 These operations do not invent message framing or guarantee peer processing.
 
-In `<pace/tcp.hpp>`, linking `pace_net`:
+In `<pace/net.hpp>`, linking `pace_net`:
 
 ```cpp
 tcp::listener tcp::listen(io_context&, tcp::endpoint, tcp::listen_options = {});
@@ -60,7 +60,7 @@ support IPv4/IPv6; there is no implicit name lookup. Existing member
 
 ## UDP
 
-Include `<pace/udp.hpp>` and link `pace_net`:
+Include `<pace/net.hpp>` and link `pace_net`:
 
 ```cpp
 udp::socket udp::open(io_context&);

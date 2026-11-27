@@ -128,7 +128,7 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1
   protocol-layers:
-    name: Linux / independent protocol layers
+    name: Linux / each module on its own
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -139,21 +139,24 @@ jobs:
           actions-cache-folder: '.xmake-cache'
           package-cache: true
           package-cache-key: independent-protocols-ubuntu
-      - name: Core with no optional protocols
+      # Every module alone with only its own dependencies, plus every public header compiled on its own.
+      # A module that silently relies on another module, or a header that misses an include, fails here.
+      - name: Each module on its own
         run: |
-          xmake f -c -m release -o build/ci-core --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y
-          xmake -y
-          xmake test -v
-      - name: HTTP2 without HTTP1, TLS or DNS
-        run: |
-          xmake f -c -m release -o build/ci-http2 --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=y --http3=n --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y
-          xmake -y
-          xmake test -v
-      - name: HTTP3 without HTTP1, HTTP2 or TCP TLS
-        run: |
-          xmake f -c -m release -o build/ci-http3 --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=y --benchmarks=n --components=n --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y -y
-          xmake -y
-          xmake test -v
+          set -eu
+          off="--http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n"
+          for module in core tls dns quic http1 http2 http3 websocket; do
+            case $module in
+              core) on="" ;;
+              *) on="--$module=y" ;;
+            esac
+            echo "::group::$module"
+            xmake f -c -m release -o "build/ci-$module" --cxxstandard=cxx20 $off $on --benchmarks=n --components=n \
+              --scaling=n --profiling=n --sanitizers=n --examples=y --tests=y --header_check=y -y
+            xmake -y
+            xmake test -v
+            echo "::endgroup::"
+          done
   freebsd:
     name: FreeBSD 14.3 / C++20 / all protocols
     runs-on: ubuntu-24.04

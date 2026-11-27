@@ -126,7 +126,7 @@ auto packet = pace::udp::exchange({"127.0.0.1", 9091}, "hello");
 if (packet.truncated) throw std::runtime_error("UDP reply truncated");
 ```
 
-Include `<pace/tcp.hpp>` or `<pace/udp.hpp>` and link `pace_net`. Both calls use the
+Include `<pace/net.hpp>` or `<pace/net.hpp>` and link `pace_net`. Both calls use the
 same timeout options. TCP needs an agreed reply length; UDP returns one packet,
 including its sender. Each chapter builds a working client and server from scratch.
 

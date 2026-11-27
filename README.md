@@ -23,14 +23,14 @@
 
 ## Four layers. Your stack.
 
-| Layer | Modules | Aggregate target |
+| Layer | Modules | xmake targets |
 |:--|:--|:--|
-| **3 · Applications** | [HTTP/1.1](docs/reference/http.md) · [HTTP/2](docs/reference/http2.md) · [HTTP/3](docs/reference/http3.md) · [WebSocket](docs/reference/websocket.md) | `pace_application` |
-| **2 · Extensions** | [TLS](docs/reference/tls.md) · [DNS](docs/reference/dns.md) · [QUIC](docs/reference/quic.md) | `pace_extensions` |
+| **3 · Applications** | [HTTP/1.1](docs/reference/http.md) · [HTTP/2](docs/reference/http2.md) · [HTTP/3](docs/reference/http3.md) · [WebSocket](docs/reference/websocket.md) | `pace_http1` · `pace_http2` · `pace_http3` · `pace_websocket` |
+| **2 · Extensions** | [TLS](docs/reference/tls.md) · [DNS](docs/reference/dns.md) · [QUIC](docs/reference/quic.md) | `pace_tls` · `pace_dns` · `pace_quic` |
 | **1 · Networking** | [TCP](docs/reference/tcp.md) · [UDP](docs/reference/udp.md) · Socket API | `pace_net` |
 | **0 · Runtime** | Event loop · Native polling · Tasks · Timers · Workers | `pace_runtime` |
 
-Link individual modules, layer aggregates, or `pace` for the enabled stack. HTTP/1.1 and WebSocket are enabled by default; TLS, DNS, QUIC, HTTP/2 and HTTP/3 are opt-in. QUIC and HTTP/3 require POSIX; see the [platform matrix](docs/reference/platform.md).
+Link individual modules, each with its own header such as `<pace/tls.hpp>`, or `pace` and `<pace/pace.hpp>` for the enabled stack. HTTP/1.1 and WebSocket are enabled by default; TLS, DNS, QUIC, HTTP/2 and HTTP/3 are opt-in. QUIC and HTTP/3 require POSIX; see the [platform matrix](docs/reference/platform.md).
 
 [Architecture →](docs/architecture.md) · [Build options & integration →](docs/tutorial/01-build.md)
 

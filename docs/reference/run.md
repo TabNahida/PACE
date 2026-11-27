@@ -1,6 +1,6 @@
 # `pace::run`
 
-Header: `<pace/run.hpp>` (also exported by `<pace/pace.hpp>`). Link `pace_runtime`.
+Header: `<pace/runtime.hpp>` (also exported by `<pace/pace.hpp>`). Link `pace_runtime`.
 
 ```cpp
 template<class Factory>

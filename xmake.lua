@@ -71,16 +71,26 @@ end
 -- They are never installed; tests and benchmarks that need them add src/ themselves.
 add_includedirs("src")
 
--- Layer 0: no networking or optional protocol dependencies.
+-- One library target per module. A module compiles only src/<module>/, installs only its own headers
+-- (include/pace/<module>/ and the umbrella pace/<module>.hpp) and links only the modules it needs, so
+-- `xmake build pace_tls` builds runtime, net and tls and nothing else.
+local modules = {}
+
+local function module_headers(name)
+    add_headerfiles("include/(pace/" .. name .. "/**.hpp)", "include/(pace/" .. name .. ".hpp)")
+end
+
 target("pace_runtime")
     set_kind("static")
     add_files("src/runtime/*.cpp")
+    module_headers("runtime")
+    -- The aggregate header includes whichever modules the consumer links.
+    add_headerfiles("include/(pace/pace.hpp)")
+    add_includedirs("include", {public = true})
     if has_config("uring") and is_plat("linux") then
         add_packages("liburing", {public = true})
         add_defines("PACE_HAS_IO_URING", {public = true})
     end
-    add_headerfiles("include/(pace/**.hpp)")
-    add_includedirs("include", {public = true})
     if has_config("profiling") then add_defines("PACE_ENABLE_PROFILING", {public = true}) end
     if is_plat("windows", "mingw") then
         add_syslinks("ws2_32", "bcrypt", {public = true})
@@ -89,78 +99,88 @@ target("pace_runtime")
         add_syslinks("pthread", {public = true})
     end
     if is_plat("windows") then add_cxxflags("/utf-8") end
-
 target_end()
+table.insert(modules, "pace_runtime")
 
--- Layer 1: core sockets. Consumers can stop here with add_deps("pace_net").
-target("pace_net")
-    set_kind("static")
-    add_files("src/net/*.cpp")
-    add_deps("pace_runtime", {public = true})
-target_end()
-
--- Layers 2 and 3: each protocol is separately compiled and independently linked.
-local extension_targets = {}
-local application_targets = {}
-local function protocol_target(name, layer, package_name, feature, dependencies)
+-- spec: files, deps (module names), packages, feature (defines PACE_HAS_<feature>), headers (extra
+-- header directories this target installs), kind (default static).
+local function module(name, spec)
     target("pace_" .. name)
-        set_kind("static")
-        if name == "quic" then
-            if get_config("quic_backend") == "ngtcp2" then
-                add_files("src/quic/quic_ngtcp2.cpp")
-                add_packages("ngtcp2", {public = true})
-                add_defines("PACE_QUIC_NGTCP2", {public = true})
-            else
-                add_files("src/quic/quic_openssl.cpp")
-            end
-        else
-            add_files("src/" .. name .. "/*.cpp")
-        end
-        if name == "http2" or name == "http3" then
-            if has_config("dns") then add_deps("pace_dns", {public = true}) end
-        end
-        add_deps("pace_net", {public = true})
-        for _, dep in ipairs(dependencies or {}) do add_deps(dep, {public = true}) end
-        if package_name then add_packages(package_name, {public = true}) end
-        add_defines("PACE_HAS_" .. feature, {public = true})
-        if is_plat("windows") then add_cxxflags("/utf-8") end
+        set_kind(spec.kind or "static")
+        if spec.files then add_files(spec.files) end
+        module_headers(name)
+        for _, extra in ipairs(spec.headers or {}) do module_headers(extra) end
+        for _, dependency in ipairs(spec.deps or {}) do add_deps("pace_" .. dependency, {public = true}) end
+        for _, package_name in ipairs(spec.packages or {}) do add_packages(package_name, {public = true}) end
+        for _, define in ipairs(spec.defines or {}) do add_defines(define, {public = true}) end
+        if spec.feature then add_defines("PACE_HAS_" .. spec.feature, {public = true}) end
+        if is_plat("windows") and spec.kind ~= "headeronly" then add_cxxflags("/utf-8") end
     target_end()
-    table.insert(layer == "extensions" and extension_targets or application_targets, "pace_" .. name)
+    table.insert(modules, "pace_" .. name)
 end
-if has_config("tls") then protocol_target("tls", "extensions", "openssl3", "TLS") end
-if has_config("dns") then protocol_target("dns", "extensions", "c-ares", "DNS") end
-if enable_quic then protocol_target("quic", "extensions", "openssl3", "QUIC") end
-local tls_dependency = has_config("tls") and {"pace_tls"} or {}
+
+-- Optional dependencies a module uses only when they were enabled.
+local function when(enabled, ...)
+    return enabled and {...} or {}
+end
+
+local function join(...)
+    local result = {}
+    for _, list in ipairs({...}) do
+        for _, value in ipairs(list) do table.insert(result, value) end
+    end
+    return result
+end
+
+module("net", {files = "src/net/*.cpp", deps = {"runtime"}})
+-- Protocol-independent HTTP messages and router; header-only for now.
+module("http", {kind = "headeronly", deps = {"runtime"}})
+if has_config("tls") then
+    module("tls", {files = "src/tls/*.cpp", deps = {"net"}, packages = {"openssl3"}, feature = "TLS"})
+end
+if has_config("dns") then
+    module("dns", {files = "src/dns/*.cpp", deps = {"net"}, packages = {"c-ares"}, feature = "DNS"})
+end
+if enable_quic then
+    local ngtcp2 = get_config("quic_backend") == "ngtcp2"
+    module("quic", {
+        files = ngtcp2 and "src/quic/quic_ngtcp2.cpp" or "src/quic/quic_openssl.cpp",
+        deps = {"net"},
+        packages = ngtcp2 and {"openssl3", "ngtcp2"} or {"openssl3"},
+        defines = when(ngtcp2, "PACE_QUIC_NGTCP2"),
+        feature = "QUIC",
+    })
+end
+local tls = when(has_config("tls"), "tls")
+local dns = when(has_config("dns"), "dns")
 if has_config("http1") then
-    target("pace_http1")
-        set_kind("static")
-        add_files("src/http1/*.cpp", "src/gateway/*.cpp")
-        add_deps("pace_net", {public = true})
-        for _, dep in ipairs(tls_dependency) do add_deps(dep, {public = true}) end
-        if has_config("dns") then add_deps("pace_dns", {public = true}) end
-        add_defines("PACE_HAS_HTTP1", {public = true})
-    target_end()
-    table.insert(application_targets, "pace_http1")
+    -- The gateway services stay in this target until P7: http::app's mount()/proxy() call them and
+    -- the reverse proxy uses the HTTP/1 client, so a separate pace_gateway target would be circular.
+    module("http1", {
+        files = {"src/http1/*.cpp", "src/gateway/*.cpp"},
+        headers = {"gateway"},
+        deps = join({"net", "http"}, tls, dns),
+        feature = "HTTP1",
+    })
 end
-if has_config("http2") then protocol_target("http2", "application", "nghttp2", "HTTP2", tls_dependency) end
-if has_config("http3") then protocol_target("http3", "application", "nghttp3", "HTTP3", {"pace_quic"}) end
-if has_config("websocket") then protocol_target("websocket", "application", nil, "WEBSOCKET", tls_dependency) end
-target("pace_extensions")
-    set_kind("phony")
-    add_deps("pace_net", {public = true})
-    for _, dep in ipairs(extension_targets) do add_deps(dep, {public = true}) end
-target_end()
-target("pace_application")
-    set_kind("phony")
-    add_deps("pace_net", {public = true})
-    for _, dep in ipairs(application_targets) do add_deps(dep, {public = true}) end
-target_end()
--- Source-compatible aggregate: existing applications still add_deps("pace").
+if has_config("http2") then
+    module("http2", {files = "src/http2/*.cpp", deps = join({"net", "http"}, tls, dns), packages = {"nghttp2"},
+                     feature = "HTTP2"})
+end
+if has_config("http3") then
+    module("http3", {files = "src/http3/*.cpp", deps = join({"net", "http", "quic"}, dns), packages = {"nghttp3"},
+                     feature = "HTTP3"})
+end
+if has_config("websocket") then
+    module("websocket", {files = "src/websocket/*.cpp", deps = join({"net"}, tls), feature = "WEBSOCKET"})
+end
+
+-- Every enabled module: add_deps("pace").
 target("pace")
     set_kind("phony")
-    add_deps("pace_extensions", "pace_application", {public = true})
+    for _, name in ipairs(modules) do add_deps(name, {public = true}) end
 target_end()
 
 -- Auxiliary targets keep their options and dependencies in separate modules.
 includes("xmake/modules.lua")
-includes("xmake/tests.lua", "xmake/examples.lua", "xmake/benchmarks.lua", "xmake/fuzz.lua")
+includes("xmake/tests.lua", "xmake/examples.lua", "xmake/benchmarks.lua", "xmake/fuzz.lua", "xmake/checks.lua")

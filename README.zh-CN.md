@@ -23,14 +23,14 @@
 
 ## 四层架构，按需组合
 
-| 层级 | 模块 | 聚合目标 |
+| 层级 | 模块 | xmake 目标 |
 |:--|:--|:--|
-| **3 · 应用协议** | [HTTP/1.1](docs/reference/http.md) · [HTTP/2](docs/reference/http2.md) · [HTTP/3](docs/reference/http3.md) · [WebSocket](docs/reference/websocket.zh-CN.md) | `pace_application` |
-| **2 · 基础协议扩展** | [TLS](docs/reference/tls.zh-CN.md) · [DNS](docs/reference/dns.md) · [QUIC](docs/reference/quic.md) | `pace_extensions` |
+| **3 · 应用协议** | [HTTP/1.1](docs/reference/http.md) · [HTTP/2](docs/reference/http2.md) · [HTTP/3](docs/reference/http3.md) · [WebSocket](docs/reference/websocket.zh-CN.md) | `pace_http1` · `pace_http2` · `pace_http3` · `pace_websocket` |
+| **2 · 基础协议扩展** | [TLS](docs/reference/tls.zh-CN.md) · [DNS](docs/reference/dns.md) · [QUIC](docs/reference/quic.md) | `pace_tls` · `pace_dns` · `pace_quic` |
 | **1 · 网络核心** | [TCP](docs/reference/tcp.md) · [UDP](docs/reference/udp.md) · Socket API | `pace_net` |
 | **0 · 运行时** | 事件循环 · 原生轮询 · 任务 · 定时器 · 工作线程 | `pace_runtime` |
 
-可以链接单个模块、某一层，或通过 `pace` 使用已启用的完整协议栈。HTTP/1.1 与 WebSocket 默认启用；TLS、DNS、QUIC、HTTP/2 和 HTTP/3 按需开启。QUIC 与 HTTP/3 要求 POSIX，Windows 暂不支持，详见[平台矩阵](docs/reference/platform.md)。
+可以只链接单个模块（各有自己的头文件，如 `<pace/tls.hpp>`），或通过 `pace` 与 `<pace/pace.hpp>` 使用已启用的完整协议栈。HTTP/1.1 与 WebSocket 默认启用；TLS、DNS、QUIC、HTTP/2 和 HTTP/3 按需开启。QUIC 与 HTTP/3 要求 POSIX，Windows 暂不支持，详见[平台矩阵](docs/reference/platform.md)。
 
 [架构设计 →](docs/architecture.md) · [构建选项与项目集成 →](docs/tutorial/01-build.md)
 

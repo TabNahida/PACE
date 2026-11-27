@@ -120,7 +120,7 @@ auto packet = pace::udp::exchange({"127.0.0.1", 9091}, "hello");
 if (packet.truncated) throw std::runtime_error("UDP reply truncated");
 ```
 
-分别包含 `<pace/tcp.hpp>`、`<pace/udp.hpp>` 并链接 `pace_net`，两者使用同样的超时选项。
+分别包含 `<pace/net.hpp>`、`<pace/net.hpp>` 并链接 `pace_net`，两者使用同样的超时选项。
 TCP 需要约定回复长度；UDP 返回一个包含来源地址的数据报。对应章节会带你写出完整客户端和服务端。
 
 ## 6. 需要组合异步操作时再用协程

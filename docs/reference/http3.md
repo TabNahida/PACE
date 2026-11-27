@@ -7,7 +7,7 @@ Short forms and owning helpers: [component conveniences](component-conveniences.
 `<pace/http3.hpp>` is an optional application protocol module. It implements
 RFC 9114 framing and RFC 9204 QPACK through nghttp3 on top of PACE QUIC; it does
 not depend on the HTTP/1.1 or HTTP/2 implementations. Request, response, header,
-and handler types live in the transport-independent `<pace/http_types.hpp>`.
+and handler types live in the transport-independent `<pace/http.hpp>`.
 
 Enable the `http3` build option. This requires the QUIC extension, OpenSSL 3.5+
 with QUIC support, and nghttp3 (the local Linux validation uses 1.18.0). Both QUIC
