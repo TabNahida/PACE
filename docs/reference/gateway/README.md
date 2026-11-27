@@ -1,199 +1,346 @@
-# HTTP gateway services
+# Gateway services
 
-[Guided tutorial](../../tutorial/14-gateway.md) · [中文](README.zh.md)
+[简体中文](README.zh.md) · [Reference](../README.md)
 
-Include `<pace/http1.hpp>` and link `pace_http1`. These APIs require PACE 0.5.0 or newer.
-The implementation is an embedded, buffered HTTP gateway, with no configuration
-language, process supervisor, compression, disk cache, automatic TLS certificate
-management, active health checks or WebSocket/CONNECT tunneling.
+## Overview
 
-## Routes and lifetime
+Handlers that turn a PACE HTTP/1 server into a small embedded gateway: `static_files` serves a directory,
+`reverse_proxy` forwards to fixed upstream servers with load balancing, and `response_cache` is the bounded,
+sharded cache both use.
 
-```cpp
-app& app::mount(std::string prefix, std::filesystem::path directory, static_options = {});
-app& app::proxy(std::string prefix, std::string upstream, proxy_options = {});
-app& app::proxy(std::string prefix, std::vector<std::string> upstreams, proxy_options = {});
-app& app::proxy(std::string prefix, std::initializer_list<std::string> upstreams, proxy_options = {});
-void app::run_workers(std::size_t workers, tcp::endpoint endpoint, limits = {}) const;
-```
+| Header | Target | Build option |
+|:--|:--|:--|
+| `<pace/gateway.hpp>` (content in `<pace/gateway/services.hpp>`) | `pace_http1` | `--http1=y` (default) |
 
-Prefixes are absolute URL paths and match segment boundaries (`/api` does not match
-`/apix`). Longest prefix wins; an exact route, including its method restrictions,
-wins over mounts. Query strings do not affect prefix selection. Like other routes,
-`handler()`/`serve()` capture a route snapshot; later configuration changes do not
-change existing handlers. Configure routing before starting workers.
+The gateway has no target of its own yet: it is compiled into `pace_http1` and enabled together with HTTP/1,
+because `http::app` uses it and the proxy uses the HTTP/1 client. `<pace/http1.hpp>` also declares it. The named
+module is `pace.gateway`; the names are in namespace `pace::http`. An HTTPS upstream needs `--tls=y`, an upstream
+with a host name `--dns=y`.
 
-`run_workers` creates a fixed runtime and one listener per context. Multi-worker
-listening requires `SO_REUSEPORT` (Linux, macOS, FreeBSD); Windows supports one worker
-through this helper. There is no background process or signal handler. Use
-`app.serve(listener)` with your own runtime for programmatic graceful shutdown.
+Both services are ordinary `http::handler` values. Mount them with [`app::mount` and `app::proxy`](../http1/app.md)
+or with [`router::mount`](../http/router.md). Everything is buffered: there is no configuration language, process
+supervision, compression, disk cache, certificate management, active health check or WebSocket/`CONNECT`
+tunnelling.
 
-`static_files` and `reverse_proxy` are copyable handler values with shared internal
-ownership. Calling either returns a task that owns the service and request. Their
-cache methods are thread-safe. Proxy connection pools and balancing counters are
-reactor-local, never shared sockets. A context retains each used proxy's state
-until context destruction; configure a bounded set of services instead of creating
-a fresh proxy per request. All I/O obeys the owning context's execution contract.
-
-To retain cache controls, register a named service through the router:
+## Synopsis
 
 ```cpp
-pace::http::static_files assets("/assets", "./public", options);
-pace::http::router routes;
-routes.mount("/assets", assets);
-// Pass routes to http::serve(listener, routes).
-auto stats = assets.cache_stats();
-assets.clear_cache();
+#include <pace/gateway.hpp>
+#include <pace/http1.hpp>
+
+#include <iostream>
+
+int main()
+{
+    pace::http::static_options files;
+    files.cache.max_bytes = 64 * 1024 * 1024; // enable the local file cache
+    pace::http::static_files assets("/assets", "./public", files);
+
+    pace::http::proxy_options proxy;
+    proxy.balance = pace::http::load_balance::least_connections;
+    pace::http::reverse_proxy api("/api", {"http://127.0.0.1:9001", "http://127.0.0.1:9002"}, proxy);
+
+    pace::http::router routes;
+    routes.mount("/assets", assets).mount("/api", api);
+    routes.get("/health", [] { return pace::http::text("ok\n"); });
+
+    pace::run([&](pace::io_context& io) { return pace::http::serve(io, {"127.0.0.1", 8080}, routes); });
+    std::cout << assets.cache_stats().hits << " cache hits\n";
+}
 ```
 
-The same pattern applies to `reverse_proxy`. Clearing entries does not revoke
-responses already in flight. Concurrent misses can refill after a clear; it is
-not a transaction barrier. There is no single-flight miss coalescing.
+## Types
 
-## Static files
+### `static_files`
 
-| `static_options` field | Default | Contract |
-|---|---:|---|
-| `index` | `index.html` | One filename, no traversal or separators |
-| `max_file_bytes` | 8 MiB | Larger files return 413 |
-| `allow_dotfiles` | false | Hidden path components rejected by default |
-| `cache_control` | `no-cache` | Downstream HTTP policy, independent of local caching |
-| `cache` | disabled | Optional snapshot cache described below |
+```cpp
+class static_files
+{
+public:
+    static_files(std::string prefix, std::filesystem::path directory, static_options options = {});
+    task<response> operator()(request incoming) const;
+    void clear_cache() const;
+    cache_statistics cache_stats() const;
+};
+```
 
-GET and HEAD support MIME inference, `ETag`, `Last-Modified`, `If-None-Match`,
-exact canonical `If-Modified-Since`, and one byte range (including suffix ranges).
-Weak ETags work for conditional GET; `If-Range` requires an exact validator.
-Multiple ranges are ignored; unsatisfiable valid ranges return 416.
-HEAD ignores Range and suppresses response bytes while retaining the complete representation length. Other
-methods return 405 with `Allow: GET, HEAD`. No directory listing is generated.
-Directory indexes also resolve without a trailing slash; there is no redirect.
-Use slash-terminated directory links for relative browser asset URLs.
+Serves regular files below `directory` for request paths below `prefix`. The constructor opens `directory`, which
+must exist. Copies share one service, including its cache.
 
-Paths are decoded once. Traversal components, invalid percent escapes, control
-bytes, backslashes, Windows alternate-stream syntax, and trailing dot/space
-components are rejected. Symlinks and intermediate symlink directories are not
-followed. Windows also rejects reparse points and checks the opened handle's final
-path against the configured root. The configured root itself is trusted; expose
-only a directory whose contents you intend to publish. Regular files only.
+- `operator()` answers `GET` and `HEAD`; other methods get 405 with `Allow: GET, HEAD`. A path outside `prefix`
+  gets 404. The part after the prefix is percent-decoded once and mapped to a file.
+- A directory is served through its `index` file, without a redirect and without a listing. Link to directories with
+  a trailing `/` so that relative links in the page resolve.
+- Responses carry `Content-Type` from the file extension, `ETag`, `Last-Modified`, `Accept-Ranges: bytes`,
+  `X-Content-Type-Options: nosniff` and, when set, `Cache-Control`. The ETag is a hash (XXH64 of the content) plus
+  the size, so it changes with any edit, including one that keeps size and timestamp. It is not a cryptographic
+  checksum.
+- `If-None-Match` (weak or strong tags, or `*`) and, without it, `If-Modified-Since` (equal to `Last-Modified`,
+  exact text) produce 304.
+- `GET` honours one byte range, `bytes=a-b`, `bytes=a-` or `bytes=-n`, with 206 and `Content-Range`; an
+  unsatisfiable range gets 416. Several ranges, other units and an `If-Range` that does not match the ETag or
+  `Last-Modified` exactly are ignored, and the full file is sent. `HEAD` ignores `Range`.
+- `clear_cache()` empties the local cache; `cache_stats()` reads its counters.
 
-Reads are **synchronous and buffered on the reactor**, bounded by `max_file_bytes`.
-There is no sendfile, asynchronous disk executor or large-file streaming here.
-Cache hits still copy the body for the owned HTTP response. Keep hot assets small;
-large/cold-file deployments should retain a dedicated file server.
+**Path safety.** Rejected with 400: invalid percent escapes, `.` and `..` segments, control bytes, backslashes,
+Windows alternate data streams (`:`), segments ending in a dot or space, and hidden segments (starting with `.`)
+unless `allow_dotfiles` is set. Symbolic links are never followed, neither as the file nor as an intermediate
+directory; on Windows reparse points are rejected too and the opened file's final path is checked against the
+root. Missing files and anything other than a regular file get 404. The root directory itself is trusted: publish
+only a directory whose whole content may be served.
 
-Static caching keys decoded file paths, excluding query parameters. It keeps file
-bytes and validators until TTL/eviction/clear, without stat-on-hit. Replacing or
-deleting a file does not invalidate its cached representation immediately.
-Request `Cache-Control` or `Pragma` bypasses the local cache.
+**Reads.** Files are read synchronously on the event loop and returned as a buffered body, up to
+`max_file_bytes` (larger files get 413). There is no `sendfile`, asynchronous disk I/O or streaming. Even a cache
+hit copies the body into the response. Keep served files small; a large or cold file set belongs on a dedicated
+file server.
 
-## Reverse proxy
+**Local cache.** When `options.cache.max_bytes` is non-zero, 200 responses are cached by decoded path (the query
+is ignored), with their validators, until the TTL ends or they are evicted. Files are not checked again on a hit,
+so a changed or deleted file can be served from the cache until then; call `clear_cache()` after deploying. A
+request with `Cache-Control` or `Pragma` bypasses the cache.
 
-Upstreams are fixed `http://`/`https://` base URLs without query/fragment.
-Hostnames require `--dns=y`; HTTPS requires `--tls=y` and verified system trust.
-Numeric HTTP upstreams need no optional modules. Upstream transport is HTTP/1.1.
-The service does not negotiate HTTP/2 or HTTP/3 upstreams.
+### `static_options`
 
-| `proxy_options` field | Default | Contract |
-|---|---:|---|
-| `balance` | `round_robin` | Or `least_connections`; counters are per worker |
-| `strip_prefix` | true | `/api/a?x=1` at `/api` becomes `/a?x=1` |
-| `max_connections` | 64 | Concurrent exchanges **per upstream per reactor** |
-| `max_idle_connections` | 16 | Idle keep-alive connections per upstream per reactor |
-| `max_response_bytes` | 8 MiB | Upstream buffered-body bound |
-| `timeout` | 30 s | One cooperative DNS/connect/TLS/exchange deadline |
-| `idle_timeout` | 30 s | Lazy expiration when a pooled connection is borrowed |
-| `fail_timeout` | 1 s | Passive cooldown after failed exchange |
-| `cache` | disabled | Shared eligible-response cache |
+```cpp
+struct static_options
+{
+    std::string index = "index.html";
+    std::size_t max_file_bytes = std::size_t{8} * 1024 * 1024;
+    bool allow_dotfiles = false;
+    std::string cache_control = "no-cache";
+    cache_options cache{};
+};
+```
 
-The base URL path is prepended after optional prefix removal. Method, body and
-query survive forwarding. `Host` becomes the upstream authority. Hop-by-hop headers,
-headers nominated by `Connection`, framing/trailer headers and incoming
-`Forwarded`/`X-Forwarded-*` are removed. PACE regenerates HTTP/1 framing and does not
-automatically invent a client IP. Configure application identity explicitly if
-needed. Upgrade and CONNECT return 501. Response bodies are buffered and trailers
-are not forwarded. Normal HTTP admission/body limits apply on the downstream side.
+| Member | Meaning |
+|:--|:--|
+| `index` | File served for a directory: one file name, no separators, `%`, `.` or `..`. Empty means a directory gets 404 |
+| `max_file_bytes` | Largest file served; larger files get 413 |
+| `allow_dotfiles` | Serve path segments that start with `.` |
+| `cache_control` | `Cache-Control` value sent to clients; empty sends none. Independent of the local cache |
+| `cache` | The local cache; disabled while `cache.max_bytes` is 0 |
 
-Round-robin skips cooling-down/saturated origins. Least-connections chooses the
-fewest active exchanges among eligible origins, rotating ties. HTTP error status
-codes do not count as transport failures. Saturation/all unavailable returns 503;
-transport or malformed-response failure returns 502; exchange timeout returns
-504. No queued admission, automatic retries or stale-on-error responses. A stale
-keep-alive connection can fail one exchange; even GET is not automatically replayed.
-Local cancellation propagates; deadlines can only interrupt cooperative waits.
+### `reverse_proxy`
 
-HEAD from an upstream preserves Content-Length through
-`response::representation_length`, used by the HTTP/1 server only for HEAD.
-These gateway helpers target HTTP/1; there is no implicit protocol translation.
+```cpp
+class reverse_proxy
+{
+public:
+    reverse_proxy(std::string prefix, std::vector<std::string> upstreams, proxy_options options = {});
+    task<response> operator()(request incoming) const;
+    void clear_cache() const;
+    cache_statistics cache_stats() const;
+};
+```
 
-### Proxy cache eligibility
+Forwards requests under `prefix` to one of `upstreams` over HTTP/1.1 and returns the upstream's response. Copies
+share one service, including its cache.
 
-Only bodyless GET requests with a bounded target (4096 bytes) are candidates.
-Authentication, cookies, ranges, conditional headers, `Cache-Control` or `Pragma`
-bypass caching. Keys include downstream Host and the full target/query. Only 200
-responses explicitly marked `public` or `s-maxage` are stored. `Set-Cookie`, `Vary`,
-private/no-cache/no-store policies, content ranges and unrecognized cache directives
-prevent storage. The effective TTL is bounded by configured TTL and upstream
-freshness; upstream Date/Age reduce freshness, and cache hits update Age.
-This deliberately conservative subset does not implement all RFC cache behavior.
+**Upstreams** are absolute `http://` or `https://` base URLs without query or fragment, parsed like
+[client URLs](../http/clients.md#url-rules). HTTPS upstreams are verified against the system roots with ALPN
+`http/1.1`. Upstreams speak HTTP/1.1 only; there is no HTTP/2 or HTTP/3 upstream and no protocol translation.
 
-## Shared cache and locality
+**Forwarding.** With `strip_prefix`, the prefix is removed from the target (`/api/a?x=1` mounted at `/api` becomes
+`/a?x=1`), then the upstream's base path is prepended. Method, body and query are kept. `Host` becomes the
+upstream's authority. Hop-by-hop fields, fields named by `Connection`, framing and trailer fields, and incoming
+`Forwarded` and `X-Forwarded-*` fields are removed; no client address is added, so add your own identity header if
+the upstream needs one. `CONNECT` and requests with `Upgrade` get 501. The upstream response is buffered up to
+`max_response_bytes`, its trailers are dropped and HTTP/1 framing is regenerated. A `HEAD` response keeps the
+upstream's `Content-Length` through `response::representation_length`.
 
-| `cache_options` field | Default | Meaning |
-|---|---:|---|
-| `max_bytes` | 0 | Accounted stored-entry budget; zero disables cache |
-| `max_entries` | 1024 | Entry count limit |
-| `max_object_bytes` | 1 MiB | Body size eligibility bound |
-| `ttl` | 60 s | Maximum local TTL |
-| `shards` | 16 | Independent locks and budgets |
+**Balancing.** Each worker context keeps its own connection pools and counters for each upstream; nothing is shared
+between threads except the cache.
 
-Budgets are partitioned equally between shards; skewed keys can underutilize the
-aggregate budget. Entry accounting includes bodies, keys and header metadata.
-Slot/hash-table allocations are separately bounded by `max_entries`; allocator
-bookkeeping and snapshots held by senders mean **this is not a process RSS cap**.
+- `round_robin` takes the next upstream that is neither cooling down nor at `max_connections`.
+- `least_connections` takes the eligible upstream with the fewest active exchanges, rotating among ties.
+- A transport failure, timeout or malformed response puts the upstream in a cooldown of `fail_timeout` and drops
+  its idle connections. HTTP error statuses do not count as failures.
+- Idle keep-alive connections (at most `max_idle_connections` per upstream) are reused; one idle longer than
+  `idle_timeout` is discarded when it is next picked.
 
-`response_cache` provides `get(key, optional_resident_age)`, `put(key, response, ttl)`,
-`clear()` and `statistics()`. Values are immutable shared snapshots. This generic
-cache does not enforce HTTP policy; the static/proxy services apply their own rules.
-Statistics expose hits, misses, evictions, entries and accounted bytes. Clearing
-removes entries, not accumulated counters.
+Nothing is queued and nothing is retried: when no upstream is eligible the reply is 503 at once, and a request
+that fails is not replayed, not even a `GET` that met a stale keep-alive connection.
 
-CLOCK replacement uses contiguous slots and a reference bit rather than mutating
-a linked LRU list on every hit. Sharding limits lock contention, heterogeneous
-lookup avoids temporary keys in `get`, and response copies happen after releasing
-the lock. Per-reactor pools avoid a global connection mutex. Reactor descriptors
-also use dense generation-checked slots, eliminating a second event-dispatch hash
-lookup and rejecting late events after slot reuse. None uses CPU-model-specific
-cache sizes or affinity. See [measurements and limitations](../../performance/http-gateway.md).
+**Proxy cache.** When `options.cache.max_bytes` is non-zero, the proxy caches a response only if all of these hold:
 
-## Reactor-local cache hits
+- the request is a `GET` with no body and a target of at most 4096 bytes, without `Authorization`, `Cookie`,
+  `Range`, any `If-*` field, `Cache-Control` or `Pragma`;
+- the response is a 200 whose `Cache-Control` contains `public` or `s-maxage`, without `private`, `no-cache`,
+  `no-store` or an unrecognized directive, and without `Set-Cookie`, `Vary`, `Content-Range` or `Pragma`.
 
-Static mounts and proxies use `response_cache::get_copy()` internally. On a running
-reactor it remembers **one** immutable snapshot per cache/context. Repeated hits
-check the shard's invalidation generation and the original steady-clock expiry,
-then return an independent response copy. They avoid the shard mutex, hash lookup,
-CLOCK writes and snapshot reference-count increments. On a key change, expiry,
-replacement, eviction or clear, the next lookup takes the shared path again.
-Outside a reactor, `get_copy()` copies a regular `get()` snapshot. The context
-retains the cache internals until context destruction; construct one long-lived
-cache/service per mount rather than constructing a new cached service per request.
+The key is the downstream `Host` plus the full target with query. The lifetime is the smaller of the configured
+TTL and the upstream's freshness, reduced by its `Date` and `Age`; cache hits carry an updated `Age`. This is a
+deliberately small subset of HTTP caching, not a full RFC 9111 cache.
 
-Generation and mutex/statistics storage are separated by 128-byte alignment;
-reader hit counters are separately aligned and written only by their owning
-reactor. `statistics()` includes live and retired reader hits (a concurrent sample
-is not a globally atomic snapshot). The cache remains bounded by its configured
-entry budget, but each reactor can retain one evicted snapshot, with body size at
-most `max_object_bytes`, plus headers/key/reader metadata. This memory survives
-until the next lookup on that cache or context destruction, just like a snapshot
-returned by `get()`. Clear prevents subsequent stale hits; already selected
-responses may finish. Mutation racing with a miss can repopulate a cleared cache.
+### `proxy_options`, `load_balance`
 
-The local snapshot favors consecutive hot-key hits; alternating keys still use
-shared shards. Cached HTTP bodies are still copied into owned responses and wire
-buffers. This is not a zero-copy or universally lock-free cache.
+```cpp
+enum class load_balance
+{
+    round_robin,
+    least_connections
+};
 
-Static ETags now use seed-zero XXH64 over file contents, including same-size edits
-with unchanged timestamps. ETag strings can change after this upgrade, causing a
-normal fresh response instead of 304. The compact internal implementation is
-adapted from [xxHash 0.8.3](https://github.com/Cyan4973/xxHash/tree/v0.8.3), BSD-2-Clause;
-its copyright/license are retained in `src/gateway/content_hash.hpp`.
-It adds no runtime package dependency and is not a cryptographic integrity check.
+struct proxy_options
+{
+    load_balance balance = load_balance::round_robin;
+    bool strip_prefix = true;
+    std::size_t max_connections = 64;
+    std::size_t max_idle_connections = 16;
+    std::size_t max_response_bytes = std::size_t{8} * 1024 * 1024;
+    std::chrono::milliseconds timeout{30000};
+    std::chrono::seconds idle_timeout{30};
+    std::chrono::milliseconds fail_timeout{1000};
+    cache_options cache{};
+};
+```
+
+| Member | Meaning |
+|:--|:--|
+| `balance` | Upstream selection, per worker context |
+| `strip_prefix` | Remove the mount prefix before forwarding |
+| `max_connections` | Concurrent exchanges per upstream per worker context; beyond it the upstream is skipped. Must be at least 1 |
+| `max_idle_connections` | Idle keep-alive connections kept per upstream per worker context; at most `max_connections` |
+| `max_response_bytes` | Largest upstream body |
+| `timeout` | One deadline for DNS, connect, TLS and the exchange; positive. Expiry gives 504 |
+| `idle_timeout` | Age after which an idle connection is discarded instead of reused |
+| `fail_timeout` | Cooldown of an upstream after a failure |
+| `cache` | The shared proxy cache; disabled while `cache.max_bytes` is 0 |
+
+### `response_cache`
+
+```cpp
+class response_cache
+{
+public:
+    explicit response_cache(cache_options options = {});
+    ~response_cache();
+    response_cache(const response_cache&) = delete;
+    response_cache& operator=(const response_cache&) = delete;
+    std::shared_ptr<const response> get(std::string_view key, std::chrono::seconds* resident_age = nullptr);
+    std::optional<response> get_copy(std::string_view key, std::chrono::seconds* resident_age = nullptr);
+    void put(std::string key, response value, std::chrono::seconds ttl);
+    void clear();
+    [[nodiscard]] cache_statistics statistics() const;
+};
+```
+
+A thread-safe cache of immutable responses by string key, split into independently locked shards and evicting with
+the CLOCK algorithm. It stores whatever it is given; the HTTP rules above belong to the services that use it.
+
+| Member | Effect |
+|:--|:--|
+| `get(key, resident_age)` | The stored snapshot, or null when missing or expired. Writes the time since insertion to `*resident_age` when given |
+| `get_copy(key, resident_age)` | An owned copy of the stored response, or empty. On a running context it remembers the last snapshot it returned for this cache, so repeated hits on the same key skip the shard lock and the shared reference count. Outside a context it copies the result of `get` |
+| `put(key, value, ttl)` | Stores `value` for `min(ttl, options.ttl)`. Ignored when the cache is disabled, `ttl` is not positive, the body is larger than `max_object_bytes` or the entry is larger than its shard's budget. Replaces an entry with the same key; evicts as needed |
+| `clear()` | Removes every entry. Statistics are kept. Responses already returned stay valid |
+| `statistics()` | Current counters |
+
+A `clear` or a replaced entry is seen by the next lookup; a miss that races with `clear` may store its result
+again afterwards, and concurrent misses on one key are not coalesced. `get_copy` keeps one snapshot per cache per
+context, which can outlive its eviction until the next lookup on that context or the context's destruction; create
+caches and cached services once, not per request.
+
+### `cache_options`
+
+```cpp
+struct cache_options
+{
+    std::size_t max_bytes = 0;
+    std::size_t max_entries = 1024;
+    std::size_t max_object_bytes = std::size_t{1024} * 1024;
+    std::chrono::seconds ttl{60};
+    std::size_t shards = 16;
+};
+```
+
+| Member | Meaning |
+|:--|:--|
+| `max_bytes` | Budget for stored entries, counting body, key and header fields. 0 disables the cache |
+| `max_entries` | Number of entries; at least 1 |
+| `max_object_bytes` | Largest body stored |
+| `ttl` | Longest lifetime of an entry; not negative |
+| `shards` | Number of shards, 1 to 256 (at most `max_entries` are used). Budgets and entries are divided equally among them, so uneven keys can leave part of the total unused |
+
+`max_bytes` is not a limit on process memory: slot storage, allocator overhead and snapshots still held by
+responses in flight or by `get_copy` come on top.
+
+### `cache_statistics`
+
+```cpp
+struct cache_statistics
+{
+    std::uint64_t hits = 0, misses = 0, evictions = 0;
+    std::size_t entries = 0, bytes = 0;
+};
+```
+
+Hits (including `get_copy` hits from every context, live or destroyed), misses, evictions, current entries and
+accounted bytes. Counters are summed shard by shard, so a sample taken during traffic is not one atomic snapshot.
+
+## Errors
+
+| Situation | Result |
+|:--|:--|
+| Prefix not starting with `/`, or containing `?`, `#`, `\`, `%`, spaces or control characters | Constructor throws `std::invalid_argument` |
+| Invalid `index` or `cache_control` | `static_files` constructor throws `std::invalid_argument` |
+| Static directory cannot be opened | `static_files` constructor throws `std::system_error` |
+| No upstream, `max_connections` 0, `max_idle_connections > max_connections`, `timeout` not positive, negative `idle_timeout` or `fail_timeout` | `reverse_proxy` constructor throws `std::invalid_argument` |
+| Upstream URL invalid, with query or fragment, HTTPS without TLS support, host name without DNS support | `reverse_proxy` constructor throws `std::invalid_argument` |
+| `cache_options` with `shards` 0 or above 256, `max_entries` 0 or negative `ttl` | Constructor throws `std::invalid_argument` |
+| Static request: bad method / unsafe path / missing file / too large | 405 / 400 / 404 / 413 response |
+| Proxy: no eligible upstream | 503 response |
+| Proxy: connection, TLS or transport failure | 502 response |
+| Proxy: malformed upstream response | 502 response |
+| Proxy: `timeout` reached | 504 response |
+| Proxy: `CONNECT` or `Upgrade` | 501 response |
+| Cancellation of the downstream request | Propagates as `std::system_error` |
+
+The deadline can interrupt only operations that wait; it cannot stop synchronous work.
+
+## Threads and concurrency
+
+Services and caches may be shared by any number of worker contexts. The caches are internally synchronized;
+`clear_cache`, `cache_stats` and every `response_cache` member may be called from any thread. Proxy connection
+pools, active counts and the round-robin position live in each context and are never shared, so the limits and
+the balancing apply per worker. Static file reads run synchronously on the context that serves the request.
+
+## Lifetime and ownership
+
+`static_files` and `reverse_proxy` are copyable handles to shared state. The task returned by `operator()` owns a
+reference to the service and the request, so the service object may be destroyed while requests are in flight.
+Each context that used a proxy, or called `get_copy` on a cache, keeps that state until the context is destroyed:
+configure a fixed set of services rather than creating one per request. Snapshots returned by `get` stay valid
+while held, independently of the cache.
+
+## Limits and defaults
+
+| Item | Default |
+|:--|:--|
+| `static_options::index` | `index.html` |
+| `static_options::max_file_bytes` | 8 MiB |
+| `static_options::allow_dotfiles` | `false` |
+| `static_options::cache_control` | `no-cache` |
+| `proxy_options::balance` | `round_robin` |
+| `proxy_options::strip_prefix` | `true` |
+| `proxy_options::max_connections` | 64 per upstream per context |
+| `proxy_options::max_idle_connections` | 16 per upstream per context |
+| `proxy_options::max_response_bytes` | 8 MiB |
+| `proxy_options::timeout` | 30 s |
+| `proxy_options::idle_timeout` | 30 s |
+| `proxy_options::fail_timeout` | 1 s |
+| `cache_options::max_bytes` | 0 (cache disabled) |
+| `cache_options::max_entries` | 1024 |
+| `cache_options::max_object_bytes` | 1 MiB |
+| `cache_options::ttl` | 60 s |
+| `cache_options::shards` | 16 |
+| Cacheable proxy target | 4096 bytes |
+
+The static ETag hash is adapted from [xxHash 0.8.3](https://github.com/Cyan4973/xxHash/tree/v0.8.3)
+(BSD-2-Clause); its copyright and license are kept in `src/gateway/content_hash.hpp`. It adds no dependency.
+
+## See also
+
+- [HTTP/1 application](../http1/app.md), [routing](../http/router.md), [HTTP/1 server](../http1/server.md)
+- [Gateway performance](../../performance/http-gateway.md)
+- Tutorial: [gateway](../../tutorial/14-gateway.md), [workers and threads](../../tutorial/08-workers-and-threads.md)
