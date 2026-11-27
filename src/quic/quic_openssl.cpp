@@ -812,7 +812,7 @@ std::shared_ptr<stream_state> new_stream(const std::shared_ptr<connection_state>
         return {};
     }
     auto result = std::make_shared<stream_state>(state, ssl.get());
-    ssl.release();
+    result->ssl = ssl.release(); // The stream state owns the handle once it exists.
     return result;
 }
 
@@ -830,7 +830,7 @@ std::shared_ptr<stream_state> accept_stream(const std::shared_ptr<connection_sta
         return {};
     }
     auto result = std::make_shared<stream_state>(state, ssl.get());
-    ssl.release();
+    result->ssl = ssl.release(); // The stream state owns the handle once it exists.
     return result;
 }
 } // namespace

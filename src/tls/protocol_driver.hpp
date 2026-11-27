@@ -33,6 +33,7 @@ public:
 
 private:
     tls::stream& stream_;
+    tcp::stream* socket_ = nullptr; // The constructor requires a TCP-backed stream.
     const char* write_data_ = nullptr;
     std::size_t write_size_ = 0;
     bool write_retry_ = false, write_wants_write_ = false, read_wants_write_ = false;

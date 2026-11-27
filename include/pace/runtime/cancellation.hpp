@@ -64,14 +64,14 @@ public:
 
     bool stop_possible() const noexcept
     {
-        return bool(state_);
+        return static_cast<bool>(state_);
     }
 
     std::error_code error() const noexcept;
 
     bool stop_requested() const noexcept
     {
-        return bool(error());
+        return static_cast<bool>(error());
     }
 
     void throw_if_cancelled() const

@@ -25,7 +25,7 @@ void apply_mask(std::span<char> bytes, const char* key)
 {
     // memcpy keeps word-at-a-time masking valid for unaligned buffers and both
     // byte orders. The repeated key is represented in the host's byte order.
-    std::array<char, 8> repeated;
+    std::array<char, 8> repeated{};
     std::copy_n(key, 4, repeated.data());
     std::copy_n(key, 4, repeated.data() + 4);
     std::uint64_t mask;
@@ -40,7 +40,7 @@ void apply_mask(std::span<char> bytes, const char* key)
     }
     for (; offset < bytes.size(); ++offset)
     {
-        bytes[offset] ^= key[offset % 4];
+        bytes[offset] = static_cast<char>(bytes[offset] ^ key[offset % 4]);
     }
 }
 
@@ -235,14 +235,8 @@ std::vector<std::string> tokens(std::string_view list)
 
 bool contains_ci(std::string_view list, std::string_view value)
 {
-    for (const auto& item : tokens(list))
-    {
-        if (iequals(item, value))
-        {
-            return true;
-        }
-    }
-    return false;
+    const auto items = tokens(list);
+    return std::any_of(items.begin(), items.end(), [&](const auto& item) { return iequals(item, value); });
 }
 
 void validate_protocols(const std::vector<std::string>& protocols)
@@ -339,15 +333,7 @@ struct head
 
     bool has(std::string_view key) const
     {
-        for (const auto& [name, value] : fields)
-        {
-            (void)value;
-            if (iequals(name, key))
-            {
-                return true;
-            }
-        }
-        return false;
+        return std::any_of(fields.begin(), fields.end(), [&](const auto& field) { return iequals(field.first, key); });
     }
 
     std::string get(std::string_view key, bool combine = false) const
@@ -418,19 +404,21 @@ struct basic_stream<Transport>::implementation
     std::string pending, protocol, close_reason, output;
     // Read ahead once for small frame fields, instead of a recv per field.
     // Large payloads bypass this bounded buffer after consuming any read-ahead.
+    // Only [input_begin, input_end) is read, so input is deliberately left uninitialized.
     std::array<char, 8192> input;
     std::size_t input_begin = 0, input_end = 0, pending_begin = 0;
     std::optional<std::uint16_t> close_code;
     bool busy = false, upgraded = false, close_sent = false, close_received = false;
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init): the read-ahead buffer needs no clearing
     implementation(Transport socket, role value, limits maximum)
         : transport(std::move(socket))
         , mode(value)
         , bounds(maximum)
     {
         if ((mode != role::client && mode != role::server) || bounds.max_header_bytes < 64
-            || bounds.max_header_bytes > 1024 * 1024 || bounds.max_frame_bytes == 0 || bounds.max_message_bytes == 0
-            || bounds.max_fragments == 0 || bounds.max_control_frames == 0
+            || bounds.max_header_bytes > std::size_t{1024} * 1024 || bounds.max_frame_bytes == 0
+            || bounds.max_message_bytes == 0 || bounds.max_fragments == 0 || bounds.max_control_frames == 0
             || bounds.max_frame_bytes > bounds.max_message_bytes)
         {
             throw std::invalid_argument("invalid WebSocket role/limits");
@@ -977,8 +965,9 @@ task<upgrade_request> basic_stream<T>::accept(
             response += "\r\n";
             co_await p.transport.write_all(response);
         }
-        catch (...)
+        catch (...) // NOLINT(bugprone-empty-catch): best-effort rejection; the original error is rethrown
         {
+            // The rejection response is best effort; the handshake failure is rethrown below.
         }
         close();
         std::rethrow_exception(failure);
@@ -1041,8 +1030,9 @@ task<std::optional<message>> basic_stream<T>::receive()
             co_await p.frame(8, payload);
             p.close_sent = true;
         }
-        catch (...)
+        catch (...) // NOLINT(bugprone-empty-catch): best-effort close frame; the protocol error is rethrown
         {
+            // The close frame is best effort; the protocol error is rethrown below.
         }
     }
     close();

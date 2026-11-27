@@ -804,8 +804,9 @@ task<void> isolated(quic::connection connection, http::handler handle, limits bo
     {
         co_await serve_connection(std::move(connection), std::move(handle), bounds);
     }
-    catch (const std::exception&)
-    { /* A malformed peer does not stop the listener. */
+    catch (const std::exception&) // NOLINT(bugprone-empty-catch): a failed peer only ends its connection
+    {
+        // A malformed peer does not stop the listener.
     }
 }
 } // namespace

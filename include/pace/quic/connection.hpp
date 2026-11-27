@@ -138,7 +138,7 @@ private:
 // Bind immediately and retain the shared server configuration.
 inline listener listen(io_context& io, udp::endpoint local, const quic::context& configuration)
 {
-    return listener(io, std::move(local), configuration);
+    return {io, std::move(local), configuration};
 }
 
 inline listener listen(udp::endpoint local, const quic::context& configuration)

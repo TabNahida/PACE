@@ -629,6 +629,7 @@ struct session
             const auto count = std::min(length, state.outgoing.size() - state.offset);
             if (count)
             {
+                // NOLINTNEXTLINE(bugprone-not-null-terminated-result): binary DATA payload, not a C string
                 std::memcpy(buffer, state.outgoing.data() + state.offset, count);
             }
             state.offset += count;
@@ -765,7 +766,7 @@ struct session
     std::string output()
     {
         std::string bytes;
-        while (bytes.size() < 64 * 1024)
+        while (bytes.size() < std::size_t{64} * 1024)
         {
             const uint8_t* data = nullptr;
             const auto size = nghttp2_session_mem_send(native, &data);
@@ -860,19 +861,15 @@ struct pump
 };
 
 template <class Driver>
-task<void> wait_driver(io_context& io, Driver& driver, bool* wake = nullptr, bool output_only = false)
+task<void> wait_driver(io_context& io, Driver& driver, const bool* wake = nullptr, bool output_only = false)
 {
     try
     {
-        if (output_only)
-        {
-            co_await io.wait_writable(driver.native_handle());
-        }
-        else if (driver.either_wait())
+        if (!output_only && driver.either_wait())
         {
             co_await io.wait_ready(driver.native_handle());
         }
-        else if (driver.write_wait())
+        else if (output_only || driver.write_wait())
         {
             co_await io.wait_writable(driver.native_handle());
         }
@@ -1086,8 +1083,9 @@ task<void> isolated(Stream stream, http::handler handle, limits bounds)
     {
         co_await serve_impl(std::move(stream), std::move(handle), bounds);
     }
-    catch (const std::exception&)
-    { /* One malformed/closed peer must not stop other connections. */
+    catch (const std::exception&) // NOLINT(bugprone-empty-catch): a failed peer only ends its connection
+    {
+        // One malformed/closed peer must not stop other connections.
     }
 }
 } // namespace
@@ -1162,8 +1160,9 @@ task<void> secure_connection(tls::stream transport, http::handler handle, limits
         co_await transport.handshake();
         co_await serve_connection(std::move(transport), std::move(handle), bounds);
     }
-    catch (const std::exception&)
+    catch (const std::exception&) // NOLINT(bugprone-empty-catch): a failed peer only ends its connection
     {
+        // A failed handshake or malformed peer must not stop the listener.
     }
 }
 } // namespace

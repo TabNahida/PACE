@@ -32,9 +32,9 @@ struct message
 
 struct limits
 {
-    std::size_t max_header_bytes = 16 * 1024;
-    std::size_t max_frame_bytes = 64 * 1024;
-    std::size_t max_message_bytes = 1024 * 1024;
+    std::size_t max_header_bytes = std::size_t{16} * 1024;
+    std::size_t max_frame_bytes = std::size_t{64} * 1024;
+    std::size_t max_message_bytes = std::size_t{1024} * 1024;
     std::size_t max_fragments = 1024;
     std::size_t max_control_frames = 1024; // Per receive call, bounds ping/pong floods.
 };

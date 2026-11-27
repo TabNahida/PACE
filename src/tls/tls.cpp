@@ -346,9 +346,12 @@ int socket_write(tcp::stream& stream, const char* bytes, int size)
     return result;
 }
 
+// Only [begin, end) of bytes is read. make_unique value-initializes the owning
+// ciphertext_buffers; a member initializer would add a second 64 KiB clear.
+// NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init): bytes is deliberately left to the owner
 struct ciphertext_buffer
 {
-    std::array<char, 64 * 1024> bytes;
+    std::array<char, std::size_t{64} * 1024> bytes;
     std::size_t begin = 0, end = 0;
 
     std::size_t size() const noexcept
@@ -452,7 +455,7 @@ int bio_read(BIO* bio, char* bytes, int size)
     if (state.prefix_offset < state.prefix.size())
     {
         const auto count = std::min<std::size_t>(size, state.prefix.size() - state.prefix_offset);
-        std::memcpy(bytes, state.prefix.data() + state.prefix_offset, count);
+        std::copy_n(state.prefix.data() + state.prefix_offset, count, bytes);
         state.prefix_offset += count;
         if (state.prefix_offset == state.prefix.size() && !state.hello_reads)
         {
@@ -950,7 +953,7 @@ void context::use_certificate_chain(const std::string& certificate_chain_file, c
         tls_error("load TLS certificate/private key");
     }
     STACK_OF(X509)* chain = nullptr;
-    SSL_CTX_get0_chain_certs(staged.get(), &chain);
+    SSL_CTX_get0_chain_certs(staged.get(), static_cast<void*>(&chain));
     if (SSL_CTX_use_cert_and_key(
             impl_->handle.get(),
             SSL_CTX_get0_certificate(staged.get()),
@@ -1214,9 +1217,10 @@ struct stream::implementation
                 {
                     state.message.assign(bytes, size);
                 }
-                catch (...)
+                catch (...) // NOLINT(bugprone-empty-catch): the handshake fails later without the message
                 {
-                } // An absent message fails the handshake in inspect_client_hello.
+                    // An absent message fails the handshake in inspect_client_hello.
+                }
             }
         );
     }
@@ -1473,9 +1477,10 @@ struct stream::implementation
         {
             co_await flush_output();
         }
-        catch (...)
+        catch (...) // NOLINT(bugprone-empty-catch): best-effort alert; the original error is rethrown
         {
-        } // Send the alert if the transport is still usable.
+            // Send the alert if the transport is still usable; the original error wins.
+        }
         std::rethrow_exception(error);
     }
 
@@ -1506,7 +1511,7 @@ struct stream::implementation
         {
             // Bound read-ahead storage even if the peer keeps sending records
             // that do not complete the ClientHello.
-            constexpr std::size_t capture_limit = 1024 * 1024;
+            constexpr std::size_t capture_limit = std::size_t{1024} * 1024;
             if (count > capture_limit - reads->size())
             {
                 tls_error("TLS ClientHello exceeded the handoff capture limit");
@@ -1584,17 +1589,19 @@ struct stream::implementation
         }
         else if (socket && (error != SSL_ERROR_WANT_READ || !bio_state.hello_reads))
         {
+            // The socket is set at construction and never reset, so it outlives the flush.
+            auto& tcp_socket = *socket;
             if (has_output())
             {
                 co_await flush_output();
             }
             if (error == SSL_ERROR_WANT_READ)
             {
-                co_await context().wait_readable(socket->native_handle());
+                co_await context().wait_readable(tcp_socket.native_handle());
             }
             else if (!bio_state.writer)
             {
-                co_await context().wait_writable(socket->native_handle());
+                co_await context().wait_writable(tcp_socket.native_handle());
             }
         }
         else
@@ -1716,14 +1723,27 @@ tls_transport* stream::generic_transport() const noexcept
 client_hello_handoff<tcp::stream> stream::release_tcp()
 {
     auto state = std::move(impl_);
-    state->bio_state.prefix += *state->bio_state.hello_reads;
-    return {std::move(*state->socket), std::move(state->bio_state.prefix)};
+    // handshake_impl captures the ClientHello whenever a handoff can be requested.
+    auto& reads = state->bio_state.hello_reads;
+    auto& tcp_socket = state->socket;
+    if (!reads || !tcp_socket)
+    {
+        throw std::logic_error("TLS handoff requires a captured ClientHello on a TCP stream");
+    }
+    state->bio_state.prefix += *reads;
+    return {std::move(*tcp_socket), std::move(state->bio_state.prefix)};
 }
 
 client_hello_handoff<std::unique_ptr<tls_transport>> stream::release_generic()
 {
     auto state = std::move(impl_);
-    state->bio_state.prefix += *state->bio_state.hello_reads;
+    // handshake_impl captures the ClientHello whenever a handoff can be requested.
+    auto& reads = state->bio_state.hello_reads;
+    if (!reads)
+    {
+        throw std::logic_error("TLS handoff requires a captured ClientHello");
+    }
+    state->bio_state.prefix += *reads;
     return {std::move(state->transport), std::move(state->bio_state.prefix)};
 }
 
@@ -1782,6 +1802,7 @@ task<void> stream::connect_impl(tcp::endpoint endpoint, std::string peer_name, s
     {
         throw std::logic_error("TLS connect requires a TCP-backed stream");
     }
+    auto& tcp_socket = *impl_->socket;
     implementation::operation operation(*impl_);
     try
     {
@@ -1791,7 +1812,7 @@ task<void> stream::connect_impl(tcp::endpoint endpoint, std::string peer_name, s
             throw std::logic_error("TLS connect requires a client context");
         }
         impl_->prepare_handshake(std::move(peer_name), server_name);
-        co_await impl_->socket->connect(std::move(endpoint));
+        co_await tcp_socket.connect(std::move(endpoint));
         co_await perform_handshake();
     }
     catch (...)
@@ -2063,6 +2084,7 @@ tls_driver::tls_driver(tls::stream& stream)
     {
         throw std::logic_error("multiplexed TLS driver requires a TCP socket");
     }
+    socket_ = &*p.socket;
     p.check(true);
     if (!p.bio_state.buffers)
     {
@@ -2079,7 +2101,7 @@ tls_driver::~tls_driver()
     // exit must not silently drop queued records then attempt a TLS shutdown.
     if (!drained())
     {
-        p.socket->close();
+        socket_->close();
     }
     p.bio_state.multiplexing = false;
     p.active = false;
@@ -2087,7 +2109,7 @@ tls_driver::~tls_driver()
 
 native_socket_type tls_driver::native_handle() const noexcept
 {
-    return stream_.impl_->socket->native_handle();
+    return socket_->native_handle();
 }
 
 bool tls_driver::drained() const noexcept
@@ -2122,7 +2144,7 @@ bool tls_driver::progress()
     if (output.size())
     {
         const int count =
-            tls::socket_write(*p.socket, output.bytes.data() + output.begin, static_cast<int>(output.size()));
+            tls::socket_write(*socket_, output.bytes.data() + output.begin, static_cast<int>(output.size()));
         if (count > 0)
         {
             output.consume(static_cast<std::size_t>(count));
@@ -2140,7 +2162,7 @@ bool tls_driver::progress()
     {
         input.compact();
         const int count =
-            tls::socket_read(*p.socket, input.bytes.data() + input.end, static_cast<int>(input.available()));
+            tls::socket_read(*socket_, input.bytes.data() + input.end, static_cast<int>(input.available()));
         if (count > 0)
         {
             input.end += static_cast<std::size_t>(count);

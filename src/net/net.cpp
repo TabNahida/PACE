@@ -101,16 +101,13 @@ bool retry_accept(int error) noexcept
 #if defined(_WIN32)
     return error == WSAECONNRESET || error == WSAECONNABORTED;
 #else
-    if (error == ECONNABORTED || error == EPROTO)
-    {
-        return true;
-    }
+    const bool aborted = error == ECONNABORTED || error == EPROTO;
 #if defined(__linux__)
     // Linux reports errors from queued connections through accept itself.
-    return error == ENETDOWN || error == ENOPROTOOPT || error == EHOSTDOWN || error == ENONET || error == EHOSTUNREACH
-           || error == EOPNOTSUPP || error == ENETUNREACH;
+    return aborted || error == ENETDOWN || error == ENOPROTOOPT || error == EHOSTDOWN || error == ENONET
+           || error == EHOSTUNREACH || error == EOPNOTSUPP || error == ENETUNREACH;
 #else
-    return false;
+    return aborted;
 #endif
 #endif
 }
@@ -280,11 +277,15 @@ task<void> stream::connect(endpoint endpoint)
     }
     const auto pending_error = last_socket_error();
 #if defined(_WIN32)
-    if (pending_error != WSAEWOULDBLOCK && pending_error != WSAEINPROGRESS && pending_error != WSAEALREADY)
+    const bool failed =
+        pending_error != WSAEWOULDBLOCK && pending_error != WSAEINPROGRESS && pending_error != WSAEALREADY;
 #else
-    if (pending_error != EINPROGRESS && pending_error != EALREADY)
+    const bool failed = pending_error != EINPROGRESS && pending_error != EALREADY;
 #endif
+    if (failed)
+    {
         socket_error("connect");
+    }
     co_await context_->wait_writable(fd_);
     check_operation(*context_, fd_);
     int error = 0;
@@ -342,7 +343,7 @@ task<std::size_t> stream::read_some(std::span<char> buffer)
 
 task<void> stream::write_all(std::string_view bytes)
 {
-    constexpr std::size_t write_quantum = 1024 * 1024;
+    constexpr std::size_t write_quantum = std::size_t{1024} * 1024;
     auto budget = write_quantum;
     for (;;)
     {

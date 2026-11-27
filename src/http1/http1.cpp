@@ -335,6 +335,7 @@ task<std::optional<std::string>> read_head(
     bool* head_request = nullptr
 )
 {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init): scratch buffer; zeroing costs a memset per read
     std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
     for (;;)
     {
@@ -374,6 +375,7 @@ task<std::optional<std::string>> read_head(
 template <class Transport>
 task<void> ensure_bytes(Transport& stream, std::string& pending, std::size_t size)
 {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init): scratch buffer; zeroing costs a memset per read
     std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
     while (pending.size() < size)
     {
@@ -390,6 +392,7 @@ task<void> ensure_bytes(Transport& stream, std::string& pending, std::size_t siz
 template <class Transport>
 task<std::string> read_line(Transport& stream, std::string& pending, std::size_t maximum)
 {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init): scratch buffer; only bytes read are consumed
     std::array<char, 1024> buffer;
     for (;;)
     {
@@ -980,6 +983,7 @@ task<response> read_response(Transport& stream, std::string& pending, limits bou
             }
             result.body = std::move(pending);
             pending.clear();
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init): scratch buffer; zeroing costs a memset per read
             std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
             for (;;)
             {
@@ -1447,8 +1451,9 @@ task<void> serve_connection(tcp::stream stream, handler handle, limits bounds)
         stream.set_no_delay();
         co_await process_connection(stream, handle, server_options{.bounds = bounds});
     }
-    catch (const std::system_error&)
-    { /* A transport error belongs to this client. */
+    catch (const std::system_error&) // NOLINT(bugprone-empty-catch): per-connection transport error
+    {
+        // A transport error belongs to this client; the listener keeps serving.
     }
 }
 
@@ -1490,8 +1495,9 @@ task<void> serve_connection(tcp::stream stream, server_handler handle, server_op
         stream.set_no_delay();
         co_await process_connection(stream, handle, options);
     }
-    catch (const std::system_error&)
-    { /* A transport error belongs to this client. */
+    catch (const std::system_error&) // NOLINT(bugprone-empty-catch): per-connection transport error
+    {
+        // A transport error belongs to this client; the listener keeps serving.
     }
 }
 
@@ -1560,8 +1566,9 @@ task<void> serve_connection(tls::stream stream, handler handle, limits bounds)
         stream.set_no_delay();
         co_await process_connection(stream, handle, server_options{.bounds = bounds});
     }
-    catch (const std::system_error&)
-    { /* TLS/transport failure is per connection. */
+    catch (const std::system_error&) // NOLINT(bugprone-empty-catch): per-connection TLS/transport error
+    {
+        // TLS/transport failure is per connection; the listener keeps serving.
     }
 }
 
@@ -1574,8 +1581,9 @@ task<void> serve_connection(tls::stream stream, server_handler handle, server_op
         stream.set_no_delay();
         co_await process_connection(stream, handle, options);
     }
-    catch (const std::system_error&)
-    { /* TLS/transport failure is per connection. */
+    catch (const std::system_error&) // NOLINT(bugprone-empty-catch): per-connection TLS/transport error
+    {
+        // TLS/transport failure is per connection; the listener keeps serving.
     }
 }
 
@@ -1588,8 +1596,9 @@ task<void> handshake_and_serve(tls::stream stream, handler handle, limits bounds
         co_await stream.handshake();
         co_await serve_connection(std::move(stream), std::move(handle), bounds);
     }
-    catch (const std::system_error&)
-    { /* A bad TLS peer must not stop the listener. */
+    catch (const std::system_error&) // NOLINT(bugprone-empty-catch): a bad TLS peer only ends its connection
+    {
+        // A bad TLS peer must not stop the listener.
     }
 }
 
@@ -1600,8 +1609,9 @@ task<void> handshake_and_serve(tls::stream stream, server_handler handle, server
         co_await stream.handshake();
         co_await serve_connection(std::move(stream), std::move(handle), std::move(options));
     }
-    catch (const std::system_error&)
-    { /* A bad TLS peer must not stop the listener. */
+    catch (const std::system_error&) // NOLINT(bugprone-empty-catch): a bad TLS peer only ends its connection
+    {
+        // A bad TLS peer must not stop the listener.
     }
 }
 } // namespace

@@ -25,7 +25,7 @@ namespace
 {
 using clock = std::chrono::steady_clock;
 using address = net::socket_address;
-constexpr std::size_t stream_window = 256 * 1024, connection_window = 4 * 1024 * 1024;
+constexpr std::size_t stream_window = std::size_t{256} * 1024, connection_window = std::size_t{4} * 1024 * 1024;
 constexpr std::size_t cid_size = 18, packet_size = 1200, batch_size = 64;
 
 ngtcp2_tstamp timestamp()
@@ -185,6 +185,8 @@ struct configuration
     }
 };
 
+namespace
+{
 struct stream_buffer
 {
     struct chunk
@@ -207,6 +209,8 @@ struct stream_buffer
     {
     }
 };
+} // namespace
+
 struct connection_state;
 
 // Socket ownership and readiness belong to PACE. The routing table only borrows
@@ -234,7 +238,7 @@ struct engine : std::enable_shared_from_this<engine>
     {
         if (config->mode == role::server)
         {
-            required(RAND_bytes(retry_secret.data(), retry_secret.size()), "QUIC Retry secret");
+            required(RAND_bytes(retry_secret.data(), static_cast<int>(retry_secret.size())), "QUIC Retry secret");
         }
     }
 
@@ -1408,7 +1412,7 @@ std::size_t write(stream_state& state, std::string_view bytes)
         {bytes.size(),
          stream_window - (stream.total - stream.acknowledged),
          connection_window - state.owner->pending_bytes,
-         16 * 1024}
+         uint64_t{16} * 1024}
     );
     if (!size)
     {

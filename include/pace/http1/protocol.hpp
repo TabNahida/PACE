@@ -28,11 +28,11 @@ namespace pace::http
 {
 struct limits
 {
-    std::size_t max_header_bytes = 16 * 1024;
-    std::size_t max_body_bytes = 1024 * 1024;
+    std::size_t max_header_bytes = std::size_t{16} * 1024;
+    std::size_t max_body_bytes = std::size_t{1024} * 1024;
     std::size_t max_requests_per_connection = 1000;
     std::size_t max_header_fields = 100;
-    std::size_t max_trailer_bytes = 8 * 1024;
+    std::size_t max_trailer_bytes = std::size_t{8} * 1024;
     std::size_t max_trailer_fields = 32;
     std::size_t max_chunk_line_bytes = 1024;
     std::size_t max_chunks = 65536;
@@ -122,7 +122,7 @@ struct server_options
     // Write time includes producing/writing headers and body, not graceful close.
     std::chrono::milliseconds request_timeout{0};
     std::chrono::milliseconds write_timeout{0};
-    std::size_t response_buffer_bytes = 64 * 1024;
+    std::size_t response_buffer_bytes = std::size_t{64} * 1024;
 };
 
 // HTTP/1.0 and HTTP/1.1 with Content-Length/chunked framing and keep-alive.

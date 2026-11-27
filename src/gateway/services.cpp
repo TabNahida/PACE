@@ -1027,16 +1027,16 @@ bool cache_request(const request& req)
     {
         return false;
     }
-    for (const auto& f : req.headers)
-    {
-        const std::string_view name = f.name;
-        if (iequals(name, "authorization") || iequals(name, "cookie") || iequals(name, "range")
-            || iequals(name.substr(0, 3), "if-") || iequals(name, "cache-control") || iequals(name, "pragma"))
+    return std::none_of(
+        req.headers.begin(),
+        req.headers.end(),
+        [](const auto& f)
         {
-            return false;
+            const std::string_view name = f.name;
+            return iequals(name, "authorization") || iequals(name, "cookie") || iequals(name, "range")
+                   || iequals(name.substr(0, 3), "if-") || iequals(name, "cache-control") || iequals(name, "pragma");
         }
-    }
-    return true;
+    );
 }
 
 std::chrono::seconds origin_age(const response& result)
@@ -1272,8 +1272,12 @@ struct reverse_proxy::implementation
                 transport->secure = std::make_unique<secure_client>(std::move(secure), bounds);
             }
             else
-#endif
+            {
                 transport->plain = std::make_unique<client>(std::move(stream), bounds);
+            }
+#else
+            transport->plain = std::make_unique<client>(std::move(stream), bounds);
+#endif
         }
         auto result = co_await transport->send(std::move(req));
         if (transport->open() && state.idle.size() < options.max_idle_connections)

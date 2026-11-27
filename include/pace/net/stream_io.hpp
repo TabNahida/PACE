@@ -44,7 +44,7 @@ task<void> read_exact(Stream& stream, std::span<std::byte> bytes)
 }
 
 template <class Stream>
-task<std::string> read_exact(Stream& stream, std::size_t size, std::size_t maximum = 1024 * 1024)
+task<std::string> read_exact(Stream& stream, std::size_t size, std::size_t maximum = std::size_t{1024} * 1024)
 {
     if (size > maximum)
     {

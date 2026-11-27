@@ -9,9 +9,9 @@ namespace pace::http2
 {
 struct limits
 {
-    std::size_t max_header_bytes = 16 * 1024;
+    std::size_t max_header_bytes = std::size_t{16} * 1024;
     std::size_t max_header_fields = 100;
-    std::size_t max_body_bytes = 1024 * 1024;
+    std::size_t max_body_bytes = std::size_t{1024} * 1024;
     std::size_t max_concurrent_streams = 100;
     std::size_t max_requests_per_connection = 1000;
     // Cooperative application tasks per connection; 1 serializes handlers.

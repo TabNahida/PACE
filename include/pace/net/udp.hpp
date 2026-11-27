@@ -144,7 +144,7 @@ inline socket open()
 
 inline socket bind(io_context& io, endpoint local, bind_options options = {})
 {
-    return socket(io, std::move(local), options);
+    return {io, std::move(local), options};
 }
 
 inline socket bind(endpoint local, bind_options options = {})

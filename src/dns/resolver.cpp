@@ -68,7 +68,7 @@ struct lookup : std::enable_shared_from_this<lookup>
 {
     struct socket_state
     {
-        ares_socket_t fd;
+        ares_socket_t fd{};
         bool alive = true, readable = false, writable = false;
         bool reader = false, writer = false;
     };

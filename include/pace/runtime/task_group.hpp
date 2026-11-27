@@ -91,6 +91,8 @@ task<void> run_child(std::shared_ptr<group_state> group, std::shared_ptr<owned_c
 {
     try
     {
+        // spawn() constructs the child with its factory; only this coroutine resets it, below.
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged until the reset after this block
         auto work = task_access::bind(invoke_entry(*child->factory, group->io), group->source.token());
         if constexpr (std::is_void_v<operation_result<Factory>>)
         {

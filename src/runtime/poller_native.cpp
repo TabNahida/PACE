@@ -26,6 +26,8 @@
 
 namespace pace
 {
+namespace
+{
 class native_poller final : public poller_backend
 {
     struct implementation;
@@ -57,8 +59,6 @@ public:
     }
 };
 
-namespace
-{
 constexpr auto wake_token = std::numeric_limits<std::uint64_t>::max();
 constexpr std::size_t max_batch = 256;
 
@@ -276,6 +276,7 @@ void native_poller::update(native_socket_type fd, bool readable, bool writable, 
     const auto previous = interest.filters;
     std::array<struct kevent, 2> changes{};
     int count = 0;
+    // NOLINTNEXTLINE(performance-no-int-to-ptr): kevent's udata is a pointer; the token round-trips through it
     auto* data = reinterpret_cast<void*>(static_cast<std::uintptr_t>(token));
     if (readable)
     {
@@ -351,6 +352,7 @@ std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms)
         return 0;
     }
     // kevent initializes every returned entry; unused capacity is never read.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init): kevent fills the entries it returns
     std::array<struct kevent, max_batch> events;
     timespec timeout{};
     timeout.tv_sec = timeout_ms / 1000;
@@ -378,6 +380,7 @@ std::size_t native_poller::wait(std::span<poll_event> output, int timeout_ms)
         implementation::interest* interest;
     };
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init): only the first `size` entries are read
     std::array<delivered_interest, max_batch> delivered;
     std::size_t size = 0;
     std::size_t bidirectional = 0;

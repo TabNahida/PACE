@@ -179,6 +179,9 @@ public:
                 std::rethrow_exception(handle.promise().exception);
             }
             handle.promise().cancellation.throw_if_cancelled();
+            // A task<T> that finished without an exception ran return_value. Checking again
+            // would add a branch to every co_await.
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): set by return_value, see above
             return std::move(*handle.promise().value);
         }
     };
@@ -205,7 +208,7 @@ class [[nodiscard]] task<void>
 public:
     struct promise_type : promise_base
     {
-        std::size_t root_index; // Used only while owned by io_context::spawn.
+        std::size_t root_index = 0; // Used only while owned by io_context::spawn.
 
         task get_return_object() noexcept
         {

@@ -3,6 +3,7 @@
 #include <pace/http/types.hpp>
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -123,7 +124,7 @@ public:
         const auto token = [](unsigned char c)
         {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-                   || std::string_view("!#$%&'*+-.^_`|~").find(c) != std::string_view::npos;
+                   || std::string_view("!#$%&'*+-.^_`|~").find(static_cast<char>(c)) != std::string_view::npos;
         };
         if (method.empty() || path.empty() || path.front() != '/')
         {
@@ -165,7 +166,7 @@ public:
             routes_ = std::make_shared<std::vector<route>>(*routes_);
         }
         routes_->insert(
-            routes_->begin() + position,
+            routes_->begin() + static_cast<std::ptrdiff_t>(position),
             {std::move(method), std::move(path), make_handler(std::forward<Function>(function))}
         );
         return *this;

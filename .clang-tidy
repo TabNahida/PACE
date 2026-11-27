@@ -48,6 +48,9 @@ Checks: >
 # - modernize-use-ranges: iterator algorithms stay; ranges cost compile time without changing behaviour.
 # - redundant-member-init: `member{}` on aggregate members is deliberate; it keeps designated and partial
 #   aggregate initialization free of -Wmissing-field-initializers.
+# Configured below, and why:
+# - header-include-cycle ignores OpenSSL's headers: ssl.h and quic.h/srtp.h/ssl3.h include each other by
+#   design, and the cycle is reported through our #include because the package path is not a system path.
 
 WarningsAsErrors: ''
 HeaderFilterRegex: '(include|src)/pace/.*|src/.*'
@@ -83,3 +86,4 @@ CheckOptions:
   - { key: cppcoreguidelines-special-member-functions.AllowMissingMoveFunctionsWhenCopyIsDeleted, value: true }
   - { key: cppcoreguidelines-special-member-functions.AllowImplicitlyDeletedCopyOrMove, value: true }
   - { key: misc-const-correctness.AnalyzeValues,                     value: false }
+  - { key: misc-header-include-cycle.IgnoredFilesList,              value: 'openssl/.*' }

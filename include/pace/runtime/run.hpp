@@ -112,12 +112,21 @@ auto run(Factory&& factory)
     {
         std::rethrow_exception(state.failure);
     }
-    if (!state.completed)
+    // The entry stores its value before it sets completed, so for a value-returning
+    // entry both conditions agree; testing the optional makes the access visibly safe.
+    if constexpr (std::is_void_v<result>)
     {
-        throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+        if (!state.completed)
+        {
+            throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+        }
     }
-    if constexpr (!std::is_void_v<result>)
+    else
     {
+        if (!state.completed || !state.value)
+        {
+            throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+        }
         return result(std::move(*state.value));
     }
 }

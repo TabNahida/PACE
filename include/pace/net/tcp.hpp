@@ -62,7 +62,7 @@ public:
     }
 
     // Owned convenience result with a pre-allocation bound (1 MiB by default).
-    task<std::string> read_exact(std::size_t size, std::size_t maximum = 1024 * 1024);
+    task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
     task<void> write_all(std::string_view bytes);
 
     task<std::size_t> read_some(std::span<std::byte> buffer)
@@ -81,7 +81,7 @@ public:
     // Must have no other operations outstanding; cancellation also closes it.
     task<void> close_gracefully(
         std::chrono::milliseconds timeout = std::chrono::milliseconds(100),
-        std::size_t discard_limit = 64 * 1024
+        std::size_t discard_limit = std::size_t{64} * 1024
     );
     void close() noexcept;
 
@@ -157,7 +157,7 @@ private:
 // Bind immediately. Current-context form is for a running task/callback.
 inline listener listen(io_context& io, endpoint local, listen_options options = {})
 {
-    return listener(io, std::move(local), options);
+    return {io, std::move(local), options};
 }
 
 inline listener listen(endpoint local, listen_options options = {})
@@ -171,7 +171,7 @@ inline task<std::string> async_exchange(
     endpoint peer,
     std::string request,
     std::size_t reply_size,
-    std::size_t maximum = 1024 * 1024
+    std::size_t maximum = std::size_t{1024} * 1024
 )
 {
     if (reply_size > maximum)
@@ -189,7 +189,7 @@ inline task<std::string> async_exchange(
     endpoint peer,
     std::string request,
     std::size_t reply_size,
-    std::size_t maximum = 1024 * 1024
+    std::size_t maximum = std::size_t{1024} * 1024
 )
 {
     co_return co_await async_exchange(this_context(), std::move(peer), std::move(request), reply_size, maximum);
@@ -200,7 +200,7 @@ inline std::string exchange(
     std::string request,
     std::size_t reply_size,
     blocking_options options = {},
-    std::size_t maximum = 1024 * 1024
+    std::size_t maximum = std::size_t{1024} * 1024
 )
 {
     return blocking_call(

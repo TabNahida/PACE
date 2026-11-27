@@ -14,7 +14,7 @@ struct cache_options
 {
     std::size_t max_bytes = 0; // Disabled by default. Accounted entry budget; slot storage is bounded by max_entries.
     std::size_t max_entries = 1024;
-    std::size_t max_object_bytes = 1024 * 1024;
+    std::size_t max_object_bytes = std::size_t{1024} * 1024;
     std::chrono::seconds ttl{60};
     std::size_t shards = 16;
 };
@@ -52,7 +52,7 @@ private:
 struct static_options
 {
     std::string index = "index.html";
-    std::size_t max_file_bytes = 8 * 1024 * 1024;
+    std::size_t max_file_bytes = std::size_t{8} * 1024 * 1024;
     bool allow_dotfiles = false;
     std::string cache_control = "no-cache";
     cache_options cache{};
@@ -86,7 +86,7 @@ struct proxy_options
     bool strip_prefix = true;
     std::size_t max_connections = 64; // Per upstream, per reactor; excess returns 503.
     std::size_t max_idle_connections = 16;
-    std::size_t max_response_bytes = 8 * 1024 * 1024;
+    std::size_t max_response_bytes = std::size_t{8} * 1024 * 1024;
     std::chrono::milliseconds timeout{30000};
     std::chrono::seconds idle_timeout{30};
     std::chrono::milliseconds fail_timeout{1000};
