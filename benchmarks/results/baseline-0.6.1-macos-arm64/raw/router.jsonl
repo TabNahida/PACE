@@ -1,0 +1,10 @@
+{"workload": "16 routes", "trial": 0, "arguments": ["16", "200000"], "record": {"routes": 16, "iterations": 200000, "ns_per_operation": 67.714}}
+{"workload": "1024 routes", "trial": 0, "arguments": ["1024", "200000"], "record": {"routes": 1024, "iterations": 200000, "ns_per_operation": 80.1596}}
+{"workload": "1024 routes", "trial": 1, "arguments": ["1024", "200000"], "record": {"routes": 1024, "iterations": 200000, "ns_per_operation": 82.8375}}
+{"workload": "16 routes", "trial": 1, "arguments": ["16", "200000"], "record": {"routes": 16, "iterations": 200000, "ns_per_operation": 68.5998}}
+{"workload": "16 routes", "trial": 2, "arguments": ["16", "200000"], "record": {"routes": 16, "iterations": 200000, "ns_per_operation": 67.915}}
+{"workload": "1024 routes", "trial": 2, "arguments": ["1024", "200000"], "record": {"routes": 1024, "iterations": 200000, "ns_per_operation": 84.1204}}
+{"workload": "1024 routes", "trial": 3, "arguments": ["1024", "200000"], "record": {"routes": 1024, "iterations": 200000, "ns_per_operation": 83.2479}}
+{"workload": "16 routes", "trial": 3, "arguments": ["16", "200000"], "record": {"routes": 16, "iterations": 200000, "ns_per_operation": 68.2465}}
+{"workload": "16 routes", "trial": 4, "arguments": ["16", "200000"], "record": {"routes": 16, "iterations": 200000, "ns_per_operation": 66.6513}}
+{"workload": "1024 routes", "trial": 4, "arguments": ["1024", "200000"], "record": {"routes": 1024, "iterations": 200000, "ns_per_operation": 80.3806}}

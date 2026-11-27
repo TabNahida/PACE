@@ -1,0 +1,66 @@
+name: Benchmark baseline
+# Measures every benchmark suite for one source revision (default: the 0.6.1 release) and uploads the raw
+# results. Hosted runners are shared and noisy: use these artifacts to compare runs of this workflow with each
+# other, and prefer a quiet local Linux machine for numbers that get published.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Tag, branch or commit to measure
+        default: v0.6.1
+      repeats:
+        description: Trials per workload
+        default: '5'
+permissions:
+  contents: read
+jobs:
+  baseline:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: linux-x86_64, os: ubuntu-24.04}
+          - {name: linux-arm64, os: ubuntu-24.04-arm}
+          - {name: macos-arm64, os: macos-15}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - name: Check out the baseline runner
+        uses: actions/checkout@v4
+        with:
+          path: runner
+      - name: Check out the measured revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          path: measured
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.0.9'
+      - name: Install nginx for the gateway comparison
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y nginx
+      - name: Build every benchmark
+        working-directory: measured
+        run: |
+          xmake f -c -m release -o build/baseline --tls=y --dns=y --quic=y --http2=y --http3=y \
+            --benchmarks=y --components=y --scaling=y --protocol_benchmarks=y --tests=n --examples=n -y
+          xmake -y
+      - name: Measure
+        run: |
+          python runner/scripts/run_baseline.py --source measured --build-dir measured/build/baseline \
+            --output results/baseline-${{ inputs.ref }}-${{ matrix.name }} --repeats ${{ inputs.repeats }} \
+            --label "GitHub-hosted ${{ matrix.os }} runner (shared, noisy)"
+      - run: cat results/*/README.md >> "$GITHUB_STEP_SUMMARY"
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: baseline-${{ matrix.name }}
+          path: results/
+          if-no-files-found: error

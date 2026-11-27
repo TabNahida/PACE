@@ -1,0 +1,4 @@
+{
+  "rounds": 10000,
+  "reactor_allocations": 2
+}

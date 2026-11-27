@@ -1,0 +1,15 @@
+{"workload": "poll-dense", "trial": 0, "arguments": ["poll-dense", "400"], "record": {"backend": "kqueue", "workload": "poll-dense", "iterations": 400, "ns_per_operation": 117.188}}
+{"workload": "poll-sparse", "trial": 0, "arguments": ["poll-sparse", "2500"], "record": {"backend": "kqueue", "workload": "poll-sparse", "iterations": 2500, "ns_per_operation": 1792}}
+{"workload": "udp", "trial": 0, "arguments": ["udp", "800"], "record": {"backend": "kqueue", "workload": "udp", "iterations": 800, "ns_per_operation": 54629.2}}
+{"workload": "udp", "trial": 1, "arguments": ["udp", "800"], "record": {"backend": "kqueue", "workload": "udp", "iterations": 800, "ns_per_operation": 53504.1}}
+{"workload": "poll-sparse", "trial": 1, "arguments": ["poll-sparse", "2500"], "record": {"backend": "kqueue", "workload": "poll-sparse", "iterations": 2500, "ns_per_operation": 2416}}
+{"workload": "poll-dense", "trial": 1, "arguments": ["poll-dense", "400"], "record": {"backend": "kqueue", "workload": "poll-dense", "iterations": 400, "ns_per_operation": 117.188}}
+{"workload": "poll-dense", "trial": 2, "arguments": ["poll-dense", "400"], "record": {"backend": "kqueue", "workload": "poll-dense", "iterations": 400, "ns_per_operation": 116.211}}
+{"workload": "poll-sparse", "trial": 2, "arguments": ["poll-sparse", "2500"], "record": {"backend": "kqueue", "workload": "poll-sparse", "iterations": 2500, "ns_per_operation": 1791}}
+{"workload": "udp", "trial": 2, "arguments": ["udp", "800"], "record": {"backend": "kqueue", "workload": "udp", "iterations": 800, "ns_per_operation": 49765.1}}
+{"workload": "udp", "trial": 3, "arguments": ["udp", "800"], "record": {"backend": "kqueue", "workload": "udp", "iterations": 800, "ns_per_operation": 52112.3}}
+{"workload": "poll-sparse", "trial": 3, "arguments": ["poll-sparse", "2500"], "record": {"backend": "kqueue", "workload": "poll-sparse", "iterations": 2500, "ns_per_operation": 2292}}
+{"workload": "poll-dense", "trial": 3, "arguments": ["poll-dense", "400"], "record": {"backend": "kqueue", "workload": "poll-dense", "iterations": 400, "ns_per_operation": 117.844}}
+{"workload": "poll-dense", "trial": 4, "arguments": ["poll-dense", "400"], "record": {"backend": "kqueue", "workload": "poll-dense", "iterations": 400, "ns_per_operation": 120.117}}
+{"workload": "poll-sparse", "trial": 4, "arguments": ["poll-sparse", "2500"], "record": {"backend": "kqueue", "workload": "poll-sparse", "iterations": 2500, "ns_per_operation": 2417}}
+{"workload": "udp", "trial": 4, "arguments": ["udp", "800"], "record": {"backend": "kqueue", "workload": "udp", "iterations": 800, "ns_per_operation": 58708.1}}

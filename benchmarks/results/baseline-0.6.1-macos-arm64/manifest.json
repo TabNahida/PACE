@@ -1,0 +1,459 @@
+{
+  "schema": 1,
+  "measured_at": "2026-11-27T07:35:41+00:00",
+  "label": "Apple M6, 12 logical CPUs, 16 GiB, macOS 27.2, on AC power, otherwise idle",
+  "repeats": 5,
+  "quick": false,
+  "source": {
+    "revision": "3ea97405948ed3e52a9c7a80cb3dc2eb6c3f027d",
+    "describe": "v0.6.1",
+    "status": ""
+  },
+  "runner": {
+    "script_sha256": "43265803d47ee6ba21e525a524dca32ba93f02774a938a8bf060003a65a8a075",
+    "revision": "f88076321074f1b44b9ef6d1a237177b3115e7dc"
+  },
+  "host": {
+    "platform": "macOS-27.2.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.9.6",
+    "logical_cpus": 12,
+    "details": [
+      "Apple M6",
+      "17179869184"
+    ],
+    "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)"
+  },
+  "build_config": "{\n    __toolchains_macosx_arm64 = {\n        \"envs\",\n        \"xcode\",\n        \"yasm\",\n        \"nasm\",\n        \"cuda\",\n        \"rust\",\n        \"go\",\n        \"gfortran\",\n        \"fpc\"\n    },\n    __toolchains_macosx_arm64_host = {\n        \"envs\",\n        \"xcode\",\n        \"yasm\",\n        \"nasm\",\n        \"cuda\",\n        \"rust\",\n        \"go\",\n        \"gfortran\",\n        \"fpc\"\n    },\n    arch = \"arm64\",\n    benchmarks = true,\n    builddir = \"build/baseline\",\n    ccache = true,\n    clean = true,\n    components = true,\n    cxxstandard = \"cxx20\",\n    dns = true,\n    examples = false,\n    host = \"macosx\",\n    http1 = true,\n    http2 = true,\n    http3 = true,\n    kind = \"static\",\n    mode = \"release\",\n    modules = false,\n    ndk_stdcxx = true,\n    plat = \"macosx\",\n    profiling = false,\n    protocol_benchmarks = true,\n    quic = true,\n    quic_backend = \"ngtcp2\",\n    sanitizers = false,\n    scaling = true,\n    tests = false,\n    tls = true,\n    uring = false,\n    websocket = true,\n    xcode = \"/Applications/Xcode.app\"\n}",
+  "suites": {
+    "runtime_hotpaths": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_runtime_hotpaths",
+      "binary_sha256": "f550e2bb97b9a44ebf52b3a5d5a7fe1b57a4465fe8592e979b39a76d0c69e401",
+      "raw": "raw/runtime-hotpaths.jsonl",
+      "workloads": {
+        "cancel sparse / 0 background": [
+          "sparse_cancel",
+          "0",
+          "1000",
+          "200"
+        ],
+        "cancel sparse / 65536 background": [
+          "sparse_cancel",
+          "65536",
+          "1000",
+          "200"
+        ],
+        "readiness / 1 socket": [
+          "ready_batch",
+          "1",
+          "2000",
+          "300"
+        ],
+        "readiness / 256 sockets": [
+          "ready_batch",
+          "256",
+          "200",
+          "50"
+        ],
+        "inbox / 65536 roots": [
+          "inbox_burst",
+          "65536",
+          "20",
+          "5"
+        ]
+      },
+      "seconds": 1.7
+    },
+    "net_hotpaths": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_net_hotpaths",
+      "binary_sha256": "8c6a4d8f233be70f890d7f36ce60846932edb3952e3b6d234f06093a2ea0edd8",
+      "raw": "raw/net-hotpaths.jsonl",
+      "workloads": {
+        "poll-dense": [
+          "poll-dense",
+          "400"
+        ],
+        "poll-sparse": [
+          "poll-sparse",
+          "2500"
+        ],
+        "udp": [
+          "udp",
+          "800"
+        ]
+      },
+      "seconds": 1.5
+    },
+    "components": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_components",
+      "binary_sha256": "430c60ccf3c528191fec62957123e36cf7b0a272ddb587d7ec1fe039eeee7bf6",
+      "results": "components.json",
+      "seconds": 6.6
+    },
+    "router": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_router_bench",
+      "binary_sha256": "0986ae92d8cc63ff2a439f2b32787a7679f3512baa463ad27b98dfebba1fd688",
+      "raw": "raw/router.jsonl",
+      "workloads": {
+        "16 routes": [
+          "16",
+          "200000"
+        ],
+        "1024 routes": [
+          "1024",
+          "200000"
+        ]
+      },
+      "seconds": 0.2
+    },
+    "inbox_allocations": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_inbox_allocations",
+      "binary_sha256": "efb244e81660f7e10c6cb3d05f883727cc733fc098f419f53df35faa56ac1df2",
+      "raw": "raw/inbox-allocations.json",
+      "seconds": 0.0
+    },
+    "tcp_echo": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_bench",
+      "binary_sha256": "a1bb8ab914bb2a14859c613e327001cbba18710b34bb0330d9172166dd7090fa",
+      "results": "tcp-echo/",
+      "seconds": 3.2
+    },
+    "scaling": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_scaling",
+      "binary_sha256": "c677cb8e047a2f6608cb51e73b695bc7d2de94b67e2ce33e0e5c6cc7ce8211cf",
+      "results": "scaling.json",
+      "seconds": 4.8
+    },
+    "websocket": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_websocket_bench",
+      "binary_sha256": "50e6989a01a1da942d274aff03392f4e0adda39c6a876406f3c7d9e3227d7a2f",
+      "raw": "raw/websocket.jsonl",
+      "workloads": {
+        "64 B": [
+          "--bytes",
+          "64",
+          "--iterations",
+          "30000"
+        ],
+        "16 KiB": [
+          "--bytes",
+          "16384",
+          "--iterations",
+          "30000"
+        ],
+        "16 KiB / 1 KiB fragments": [
+          "--bytes",
+          "16384",
+          "--fragment-bytes",
+          "1024",
+          "--iterations",
+          "30000"
+        ]
+      },
+      "seconds": 12.3
+    },
+    "http_close": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_http_close_probe",
+      "binary_sha256": "92d0725b984395e8b7c48917271b81ca8d3e22d22c361abb81ae324093b7fddb",
+      "raw": "raw/http-close.jsonl",
+      "workloads": {
+        "tcp / length / peer close +0 ms": [
+          "--transport",
+          "tcp",
+          "--framing",
+          "length",
+          "--connection",
+          "both",
+          "--trials",
+          "20",
+          "--delays-ms",
+          "0",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "tcp / length / peer close +10 ms": [
+          "--transport",
+          "tcp",
+          "--framing",
+          "length",
+          "--connection",
+          "both",
+          "--trials",
+          "20",
+          "--delays-ms",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "tcp / chunked / peer close +0 ms": [
+          "--transport",
+          "tcp",
+          "--framing",
+          "chunked",
+          "--connection",
+          "both",
+          "--trials",
+          "20",
+          "--delays-ms",
+          "0",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "tcp / chunked / peer close +10 ms": [
+          "--transport",
+          "tcp",
+          "--framing",
+          "chunked",
+          "--connection",
+          "both",
+          "--trials",
+          "20",
+          "--delays-ms",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "tls / length / peer close +0 ms": [
+          "--transport",
+          "tls",
+          "--framing",
+          "length",
+          "--connection",
+          "both",
+          "--trials",
+          "20",
+          "--delays-ms",
+          "0",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "tls / length / peer close +10 ms": [
+          "--transport",
+          "tls",
+          "--framing",
+          "length",
+          "--connection",
+          "both",
+          "--trials",
+          "20",
+          "--delays-ms",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "tls / chunked / peer close +0 ms": [
+          "--transport",
+          "tls",
+          "--framing",
+          "chunked",
+          "--connection",
+          "both",
+          "--trials",
+          "20",
+          "--delays-ms",
+          "0",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "tls / chunked / peer close +10 ms": [
+          "--transport",
+          "tls",
+          "--framing",
+          "chunked",
+          "--connection",
+          "both",
+          "--trials",
+          "20",
+          "--delays-ms",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ]
+      },
+      "seconds": 12.3
+    },
+    "protocol_multiplex": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_protocol_multiplex",
+      "binary_sha256": "92ab35501fec6072283bd9133572df3a0511f7ba2d0cf17856f7a47908a59e7f",
+      "raw": "raw/protocol-multiplex.jsonl",
+      "workloads": {
+        "h2 / 1 handlers": [
+          "--protocol",
+          "h2",
+          "--handlers",
+          "1",
+          "--streams",
+          "16",
+          "--delay-ms",
+          "10",
+          "--body-bytes",
+          "1024",
+          "--batches",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "h2 / 8 handlers": [
+          "--protocol",
+          "h2",
+          "--handlers",
+          "8",
+          "--streams",
+          "16",
+          "--delay-ms",
+          "10",
+          "--body-bytes",
+          "1024",
+          "--batches",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "h2tls / 1 handlers": [
+          "--protocol",
+          "h2tls",
+          "--handlers",
+          "1",
+          "--streams",
+          "16",
+          "--delay-ms",
+          "10",
+          "--body-bytes",
+          "1024",
+          "--batches",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "h2tls / 8 handlers": [
+          "--protocol",
+          "h2tls",
+          "--handlers",
+          "8",
+          "--streams",
+          "16",
+          "--delay-ms",
+          "10",
+          "--body-bytes",
+          "1024",
+          "--batches",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "h3 / 1 handlers": [
+          "--protocol",
+          "h3",
+          "--handlers",
+          "1",
+          "--streams",
+          "16",
+          "--delay-ms",
+          "10",
+          "--body-bytes",
+          "1024",
+          "--batches",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ],
+        "h3 / 8 handlers": [
+          "--protocol",
+          "h3",
+          "--handlers",
+          "8",
+          "--streams",
+          "16",
+          "--delay-ms",
+          "10",
+          "--body-bytes",
+          "1024",
+          "--batches",
+          "10",
+          "--certs",
+          "$SOURCE/tests/certs"
+        ]
+      },
+      "seconds": 33.8
+    },
+    "gateway_components": {
+      "status": "ok",
+      "binary": "$SOURCE/build/baseline/macosx/arm64/release/pace_gateway_components",
+      "binary_sha256": "e7a58f12640e5aea04aa00770b76c72cd94b565664e57d847c0088dab732c94c",
+      "raw": "raw/gateway-components.jsonl",
+      "workloads": {
+        "fnv / 1 workers": [
+          "fnv",
+          "1",
+          "200000"
+        ],
+        "xxh / 1 workers": [
+          "xxh",
+          "1",
+          "200000"
+        ],
+        "shared / 1 workers": [
+          "shared",
+          "1",
+          "200000"
+        ],
+        "local / 1 workers": [
+          "local",
+          "1",
+          "200000"
+        ],
+        "shared / 2 workers": [
+          "shared",
+          "2",
+          "200000"
+        ],
+        "local / 2 workers": [
+          "local",
+          "2",
+          "200000"
+        ],
+        "shared / 4 workers": [
+          "shared",
+          "4",
+          "200000"
+        ],
+        "local / 4 workers": [
+          "local",
+          "4",
+          "200000"
+        ],
+        "shared / 8 workers": [
+          "shared",
+          "8",
+          "200000"
+        ],
+        "local / 8 workers": [
+          "local",
+          "8",
+          "200000"
+        ]
+      },
+      "seconds": 9.3
+    },
+    "quic_transport": {
+      "status": "skipped",
+      "reason": "pace_quic_transport is built only on Linux",
+      "seconds": 0.0
+    },
+    "http_gateway": {
+      "status": "skipped",
+      "reason": "the nginx gateway comparison uses pace_http_load, which is built only on Linux",
+      "seconds": 0.0
+    }
+  }
+}
