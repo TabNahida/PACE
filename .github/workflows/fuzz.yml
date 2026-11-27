@@ -1,0 +1,91 @@
+name: Fuzz
+# Short libFuzzer runs on every pull request, long runs nightly. The working corpus is cached between
+# runs so coverage accumulates; crashes are uploaded as artifacts. The seed corpus under
+# tests/fuzz/corpus is replayed on every toolchain as a regression test.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Fuzzing time per target, in seconds
+        default: '600'
+permissions:
+  contents: read
+concurrency:
+  group: pace-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  libfuzzer:
+    name: libFuzzer / ASan + UBSan / ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [http1_server, http1_client, websocket_server]
+    env:
+      SECONDS_PER_TARGET: ${{ github.event_name == 'schedule' && '1800' || inputs.seconds || '60' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 21 with libFuzzer
+        run: |
+          curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh 21
+          sudo apt-get install -y libclang-rt-21-dev
+          echo /usr/lib/llvm-21/bin >> "$GITHUB_PATH"
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.1.1'
+          actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: fuzz-clang-21
+      - name: Build the fuzz target
+        run: |
+          xmake f -c -m releasedbg --toolchain=clang --cc=clang-21 --cxx=clang++-21 --ld=clang++-21 \
+            --fuzz=libfuzzer --tests=n --examples=n -y
+          xmake build -y pace_fuzz_${{ matrix.target }}
+      - name: Restore the working corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz-corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+      - name: Fuzz for ${{ env.SECONDS_PER_TARGET }} seconds
+        run: |
+          mkdir -p fuzz-corpus/${{ matrix.target }} fuzz-artifacts
+          binary=$(find build -type f -name pace_fuzz_${{ matrix.target }} | head -1)
+          dictionary=()
+          case ${{ matrix.target }} in http1_*) dictionary=(-dict=tests/fuzz/http.dict) ;; esac
+          "$binary" -max_total_time="$SECONDS_PER_TARGET" -timeout=10 -rss_limit_mb=2048 \
+            -artifact_prefix=fuzz-artifacts/ "${dictionary[@]}" \
+            fuzz-corpus/${{ matrix.target }} tests/fuzz/corpus/${{ matrix.target }}
+      - name: Upload crash reproducers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: fuzz-artifacts/
+          if-no-files-found: ignore
+  replay:
+    name: Seed corpus replay / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.1.1'
+      - name: Build replay drivers
+        run: |
+          xmake f -c -m debug --fuzz=replay --tests=n --examples=n -y
+          xmake -y
+      - name: Replay the seed corpus
+        run: xmake test -v

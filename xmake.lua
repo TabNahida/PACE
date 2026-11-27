@@ -9,6 +9,7 @@ option("modules", {default = false, showmenu = true, description = "Build the op
 option("sanitizers", {default = false, description = "Enable AddressSanitizer and UndefinedBehaviorSanitizer"})
 option("uring", {default = false, showmenu = true, description = "Build the optional Linux io_uring readiness backend (liburing)"})
 option("profiling", {default = false, description = "Enable intrusive per-thread stage timings (diagnostics only)"})
+option("fuzz", {default = "none", values = {"none", "libfuzzer", "replay"}, showmenu = true, description = "Build fuzz targets with libFuzzer (Clang) or a corpus replay driver"})
 option("http1", {default = true, showmenu = true, description = "Enable the HTTP/1.0 and HTTP/1.1 application module"})
 option("websocket", {default = true, showmenu = true, description = "Enable the WebSocket application module"})
 option("tls", {default = false, showmenu = true, description = "Enable TLS/HTTPS with OpenSSL"})
@@ -54,6 +55,12 @@ end
 if has_config("http2") then add_requires("nghttp2 1.70.0") end
 if has_config("dns") then add_requires("c-ares 1.34.8") end
 if has_config("http3") then add_requires("nghttp3 v1.18.0") end
+
+-- libFuzzer needs coverage instrumentation in the library code it exercises, not only in the targets.
+if get_config("fuzz") == "libfuzzer" then
+    add_cxflags("-fsanitize=fuzzer-no-link,address,undefined", "-fno-omit-frame-pointer", {force = true})
+    add_ldflags("-fsanitize=address,undefined", {force = true})
+end
 
 if has_config("sanitizers") and not is_plat("windows") then
     add_cxxflags("-fsanitize=address,undefined", "-fno-omit-frame-pointer")
@@ -149,4 +156,4 @@ target_end()
 
 -- Auxiliary targets keep their options and dependencies in separate modules.
 includes("xmake/modules.lua")
-includes("xmake/tests.lua", "xmake/examples.lua", "xmake/benchmarks.lua")
+includes("xmake/tests.lua", "xmake/examples.lua", "xmake/benchmarks.lua", "xmake/fuzz.lua")
