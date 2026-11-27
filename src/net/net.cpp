@@ -2,6 +2,7 @@
 #include <pace/runtime/operation.hpp>
 #include <pace/runtime/this_context.hpp>
 #include "net/socket_address.hpp"
+#include "net/socket_ops.hpp"
 #include "runtime/profiling.hpp"
 
 #if defined(_WIN32)
@@ -29,64 +30,16 @@ namespace pace::tcp
 {
 namespace
 {
-#if defined(_WIN32)
-using socket_length = int;
-
-int last_socket_error() noexcept
-{
-    return ::WSAGetLastError();
-}
-
-void close_socket(native_socket_type fd) noexcept
-{
-    ::closesocket(fd);
-}
-
-bool interrupted(int error) noexcept
-{
-    return error == WSAEINTR;
-}
-
-bool would_block(int error) noexcept
-{
-    return error == WSAEWOULDBLOCK;
-}
-#else
-using socket_length = socklen_t;
-
-int last_socket_error() noexcept
-{
-    return errno;
-}
-
-void close_socket(native_socket_type fd) noexcept
-{
-    ::close(fd);
-}
-
-bool interrupted(int error) noexcept
-{
-    return error == EINTR;
-}
-
-bool would_block(int error) noexcept
-{
-    return error == EAGAIN || error == EWOULDBLOCK;
-}
-#endif
-
-std::error_code socket_error_code(int error)
-{
-#if defined(_WIN32)
-    return {error, std::system_category()};
-#else
-    return {error, std::generic_category()};
-#endif
-}
+using net::close_socket;
+using net::interrupted;
+using net::last_socket_error;
+using net::socket_error_code;
+using net::socket_length;
+using net::would_block;
 
 [[noreturn]] void socket_error(const char* what)
 {
-    throw std::system_error(socket_error_code(last_socket_error()), what);
+    net::throw_socket_error(what);
 }
 
 void configure_socket(native_socket_type fd)

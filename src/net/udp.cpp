@@ -1,5 +1,6 @@
 #include <pace/net/udp.hpp>
 #include "net/socket_address.hpp"
+#include "net/socket_ops.hpp"
 
 #if !defined(_WIN32)
 #include <arpa/inet.h>
@@ -20,64 +21,16 @@ namespace pace::udp
 {
 namespace
 {
-#if defined(_WIN32)
-using socket_length = int;
+using net::close_socket;
+using net::interrupted;
+using net::last_socket_error;
+using net::socket_error_code;
+using net::socket_length;
+using net::would_block;
 
-int last_error() noexcept
-{
-    return ::WSAGetLastError();
-}
-
-void release(native_socket_type fd) noexcept
-{
-    ::closesocket(fd);
-}
-
-bool interrupted(int error)
-{
-    return error == WSAEINTR;
-}
-
-bool would_block(int error)
-{
-    return error == WSAEWOULDBLOCK;
-}
-
-std::error_code error_code(int error)
-{
-    return {error, std::system_category()};
-}
-#else
-using socket_length = socklen_t;
-
-int last_error() noexcept
-{
-    return errno;
-}
-
-void release(native_socket_type fd) noexcept
-{
-    ::close(fd);
-}
-
-bool interrupted(int error)
-{
-    return error == EINTR;
-}
-
-bool would_block(int error)
-{
-    return error == EAGAIN || error == EWOULDBLOCK;
-}
-
-std::error_code error_code(int error)
-{
-    return {error, std::generic_category()};
-}
-#endif
 [[noreturn]] void fail(const char* operation)
 {
-    throw std::system_error(error_code(last_error()), operation);
+    net::throw_socket_error(operation);
 }
 
 void check(io_context& context, native_socket_type fd, bool asynchronous = false)
@@ -158,7 +111,7 @@ native_socket_type create_socket(address_family family)
     }
     catch (...)
     {
-        release(fd);
+        close_socket(fd);
         throw;
     }
     return fd;
@@ -226,7 +179,7 @@ void socket::select_family(address_family family)
     }
     const auto replacement = create_socket(family);
     context_->release_socket(fd_);
-    release(std::exchange(fd_, replacement));
+    close_socket(std::exchange(fd_, replacement));
     family_ = family;
 }
 
@@ -327,14 +280,14 @@ task<std::size_t> socket::send_to(std::string_view bytes, endpoint destination)
             }
             co_return static_cast<std::size_t>(count);
         }
-        const int error = last_error();
+        const int error = last_socket_error();
         if (interrupted(error))
         {
             continue;
         }
         if (!would_block(error))
         {
-            throw std::system_error(error_code(error), "UDP sendto");
+            throw std::system_error(socket_error_code(error), "UDP sendto");
         }
         co_await context_->wait_writable(fd_);
     }
@@ -357,7 +310,7 @@ task<datagram> socket::receive_from(std::span<char> buffer)
         const auto capacity = std::min<std::size_t>(buffer.size(), INT_MAX);
 #if defined(_WIN32)
         auto count = ::recvfrom(fd_, buffer.data(), static_cast<int>(capacity), 0, sender.data(), &sender.length);
-        if (count < 0 && last_error() == WSAEMSGSIZE)
+        if (count < 0 && last_socket_error() == WSAEMSGSIZE)
         {
             count = static_cast<int>(capacity);
             truncated = true;
@@ -381,14 +334,14 @@ task<datagram> socket::receive_from(std::span<char> buffer)
                 truncated
             };
         }
-        const int error = last_error();
+        const int error = last_socket_error();
         if (interrupted(error))
         {
             continue;
         }
         if (!would_block(error))
         {
-            throw std::system_error(error_code(error), "UDP receive");
+            throw std::system_error(socket_error_code(error), "UDP receive");
         }
         co_await context_->wait_readable(fd_);
     }
@@ -399,7 +352,7 @@ void socket::close() noexcept
     if (fd_ != invalid_socket)
     {
         context_->release_socket(fd_);
-        release(std::exchange(fd_, invalid_socket));
+        close_socket(std::exchange(fd_, invalid_socket));
     }
 }
 
