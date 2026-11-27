@@ -1,0 +1,50 @@
+name: Interop
+# External peers against PACE servers; see tests/interop/run_interop.py and tests/interop/peers.json.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pace-interop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  peers:
+    name: curl, openssl s_client, h2spec
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.1.1'
+          actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: interop
+      - name: Install h2spec 2.6.0
+        run: |
+          curl -fsSL -o /tmp/h2spec.tar.gz https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz
+          sha256sum /tmp/h2spec.tar.gz
+          tar -xzf /tmp/h2spec.tar.gz -C /tmp h2spec
+          sudo install /tmp/h2spec /usr/local/bin/h2spec
+          h2spec --version
+      - name: Build the interop server
+        run: |
+          xmake f -c -m release --http1=y --websocket=y --tls=y --dns=y --quic=y --http2=y --http3=y --tests=y --examples=n -y
+          xmake build -y pace_interop_server
+      - name: Run peers
+        # h2spec is informational until its first results fill tests/interop/h2spec-known-failures.txt.
+        run: |
+          python3 tests/interop/run_interop.py --build-dir build \
+            --require curl-http1,curl-https1,curl-h2c,curl-h2,openssl-tls,h2spec \
+            --informational h2spec --output interop-results/report.json
+        env:
+          PACE_INTEROP_OUTPUT_DIR: interop-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interop-results
+          path: interop-results/
+          if-no-files-found: warn

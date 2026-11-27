@@ -76,6 +76,16 @@ if has_config("tests") then
     end
 end
 
+-- External interop peers (curl, openssl s_client, h2spec...) run against this server; see
+-- tests/interop/run_interop.py. It is built with the tests but is not a test itself.
+if has_config("tests") then
+    target("pace_interop_server")
+        set_kind("binary")
+        add_files(path.join(pace_root, "tests/interop/pace_interop_server.cpp"))
+        add_deps("pace")
+    target_end()
+end
+
 if has_config("tests") and is_plat("windows") then
     target("pace_iocp_diagnostic")
         set_kind("binary")

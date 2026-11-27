@@ -1,0 +1,17 @@
+{
+  "comment": "Interop peers, pinned. 'phase' is the PACE 1.0 phase that first needs the peer; 'suite' is the run_interop.py suite that uses it today, if any.",
+  "peers": [
+    {"name": "curl", "version": "distribution", "source": "ubuntu-24.04 package", "suite": ["curl-http1", "curl-https1", "curl-h2c", "curl-h2", "curl-h3"], "phase": "P0"},
+    {"name": "openssl s_client", "version": "distribution", "source": "ubuntu-24.04 package", "suite": ["openssl-tls"], "phase": "P0"},
+    {"name": "h2spec", "version": "2.6.0", "source": "https://github.com/summerwind/h2spec/releases/tag/v2.6.0", "suite": ["h2spec"], "phase": "P0"},
+    {"name": "BoringSSL BoGo runner", "version": "pin when the shim lands", "source": "https://boringssl.googlesource.com/boringssl/+/HEAD/ssl/test/", "suite": [], "phase": "P4"},
+    {"name": "tlsfuzzer", "version": "pin when the suite lands", "source": "https://github.com/tlsfuzzer/tlsfuzzer", "suite": [], "phase": "P4"},
+    {"name": "unbound / knot-resolver / CoreDNS", "version": "distribution", "source": "ubuntu-24.04 packages", "suite": [], "phase": "P5"},
+    {"name": "quic-interop-runner", "version": "pin when the endpoint image lands", "source": "https://github.com/quic-interop/quic-interop-runner", "suite": [], "phase": "P6"},
+    {"name": "quic-go, quiche, msquic, picoquic, ngtcp2", "version": "interop-runner images", "source": "quic-interop-runner", "suite": [], "phase": "P6"},
+    {"name": "nginx / h2o", "version": "distribution", "source": "ubuntu-24.04 packages", "suite": [], "phase": "P7"},
+    {"name": "Dante, 3proxy", "version": "distribution", "source": "ubuntu-24.04 packages", "suite": [], "phase": "P7"},
+    {"name": "h3spec", "version": "pin when the native HTTP/3 server lands", "source": "https://github.com/kazu-yamamoto/h3spec", "suite": [], "phase": "P8"},
+    {"name": "masque-go", "version": "pin when CONNECT-UDP lands", "source": "https://github.com/quic-go/masque-go", "suite": [], "phase": "P8"}
+  ]
+}
