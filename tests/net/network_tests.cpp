@@ -784,6 +784,36 @@ pace::task<void> second_operation_rejected(pace::io_context& context)
     }
 }
 
+pace::task<std::string> read_to_end(pace::tcp::stream& stream)
+{
+    std::string received;
+    std::array<char, 64> bytes{};
+    while (const auto count = co_await stream.read_some(pace::as_writable_bytes(bytes)))
+    {
+        received.append(bytes.data(), count);
+    }
+    co_return received;
+}
+
+pace::task<void> half_close_server(std::shared_ptr<pace::tcp::listener> listener)
+{
+    auto stream = co_await listener->accept();
+    require(co_await read_to_end(stream) == "ping", "TCP half-close request mismatch");
+    co_await stream.write_all(pace::as_bytes("pong"));
+}
+
+// shutdown_write sends FIN; the peer reads EOF and can still answer, and this side can still read the answer.
+pace::task<void> tcp_half_close(pace::io_context& context)
+{
+    auto listener = std::make_shared<pace::tcp::listener>(context, pace::tcp::endpoint{"127.0.0.1", 0});
+    context.spawn(half_close_server(listener));
+    pace::tcp::stream client(context);
+    co_await client.connect(listener->local_endpoint());
+    co_await client.write_all(pace::as_bytes("ping"));
+    co_await client.shutdown_write();
+    require(co_await read_to_end(client) == "pong", "TCP reply after shutdown_write was lost");
+}
+
 pace::task<void> close_soon(std::shared_ptr<pace::tcp::stream> stream)
 {
     co_await stream->context().sleep_for(5ms);
@@ -1084,6 +1114,11 @@ TEST_CASE("HTTP framing, fragmentation, limits and keep-alive")
 TEST_CASE("a second read or accept is rejected while the first is pending")
 {
     run_test(second_operation_rejected);
+}
+
+TEST_CASE("TCP shutdown_write sends FIN and keeps reading")
+{
+    run_test(tcp_half_close);
 }
 
 TEST_CASE("stop cancels pending accept")

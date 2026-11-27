@@ -159,6 +159,54 @@ void verified_roundtrip(
     require(done.count == 2, "TLS roundtrip did not complete both peers");
 }
 
+pace::task<std::string> read_to_end(pace::tls::stream& socket)
+{
+    std::string received;
+    std::array<char, 64> bytes{};
+    while (const auto count = co_await socket.read_some(pace::as_writable_bytes(bytes)))
+    {
+        received.append(bytes.data(), count);
+    }
+    co_return received;
+}
+
+pace::task<void> half_close_server(pace::tcp::listener& listener, const pace::tls::context& config, finished& done)
+{
+    pace::tls::stream socket(co_await listener.accept(), config);
+    co_await socket.handshake();
+    // The client's close_notify ends its direction; this side can still answer.
+    require(co_await read_to_end(socket) == "ping", "TLS half-close request mismatch");
+    co_await socket.write_all(pace::as_bytes("pong"));
+    co_await socket.shutdown();
+    done.arrive();
+}
+
+pace::task<void> half_close_client(pace::tls::stream& socket, pace::tcp::endpoint endpoint, finished& done)
+{
+    co_await socket.connect(std::move(endpoint), "localhost");
+    co_await socket.write_all(pace::as_bytes("ping"));
+    co_await socket.shutdown_write();
+    require(co_await read_to_end(socket) == "pong", "TLS reply after shutdown_write was lost");
+    socket.close();
+    done.arrive();
+}
+
+void tls_half_close(const std::filesystem::path& fixtures)
+{
+    pace::io_context io;
+    pace::tls::context server(pace::tls::role::server);
+    server.use_certificate_chain((fixtures / "localhost.pem").string(), (fixtures / "localhost-key.pem").string());
+    pace::tls::context client_config;
+    client_config.load_verify_file((fixtures / "ca.pem").string());
+    pace::tls::stream client(io, client_config);
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    finished done{io};
+    io.spawn(half_close_server(listener, server, done));
+    io.spawn(half_close_client(client, listener.local_endpoint(), done));
+    io.run();
+    require(done.count == 2, "TLS half-close did not complete both peers");
+}
+
 pace::task<void> rejecting_server(
     pace::tcp::listener& listener,
     const pace::tls::context& config,
@@ -1740,6 +1788,11 @@ TEST_CASE("verified TLS round trip after replaying a complete or partial ClientH
 {
     verified_roundtrip(certs(), "localhost", replay_prefix::complete_hello);
     verified_roundtrip(certs(), "localhost", replay_prefix::mid_record);
+}
+
+TEST_CASE("TLS shutdown_write sends close_notify and keeps reading")
+{
+    tls_half_close(certs());
 }
 
 TEST_CASE("TLS handshake rejects a certificate for another host name")
