@@ -1,10 +1,10 @@
-# 5. Execution and worker selection
+# 8. Workers and threads
 
-[中文](08-workers-and-threads.zh.md) · [Previous: HTTP](03-http-server.md) · [Next: shutdown](09-graceful-shutdown.md)
+[中文](08-workers-and-threads.zh.md) · [Learning path](README.md) · [Previous: structured concurrency](07-structured-concurrency.md)
 
-So far a single caller thread ran the reactor. This chapter assigns independent
-work to two reactors, then shows how to use application-owned threads. Change
-`main.cpp` to this complete program and link `pace_runtime`:
+So far one thread ran one event loop. This chapter gives independent work to two event loops, then runs a loop on a
+thread your application owns. Save this complete program as `workers.cpp`, with a `workers` target that depends on
+`pace_runtime`:
 
 ```cpp
 #include <pace/runtime.hpp>
@@ -12,139 +12,154 @@ work to two reactors, then shows how to use application-owned threads. Change
 #include <chrono>
 #include <iostream>
 
-pace::task<void> work(pace::runtime& pool, std::size_t index, std::atomic<unsigned>& remaining) {
+pace::task<void> work(pace::runtime& pool, std::size_t index, std::atomic<unsigned>& remaining)
+{
     auto& io = pool.context(index);
     co_await io.sleep_for(std::chrono::milliseconds(5));
-    if (remaining.fetch_sub(1) == 1) pool.stop();
+    if (remaining.fetch_sub(1) == 1)
+    {
+        pool.stop();
+    }
 }
 
-int main() {
-    try {
+int main()
+{
+    try
+    {
         pace::runtime pool(2);
         std::atomic<unsigned> remaining{2};
         pool.context(0).spawn(work(pool, 0, remaining));
         pool.context(1).spawn(work(pool, 1, remaining));
         pool.run_on_current_thread();
         std::cout << "Both workers finished\n";
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-Build/run `my_application`. Expect `Both workers finished`. The count is atomic
-because the two tasks can touch it from different OS threads. Each task chooses
-its own context before starting; `co_await` does not move it between workers.
-The last task requests stop for both contexts, and the blocking run call joins
-before `remaining` or `pool` is destroyed. Change `run_on_current_thread()` to
-`run()` and observe the same result with both workers in background threads.
+Build and run `workers`. Expect `Both workers finished`. The counter is atomic because the two tasks can touch it
+from different OS threads. Each task is placed on its context before it starts, and `co_await` never moves it to
+another one. The last task to finish stops both contexts, and `run_on_current_thread` joins the worker thread before
+`remaining` and `pool` are destroyed. Change `run_on_current_thread()` to `run()` and you get the same result with
+both contexts on background threads.
 
-Complete source: [`tutorial_workers.cpp`](../../examples/tutorial_workers.cpp).
-Run both modes to check which thread executes context zero:
+The companion [`tutorial_workers.cpp`](../../examples/tutorial_workers.cpp) runs the same layout in both modes and
+checks which thread runs each context:
 
 ```sh
 xmake run tutorial_workers
 xmake run tutorial_workers background
 ```
 
-Both modes use two contexts and verify that each task stays on its assigned
-context. The default `caller` mode also checks that context zero runs on `main`'s
-thread. The last completed task requests stop for the runtime.
+Both modes use two contexts and check that each task stays on its assigned context. The default `caller` mode also
+checks that context zero runs on `main`'s thread. The last task to finish stops the runtime, and the program prints
+`Two contexts completed in caller mode` (or `background mode`).
 
 ## Choose the execution layout
 
 ```cpp
 pace::runtime runtime(2);
-// Submit work to runtime.context(0) and runtime.context(1).
+// Spawn work on runtime.context(0) and runtime.context(1).
 runtime.run_on_current_thread();
 ```
 
-This creates one background worker and uses the caller for the other context.
-The argument `2` is the **total number of contexts**, including the caller.
-`runtime(1).run_on_current_thread()` creates no runtime worker threads. For a caller
-that should only wait, use `runtime.run()`: it creates one background thread per
-context and joins all of them. Both calls block until stop and draining finish;
-neither starts a detached service.
+This creates one background worker thread and uses the calling thread for the other context. The argument `2` is
+the **total number of contexts**, including the caller's. `runtime(1).run_on_current_thread()` creates no worker
+thread. When the calling thread should only wait, use `runtime.run()`: it starts one thread per context and joins all
+of them. Both calls block until the runtime is stopped and drained; neither leaves a service running in the
+background.
 
-Without an explicit count, construction uses reported hardware concurrency with
-a minimum of one. You can choose any positive count supported by your resources;
-zero is rejected. Work is assigned explicitly through `context(index)`, not
-automatically balanced or stolen. Sharing a mutable object across contexts needs
-normal C++ synchronization. The tutorial uses an atomic completion counter.
+Without a count, the constructor uses the reported hardware concurrency, at least one. You can pass any positive
+count your resources support. Work goes where you put it with `context(index)`: nothing balances or steals tasks
+between contexts. Mutable objects shared between contexts need ordinary C++ synchronization, like the atomic counter
+above.
 
-The runtime is single-use regardless of execution mode. Calling either run method
-again is an error. Caller mode cannot be nested inside another running PACE
-context. A root failure stops peer contexts and is rethrown after worker joins.
+A runtime runs once, whichever mode you choose; calling either run method again is an error. Caller mode cannot run
+inside another running PACE context. When a root task fails, the runtime stops the other contexts and rethrows the
+failure after joining its workers.
 
 ## Run without a runtime
 
-The [task tutorial](04-tasks-and-timers.md) distinguishes the entry runner from the manual model:
-one context and `io.run()` on the caller. A context can instead run on a thread
-owned by your application. This replacement for the first tutorial's main body
-wraps the named `lesson` coroutine from the task exercise so manual execution has a stop path:
+[Chapter 4](04-tasks-and-timers.md) showed the manual model: one context and `io.run()` on the calling thread. A
+context can also run on a thread your application owns. In a copy of
+[`tutorial_tasks.cpp`](../../examples/tutorial_tasks.cpp), add this coroutine after `lesson`, so that the context has a
+way to stop:
 
 ```cpp
-// Define this at namespace scope.
-pace::task<void> controlled_lesson(pace::io_context& io) {
+pace::task<void> controlled_lesson(pace::io_context& io)
+{
     co_await lesson(io);
     io.stop();
 }
+```
 
-// In main:
+Then replace the body of `main`'s `try` block with:
+
+```cpp
 pace::io_context io;
 std::exception_ptr failure;
 io.spawn(controlled_lesson(io));
-std::thread run_thread([&io, &failure] {
-    try { io.run(); }
-    catch (...) { failure = std::current_exception(); }
-});
-run_thread.join(); // controlled_lesson() requests stop; join also synchronizes failure access.
-if (failure) std::rethrow_exception(failure);
+std::thread run_thread(
+    [&io, &failure]
+    {
+        try
+        {
+            io.run();
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+    }
+);
+run_thread.join(); // controlled_lesson() stops the context; join also makes failure safe to read.
+if (failure)
+{
+    std::rethrow_exception(failure);
+}
+return 0;
 ```
 
-Include `<thread>` and `<exception>`. The lambda is a normal thread function,
-not a coroutine, and both referenced objects outlive its join. A long-lived
-service can request `io.stop()` from its control thread before joining. Arrange
-the same join during exception unwinding; destroying a joinable `std::thread`
-terminates the process. Destruction of `io` is not an automatic thread join.
+Include `<thread>` and `<exception>`. The lambda is an ordinary thread function, not a coroutine, and both objects it
+references outlive the join. A long-running service would call `io.stop()` from its control thread before joining.
+Make sure the join also happens when an exception unwinds `main`: destroying a joinable `std::thread` terminates the
+process. Destroying `io` does not join any thread for you.
 
-You can create several independent contexts and run each on a different
-application thread. Do not run one context simultaneously from multiple threads,
-and do not nest one `run` inside another PACE context on the same thread.
+You can create several independent contexts and run each on its own application thread. Never run one context on
+several threads at once, and do not start a `run` inside another PACE context on the same thread.
 
 ## Submit from other threads
 
-`io.spawn(std::move(task))` transfers an owned root task, while `io.post(function)` queues
-a synchronous callback. Both are thread-safe. A callback can change loop-owned
-state, close a still-live socket, or submit another named coroutine on that loop.
-Its referenced objects must remain alive until the callback runs, and shutdown
-can reject the submission with `operation_canceled`.
+`io.spawn(std::move(task))` hands over an owned root task, and `io.post(function)` queues a plain callback. Both are
+safe to call from any thread. A callback can change state owned by the loop, close a socket that is still alive, or
+spawn another coroutine on that loop. Whatever it references must stay alive until it runs, and once the context
+stops, the submission is rejected with `std::errc::operation_canceled`.
 
 ```cpp
 io.post([&io] { io.stop(); });
 ```
 
-This is a normal callback with a context whose lifetime is controlled by its
-owner. For payloads, capture an owned `std::string` or a `shared_ptr` by value.
-`std::function` in C++20 requires a copyable callable; a lambda that only owns a
-`unique_ptr` is not directly suitable for `post`. A task submitted with `spawn`
-can own move-only values in its coroutine frame.
+This callback refers to a context whose lifetime its owner controls. For data, capture an owned `std::string` or a
+`shared_ptr` by value. `post` takes a `std::function`, which in C++20 requires a copyable callable: a lambda that
+owns a `unique_ptr` does not fit. A task passed to `spawn` can own move-only values in its coroutine frame.
 
-## Keep blocking work off the reactor
+## Keep blocking work off the event loop
 
-A synchronous filesystem call, database driver or large CPU computation inside a
-coroutine still blocks its executing thread. PACE does not currently include an
-awaitable blocking-work executor. Use application-owned workers for such work,
-then `post` an owned result back to the relevant context. Keep the context alive
-until those workers are joined, and handle a rejected post during shutdown.
+A synchronous file-system call, a database driver or a long computation inside a coroutine still blocks the thread
+that runs it. PACE has no awaitable executor for blocking work. Run such work on threads your application owns, then
+`post` the owned result back to the context that needs it. Keep the context alive until those threads are joined, and
+handle a rejected `post` during shutdown.
 
-Changing `runtime(1)` to `runtime(8)` does not make a blocking operation on context
-zero parallel within that context. It only creates other independent reactors.
-Neither `co_await io.yield()` nor awaiting a child task offloads a computation.
+Changing `runtime(1)` to `runtime(8)` does not make a blocking call on context zero run in parallel: it only creates
+seven more independent event loops. Neither `co_await io.yield()` nor awaiting a child task moves a computation to
+another thread.
 
-Worker counts, reuse-port listeners and measurement guidance are in the
-[reference tuning guide](../guides/protocol-tuning.md#worker-placement).
+Choosing worker counts, listeners that share a port across workers, and measuring the effect are covered in
+[protocol tuning](../guides/protocol-tuning.md). Reference: [`runtime`](../reference/runtime/runtime.md),
+[`io_context`](../reference/runtime/io-context.md).
 
-Reference: [`runtime`](../reference/runtime/runtime.md), [`io_context`](../reference/runtime/io-context.md).
-Next: [orderly shutdown](09-graceful-shutdown.md).
+Next: [9. Orderly shutdown](09-graceful-shutdown.md)

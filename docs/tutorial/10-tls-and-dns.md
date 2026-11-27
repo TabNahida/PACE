@@ -1,46 +1,62 @@
-# 8. Resolve a host and verify a TLS peer
+# 10. TLS and DNS
 
-[中文](10-tls-and-dns.zh.md) · [Previous: UDP](06-udp.md) · [Next: WebSocket](11-websocket.md)
+[中文](10-tls-and-dns.zh.md) · [Learning path](README.md) · [Previous: orderly shutdown](09-graceful-shutdown.md)
 
-A network address tells you where to connect. A TLS peer name tells you which
-identity to verify. Keep these separate rather than treating a resolved IP as a
-replacement for the original hostname.
+A network address tells you where to connect. A TLS peer name tells you which identity to verify. Keep the two
+apart: a resolved IP address does not replace the original hostname.
 
-## 1. Start with deterministic resolution
+Both modules are optional. Configure the `hello` project with them before you start; xmake downloads c-ares and
+OpenSSL the first time:
 
-Enable `--dns=y` and link `pace_dns`. Put this complete program in `main.cpp`:
+```sh
+xmake f -m release --tests=n --examples=n --dns=y --tls=y -y
+```
+
+## Start with deterministic resolution
+
+Save this complete program as `resolve.cpp`, with a `resolve` target that depends on `pace_dns`:
 
 ```cpp
 #include <pace/dns.hpp>
 #include <pace/runtime.hpp>
 #include <iostream>
 
-int main() {
-    try {
-        pace::run([]() -> pace::task<void> {
-            const auto result = co_await pace::dns::resolve("127.0.0.1");
-            for (const auto& address : result.addresses)
-                std::cout << address.text << '\n';
-        });
-    } catch (const std::exception& error) {
+int main()
+{
+    try
+    {
+        pace::run(
+            []() -> pace::task<void>
+            {
+                const auto result = co_await pace::dns::resolve("127.0.0.1");
+                for (const auto& address : result.addresses)
+                {
+                    std::cout << address.text << '\n';
+                }
+            }
+        );
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-Expect `127.0.0.1`. This numeric lookup works without an external nameserver.
-Now replace it with your service's hostname. Results can contain IPv4 and IPv6;
-choose a returned numeric address and construct your TCP endpoint with the
-service port. Resolution itself neither connects nor automatically retries all
-addresses. The helper owns its resolver through completion. For a command-line
-exercise, run `xmake run tutorial_dns` or `xmake run tutorial_dns example.com` in
-the repository; the latter needs working external DNS.
+Expect `127.0.0.1`. A numeric name resolves without asking a name server. Now replace it with your service's
+hostname. The result can contain IPv4 and IPv6 addresses: choose one and build your TCP endpoint from it and the
+service port. Resolving neither connects nor tries the addresses for you. `dns::resolve` owns its resolver until it
+completes, and gives up after five seconds by default.
 
-## 2. Configure trust before opening a TLS stream
+The companion `xmake run tutorial_dns` resolves `127.0.0.1` and prints each address with its family;
+`xmake run tutorial_dns example.com` resolves a real name and needs working external DNS. Configure the PACE checkout
+with `--dns=y --examples=y` first.
 
-Enable `--tls=y` and link `pace_tls` (or `pace_http1` for HTTPS). For local practice
-use the public test CA and localhost certificate in the PACE checkout:
+## Configure trust before opening a TLS stream
+
+Link `pace_tls` (or `pace_http1` for HTTPS, which brings TLS along when it is enabled). For local practice, use the
+public test CA and localhost certificate in the PACE checkout:
 
 ```cpp
 pace::tls::context server_config(pace::tls::role::server), client_config;
@@ -50,14 +66,15 @@ server_config.set_alpn_protocols({"pace-demo"});
 client_config.set_alpn_protocols({"pace-demo"});
 ```
 
-These paths assume the repository working directory. Use your own chain/key and
-appropriate trust roots in deployment. Do not disable verification to make the
-example connect. Configure before calling the helper and retain custom configurations
-until its await completes; the returned stream retains the configuration state.
+These paths are relative to the PACE checkout. `xmake run` starts a program in its build directory, so run it with
+`xmake run -w third_party/PACE <target>` from the `hello` directory, or use absolute paths. In
+deployment, use your own certificate chain, key and trust roots. Do not turn verification off to make the example
+connect. Configure a context completely before its first use: after a stream has used it, its setters throw. Keep a
+context alive until the operation that borrows it completes; the streams themselves share ownership of its state.
 
-## 3. Upgrade the TCP connection task
+## Upgrade the TCP connection task
 
-In the TCP server's per-connection coroutine, replace the plain stream with:
+In the per-connection coroutine of a TCP server, replace the plain stream with a TLS stream:
 
 ```cpp
 auto connection = co_await pace::tls::accept(std::move(accepted_tcp_stream), server_config);
@@ -65,7 +82,7 @@ co_await pace::write(connection, "Hello over verified TLS!\n");
 co_await connection.shutdown();
 ```
 
-On the client, make the handshake's expected identity explicit:
+On the client, name the identity the handshake must verify:
 
 ```cpp
 auto connection = co_await pace::tls::connect(client_config, endpoint, "localhost");
@@ -74,39 +91,39 @@ std::cout << message;
 co_await connection.shutdown();
 ```
 
-The helpers return only after the handshake succeeds. `pace::read_exact` and
-`pace::write` use the same spelling as TCP; here the greeting is exactly 25 bytes.
-The endpoint can be `127.0.0.1`, while the certificate is checked for `localhost`.
-For a real resolved host, retain that host as the peer name. TLS reads/writes now
-use the same await style as TCP, but authenticated close notification matters;
-a bare truncated TCP EOF is not automatically a successful TLS message ending.
+Both calls return only after a successful handshake. `pace::read_exact` and `pace::write` work on TLS streams just as
+on TCP; the greeting here is exactly 25 bytes. The endpoint can be `127.0.0.1` while the certificate is checked for
+`localhost`. For a real host, keep the hostname you resolved as the peer name. TLS ends a stream with an
+authenticated close notification: a bare TCP end of stream is not a successful end of a TLS message.
 
-## 4. Run both sides and then try a failure
+## Run both sides and then try a failure
 
-From the repository root:
+From the PACE checkout:
 
 ```sh
-xmake f --tls=y --dns=y --examples=y -y
+xmake f -m release --tls=y --dns=y --examples=y -y
 xmake -y tutorial_tls tutorial_dns
 xmake run tutorial_tls
 xmake run tutorial_dns
 ```
 
-The [TLS companion](../../examples/tutorial_tls.cpp) retains the configurations
-and listener outside the tasks, checks negotiated ALPN, validates the complete
-payload and waits for both peers' shutdown before stopping. In your copy, change
-the expected peer name to an unrelated host and verify that the handshake fails.
-Do not turn verification off to hide that expected failure.
+The companion [`tutorial_tls.cpp`](../../examples/tutorial_tls.cpp) keeps both configurations and the listener
+outside the tasks, checks the negotiated ALPN protocol, reads the whole greeting, confirms that the peer's close
+notification follows it, and waits for both peers to shut down before stopping. It prints
+`Hello over verified TLS!`. In your own copy, change the expected peer name to an unrelated host and check that the
+handshake fails. Do not turn verification off to hide that failure.
 
-For HTTP, reuse this configuration with the HTTPS `http::get`/`serve` overloads
-in [chapter 4](03-http-server.md#add-https). [DNS reference](../reference/dns/README.md) and
-[TLS reference](../reference/tls/README.md) describe timeout, trust, SNI and ownership details.
+For a service with a publicly trusted certificate and no custom ALPN, the client needs no configuration:
+`co_await pace::tls::connect(endpoint, hostname)` verifies with OpenSSL's default trust store (see
+[chapter 2](02-http-client.md) if that store is empty). Keep the original DNS
+hostname as the name to verify. For a single lookup outside a running context, use
+`auto result = pace::run(pace::dns::resolve("127.0.0.1"));`.
 
-For a service using system trust and no custom ALPN, the client can omit the config:
-`co_await pace::tls::connect(endpoint, hostname)`. Keep the original DNS hostname
-for verification. For a one-off lookup outside a running context, use
-`auto addresses = pace::run(pace::dns::resolve("127.0.0.1"));`.
+For HTTP, give the HTTPS overloads a client context that loads your CA, for example `pace::http::get(trust, url)`
+from [chapter 2](02-http-client.md); leave out the `pace-demo` ALPN, which only these two peers agree on. The HTTPS
+server is in
+[HTTP recipes](../guides/http-recipes.md). The [DNS reference](../reference/dns/README.md) and the
+[TLS reference](../reference/tls/README.md) describe timeouts, trust, SNI and ownership;
+[protocol tuning](../guides/protocol-tuning.md) covers reusing configurations and choosing ALPN.
 
-[Helper contracts](../reference/component-conveniences.md) and
-[configuration reuse and ALPN](../guides/protocol-tuning.md#dns-and-tls) cover
-the next steps after this local exercise. These helpers require PACE v0.3.1 or newer.
+Next: [11. WebSocket](11-websocket.md)

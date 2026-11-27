@@ -1,65 +1,86 @@
-# 12. Start tasks together and finish them together
+# 7. Structured concurrency
 
-[中文](07-structured-concurrency.zh.md) · [Learning path](README.md) · [Reference](../reference/runtime/structured-concurrency.md)
+[中文](07-structured-concurrency.zh.md) · [Learning path](README.md) · [Previous: UDP](06-udp.md)
 
-A direct `http::get(url)` is still the shortest way to get one response. Use a task
-group when several asynchronous operations must share a lifetime. This chapter
-requires PACE 0.4.0 or newer and links `pace_runtime`.
+A direct `http::get(url)` is still the shortest way to get one response. When several asynchronous operations must
+start together and finish together, put them in a task group. This chapter links `pace_runtime`, and `pace_http1`
+from its second section on.
 
-## 1. Start two tasks and collect their results
+## Start two tasks and collect their results
 
-Save this complete program as `main.cpp` in chapter 1's project, and change its
-`add_deps` to `pace_runtime`:
+Save this complete program as `structured.cpp`, with a `structured` target that depends on `pace_runtime`. It is the
+companion program [`tutorial_structured.cpp`](../../examples/tutorial_structured.cpp):
 
 ```cpp
 #include <pace/runtime.hpp>
+
 #include <chrono>
 #include <iostream>
 #include <string>
 using namespace std::chrono_literals;
 
-pace::task<std::string> main_task() {
-    co_return co_await pace::with_task_group([](pace::task_group& group) -> pace::task<std::string> {
-        auto first = group.spawn([]() -> pace::task<std::string> {
-            co_await pace::sleep_for(10ms);
-            co_return "Hello";
-        });
-        auto second = group.spawn([]() -> pace::task<std::string> {
-            co_await pace::sleep_for(5ms);
-            co_return "structured PACE";
-        });
-        auto a = co_await first;
-        auto b = co_await second;
-        co_return a + ", " + b + "!";
-    }, {.deadline = pace::deadline::after(2s)});
+pace::task<std::string> main_task()
+{
+    co_return co_await pace::with_task_group(
+        [](pace::task_group& group) -> pace::task<std::string>
+        {
+            auto first = group.spawn(
+                []() -> pace::task<std::string>
+                {
+                    co_await pace::sleep_for(10ms);
+                    co_return "Hello";
+                }
+            );
+            auto second = group.spawn(
+                []() -> pace::task<std::string>
+                {
+                    co_await pace::sleep_for(5ms);
+                    co_return "structured PACE";
+                }
+            );
+            auto a = co_await first;
+            auto b = co_await second;
+            co_return a + ", " + b + "!";
+        },
+        {.deadline = pace::deadline::after(2s)}
+    );
 }
-int main() {
-    try { std::cout << pace::run(main_task) << '\n'; }
-    catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
+
+int main()
+{
+    try
+    {
+        std::cout << pace::run(main_task) << '\n';
+    }
+    catch (const std::exception& error)
+    {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
 }
 ```
 
-Build/run `my_application`. Expect `Hello, structured PACE!` and process exit.
-The second task can finish first, but each handle gives the result of its own task.
-`group.spawn` starts a child on this context. `co_await first` consumes that result
-once. Even if you discard a handle, the group still waits for its child.
+Build and run `structured`, or run `xmake run tutorial_structured` in the PACE checkout. Expect
+`Hello, structured PACE!` and a normal exit. The second task finishes first, but each handle gives the result of its
+own task. `group.spawn` starts a child on this context, and `co_await first` takes that child's result once. A child
+whose handle you discard still belongs to the group, which waits for it.
 
-`with_task_group` returns only when its body and all children finish. If a child
-fails, siblings are canceled and joined before the exception reaches your caller.
-If the body throws, children are also canceled and joined. Returning from the body
-normally waits for remaining children; it does not cancel them.
+`with_task_group` returns only when its body and all its children have finished. If a child fails, its siblings are
+cancelled and joined before the exception reaches the caller. If the body throws, the children are cancelled and
+joined too. When the body returns normally, the group waits for the remaining children; it does not cancel them.
 
-The two-second deadline covers the entire group, including nested calls. It is an
-absolute monotonic deadline, so a nested operation cannot restart or extend it.
-Timeout throws `system_error` with `errc::timed_out` after cleanup.
+The two-second deadline covers the whole group, including nested calls. It is an absolute point on the monotonic
+clock, so a nested operation cannot restart or extend it. When it expires, the group cancels its work and, after the
+cleanup, throws `std::system_error` with `std::errc::timed_out`.
 
-## 2. Replace timers with network requests
+## Replace timers with network requests
 
-Include `<pace/http1.hpp>` and link `pace_http1`. With the quick-start server running,
-replace the group body with:
+Include `<pace/http1.hpp>` and change the target's dependency to `pace_http1`. With the `hello` server from
+[chapter 1](01-install-and-first-program.md) running, replace the group body with:
 
 ```cpp
-[](pace::task_group& group) -> pace::task<std::string> {
+[](pace::task_group& group) -> pace::task<std::string>
+{
     auto first = group.spawn(pace::http::async_get("http://127.0.0.1:8080/health"));
     auto second = group.spawn(pace::http::async_get("http://127.0.0.1:8080/health"));
     auto a = co_await first;
@@ -68,54 +89,68 @@ replace the group body with:
 }
 ```
 
-Both requests own separate connections and inherit the group's cancellation and
-deadline. The same names work with `http2::async_get` or `http3::async_get` when
-those modules and compatible servers are enabled. See [unified HTTP clients](../reference/http/clients.md).
+Expect `ok` twice. Both requests use their own connections and inherit the group's cancellation and deadline. The
+same code works with `http2::async_get` or `http3::async_get` when those modules are enabled and the server speaks
+that protocol; see [URL clients](../reference/http/clients.md).
 
-## 3. Cancel one operation without stopping the loop
+## Cancel one operation without stopping the loop
 
-Inside a task, a boundary can have its own budget:
+Inside a task, one operation can have its own budget:
 
 ```cpp
-try {
-    auto reply = co_await pace::with_deadline(pace::deadline::after(100ms),
-        pace::http::async_get("http://127.0.0.1:8080/health"));
+try
+{
+    auto reply = co_await pace::with_deadline(
+        pace::deadline::after(100ms),
+        pace::http::async_get("http://127.0.0.1:8080/health")
+    );
     std::cout << reply.body;
-} catch (const std::system_error& error) {
-    if (error.code() != std::errc::timed_out) throw;
+}
+catch (const std::system_error& error)
+{
+    if (error.code() != std::errc::timed_out)
+    {
+        throw;
+    }
     std::cout << "request timed out\n";
 }
 ```
 
-Other tasks on the same loop keep running. Handle a recoverable error inside the
-child if you want its siblings to continue; an error escaping a child fails its
-group. For external cancellation create `pace::cancellation_source`, pass
-`source.token()` through `with_cancellation` or `operation_options`, and call
-`source.request_cancellation()` from the controlling thread. The resulting error is
-`errc::operation_canceled`. Use `io.stop()` only when shutting down the whole loop.
+Other tasks on the same loop keep running. Handle an error you can recover from inside the child if its siblings
+should continue: an error that escapes a child fails its whole group. To cancel from outside, create a
+`pace::cancellation_source`, pass `source.token()` to `with_cancellation` (or in `operation_options`), and call
+`source.request_cancellation()` from the controlling code. The cancelled operation throws `std::system_error` with
+`std::errc::operation_canceled`. Use `io.stop()` only to shut down the whole loop.
 
-## 4. Give shared data a safe owner
+## Give shared data a safe owner
 
-Child factories own their value captures until completion. A child may borrow data
-from the caller outside the whole `with_task_group` call. It must not borrow a body
-local that is destroyed when the body returns or throws. Use `group.own` instead:
+Child factories own the values they capture until they complete. A child may borrow data that the caller keeps
+alive for the whole `with_task_group` call, but not a local of the body: the body's locals are destroyed when it
+returns or throws, possibly while children still run. Give such data to the group with `group.own`:
 
 ```cpp
-co_await pace::with_task_group([](pace::task_group& group) -> pace::task<void> {
-    auto& text = group.own(std::string("owned until every child finishes"));
-    (void)group.spawn([&text]() -> pace::task<void> {
-        co_await pace::sleep_for(5ms);
-        std::cout << text << '\n';
-    });
-    co_return; // text remains alive while the child waits
-});
+co_await pace::with_task_group(
+    [](pace::task_group& group) -> pace::task<void>
+    {
+        auto& text = group.own(std::string("owned until every child finishes"));
+        (void)group.spawn(
+            [&text]() -> pace::task<void>
+            {
+                co_await pace::sleep_for(5ms);
+                std::cout << text << '\n';
+            }
+        );
+        co_return; // text stays alive while the child waits
+    }
+);
 ```
 
-`group.own` keeps the object until all children are joined, including on exceptions.
-Alternatively copy or move data into a child factory. Pass a capturing coroutine
-lambda itself to `spawn`; do not immediately invoke a temporary lambda and pass its
-borrowed task. Do not return sockets/views that borrow group-owned storage.
+`group.own` keeps the object until every child has been joined, also when an exception unwinds the group. Copying
+or moving data into a child's factory works as well. Pass a capturing coroutine lambda itself to `spawn`; do not call
+a temporary lambda and pass the task it returns, which would borrow the destroyed lambda. Do not return sockets or
+views that borrow storage the group owns.
 
-The repository companion is `xmake run tutorial_structured`. Cleanup shielding,
-error precedence, custom awaiters and concurrency contracts belong in
-[the reference](../reference/runtime/structured-concurrency.md).
+Shielding cleanup from cancellation, which error wins when several fail, and the threading rules are in the
+[structured concurrency reference](../reference/runtime/structured-concurrency.md).
+
+Next: [8. Workers and threads](08-workers-and-threads.md)

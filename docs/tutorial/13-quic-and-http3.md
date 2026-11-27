@@ -1,38 +1,40 @@
-# 11. From a QUIC stream to HTTP/3
+# 13. QUIC and HTTP/3
 
-[中文](13-quic-and-http3.zh.md) · [Previous: HTTP/2](12-http2.md) · [Learning path](README.md)
+[中文](13-quic-and-http3.zh.md) · [Learning path](README.md) · [Previous: HTTP/2](12-http2.md)
 
-QUIC adds authenticated, reliable streams above UDP. HTTP/3 then supplies HTTP
-framing and QPACK on those streams. Build one layer at a time: raw UDP datagrams
-are not QUIC, and arbitrary QUIC stream bytes are not HTTP/3 messages.
-Both backends currently require POSIX. Choose `--quic_backend=ngtcp2`
-(default) or `--quic_backend=openssl`; the examples and HTTP/3 API work with either.
+QUIC adds authenticated, reliable streams on top of UDP. HTTP/3 then adds HTTP framing and QPACK header compression
+on those streams. Build one layer at a time: raw UDP datagrams are not QUIC, and arbitrary bytes on a QUIC stream are
+not HTTP/3 messages.
 
+Both modules are optional and need a POSIX platform. `--http3=y` also enables QUIC; xmake downloads OpenSSL,
+ngtcp2 and nghttp3 the first time. `--quic_backend=ngtcp2` (the default) or `--quic_backend=openssl` selects the
+QUIC implementation; everything in this chapter works with either.
 
 ## Start with one HTTP/3 URL
 
-Enable `http3=y` and link `pace_http3`. With a trusted HTTP/3 service:
+Configure with `--http3=y` and link `pace_http3`. With an HTTP/3 service whose certificate OpenSSL's default trust store accepts:
 
 ```cpp
 #include <pace/http3.hpp>
 #include <iostream>
-int main() {
+
+int main()
+{
     auto reply = pace::http3::get("https://127.0.0.1:9443/health");
     std::cout << reply.status << " " << reply.body;
 }
 ```
 
-For a local test certificate, create `quic::context trust`, load the test CA,
-set ALPN `h3`, and call `http3::get(trust, url)`. In a coroutine use
-`co_await http3::async_get(url)`. See [unified clients](../reference/http/clients.md)
-for trust and URL options. The following steps build the local service and then
-show the underlying QUIC streams; you need no raw stream setup for a URL request.
+HTTP/3 URLs are always `https://`. For a server with a test certificate, create a `quic::context`, load the test CA,
+set ALPN `h3` and call `pace::http3::get(trust, url)`. In a coroutine, use `co_await pace::http3::async_get(url)`.
+[URL clients](../reference/http/clients.md) covers trust and URL options. The rest of this chapter builds a local
+service and shows the QUIC streams underneath; a URL request needs none of that setup.
 
-## 1. Configure identities and the application protocol
+## Configure identities and the application protocol
 
-Enable `--quic=y`, link `pace_quic`, and include `<pace/quic.hpp>`. Use server/client
-`quic::context` objects, configuring the test chain/key and client trust as in the
-TLS exercise, but set ALPN to `pace-demo` on both sides:
+Configure with `--quic=y`, link `pace_quic` and include `<pace/quic.hpp>`. Create a server and a client
+`quic::context`, with the test certificate, key and CA from [chapter 10](10-tls-and-dns.md), and set ALPN
+`pace-demo` on both sides:
 
 ```cpp
 pace::quic::context server_config(pace::quic::role::server), client_config;
@@ -43,11 +45,11 @@ client_config.set_alpn_protocols({"pace-demo"});
 auto listener = pace::quic::listen(io, {"127.0.0.1", 0}, server_config);
 ```
 
-Keep these objects outside the peer tasks, through `io.run()`. Paths above assume
-the repository working directory and are public test credentials only. QUIC has
-its own TLS 1.3 handshake; enabling the separate TCP TLS module is unnecessary.
+Keep these objects outside the peer tasks, alive until `io.run()` returns. The paths are relative to the PACE
+checkout, and the credentials are public test credentials. QUIC carries its own TLS 1.3 handshake; the separate TLS
+module for TCP is not needed.
 
-## 2. Open a stream and explicitly end one direction
+## Open a stream and end one direction explicitly
 
 In the client coroutine:
 
@@ -58,23 +60,21 @@ co_await pace::write(stream, "hello");
 stream.finish_write();
 ```
 
-On the server, await `listener.accept()` and then `connection.accept_stream()`.
-Read until that stream's EOF, write the reply, and call `finish_write()` for the
-reply direction. FIN applies to the stream, not to every stream on the connection.
-Keep the connection alive while its streams operate. Awaiting `pace::write`
-is not proof of peer receipt. Before closing a sender, follow the
-[delivery and FIN contract](../guides/protocol-tuning.md#quic), also used by
-the companion below.
+On the server, await `listener.accept()` and then `connection.accept_stream()`. Read until that stream ends, write
+the reply, and call `finish_write()` for the reply direction. The end of stream (FIN) applies to that one stream, not
+to the connection's other streams. Keep the connection alive while its streams are in use. A completed
+`pace::write` does not prove that the peer received the bytes; before closing a sender, follow the delivery and FIN
+rules in [protocol tuning](../guides/protocol-tuning.md), as the companion below does.
 
-The [QUIC companion](../../examples/tutorial_quic.cpp) tracks both peers before
-stopping and imposes a local deadline. Build/run `tutorial_quic`; expect
-`Hello over verified QUIC!`. Try two streams in your own copy without treating a
-FIN on the first as closure of the second.
+The companion [`tutorial_quic.cpp`](../../examples/tutorial_quic.cpp) waits until the server's reply has been
+acknowledged and until both peers have finished before stopping, and fails after five seconds. Configure the PACE
+checkout with `--quic=y --examples=y` and run `xmake run tutorial_quic`; expect `Hello over verified QUIC!`. In your
+own copy, try two streams, and check that a FIN on the first does not close the second.
 
-## 3. Let HTTP/3 own the protocol streams
+## Let HTTP/3 own the protocol streams
 
-Enable `--http3=y` (which enables QUIC), link `pace_http3`, and change both ALPN
-lists to `h3`. The HTTP request/response and router types from chapter 4 still work:
+Configure with `--http3=y`, link `pace_http3`, and change both ALPN lists to `h3`. The request, response and router
+types from [chapter 3](03-http-server.md) still apply:
 
 ```cpp
 pace::http::router app;
@@ -82,8 +82,8 @@ app.get("/health", [](pace::http::request) { return pace::http::response{.body =
 io.spawn(pace::http3::serve(listener, app));
 ```
 
-Include `<pace/http3.hpp>` and `<pace/http.hpp>`. In the client, establish a
-verified QUIC connection with the `h3` configuration, then request one response:
+Include `<pace/http3.hpp>` and `<pace/http.hpp>`. In the client, open a verified QUIC connection with the `h3`
+configuration, then request one response:
 
 ```cpp
 auto connection = co_await pace::quic::connect(client_config, endpoint, "localhost");
@@ -91,44 +91,43 @@ const auto reply = co_await pace::http3::async_get(std::move(connection), "local
 std::cout << reply.status << " " << reply.body << '\n';
 ```
 
-Do not also open your own application/control streams on that transferred
-connection. The adapter owns HTTP/3 control and QPACK streams. `async_get` returns one buffered response. For several requests, use `async_exchange` instead;
-[batching, concurrency and lifetime](../guides/protocol-tuning.md#http2-and-http3)
-are covered in the reference. The helper uses your existing context and does not
-start a background thread. These helpers require PACE v0.3.1 or newer.
+`async_get` takes over the connection: do not open your own streams on it. HTTP/3 uses its own control and QPACK
+streams. `async_get` returns one buffered response; for several requests on one connection, use `async_exchange`.
+[Protocol tuning](../guides/protocol-tuning.md) covers batches, concurrency and lifetimes. The call runs on your
+existing context and starts no background thread.
 
-## 4. Verify the layered version
+## Verify the layered version
 
-From the repository root:
+From the PACE checkout:
 
 ```sh
-xmake f --http3=y --examples=y -y
+xmake f -m release --http3=y --examples=y -y
 xmake -y tutorial_quic tutorial_http3
 xmake run tutorial_quic
 xmake run tutorial_http3
 ```
 
-The [HTTP/3 companion](../../examples/tutorial_http3.cpp) prints responses for
-`/one` and `/two`. In your copy change the peer ALPN on one side and verify failure;
-a UDP socket being reachable does not establish an authenticated HTTP/3 session.
-This API does not expose server push, CONNECT, WebTransport or 0-RTT. Continue with
-the [QUIC](../reference/quic/README.md) and [HTTP/3](../reference/http3/README.md) references for
-limits and ownership rather than inferring support from the transport name.
+The companion [`tutorial_http3.cpp`](../../examples/tutorial_http3.cpp) sends one GET with `http3::async_get`, then
+`/one` and `/two` as a batch with `http3::async_exchange`, and prints `Hello over HTTP/3, /one!` and
+`Hello over HTTP/3, /two!`. In your copy, change the ALPN on one side and check that the connection fails: reaching a
+UDP port does not establish an authenticated HTTP/3 session. This API has no server push, CONNECT, WebTransport or
+0-RTT. The [QUIC](../reference/quic/README.md) and [HTTP/3](../reference/http3/README.md) references give the limits
+and ownership rules.
 
-## 5. Write a complete single-request service
+## Write a complete single-request service
 
-Create `h3_server.cpp` and `h3_client.cpp` targets as in chapter 3, both depending
-on `pace_http3`. Enable `--http3=y`. Run these programs from the PACE checkout
-root so the public test certificate paths resolve (or copy `tests/certs` into
-your practice working directory). First write the server:
+Create `h3_server` and `h3_client` targets as in [chapter 5](05-tcp.md), both depending on `pace_http3`. The test
+certificate paths are relative to the PACE checkout, so start both programs with `xmake run -w third_party/PACE`
+from the `hello` directory, as in [chapter 10](10-tls-and-dns.md). First the server:
 
 ```cpp
-#include <pace/http3.hpp>
 #include <pace/http.hpp>
+#include <pace/http3.hpp>
 #include <pace/runtime.hpp>
 #include <iostream>
 
-pace::task<void> serve() {
+pace::task<void> serve()
+{
     pace::quic::context security(pace::quic::role::server);
     security.use_certificate_chain("tests/certs/localhost.pem", "tests/certs/localhost-key.pem");
     security.set_alpn_protocols({"h3"});
@@ -137,48 +136,61 @@ pace::task<void> serve() {
     routes.get("/health", [] { return pace::http::text("ok\n"); });
     co_await pace::http3::serve_connection(co_await listener.accept(), routes);
 }
-int main() {
-    try { pace::run(serve); }
-    catch (const std::exception& error) {
+
+int main()
+{
+    try
+    {
+        pace::run(serve);
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-The listener binds on the current context and remains alive through the connection.
-Now write the client; keep `localhost` as the certificate identity even though the
-network address is numeric:
+The listener binds on the running context and stays alive through the connection. Now the client; it keeps
+`localhost` as the certificate identity although the address is numeric:
 
 ```cpp
 #include <pace/http3.hpp>
 #include <pace/runtime.hpp>
 #include <iostream>
 
-pace::task<pace::http::response> get_health() {
+pace::task<pace::http::response> get_health()
+{
     pace::quic::context trust;
     trust.load_verify_file("tests/certs/ca.pem");
     trust.set_alpn_protocols({"h3"});
     auto connection = co_await pace::quic::connect(trust, {"127.0.0.1", 9094}, "localhost");
     co_return co_await pace::http3::async_get(std::move(connection), "localhost:9094", "/health");
 }
-int main() {
-    try {
+
+int main()
+{
+    try
+    {
         auto reply = pace::run(get_health);
         std::cout << reply.status << " " << reply.body;
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-Start `h3_server`, then `h3_client` in another terminal. Expect `200 ok` and both
-processes to exit. Restart the server for the next request. To accept repeatedly,
-replace `serve_connection(co_await listener.accept(), routes)` with
-`serve(listener, routes)`. Test certificates are only for this local exercise.
+Start `xmake run -w third_party/PACE h3_server`, then `xmake run -w third_party/PACE h3_client` in another
+terminal. Expect `200 ok` and both programs to exit. Start the server
+again for the next request. To accept connections in a loop, replace
+`serve_connection(co_await listener.accept(), routes)` with `serve(listener, routes)`. The test certificates are for
+this local exercise only.
 
-In the local QUIC exchange, the client also remains alive after reading the reply
-FIN until the server has observed its acknowledgments. The companion awaits
-connection events until both peers finish; receiving a FIN alone is not a join
-with the remote sender.
+In the QUIC companion, the client stays alive after it has read the reply's FIN, until the server has seen its
+acknowledgements: it keeps waiting for connection events until both peers have finished. Receiving a FIN does not
+mean the remote sender is done.
+
+Next: [14. Static files and a reverse proxy](14-gateway.md)

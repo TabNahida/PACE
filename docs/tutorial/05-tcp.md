@@ -1,11 +1,11 @@
-# 3. Send a TCP request with one call
+# 5. TCP
 
-[中文](05-tcp.zh.md) · [Learning path](README.md) · [Next: HTTP](03-http-server.md)
+[中文](05-tcp.zh.md) · [Learning path](README.md) · [Previous: tasks and timers](04-tasks-and-timers.md)
 
-Use PACE 0.4.0 or newer and chapter 1's source setup; link `pace_net`. Our protocol is four request bytes and four
-reply bytes, using a numeric loopback address.
+This chapter builds a TCP client and an echo server. The protocol is four request bytes and four reply bytes, on a
+numeric loopback address. Both programs link `pace_net`.
 
-## 1. Write the client first
+## Write the client first
 
 Save this as `tcp_client.cpp`:
 
@@ -13,64 +13,82 @@ Save this as `tcp_client.cpp`:
 #include <pace/net.hpp>
 #include <iostream>
 
-int main() {
-    try {
+int main()
+{
+    try
+    {
         auto reply = pace::tcp::exchange({"127.0.0.1", 9090}, "ping", 4);
         std::cout << reply << '\n';
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-`exchange` connects, writes the entire request, reads exactly four bytes and closes
-the connection. It returns an owned string and blocks this thread, with a 30-second
-default total deadline. No `run` or coroutine is needed. For a different budget,
-include `<chrono>` and pass `{.timeout = std::chrono::seconds(2)}` as the fourth argument.
+`exchange` connects, writes the whole request, reads exactly four bytes and closes the connection. It returns an
+owned string and blocks this thread, with a total budget of 30 seconds by default. No `run` or coroutine is needed.
+For a different budget, include `<chrono>` and pass `{.timeout = std::chrono::seconds(2)}` as the fourth argument.
 
-TCP preserves bytes, **not message boundaries**. The last argument here is the
-expected reply length, not a maximum packet size. PACE handles short reads and
-throws on premature EOF. Both peers must agree on framing.
+TCP delivers a stream of bytes, **not messages**. The last argument is the exact length of the reply, not a maximum
+size. PACE keeps reading through short reads and throws if the peer closes before four bytes arrive. Both peers must
+agree on how messages are framed.
 
-## 2. Supply the four-byte echo service
+## Supply the four-byte echo service
 
 Save this as `tcp_server.cpp`:
 
 ```cpp
-#include <pace/runtime.hpp>
 #include <pace/net.hpp>
+#include <pace/runtime.hpp>
 #include <iostream>
 
-pace::task<void> echo(pace::tcp::stream socket) {
-    try {
+pace::task<void> echo(pace::tcp::stream socket)
+{
+    try
+    {
         auto message = co_await pace::read_exact(socket, 4);
         co_await pace::write(socket, std::move(message));
-    } catch (const std::system_error& error) {
+    }
+    catch (const std::system_error& error)
+    {
         std::cerr << "connection: " << error.what() << '\n';
     }
 }
-pace::task<void> serve() {
+
+pace::task<void> serve()
+{
     auto listener = pace::tcp::listen({"127.0.0.1", 9090});
-    for (;;) pace::this_context().spawn(echo(co_await listener.accept()));
+    for (;;)
+    {
+        pace::this_context().spawn(echo(co_await listener.accept()));
+    }
 }
-int main() {
-    try { pace::run(serve); }
-    catch (const std::exception& error) {
+
+int main()
+{
+    try
+    {
+        pace::run(serve);
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-`listen` binds on the running context. Each `accept` returns one connected stream;
-`spawn` gives it to an independent `echo` task so the listener can accept again.
-The coroutine owns its stream and handles connection errors. Servers use `run`
-because they keep processing events; ordinary one-shot clients do not need it.
+`listen` binds the address on the running context. Each `accept` returns one connected stream, and `spawn` hands it
+to an independent `echo` task so the loop can accept the next connection at once. The `echo` coroutine owns its
+stream and handles that connection's errors itself. The server uses `run` because it keeps processing events; a
+one-shot client like the one above does not need it.
 
-## 3. Build and try both sides
+## Build and try both sides
 
-Add these targets to chapter 1's xmake.lua:
+Add these targets to `xmake.lua`:
 
 ```lua
 for _, name in ipairs({"tcp_client", "tcp_server"}) do
@@ -81,21 +99,23 @@ for _, name in ipairs({"tcp_client", "tcp_server"}) do
 end
 ```
 
-Build with `xmake -y tcp_client tcp_server`. Run `xmake run tcp_server` in one
-terminal, then `xmake run tcp_client` in another. Expect `ping` and client exit.
-Run the client again; the server is still listening. Stop the server with Ctrl-C.
-Try a six-byte request/reply by changing both lengths and the payload to `hello!`.
-Changing only one side breaks the protocol.
+Build with `xmake -y tcp_client tcp_server`. Run `xmake run tcp_server` in one terminal, then `xmake run tcp_client`
+in another. Expect `ping` and the client to exit. Run the client again: the server is still listening. Stop the
+server with Ctrl-C.
 
-## 4. Compose async work when needed
+Change both lengths to six and the payload to `hello!` for a six-byte exchange. Changing only one side breaks the
+protocol: depending on which side you change, the client reports that the connection closed early or waits until
+its timeout.
 
-Inside a running coroutine, the equivalent one-shot operation is:
+## Compose async work when needed
+
+Inside a running coroutine, the same one-shot exchange is:
 
 ```cpp
 auto reply = co_await pace::tcp::async_exchange({"127.0.0.1", 9090}, "ping", 4);
 ```
 
-For multiple exchanges on a connection, keep the socket yourself:
+For several exchanges on one connection, keep the socket yourself:
 
 ```cpp
 auto socket = co_await pace::tcp::connect({"127.0.0.1", 9090});
@@ -104,12 +124,17 @@ auto reply = co_await pace::read_exact(socket, 4);
 co_await socket.close_gracefully();
 ```
 
-`pace::write` owns its string across suspension. `read_exact` returns an owned
-string, bounded to 1 MiB by default. The socket must stay inside its context's
-lifetime. The async helper does not add the blocking helper's total deadline.
+`pace::write` owns its string while it waits. `read_exact` returns an owned string and refuses lengths above 1 MiB
+unless you pass a larger maximum. The socket must not outlive its context. The async calls do not add the 30-second
+budget of the blocking call.
 
-[Direct-client bounds and errors](../reference/direct-clients.md) ·
-[Buffers, IPv6 and concurrency](../reference/component-conveniences.md) ·
-[Tuning](../guides/protocol-tuning.md) · [Shutdown](09-graceful-shutdown.md)
+The companion `xmake run tutorial_tcp` ([source](../../examples/tutorial_tcp.cpp)) runs a full echo server and a
+client in one process and prints `TCP echo verified: Hello from PACE`. Its echo loop reads into a reusable buffer
+with `read_some` and writes back what arrived, and its accept loop treats a closed listener as the end of the loop.
+`xmake run tutorial_tcp serve` keeps the server on port 9090 until Ctrl-C; `xmake run tutorial_tcp client` talks to
+it.
 
-The repository's `xmake run tutorial_tcp` is a self-contained asynchronous echo exercise.
+[TCP reference](../reference/net/tcp.md) · [Protocol tuning](../guides/protocol-tuning.md) ·
+[Orderly shutdown](09-graceful-shutdown.md)
+
+Next: [6. UDP](06-udp.md)

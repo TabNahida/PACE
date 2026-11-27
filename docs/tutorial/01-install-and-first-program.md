@@ -1,13 +1,28 @@
-# 1. Build and run
+# 1. Install PACE and build your first program
 
-This chapter builds **your own program**, not a prewritten example. You need xmake
-2.9.8+ and a C++20 compiler. These guides require PACE 0.4.0 or newer.
-Use the v0.4.0 source checkout for the setup below.
+[中文](01-install-and-first-program.zh.md) · [Learning path](README.md)
 
-## Create a small application
+In this chapter you set up a project of your own that builds PACE from source, write a small HTTP server and
+check it with curl. The following chapters add programs to the same project.
 
-Make a working directory with this layout. Place this PACE checkout under
-`third_party/PACE`:
+## Install xmake and a compiler
+
+PACE builds with [xmake](https://xmake.io/) 2.9.8 or newer and a C++20 compiler: GCC, Clang or MSVC. CI builds it
+on Linux, macOS, Windows and 64-bit FreeBSD; [platform support](../reference/platform-support.md) lists the
+exact configurations.
+
+- Linux and macOS: install xmake as described on its site, and a compiler from your package manager or the Xcode
+  command-line tools.
+- Windows: install xmake and Visual Studio with the C++ workload, then work in a shell that has the Visual Studio
+  C++ environment.
+- FreeBSD: install **xmake-io** from upstream. The FreeBSD package named `xmake` is a different tool. The
+  [CI workflow](../../.github/workflows/ci.yml) shows a pinned source install.
+
+Check the installation with `xmake --version`. You also need git, and curl to try the server below.
+
+## Create the project
+
+Make a directory with this layout:
 
 ```text
 hello/
@@ -16,7 +31,13 @@ hello/
   third_party/PACE/
 ```
 
-Write the application's `xmake.lua`:
+From `hello`, put the PACE sources into `third_party/PACE`:
+
+```sh
+git clone https://github.com/TabNahida/PACE.git third_party/PACE
+```
+
+Write `xmake.lua`:
 
 ```lua
 set_project("hello")
@@ -24,161 +45,157 @@ set_languages("cxx20")
 add_rules("mode.debug", "mode.release")
 includes("third_party/PACE")
 
-target("my_application")
+target("hello")
     set_kind("binary")
     add_files("main.cpp")
     add_deps("pace_http1")
 ```
 
-The dependency supplies headers and platform libraries. Do not copy PACE's
-`.cpp` files into your target or construct a manual static-library link order.
-Start `main.cpp` with this complete program:
+`includes` loads PACE's build description, so its options and library targets become part of your project.
+`add_deps("pace_http1")` links the HTTP/1 module and, through it, the modules it depends on (runtime, net and the
+shared HTTP types). It also supplies the include path, the feature definitions and the platform libraries. Do not
+copy PACE's `.cpp` files into your target or write a link order by hand.
+
+## Write the first program
+
+Write `main.cpp`:
 
 ```cpp
 #include <pace/http1.hpp>
 #include <iostream>
 
-int main() {
-    try {
-        auto reply = pace::http::get("http://127.0.0.1:8080/health");
-        std::cout << reply.status << " " << reply.body;
-    } catch (const std::exception& error) {
+int main()
+{
+    try
+    {
+        pace::http::app app;
+        app.get("/health", [] { return pace::http::text("ok\n"); });
+        app.post("/echo", [](pace::http::request request) { return pace::http::text(std::move(request.body)); });
+        std::cout << "Listening on http://127.0.0.1:8080\n";
+        app.run(8080);
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-From **hello**, configure and run:
+`http::app` holds the routes. `get` and `post` register a handler for a method and an exact path. `http::text`
+makes a plain-text response that owns its body; the `/echo` handler returns the body it received.
+`app.run(8080)` listens on `127.0.0.1:8080` and serves on this thread until the process ends. There is no
+coroutine in this program; [chapter 3](03-http-server.md) shows where coroutines come in.
+
+## Build and run
+
+From `hello`:
 
 ```sh
-xmake f -m release --tests=n --examples=n --http1=y --websocket=n -y
-xmake -y my_application
-xmake run my_application
+xmake f -m release --tests=n --examples=n -y
+xmake -y hello
+xmake run hello
 ```
 
-Keep the [quick start's server](02-http-client.md) running in another terminal.
-Expect `200 ok` and client exit. `get` directly returns a response; no coroutine
-setup is needed. Continue with [HTTP](03-http-server.md), [TCP](05-tcp.md) or [UDP](06-udp.md).
-[Chapter 2](04-tasks-and-timers.md) introduces tasks when you need async composition.
-
-If a header cannot be found, check the `includes` path and dependency. If a
-protocol target is missing, enable its option before building. A connection error
-usually means the local server is not running or the URL has the wrong port.
-
-## Build the repository's companion exercises
-
-From the PACE checkout:
+`xmake f` configures the project; `--tests=n --examples=n` keeps PACE's own tests and examples out of your build.
+In a second terminal:
 
 ```sh
-xmake f -m release --examples=y --tests=y -y
-xmake -y tutorial_tasks
+curl -i http://127.0.0.1:8080/health
+curl --data-binary hello http://127.0.0.1:8080/echo
+```
+
+Expect status 200 with `ok`, then `hello`. Stop the server with Ctrl-C. Keep this project: the next chapter sends
+requests to this server from a program of your own.
+
+If a PACE header cannot be found, check the `includes` path and the `add_deps` line. If xmake reports an unknown
+target such as `pace_tls`, enable its build option (next section) and configure again. If curl cannot connect, the
+server is not running or another program already uses port 8080; the server then reports the bind error.
+
+## Depend on the module you need
+
+Each module is its own library target. Depend on the one your program uses; its dependencies come with it.
+
+| Your program uses | Build option | Target |
+|:--|:--|:--|
+| Tasks, timers, runtime | always built | `pace_runtime` |
+| TCP and UDP | always built | `pace_net` |
+| HTTP/1 clients and servers, `http::app`, static files and proxy | `--http1=y` (default) | `pace_http1` |
+| WebSocket | `--websocket=y` (default) | `pace_websocket` |
+| TLS | `--tls=y` | `pace_tls` |
+| DNS | `--dns=y` | `pace_dns` |
+| QUIC | `--quic=y` | `pace_quic` |
+| HTTP/2 | `--http2=y` (add `--tls=y` for HTTPS) | `pace_http2` |
+| HTTP/3 | `--http3=y` (enables QUIC) | `pace_http3` |
+| Everything enabled in this build | | `pace` |
+
+Change `add_deps` and configure again before building. An option that enables a module also adds it to HTTP/1
+where it applies: with `--dns=y` the URL clients accept hostnames, and with `--tls=y` they accept `https://`.
+Optional modules download their third-party libraries (OpenSSL, c-ares, nghttp2, ngtcp2, nghttp3) through xmake
+the first time you configure them. QUIC and HTTP/3 need a POSIX platform. `--http1=n --websocket=n` gives a build
+with only the runtime, TCP/UDP and the shared HTTP types, without any optional dependency.
+
+[Build options](../reference/build-options.md) covers every flag, the C++ standard, sanitizers, the QUIC backend
+and the I/O backends.
+
+## Build the companion programs
+
+Most chapters name a companion program in PACE's `examples/` directory. It is a complete, self-checking version of
+the chapter's exercise. From the PACE checkout (`third_party/PACE`):
+
+```sh
+xmake f -m release --examples=y -y
+xmake -y
 xmake run tutorial_tasks
 ```
 
-CI uses xmake 3.0.9 with GCC, Clang or MSVC on Linux, macOS, Windows and 64-bit
-FreeBSD. On Windows use a shell with the Visual Studio C++ environment available.
-On FreeBSD install **xmake-io** from upstream: the FreeBSD package named `xmake`
-is a different tool. The [CI workflow](../../.github/workflows/ci.yml) has a
-pinned source-install example.
-
-Build all enabled targets and run correctness tests:
-
-```sh
-xmake -y
-xmake test -v
-```
-
-Tests include the enabled protocol suites and bounded tutorial smoke checks.
-The [22 October local Linux validation](../../tests/results/linux-protocols-2026-10-22/README.md)
-records full, core-only and HTTP3-only builds and sanitizer coverage.
-
-## Select the module you need
-
-| Application | Enable | Target dependency |
-|---|---|---|
-| Tasks / timers | No protocol option | `pace_runtime` |
-| TCP / UDP | No protocol option | `pace_net` |
-| HTTP/1 | `--http1=y` | `pace_http1` |
-| WebSocket | `--websocket=y` | `pace_websocket` |
-| DNS | `--dns=y` | `pace_dns` |
-| TLS | `--tls=y` | `pace_tls` |
-| HTTP/2 | `--http2=y` (TLS separately) | `pace_http2` |
-| QUIC / HTTP/3 | `--quic=y` / `--http3=y` | `pace_quic` / `pace_http3` |
-
-Change your application's `add_deps` and reconfigure before building. HTTP/3 enables
-QUIC, which embeds its own TLS and currently requires POSIX. Enabling optional
-modules can download dependencies. Do not use the public test certificates in deployment.
-
-[Full build configuration](../reference/build-options.md) covers all flags,
-C++ standard selection, sanitizers, profiling, vendoring and isolated builds.
-Next: [tasks and timers](04-tasks-and-timers.md).
+`tutorial_tasks` prints `Hello, PACE` and exits. `xmake test` runs PACE's correctness tests. Chapters about
+optional modules give the extra options to add to `xmake f`.
 
 ## C++ named module (`import pace`)
 
-C++20 and newer can opt into the named module facade. It is off by default;
-ordinary header-based targets remain available. This is a C++ language module,
-separate from the independently linked protocol targets above. No `import std`
-is required. See the [Clang module guide](https://clang.llvm.org/docs/StandardCPlusPlusModules.html#abi-non-breaking-styles)
-for the ABI-preserving export-using approach used here.
+PACE can also be used through C++20 named modules instead of headers. Modules are off by default; configure
+`--modules=y` and depend on `pace_module` instead of a library target:
 
-Validated locally with **Clang 18.1.3, libstdc++ 13 and xmake 3.1.1**. Install a
-matching `clang-scan-deps` (Ubuntu: `clang-tools-18`) and put its directory on
-`PATH`; xmake's fallback scanner in 3.1.1 drops the language-standard flag and
-cannot scan the coroutine headers. Clang 21 also passes the remote all-protocol
-module test with both QUIC backends. GCC 13.3 fails to expose exported using
-declarations; GCC 15.2 crashes in `expand_CO_FRAME` while importing inline
-coroutines. The module therefore diagnoses GCC versions below 16 explicitly;
-header builds remain supported. GCC's [coroutine/module serialization fix](https://gcc.gnu.org/pipermail/gcc-patches/2026-January/705464.html)
-is in GCC 16. GCC 16.2 and Clang 21.1.8 pass the C++20 module and mixed-header ABI
-tests with both QUIC backends. See the [Actions run](https://github.com/TabNahida/PACE/actions/runs/44238306831).
-MSVC and Apple Clang module builds are not yet validated. They remain covered by the existing
-header-mode platform matrix where applicable.
-
-```sh
-# Ubuntu LLVM packages put matching binaries in this directory.
-export PATH="/usr/lib/llvm-18/bin:$PATH"
-xmake f -c -m release --toolchain=clang --modules=y --cxxstandard=cxx20 --tests=y --examples=n -y
-xmake -y pace_module_tests
-xmake run pace_module_tests
+```lua
+target("hello_module")
+    set_kind("binary")
+    add_files("module_main.cpp")
+    add_deps("pace_module")
 ```
 
-For your application, replace `add_deps("pace")` with
-`add_deps("pace_module")`, configure `--modules=y`, and write:
+`import pace;` brings in every module enabled in the build, like `#include <pace/pace.hpp>`. Each library module
+also has its own named module, `pace.<module>`: `pace.runtime`, `pace.net`, `pace.http`, `pace.http1`,
+`pace.gateway`, `pace.tls`, `pace.dns`, `pace.quic`, `pace.http2`, `pace.http3` and `pace.websocket`. Each exports
+only its own names, so a program that uses TCP imports `pace.net` and `pace.runtime`. This program needs only the
+runtime:
 
 ```cpp
 #include <coroutine>
 #include <iostream>
-import pace;
+import pace.runtime;
 
-pace::task<int> answer() {
+pace::task<int> answer()
+{
     co_await pace::yield();
     co_return 42;
 }
-int main() {
+
+int main()
+{
     std::cout << pace::run(answer) << '\n';
 }
 ```
 
-Include the standard headers your source uses **before** `import pace`; no
-PACE header is needed in the importing translation unit. The facade exports
-runtime, TCP/UDP and shared HTTP message/router APIs, plus only enabled optional
-protocols. `--http1=n --websocket=n` produces a core-only module with no optional
-protocol library dependencies. Use `--cxxstandard=cxx23` or `cxxlatest` with the
-same option when needed; the module does not impose a C++23 minimum.
+Replace `import pace.runtime;` with `import pace;` to import everything. Include the standard headers a source file
+uses before the `import`; it needs no PACE header. Modules do not export macros, and xmake still passes the
+feature definitions and link dependencies through `pace_module`.
 
-The implementation remains in the existing static libraries. Header consumers
-and import consumers in different translation units share the same types and
-link together; the module smoke test exercises that ABI boundary. Do not
-rebuild implementation `.cpp` files as module implementation units. Module
-imports do not export macros; xmake still propagates feature definitions and
-link dependencies through `pace_module`. Rebuild BMIs after changing compiler,
-standard or protocol options, and do not distribute cached BMIs across different
-toolchains. xmake may warn that `std`/`std.compat` modules are missing; this
-facade uses standard-library headers and does not need those modules.
+The modules are an import interface over the same static libraries: a translation unit that includes PACE headers
+and one that imports PACE modules use the same types and link together. Build the module with Clang and a matching
+`clang-scan-deps` on `PATH`, or with GCC 16 or newer; GCC before 16 is rejected with an error. MSVC and Apple Clang
+module builds are not validated. Rebuild after changing the compiler, the C++ standard or a module option, and do
+not share built module interfaces between toolchains. [Build options](../reference/build-options.md) lists the
+validated toolchains.
 
-[Module CI](../../.github/workflows/modules.yml) covers Clang C++20 core/default
-builds and C++23 with all optional protocols. This adds an import interface;
-no compile-time or runtime speedup is claimed for modules themselves.
-
-Choose `--quic_backend=ngtcp2` (default) or `--quic_backend=openssl` together with `--quic=y` or `--http3=y`. Both support C++20 and use OpenSSL 3.5.7 for TLS; the default backend also requires ngtcp2 1.26.0.
+Next: [2. Make HTTP requests](02-http-client.md)
