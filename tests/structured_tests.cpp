@@ -1,10 +1,8 @@
+#include "support/pace_test.hpp"
 #include <pace/pace.hpp>
 
 #include <array>
 #include <atomic>
-#include <condition_variable>
-#include <iostream>
-#include <mutex>
 #include <thread>
 #ifndef _WIN32
 #include <fcntl.h>
@@ -13,13 +11,7 @@
 #endif
 using namespace std::chrono_literals;
 
-void require(bool b, const char* text)
-{
-    if (!b)
-    {
-        throw std::runtime_error(text);
-    }
-}
+using pace::test::require;
 
 struct destroyed
 {
@@ -582,43 +574,29 @@ void subscription_races()
     require(b.token().stop_requested(), "cyclic link propagation failed");
 }
 
-int main()
+TEST_CASE("cancellation subscriptions handle concurrent removal, self-unregistration and cyclic links")
 {
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool done = false;
-    std::thread watchdog(
-        [&]
-        {
-            std::unique_lock lock(mutex);
-            if (!cv.wait_for(lock, 30s, [&] { return done; }))
-            {
-                std::abort();
-            }
-        }
-    );
-    int result = 0;
-    try
-    {
-        subscription_races();
-        pace::run(tests);
-        shutdown_tests();
-        cancellation_callback_tests();
-#ifndef _WIN32
-        directional_cancel_tests();
-#endif
-        std::cout << "Structured children, local cancellation, deadlines and cleanup passed\n";
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-        result = 1;
-    }
-    {
-        std::lock_guard lock(mutex);
-        done = true;
-    }
-    cv.notify_one();
-    watchdog.join();
-    return result;
+    subscription_races();
 }
+
+TEST_CASE("task groups, deadlines and local cancellation join and drain their children")
+{
+    pace::run(tests);
+}
+
+TEST_CASE("context stop drains structured children before leaving the boundary")
+{
+    shutdown_tests();
+}
+
+TEST_CASE("cancellation callbacks survive a failing callback and reject registration after stop")
+{
+    cancellation_callback_tests();
+}
+
+#ifndef _WIN32
+TEST_CASE("read cancellation leaves the opposite direction armed")
+{
+    directional_cancel_tests();
+}
+#endif

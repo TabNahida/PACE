@@ -1,3 +1,4 @@
+#include "support/pace_test.hpp"
 #include <pace/run.hpp>
 #include <pace/runtime.hpp>
 #include <pace/detail/poller.hpp>
@@ -9,7 +10,6 @@
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -30,39 +30,7 @@ using namespace std::chrono_literals;
 
 namespace
 {
-void require(bool value, const char* message)
-{
-    if (!value)
-    {
-        throw std::runtime_error(message);
-    }
-}
-
-struct watchdog
-{
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool done = false;
-    std::thread thread{[this]
-                       {
-                           std::unique_lock lock(mutex);
-                           if (!cv.wait_for(lock, 20s, [&] { return done; }))
-                           {
-                               std::cerr << "runtime tests timed out\n";
-                               std::abort();
-                           }
-                       }};
-
-    ~watchdog()
-    {
-        {
-            std::lock_guard lock(mutex);
-            done = true;
-        }
-        cv.notify_one();
-        thread.join();
-    }
-};
+using pace::test::require;
 
 struct completion_signal
 {
@@ -1903,203 +1871,258 @@ void entry_runner_contract()
     require(failure && pace::io_context::current() == nullptr, "empty entry or current context cleanup");
 }
 
-void run_tests()
-{
-    entry_runner_contract();
-    profiling_contract();
-    poller_output_contract();
-    readiness_union_contract();
-    invalid_socket_is_rejected();
-    mixed_concurrent_submissions();
-    repeated_sleep_and_wake();
-    timer_fairness_with_ready_work();
-    cancellable_callback_timers();
-    cancel_sleepers_out_of_order();
-    cancellation_batch_with_unregistration();
-    shutdown_preserves_pending_timeout_reasons();
-    protocol_signals();
-    shutdown_exactly_once();
-    runtime_thread_modes();
-    runtime_caller_failures();
-    runtime_nested_caller_rejection();
-    runtime_concurrent_run_rejection();
-    {
-        pace::io_context io;
-        int steps = 0;
-        io.spawn(basics(io, steps));
-        io.run();
-        require(steps == 10000, "yield count");
-    }
-    {
-        pace::io_context io;
-        int canceled = 0;
-        for (int i = 0; i < 100; ++i)
-        {
-            io.spawn(wait_for_stop(io, canceled));
-        }
-        io.spawn(timer_stop(io));
-        io.run();
-        require(canceled == 100, "all timers drain");
-    }
-    {
-        pace::io_context io;
-        io.spawn(fail());
-        bool caught = false;
-        try
-        {
-            io.run();
-        }
-        catch (const std::runtime_error&)
-        {
-            caught = true;
-        }
-        require(caught, "detached failure must reach run");
-    }
-    {
-        pace::io_context io;
-        std::atomic<int> count{0};
-        std::thread runner([&] { io.run(); });
-        std::vector<std::thread> producers;
-        for (int i = 0; i < 4; ++i)
-        {
-            producers.emplace_back(
-                [&]
-                {
-                    for (int n = 0; n < 2500; ++n)
-                    {
-                        io.post(
-                            [&]
-                            {
-                                if (++count == 10000)
-                                {
-                                    io.stop();
-                                }
-                            }
-                        );
-                    }
-                }
-            );
-        }
-        for (auto& producer : producers)
-        {
-            producer.join();
-        }
-        runner.join();
-        require(count == 10000, "cross-thread posts lost");
-    }
-    {
-        pace::runtime rt(4);
-        std::atomic<int> count{0};
-        for (std::size_t i = 0; i < rt.size(); ++i)
-        {
-            rt.context(i).spawn(worker(rt, i, count));
-        }
-        rt.run();
-        require(count == 4, "worker completion");
-    }
-    {
-        pace::runtime rt(2);
-        int canceled = 0;
-        rt.context(0).spawn(wait_for_stop(rt.context(0), canceled));
-        rt.context(1).spawn(fail());
-        bool caught = false;
-        try
-        {
-            rt.run();
-        }
-        catch (const std::runtime_error&)
-        {
-            caught = true;
-        }
-        require(caught && canceled == 1, "worker failure stops peers");
-    }
-    {
-        pace::io_context io;
-        io.stop();
-        io.run();
-        bool rejected = false;
-        try
-        {
-            io.post([] {});
-        }
-        catch (const std::system_error&)
-        {
-            rejected = true;
-        }
-        require(rejected, "post after stop must reject");
-        rejected = false;
-        try
-        {
-            io.run();
-        }
-        catch (const std::logic_error&)
-        {
-            rejected = true;
-        }
-        require(rejected, "second run must reject");
-    }
-    {
-        int destroyed = 0;
-        bool rejected = false;
-        {
-            pace::io_context io;
-            io.spawn(never_started(pending_cleanup(io, destroyed, rejected)));
-        }
-        require(destroyed == 1 && rejected, "queued task cleanup must run before context internals are destroyed");
-    }
-    {
-        pace::io_context io;
-        const auto positive = io.sleep_for(std::chrono::hours::max());
-        const auto negative = io.sleep_for(std::chrono::hours::min());
-        require(positive.deadline > std::chrono::steady_clock::now() + 24h, "large duration must saturate safely");
-        require(negative.deadline <= std::chrono::steady_clock::now(), "negative duration must be ready immediately");
-    }
-#if defined(__linux__)
-    ready_single_flag_contract();
-    persistent_poller_contract();
-    persistent_reactor_batches();
-    {
-        pace::io_context io;
-        owned_eventfd descriptor(io);
-        int count = 0;
-        io.spawn(descriptor_reader(io, descriptor.fd, count));
-        io.spawn(descriptor_writer(io, descriptor.fd));
-        io.run();
-        require(count == 2, "descriptor readiness and rearm");
-    }
-    {
-        pace::io_context io;
-        owned_eventfd descriptor(io);
-        bool canceled = false;
-        io.spawn(canceled_descriptor_reader(io, descriptor.fd, canceled));
-        io.spawn(cancel_descriptor(io, descriptor.fd));
-        io.run();
-        require(canceled, "descriptor cancel result");
-    }
-    {
-        pace::io_context io;
-        owned_eventfd descriptor(io);
-        bool read = false, rejected = false;
-        io.spawn(simultaneous_reader(io, descriptor.fd, read));
-        io.spawn(simultaneous_writer(io, descriptor.fd, rejected));
-        io.run();
-        require(read && rejected, "simultaneous read/write readiness must preserve both directions");
-    }
-#endif
-}
 } // namespace
 
-int main()
+TEST_CASE("pace::run entry points drain background work and restore the current context")
 {
-    watchdog timeout;
-    try
-    {
-        run_tests();
-        std::cout << "runtime tests passed\n";
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-        return 1;
-    }
+    entry_runner_contract();
 }
+
+TEST_CASE("profiling scopes preserve error codes and unwind on exceptions")
+{
+    profiling_contract();
+}
+
+TEST_CASE("poller respects its output span and one-shot delivery")
+{
+    poller_output_contract();
+}
+
+TEST_CASE("readiness unions resume once and release both directions")
+{
+    readiness_union_contract();
+}
+
+TEST_CASE("invalid sockets are rejected")
+{
+    invalid_socket_is_rejected();
+}
+
+TEST_CASE("mixed concurrent submissions run once on their own reactor")
+{
+    mixed_concurrent_submissions();
+}
+
+TEST_CASE("repeated sleep and wake rounds run once each")
+{
+    repeated_sleep_and_wake();
+}
+
+TEST_CASE("due timers make progress while ready work is queued")
+{
+    timer_fairness_with_ready_work();
+}
+
+TEST_CASE("cancellable callback timers fire once in order and release callbacks")
+{
+    cancellable_callback_timers();
+}
+
+TEST_CASE("sleepers cancelled out of order leave surviving timers intact")
+{
+    cancel_sleepers_out_of_order();
+}
+
+TEST_CASE("cancellation batches skip unregistered callbacks")
+{
+    cancellation_batch_with_unregistration();
+}
+
+TEST_CASE("shutdown preserves pending timeout reasons")
+{
+    shutdown_preserves_pending_timeout_reasons();
+}
+
+TEST_CASE("protocol signals resume each waiter exactly once")
+{
+    protocol_signals();
+}
+
+TEST_CASE("shutdown resumes and destroys each task exactly once")
+{
+    shutdown_exactly_once();
+}
+
+TEST_CASE("runtime thread modes assign distinct execution threads")
+{
+    runtime_thread_modes();
+}
+
+TEST_CASE("runtime caller mode propagates failures and drains every context")
+{
+    runtime_caller_failures();
+}
+
+TEST_CASE("runtime caller mode rejects nesting")
+{
+    runtime_nested_caller_rejection();
+}
+
+TEST_CASE("concurrent runtime run is rejected without stopping the active runtime")
+{
+    runtime_concurrent_run_rejection();
+}
+
+TEST_CASE("task basics and repeated yields")
+{
+    pace::io_context io;
+    int steps = 0;
+    io.spawn(basics(io, steps));
+    io.run();
+    require(steps == 10000, "yield count");
+}
+
+TEST_CASE("stop drains all pending timers")
+{
+    pace::io_context io;
+    int canceled = 0;
+    for (int i = 0; i < 100; ++i)
+    {
+        io.spawn(wait_for_stop(io, canceled));
+    }
+    io.spawn(timer_stop(io));
+    io.run();
+    require(canceled == 100, "all timers drain");
+}
+
+TEST_CASE("detached task failure reaches run")
+{
+    pace::io_context io;
+    io.spawn(fail());
+    CHECK_THROWS_AS(io.run(), std::runtime_error);
+}
+
+TEST_CASE("cross-thread posts are not lost")
+{
+    pace::io_context io;
+    std::atomic<int> count{0};
+    std::thread runner([&] { io.run(); });
+    std::vector<std::thread> producers;
+    for (int i = 0; i < 4; ++i)
+    {
+        producers.emplace_back(
+            [&]
+            {
+                for (int n = 0; n < 2500; ++n)
+                {
+                    io.post(
+                        [&]
+                        {
+                            if (++count == 10000)
+                            {
+                                io.stop();
+                            }
+                        }
+                    );
+                }
+            }
+        );
+    }
+    for (auto& producer : producers)
+    {
+        producer.join();
+    }
+    runner.join();
+    require(count == 10000, "cross-thread posts lost");
+}
+
+TEST_CASE("runtime workers all complete")
+{
+    pace::runtime rt(4);
+    std::atomic<int> count{0};
+    for (std::size_t i = 0; i < rt.size(); ++i)
+    {
+        rt.context(i).spawn(worker(rt, i, count));
+    }
+    rt.run();
+    require(count == 4, "worker completion");
+}
+
+TEST_CASE("runtime worker failure stops peers")
+{
+    pace::runtime rt(2);
+    int canceled = 0;
+    rt.context(0).spawn(wait_for_stop(rt.context(0), canceled));
+    rt.context(1).spawn(fail());
+    CHECK_THROWS_AS(rt.run(), std::runtime_error);
+    require(canceled == 1, "worker failure stops peers");
+}
+
+TEST_CASE("stopped context rejects post and a second run")
+{
+    pace::io_context io;
+    io.stop();
+    io.run();
+    CHECK_THROWS_AS(io.post([] {}), std::system_error);
+    CHECK_THROWS_AS(io.run(), std::logic_error);
+}
+
+TEST_CASE("queued task cleanup runs before context internals are destroyed")
+{
+    int destroyed = 0;
+    bool rejected = false;
+    {
+        pace::io_context io;
+        io.spawn(never_started(pending_cleanup(io, destroyed, rejected)));
+    }
+    require(destroyed == 1 && rejected, "queued task cleanup must run before context internals are destroyed");
+}
+
+TEST_CASE("extreme sleep durations saturate safely")
+{
+    pace::io_context io;
+    const auto positive = io.sleep_for(std::chrono::hours::max());
+    const auto negative = io.sleep_for(std::chrono::hours::min());
+    require(positive.deadline > std::chrono::steady_clock::now() + 24h, "large duration must saturate safely");
+    require(negative.deadline <= std::chrono::steady_clock::now(), "negative duration must be ready immediately");
+}
+
+#if defined(__linux__)
+TEST_CASE("a single readiness flag resumes and clears a union once")
+{
+    ready_single_flag_contract();
+}
+
+TEST_CASE("persistent poller subscriptions survive without rearm")
+{
+    persistent_poller_contract();
+}
+
+TEST_CASE("persistent reactor batches complete every descriptor once")
+{
+    persistent_reactor_batches();
+}
+
+TEST_CASE("descriptor readiness rearms")
+{
+    pace::io_context io;
+    owned_eventfd descriptor(io);
+    int count = 0;
+    io.spawn(descriptor_reader(io, descriptor.fd, count));
+    io.spawn(descriptor_writer(io, descriptor.fd));
+    io.run();
+    require(count == 2, "descriptor readiness and rearm");
+}
+
+TEST_CASE("descriptor cancellation reaches the awaiter")
+{
+    pace::io_context io;
+    owned_eventfd descriptor(io);
+    bool canceled = false;
+    io.spawn(canceled_descriptor_reader(io, descriptor.fd, canceled));
+    io.spawn(cancel_descriptor(io, descriptor.fd));
+    io.run();
+    require(canceled, "descriptor cancel result");
+}
+
+TEST_CASE("simultaneous read and write readiness preserve both directions")
+{
+    pace::io_context io;
+    owned_eventfd descriptor(io);
+    bool read = false, rejected = false;
+    io.spawn(simultaneous_reader(io, descriptor.fd, read));
+    io.spawn(simultaneous_writer(io, descriptor.fd, rejected));
+    io.run();
+    require(read && rejected, "simultaneous read/write readiness must preserve both directions");
+}
+#endif

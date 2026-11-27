@@ -1,9 +1,9 @@
+#include "support/pace_test.hpp"
 #include <pace/udp.hpp>
 #include <pace/detail/poller.hpp>
 
 #include <array>
 #include <cstdlib>
-#include <iostream>
 #include <set>
 #include <vector>
 #ifndef _WIN32
@@ -13,13 +13,7 @@
 #endif
 namespace
 {
-void require(bool ok, const char* message)
-{
-    if (!ok)
-    {
-        throw std::runtime_error(message);
-    }
-}
+using pace::test::require;
 
 void notify(pace::native_socket_type sender, const pace::udp::socket& target)
 {
@@ -40,81 +34,78 @@ void drain(pace::native_socket_type fd)
 }
 } // namespace
 
-int main()
+TEST_CASE("an explicitly requested backend is not silently substituted")
 {
-    try
+    pace::io_context io;
+    if (const auto* requested = std::getenv("PACE_IO_BACKEND"); requested && std::string_view(requested) != "automatic")
     {
-        pace::io_context io;
-        if (const auto* requested = std::getenv("PACE_IO_BACKEND");
-            requested && std::string_view(requested) != "automatic")
+        require(
+            pace::backend_name(io.backend()) == std::string_view(requested),
+            "explicit backend was silently substituted"
+        );
+    }
+}
+
+TEST_CASE("poller survives queue pressure, cancellation and descriptor reuse")
+{
+    pace::io_context io;
+    pace::detail::poller poller(false);
+    MESSAGE("backend=" << std::string(pace::backend_name(poller.backend())));
+    pace::udp::socket sender(io, {"127.0.0.1", 0});
+    std::array<pace::detail::poll_event, 256> events{};
+    // More subscriptions/cancellations than the 256-entry io_uring SQ.
+    std::vector<pace::udp::socket> sockets;
+    sockets.reserve(512);
+    for (unsigned n = 0; n < 512; ++n)
+    {
+        CAPTURE(n);
+        sockets.emplace_back(io, pace::udp::endpoint{"127.0.0.1", 0});
+        const auto fd = sockets.back().native_handle();
+        poller.update(fd, true, false, n + 1);
+        poller.remove(fd);
+        poller.update(fd, true, false, n + 1001);
+        notify(sender.native_handle(), sockets.back());
+    }
+    std::set<std::uint64_t> seen;
+    const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (seen.size() != sockets.size() && std::chrono::steady_clock::now() < end)
+    {
+        const auto count = poller.wait(events, 100);
+        for (std::size_t n = 0; n < count; ++n)
         {
-            require(
-                pace::backend_name(io.backend()) == std::string_view(requested),
-                "explicit backend was silently substituted"
-            );
+            require(events[n].token >= 1001 && events[n].token < 1513, "stale canceled subscription escaped");
+            if (seen.insert(events[n].token).second)
+            {
+                drain(sockets[events[n].token - 1001].native_handle());
+            }
         }
-        pace::detail::poller poller(false);
-        std::cout << "backend=" << pace::backend_name(poller.backend()) << '\n';
-        pace::udp::socket sender(io, {"127.0.0.1", 0});
-        std::array<pace::detail::poll_event, 256> events{};
-        // More subscriptions/cancellations than the 256-entry io_uring SQ.
-        std::vector<pace::udp::socket> sockets;
-        sockets.reserve(512);
-        for (unsigned n = 0; n < 512; ++n)
-        {
-            sockets.emplace_back(io, pace::udp::endpoint{"127.0.0.1", 0});
-            const auto fd = sockets.back().native_handle();
-            poller.update(fd, true, false, n + 1);
-            poller.remove(fd);
-            poller.update(fd, true, false, n + 1001);
-            notify(sender.native_handle(), sockets.back());
-        }
-        std::set<std::uint64_t> seen;
-        const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-        while (seen.size() != sockets.size() && std::chrono::steady_clock::now() < end)
+    }
+    require(seen.size() == sockets.size(), "queue pressure lost a readiness notification");
+    for (auto& socket : sockets)
+    {
+        poller.forget(socket.native_handle());
+    }
+    sockets.clear();
+    // Native handles may be recycled; late packets must not target a new wait.
+    for (unsigned n = 0; n < 128; ++n)
+    {
+        CAPTURE(n);
+        pace::udp::socket socket(io, {"127.0.0.1", 0});
+        const auto token = 10000 + n;
+        poller.update(socket.native_handle(), true, false, token);
+        notify(sender.native_handle(), socket);
+        bool ready = false;
+        for (unsigned tries = 0; tries < 50 && !ready; ++tries)
         {
             const auto count = poller.wait(events, 100);
-            for (std::size_t n = 0; n < count; ++n)
+            for (std::size_t i = 0; i < count; ++i)
             {
-                require(events[n].token >= 1001 && events[n].token < 1513, "stale canceled subscription escaped");
-                if (seen.insert(events[n].token).second)
-                {
-                    drain(sockets[events[n].token - 1001].native_handle());
-                }
+                require(events[i].token == token, "recycled socket received an obsolete token");
+                ready = true;
             }
         }
-        require(seen.size() == sockets.size(), "queue pressure lost a readiness notification");
-        for (auto& socket : sockets)
-        {
-            poller.forget(socket.native_handle());
-        }
-        sockets.clear();
-        // Native handles may be recycled; late packets must not target a new wait.
-        for (unsigned n = 0; n < 128; ++n)
-        {
-            pace::udp::socket socket(io, {"127.0.0.1", 0});
-            const auto token = 10000 + n;
-            poller.update(socket.native_handle(), true, false, token);
-            notify(sender.native_handle(), socket);
-            bool ready = false;
-            for (unsigned tries = 0; tries < 50 && !ready; ++tries)
-            {
-                const auto count = poller.wait(events, 100);
-                for (std::size_t i = 0; i < count; ++i)
-                {
-                    require(events[i].token == token, "recycled socket received an obsolete token");
-                    ready = true;
-                }
-            }
-            require(ready, "recycled socket lost notification");
-            drain(socket.native_handle());
-            poller.forget(socket.native_handle());
-        }
-        std::cout << "queue pressure, cancellation and descriptor reuse passed\n";
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-        return 1;
+        require(ready, "recycled socket lost notification");
+        drain(socket.native_handle());
+        poller.forget(socket.native_handle());
     }
 }
