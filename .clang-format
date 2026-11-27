@@ -1,0 +1,106 @@
+# PACE code style: Allman braces, 120 columns, braces on every control-flow body.
+# Only short lambdas may stay on one line; everything else breaks.
+Language: Cpp
+BasedOnStyle: Microsoft
+Standard: c++20
+ColumnLimit: 120
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+EmptyLineBeforeAccessModifier: LogicalBlock
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: true
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: true
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+
+AllowShortFunctionsOnASingleLine: None
+AllowShortLambdasOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortEnumsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortCompoundRequirementOnASingleLine: true
+InsertBraces: true
+
+AlignAfterOpenBracket: BlockIndent
+BinPackParameters: OnePerLine
+BinPackArguments: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+BreakConstructorInitializers: BeforeComma
+PackConstructorInitializers: Never
+BreakInheritanceList: BeforeComma
+BreakTemplateDeclarations: Yes
+RequiresClausePosition: OwnLine
+IndentRequiresClause: false
+BreakBeforeBinaryOperators: NonAssignment
+AlwaysBreakBeforeMultilineStrings: false
+Cpp11BracedListStyle: true
+
+NamespaceIndentation: None
+CompactNamespaces: false
+FixNamespaceComments: true
+ShortNamespaceLines: 0
+IndentCaseLabels: true
+IndentPPDirectives: None
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+SpaceAfterTemplateKeyword: true
+SpaceBeforeParens: ControlStatements
+QualifierAlignment: Leave
+
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  # Groups: PACE headers, standard library, third-party, platform. SortPriority orders within a group.
+  - Regex: '^<pace/detail/'
+    Priority: 1
+    SortPriority: 2
+  - Regex: '^(<pace/|")'
+    Priority: 1
+    SortPriority: 1
+  - Regex: '^<(openssl|ngtcp2|nghttp2|nghttp3|ares)'
+    Priority: 4
+  # Winsock headers stay in one group and keep this relative order.
+  - Regex: '^<winsock2\.h>'
+    Priority: 5
+    SortPriority: 5
+  - Regex: '^<ws2tcpip\.h>'
+    Priority: 5
+    SortPriority: 6
+  - Regex: '^<(windows|mswsock|mstcpip|iphlpapi)\.h>'
+    Priority: 5
+    SortPriority: 7
+  - Regex: '^<(arpa/|netinet/|net/|sys/|linux/|fcntl|unistd|poll|netdb|signal|errno|dlfcn|pthread|time|sched|ifaddrs|mach/|liburing)'
+    Priority: 8
+  - Regex: '^<[a-z_]+>$'
+    Priority: 3
+  - Regex: '.*'
+    Priority: 9
+
+KeepEmptyLines:
+  AtStartOfBlock: false
+  AtStartOfFile: false
+  AtEndOfFile: false
+MaxEmptyLinesToKeep: 1
+SeparateDefinitionBlocks: Always
+InsertNewlineAtEOF: true
+ReflowComments: Always

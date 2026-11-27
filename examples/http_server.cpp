@@ -9,52 +9,89 @@
 #include <thread>
 #include <vector>
 
-namespace {
+namespace
+{
 std::atomic_flag interrupted = ATOMIC_FLAG_INIT;
-void on_signal(int) { interrupted.test_and_set(std::memory_order_relaxed); }
+
+void on_signal(int)
+{
+    interrupted.test_and_set(std::memory_order_relaxed);
+}
 
 // Keep signal handlers minimal and join the watcher even when run() throws.
 // std::thread also supports platforms whose libc++ does not provide jthread.
-class signal_watcher {
+class signal_watcher
+{
     std::atomic<bool> finished_{false};
     std::thread worker_;
+
 public:
-    explicit signal_watcher(pace::runtime& runtime) : worker_([this, &runtime] {
-        while (!finished_.load(std::memory_order_relaxed) &&
-               !interrupted.test(std::memory_order_relaxed))
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        if (interrupted.test(std::memory_order_relaxed)) runtime.stop();
-    }) {}
-    ~signal_watcher() {
+    explicit signal_watcher(pace::runtime& runtime)
+        : worker_(
+              [this, &runtime]
+              {
+                  while (!finished_.load(std::memory_order_relaxed) && !interrupted.test(std::memory_order_relaxed))
+                  {
+                      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                  }
+                  if (interrupted.test(std::memory_order_relaxed))
+                  {
+                      runtime.stop();
+                  }
+              }
+          )
+    {
+    }
+
+    ~signal_watcher()
+    {
         finished_.store(true, std::memory_order_relaxed);
         worker_.join();
     }
 };
 
-pace::task<pace::http::response> handle(pace::http::request request) {
+pace::task<pace::http::response> handle(pace::http::request request)
+{
     if (request.target == "/")
+    {
         co_return pace::http::response{.body = "Hello from PACE!\n"};
+    }
     if (request.target == "/echo" && request.method == "POST")
+    {
         co_return pace::http::response{.body = std::move(request.body)};
+    }
     co_return pace::http::response{.status = 404, .body = "Not found\n"};
 }
 } // namespace
 
-int main(int argc, char** argv) {
-    try {
+int main(int argc, char** argv)
+{
+    try
+    {
         const auto port = argc > 1 ? std::stoul(argv[1]) : 8080;
         const auto workers = argc > 2 ? std::stoul(argv[2]) : 1;
-        if (port > 65535 || workers == 0) throw std::invalid_argument("invalid port or worker count");
+        if (port > 65535 || workers == 0)
+        {
+            throw std::invalid_argument("invalid port or worker count");
+        }
 #if defined(_WIN32)
-        if (workers > 1) throw std::invalid_argument("this example uses SO_REUSEPORT; use one worker on Windows");
+        if (workers > 1)
+        {
+            throw std::invalid_argument("this example uses SO_REUSEPORT; use one worker on Windows");
+        }
 #endif
         pace::runtime runtime(workers);
         std::vector<std::unique_ptr<pace::tcp::listener>> listeners;
-        for (std::size_t i = 0; i < runtime.size(); ++i) {
+        for (std::size_t i = 0; i < runtime.size(); ++i)
+        {
             auto& context = runtime.context(i);
-            listeners.push_back(std::make_unique<pace::tcp::listener>(context,
-                pace::tcp::endpoint{"0.0.0.0", static_cast<std::uint16_t>(port)},
-                pace::tcp::listen_options{.reuse_port = workers > 1}));
+            listeners.push_back(
+                std::make_unique<pace::tcp::listener>(
+                    context,
+                    pace::tcp::endpoint{"0.0.0.0", static_cast<std::uint16_t>(port)},
+                    pace::tcp::listen_options{.reuse_port = workers > 1}
+                )
+            );
             context.spawn(pace::http::serve(*listeners.back(), handle));
         }
         std::signal(SIGINT, on_signal);
@@ -62,10 +99,12 @@ int main(int argc, char** argv) {
         // The signal handler only sets a lock-free atomic flag. A normal thread calls
         // stop(), which wakes every reactor and cancels outstanding operations.
         signal_watcher shutdown(runtime);
-        std::cout << "PACE HTTP listening on http://127.0.0.1:" << port
-                  << " with " << workers << " worker(s); Ctrl+C to stop\n";
+        std::cout << "PACE HTTP listening on http://127.0.0.1:" << port << " with " << workers
+                  << " worker(s); Ctrl+C to stop\n";
         runtime.run();
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
