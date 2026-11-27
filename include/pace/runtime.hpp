@@ -1,6 +1,7 @@
 #pragma once
 
 // Runtime: tasks, io_context, timers, cancellation, structured concurrency and workers.
+#include <pace/runtime/ascii.hpp>
 #include <pace/runtime/blocking.hpp>
 #include <pace/runtime/cancellation.hpp>
 #include <pace/runtime/io_backend.hpp>

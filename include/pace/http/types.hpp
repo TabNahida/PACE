@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pace/runtime/ascii.hpp>
 #include <pace/runtime/task.hpp>
 
 #include <cstddef>
@@ -35,25 +36,9 @@ struct request
 
     [[nodiscard]] std::string_view header(std::string_view name) const noexcept
     {
-        const auto equal = [](std::string_view a, std::string_view b)
-        {
-            if (a.size() != b.size())
-            {
-                return false;
-            }
-            for (std::size_t i = 0; i < a.size(); ++i)
-            {
-                const auto lower = [](unsigned char c) { return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c; };
-                if (lower(a[i]) != lower(b[i]))
-                {
-                    return false;
-                }
-            }
-            return true;
-        };
         for (const auto& field : headers)
         {
-            if (equal(field.name, name))
+            if (ascii::iequals(field.name, name))
             {
                 return field.value;
             }
@@ -77,25 +62,9 @@ struct response
 
     [[nodiscard]] std::string_view header(std::string_view name) const noexcept
     {
-        const auto equal = [](std::string_view a, std::string_view b)
-        {
-            if (a.size() != b.size())
-            {
-                return false;
-            }
-            for (std::size_t i = 0; i < a.size(); ++i)
-            {
-                const auto lower = [](unsigned char c) { return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c; };
-                if (lower(a[i]) != lower(b[i]))
-                {
-                    return false;
-                }
-            }
-            return true;
-        };
         for (const auto& field : headers)
         {
-            if (equal(field.name, name))
+            if (ascii::iequals(field.name, name))
             {
                 return field.value;
             }

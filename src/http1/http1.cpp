@@ -1,4 +1,5 @@
 #include <pace/http1/protocol.hpp>
+#include <pace/runtime/ascii.hpp>
 #include "http/serve_group.hpp"
 
 #include <algorithm>
@@ -19,16 +20,7 @@ struct parse_failure
     unsigned status;
 };
 
-char lower(char c) noexcept
-{
-    return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : c;
-}
-
-bool equal_ci(std::string_view a, std::string_view b) noexcept
-{
-    return a.size() == b.size()
-           && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) { return lower(x) == lower(y); });
-}
+using ascii::iequals;
 
 std::string_view trim(std::string_view text) noexcept
 {
@@ -150,7 +142,7 @@ bool forbidden_trailer(std::string_view name)
         "max-forwards",
         "range"
     };
-    return std::any_of(std::begin(forbidden), std::end(forbidden), [&](auto value) { return equal_ci(name, value); });
+    return std::any_of(std::begin(forbidden), std::end(forbidden), [&](auto value) { return iequals(name, value); });
 }
 
 template <class Visit>
@@ -220,7 +212,7 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
     for (const auto& field : fields)
     {
         const auto name = std::string_view(field.name), value = std::string_view(field.value);
-        if (equal_ci(name, "content-length"))
+        if (iequals(name, "content-length"))
         {
             if (result.length || value.empty())
             {
@@ -234,7 +226,7 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
             }
             result.length = length;
         }
-        else if (equal_ci(name, "transfer-encoding"))
+        else if (iequals(name, "transfer-encoding"))
         {
             if (has_transfer)
             {
@@ -248,7 +240,7 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
                 [&](std::string_view token)
                 {
                     ++codings;
-                    chunked = equal_ci(token, "chunked");
+                    chunked = iequals(token, "chunked");
                 }
             );
             if (codings != 1 || !chunked)
@@ -256,7 +248,7 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
                 // Ambiguous framing still takes precedence over unsupported coding.
                 for (const auto& candidate : fields)
                 {
-                    if (equal_ci(candidate.name, "content-length"))
+                    if (iequals(candidate.name, "content-length"))
                     {
                         throw parse_failure{400};
                     }
@@ -265,7 +257,7 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
             }
             result.chunked = true;
         }
-        else if (equal_ci(name, "host") && request_message)
+        else if (iequals(name, "host") && request_message)
         {
             if (host || value.empty() || value.find_first_of(" ,\t") != std::string_view::npos)
             {
@@ -273,20 +265,20 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
             }
             host = true;
         }
-        else if (equal_ci(name, "connection"))
+        else if (iequals(name, "connection"))
         {
             visit_tokens(
                 value,
                 [&](std::string_view token)
                 {
-                    if (equal_ci(token, "content-length") || equal_ci(token, "transfer-encoding")
-                        || equal_ci(token, "host") || equal_ci(token, "trailer"))
+                    if (iequals(token, "content-length") || iequals(token, "transfer-encoding")
+                        || iequals(token, "host") || iequals(token, "trailer"))
                     {
                         throw parse_failure{400};
                     }
-                    close |= equal_ci(token, "close");
-                    persistent |= equal_ci(token, "keep-alive");
-                    if (request_message && equal_ci(token, "upgrade"))
+                    close |= iequals(token, "close");
+                    persistent |= iequals(token, "keep-alive");
+                    if (request_message && iequals(token, "upgrade"))
                     {
                         throw parse_failure{501};
                     }
@@ -294,15 +286,15 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
                 }
             );
         }
-        else if (equal_ci(name, "trailer"))
+        else if (iequals(name, "trailer"))
         {
             visit_tokens(value, [&](std::string_view token) { declared_trailers.emplace_back(token); });
         }
-        else if (request_message && equal_ci(name, "expect"))
+        else if (request_message && iequals(name, "expect"))
         {
             throw parse_failure{417};
         }
-        else if (request_message && equal_ci(name, "upgrade"))
+        else if (request_message && iequals(name, "upgrade"))
         {
             throw parse_failure{501};
         }
@@ -321,7 +313,7 @@ framing parse_framing(const std::vector<header_field>& fields, std::string_view 
             || std::any_of(
                 result.connection_fields.begin(),
                 result.connection_fields.end(),
-                [&](const auto& field) { return equal_ci(field, name); }
+                [&](const auto& field) { return iequals(field, name); }
             ))
         {
             throw parse_failure{400};
@@ -640,7 +632,7 @@ task<void> read_body(
             || std::any_of(
                 frame.connection_fields.begin(),
                 frame.connection_fields.end(),
-                [&](const auto& name) { return equal_ci(name, field.name); }
+                [&](const auto& name) { return iequals(name, field.name); }
             ))
         {
             throw parse_failure{400};
@@ -714,8 +706,8 @@ void validate_output_field(const header_field& field)
 
 bool managed_field(std::string_view name)
 {
-    return equal_ci(name, "content-length") || equal_ci(name, "transfer-encoding") || equal_ci(name, "connection")
-           || equal_ci(name, "trailer");
+    return iequals(name, "content-length") || iequals(name, "transfer-encoding") || iequals(name, "connection")
+           || iequals(name, "trailer");
 }
 
 std::string trailer_declaration(const std::vector<header_field>& trailers)
@@ -831,7 +823,7 @@ std::string encode_response(
     for (const auto& field : result.headers)
     {
         validate_output_field(field);
-        if (managed_field(field.name) || equal_ci(field.name, "content-type"))
+        if (managed_field(field.name) || iequals(field.name, "content-type"))
         {
             throw std::invalid_argument("HTTP framing and content-type headers are managed by PACE");
         }
@@ -881,11 +873,11 @@ std::string encode_request(const request& outgoing)
     for (const auto& field : outgoing.headers)
     {
         validate_output_field(field);
-        if (managed_field(field.name) || equal_ci(field.name, "expect") || equal_ci(field.name, "upgrade"))
+        if (managed_field(field.name) || iequals(field.name, "expect") || iequals(field.name, "upgrade"))
         {
             throw std::invalid_argument("HTTP framing/upgrade/expect header is managed or unsupported");
         }
-        if (equal_ci(field.name, "host"))
+        if (iequals(field.name, "host"))
         {
             if (host || field.value.empty() || field.value.find_first_of(" ,\t") != std::string::npos)
             {
@@ -1285,7 +1277,7 @@ void default_host(request& outgoing, std::string host, std::uint16_t port, std::
     const bool exists = std::any_of(
         outgoing.headers.begin(),
         outgoing.headers.end(),
-        [](const auto& field) { return equal_ci(field.name, "host"); }
+        [](const auto& field) { return iequals(field.name, "host"); }
     );
     if (!exists)
     {
@@ -1325,7 +1317,7 @@ std::string_view request_head::header(std::string_view name) const noexcept
 {
     for (const auto& field : headers)
     {
-        if (equal_ci(field.name, name))
+        if (iequals(field.name, name))
         {
             return field.value;
         }

@@ -39,3 +39,9 @@ export namespace pace::this_task
 {
 using ::pace::this_task::cancellation;
 } // namespace pace::this_task
+
+export namespace pace::ascii
+{
+using ::pace::ascii::iequals;
+using ::pace::ascii::to_lower;
+} // namespace pace::ascii

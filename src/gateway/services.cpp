@@ -1,4 +1,5 @@
 #include <pace/http1/protocol.hpp>
+#include <pace/runtime/ascii.hpp>
 #include <pace/runtime/operation.hpp>
 #include "gateway/content_hash.hpp"
 #include "http/url.hpp"
@@ -31,33 +32,10 @@ using clock_type = std::chrono::steady_clock;
 
 std::string lower(std::string_view s)
 {
-    std::string out(s);
-    for (auto& c : out)
-    {
-        if (c >= 'A' && c <= 'Z')
-        {
-            c += 'a' - 'A';
-        }
-    }
-    return out;
+    return ascii::to_lower(std::string(s));
 }
 
-bool equal_ci(std::string_view a, std::string_view b)
-{
-    if (a.size() != b.size())
-    {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i)
-    {
-        auto fold = [](unsigned char c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; };
-        if (fold(a[i]) != fold(b[i]))
-        {
-            return false;
-        }
-    }
-    return true;
-}
+using ascii::iequals;
 
 std::string_view trim(std::string_view s)
 {
@@ -1005,7 +983,7 @@ void strip_headers(std::vector<header_field>& headers, bool outgoing_request)
     std::vector<std::string> named;
     for (const auto& f : headers)
     {
-        if (equal_ci(f.name, "Connection"))
+        if (iequals(f.name, "Connection"))
         {
             auto more = tokens(f.value);
             named.insert(named.end(), more.begin(), more.end());
@@ -1016,23 +994,23 @@ void strip_headers(std::vector<header_field>& headers, bool outgoing_request)
         [&](const header_field& f)
         {
             const std::string_view name = f.name;
-            if (equal_ci(name, "connection") || equal_ci(name, "keep-alive") || equal_ci(name, "proxy-connection")
-                || equal_ci(name, "proxy-authenticate") || equal_ci(name, "proxy-authorization") || equal_ci(name, "te")
-                || equal_ci(name, "trailer") || equal_ci(name, "transfer-encoding") || equal_ci(name, "upgrade")
-                || equal_ci(name, "content-length") || name.starts_with(':'))
+            if (iequals(name, "connection") || iequals(name, "keep-alive") || iequals(name, "proxy-connection")
+                || iequals(name, "proxy-authenticate") || iequals(name, "proxy-authorization") || iequals(name, "te")
+                || iequals(name, "trailer") || iequals(name, "transfer-encoding") || iequals(name, "upgrade")
+                || iequals(name, "content-length") || name.starts_with(':'))
             {
                 return true;
             }
-            if (std::any_of(named.begin(), named.end(), [&](const auto& token) { return equal_ci(token, name); }))
+            if (std::any_of(named.begin(), named.end(), [&](const auto& token) { return iequals(token, name); }))
             {
                 return true;
             }
             if (outgoing_request)
             {
-                return equal_ci(name, "host") || equal_ci(name, "expect") || equal_ci(name, "forwarded")
-                       || equal_ci(name.substr(0, 12), "x-forwarded-");
+                return iequals(name, "host") || iequals(name, "expect") || iequals(name, "forwarded")
+                       || iequals(name.substr(0, 12), "x-forwarded-");
             }
-            return equal_ci(name, "content-type");
+            return iequals(name, "content-type");
         }
     );
 }
@@ -1046,8 +1024,8 @@ bool cache_request(const request& req)
     for (const auto& f : req.headers)
     {
         const std::string_view name = f.name;
-        if (equal_ci(name, "authorization") || equal_ci(name, "cookie") || equal_ci(name, "range")
-            || equal_ci(name.substr(0, 3), "if-") || equal_ci(name, "cache-control") || equal_ci(name, "pragma"))
+        if (iequals(name, "authorization") || iequals(name, "cookie") || iequals(name, "range")
+            || iequals(name.substr(0, 3), "if-") || iequals(name, "cache-control") || iequals(name, "pragma"))
         {
             return false;
         }
@@ -1333,7 +1311,7 @@ struct reverse_proxy::implementation
                 // Date/Age were normalized on insertion. Resident time uses a
                 // monotonic clock; do not parse the same Date on every hit.
                 age += std::chrono::seconds(initial);
-                std::erase_if(result.headers, [](const header_field& f) { return equal_ci(f.name, "Age"); });
+                std::erase_if(result.headers, [](const header_field& f) { return iequals(f.name, "Age"); });
                 result.headers.push_back({"Age", std::to_string(age.count())});
                 co_return result;
             }
@@ -1449,7 +1427,7 @@ struct reverse_proxy::implementation
         if (eligible && ttl.count() > 0)
         {
             const auto age = origin_age(result);
-            std::erase_if(result.headers, [](const header_field& f) { return equal_ci(f.name, "Age"); });
+            std::erase_if(result.headers, [](const header_field& f) { return iequals(f.name, "Age"); });
             result.headers.push_back({"Age", std::to_string(age.count())});
             self->cache.put(key, result, ttl);
         }

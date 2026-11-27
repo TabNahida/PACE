@@ -1,4 +1,5 @@
 #include <pace/http3/protocol.hpp>
+#include <pace/runtime/ascii.hpp>
 #include "http/dispatch.hpp"
 #include "http/serve_group.hpp"
 #include "quic/driver.hpp"
@@ -43,18 +44,6 @@ bool valid_name(std::string_view value)
                           || std::string_view("!#$%&'*+-.^_`|~").find(static_cast<char>(c)) != std::string_view::npos;
                }
            );
-}
-
-std::string lower(std::string text)
-{
-    for (auto& c : text)
-    {
-        if (c >= 'A' && c <= 'Z')
-        {
-            c += 'a' - 'A';
-        }
-    }
-    return text;
 }
 
 bool forbidden(std::string_view name)
@@ -104,7 +93,7 @@ void add_headers(fields& target, const fields& source, limits bounds, bool trail
     }
     for (const auto& item : source)
     {
-        auto name = lower(item.name);
+        auto name = ascii::to_lower(item.name);
         if (!valid_name(name) || !valid_value(item.value) || forbidden(name)
             || (name == "te" && item.value != "trailers")
             || (trailers && (name == "content-length" || name == "host" || name == "te")))
@@ -556,7 +545,7 @@ struct session
 
     fields request_headers(const std::string& authority, const http::request& request)
     {
-        if (request.method.empty() || !valid_name(lower(request.method)) || request.method == "CONNECT"
+        if (request.method.empty() || !valid_name(ascii::to_lower(request.method)) || request.method == "CONNECT"
             || request.target.empty() || (request.target.front() != '/' && request.target != "*")
             || (request.target == "*" && request.method != "OPTIONS") || !valid_value(request.target)
             || request.target.find_first_of(" \t") != std::string::npos || request.body.size() > bounds.max_body_bytes)
@@ -572,7 +561,7 @@ struct session
         };
         for (const auto& h : request.headers)
         {
-            if (lower(h.name) == "content-type")
+            if (ascii::to_lower(h.name) == "content-type")
             {
                 headers.push_back({"content-type", h.value});
             }

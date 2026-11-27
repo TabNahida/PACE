@@ -1,3 +1,4 @@
+#include <pace/runtime/ascii.hpp>
 #include <pace/websocket/stream.hpp>
 
 #include <algorithm>
@@ -169,16 +170,7 @@ std::string accept_key(std::string_view key)
     return base64(digest);
 }
 
-char lower(char c)
-{
-    return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : c;
-}
-
-bool equal_ci(std::string_view a, std::string_view b)
-{
-    return a.size() == b.size()
-           && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) { return lower(x) == lower(y); });
-}
+using ascii::iequals;
 
 std::string_view trim(std::string_view value)
 {
@@ -245,7 +237,7 @@ bool contains_ci(std::string_view list, std::string_view value)
 {
     for (const auto& item : tokens(list))
     {
-        if (equal_ci(item, value))
+        if (iequals(item, value))
         {
             return true;
         }
@@ -350,7 +342,7 @@ struct head
         for (const auto& [name, value] : fields)
         {
             (void)value;
-            if (equal_ci(name, key))
+            if (iequals(name, key))
             {
                 return true;
             }
@@ -364,7 +356,7 @@ struct head
         bool found = false;
         for (const auto& [name, value] : fields)
         {
-            if (equal_ci(name, key))
+            if (iequals(name, key))
             {
                 if (found && !combine)
                 {
