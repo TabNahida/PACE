@@ -1,15 +1,11 @@
 // Linux fault injection, linked with --wrap=SSL_CTX_set_default_verify_paths.
 // Exercises CA verification when OpenSSL's default trust paths are unavailable.
+#include "support/pace_test.hpp"
 #include <pace/tls.hpp>
 
 #include <array>
-#include <chrono>
-#include <condition_variable>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
-#include <mutex>
-#include <thread>
 
 #include <openssl/ssl.h>
 
@@ -17,38 +13,7 @@ namespace
 {
 unsigned default_path_calls = 0;
 
-void require(bool value, const char* message)
-{
-    if (!value)
-    {
-        throw std::runtime_error(message);
-    }
-}
-
-struct watchdog
-{
-    std::mutex mutex;
-    std::condition_variable changed;
-    bool done = false;
-    std::thread thread{[this]
-                       {
-                           std::unique_lock lock(mutex);
-                           if (!changed.wait_for(lock, std::chrono::seconds(30), [&] { return done; }))
-                           {
-                               std::abort();
-                           }
-                       }};
-
-    ~watchdog()
-    {
-        {
-            std::lock_guard lock(mutex);
-            done = true;
-        }
-        changed.notify_one();
-        thread.join();
-    }
-};
+using pace::test::require;
 
 struct finished
 {
@@ -179,17 +144,23 @@ void run_case(
     bool should_accept
 )
 {
+    CAPTURE(ca);
+    CAPTURE(name);
+    CAPTURE(should_accept);
     pace::io_context io;
     pace::tls::context config(pace::tls::role::server);
     config.use_certificate_chain((fixtures / "localhost.pem").string(), (fixtures / "localhost-key.pem").string());
     pace::tcp::listener listener(io, {"127.0.0.1", 0});
     finished done{io};
     io.spawn(server(listener, config, starttls, should_accept, done));
-    io.spawn(
-        client(io, listener.local_endpoint(), fixtures, std::move(ca), std::move(name), starttls, should_accept, done)
-    );
+    io.spawn(client(io, listener.local_endpoint(), fixtures, ca, name, starttls, should_accept, done));
     io.run();
     require(done.count == 2, "trust failure regression did not finish both peers");
+}
+
+std::filesystem::path fixtures()
+{
+    return std::filesystem::path(__FILE__).parent_path() / "certs";
 }
 } // namespace
 
@@ -199,36 +170,30 @@ extern "C" int __wrap_SSL_CTX_set_default_verify_paths(SSL_CTX*)
     return 0;
 }
 
-int main(int argc, char** argv)
+TEST_CASE("system trust fails when OpenSSL default verify paths are unavailable")
 {
-    watchdog guard;
+    bool failed = false;
     try
     {
-        const auto fixtures =
-            argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path() / "certs";
-        bool failed = false;
-        try
-        {
-            pace::tls::context system;
-        }
-        catch (const std::system_error&)
-        {
-            failed = true;
-        }
-        require(failed && default_path_calls == 1, "default-path fault injection was not exercised");
-        for (bool starttls : {false, true})
-        {
-            run_case(fixtures, starttls, "ca.pem", "localhost", true);
-            run_case(fixtures, starttls, "ca.pem", "wrong.example", false);
-            run_case(fixtures, starttls, "sni-ca.pem", "localhost", false);
-            run_case(fixtures, starttls, "", "localhost", false);
-        }
-        require(default_path_calls == 1, "application trust unexpectedly consulted default paths");
-        std::cout << "TLS unavailable-default-trust tests passed\n";
+        pace::tls::context system;
     }
-    catch (const std::exception& error)
+    catch (const std::system_error&)
     {
-        std::cerr << error.what() << '\n';
-        return 1;
+        failed = true;
     }
+    require(failed && default_path_calls == 1, "default-path fault injection was not exercised");
+}
+
+TEST_CASE("application trust still verifies chain and host name without default verify paths")
+{
+    const auto calls = default_path_calls;
+    for (bool starttls : {false, true})
+    {
+        CAPTURE(starttls);
+        run_case(fixtures(), starttls, "ca.pem", "localhost", true);
+        run_case(fixtures(), starttls, "ca.pem", "wrong.example", false);
+        run_case(fixtures(), starttls, "sni-ca.pem", "localhost", false);
+        run_case(fixtures(), starttls, "", "localhost", false);
+    }
+    require(default_path_calls == calls, "application trust unexpectedly consulted default paths");
 }

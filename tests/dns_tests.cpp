@@ -1,3 +1,4 @@
+#include "support/pace_test.hpp"
 #include <pace/dns.hpp>
 #include <pace/tcp.hpp>
 #include <pace/udp.hpp>
@@ -5,48 +6,13 @@
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
-#include <iostream>
-#include <mutex>
-#include <thread>
 #include <utility>
 
 namespace
 {
 using namespace std::chrono_literals;
 
-void require(bool value, const char* what)
-{
-    if (!value)
-    {
-        throw std::runtime_error(what);
-    }
-}
-
-struct watchdog
-{
-    std::mutex mutex;
-    std::condition_variable changed;
-    bool done = false;
-    std::thread thread{[this]
-                       {
-                           std::unique_lock lock(mutex);
-                           if (!changed.wait_for(lock, 10s, [this] { return done; }))
-                           {
-                               std::abort();
-                           }
-                       }};
-
-    ~watchdog()
-    {
-        {
-            std::lock_guard lock(mutex);
-            done = true;
-        }
-        changed.notify_one();
-        thread.join();
-    }
-};
+using pace::test::require;
 
 unsigned get16(std::string_view data, std::size_t offset)
 {
@@ -551,45 +517,51 @@ void tcp_cancellation()
 }
 } // namespace
 
-int main()
+TEST_CASE("DNS resolves A, AAAA and CNAME answers, falls back to TCP and rejects bad answers")
 {
-    watchdog deadline;
-    try
+    pace::io_context io;
+    auto [tcp_server, server] = bind_nameservers(io);
+    unsigned queries = 0, tcp_queries = 0;
+    io.spawn(tcp_nameserver(tcp_server, tcp_queries));
+    io.spawn(nameserver(server, queries));
+    io.spawn(checks(io, configuration(server), queries, tcp_queries));
+    io.run();
+}
+
+TEST_CASE("DNS lookup is canceled by cancel, resolver destruction or context stop")
+{
+    for (unsigned mode = 0; mode < 3; ++mode)
     {
-        {
-            pace::io_context io;
-            auto [tcp_server, server] = bind_nameservers(io);
-            unsigned queries = 0, tcp_queries = 0;
-            io.spawn(tcp_nameserver(tcp_server, tcp_queries));
-            io.spawn(nameserver(server, queries));
-            io.spawn(checks(io, configuration(server), queries, tcp_queries));
-            io.run();
-        }
-        for (unsigned mode = 0; mode < 3; ++mode)
-        {
-            cancellation(mode);
-        }
-        reentrant_cancellation(false);
-        reentrant_cancellation(true);
-        tcp_cancellation();
-        {
-            pace::io_context io;
-            bool canceled = false;
-            pace::task<pace::dns::result> work;
-            {
-                pace::dns::resolver resolver(io);
-                work = resolver.resolve("127.0.0.1");
-            }
-            io.spawn(expired_owner(io, std::move(work), canceled));
-            io.run();
-            require(canceled, "lazy destroyed resolver");
-        }
-        std::cout << "DNS A/AAAA/CNAME, TCP fallback, local errors, malformed replies, timeout, cancellation "
-                     "reentrancy and lifetime passed\n";
+        CAPTURE(mode);
+        cancellation(mode);
     }
-    catch (const std::exception& error)
+}
+
+TEST_CASE("canceled DNS continuation can start a new lookup on its resolver")
+{
+    reentrant_cancellation(false);
+}
+
+TEST_CASE("canceled DNS continuation can destroy its resolver")
+{
+    reentrant_cancellation(true);
+}
+
+TEST_CASE("canceling a DNS TCP fallback closes its socket and keeps the resolver usable")
+{
+    tcp_cancellation();
+}
+
+TEST_CASE("lazy DNS lookup is canceled when its resolver was destroyed first")
+{
+    pace::io_context io;
+    bool canceled = false;
+    pace::task<pace::dns::result> work;
     {
-        std::cerr << error.what() << '\n';
-        return 1;
+        pace::dns::resolver resolver(io);
+        work = resolver.resolve("127.0.0.1");
     }
+    io.spawn(expired_owner(io, std::move(work), canceled));
+    io.run();
+    require(canceled, "lazy destroyed resolver");
 }

@@ -1,20 +1,12 @@
+#include "support/pace_test.hpp"
 #include <pace/http_router.hpp>
 #include <pace/pace.hpp>
 
-#include <condition_variable>
 #include <filesystem>
-#include <iostream>
-#include <mutex>
 #include <thread>
 using namespace std::chrono_literals;
 
-void require(bool b, const char* text)
-{
-    if (!b)
-    {
-        throw std::runtime_error(text);
-    }
-}
+using pace::test::require;
 
 pace::http::router routes()
 {
@@ -109,16 +101,7 @@ void exercise(const std::string& url, Get get, Post post, Fetch fetch, AsyncGet 
     require(get(url).body == "ok", "one timeout affected another request");
     request.method = "GET";
     request.headers = {{"Host", "override.invalid"}};
-    bool rejected = false;
-    try
-    {
-        (void)fetch(url, std::move(request));
-    }
-    catch (const std::invalid_argument&)
-    {
-        rejected = true;
-    }
-    require(rejected, "URL authority override allowed");
+    CHECK_THROWS_AS((void)fetch(url, std::move(request)), std::invalid_argument);
 }
 #if defined(PACE_HAS_HTTP1) || defined(PACE_HAS_HTTP2)
 template <class Serve, class Get>
@@ -171,156 +154,108 @@ pace::task<void> listener_scope(Serve serve, Get get)
 }
 #endif
 
-int main()
-{
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool done = false;
-    std::thread watchdog(
-        [&]
-        {
-            std::unique_lock lock(mutex);
-            if (!cv.wait_for(lock, 40s, [&] { return done; }))
-            {
-                std::abort();
-            }
-        }
-    );
-    int status = 0;
-    try
-    {
 #ifdef PACE_HAS_HTTP1
-        pace::run(listener_scope(
-            [](auto& l, auto h) { return pace::http::serve(l, h); },
-            [](auto u) { return pace::http1::async_get(u); }
-        ));
-        {
-            pace::io_context io;
-            pace::tcp::listener listener(io, {"127.0.0.1", 0});
-            auto url = "http://127.0.0.1:" + std::to_string(listener.local_endpoint().port) + "/";
-            io.spawn(pace::http::serve(listener, routes()));
-            server_thread server(io);
-            exercise(
-                url,
-                [](auto u) { return pace::http::get(u); },
-                [](auto u, auto b) { return pace::http::post(u, b, "text/plain"); },
-                [](auto u, auto r) { return pace::http::fetch(u, r); },
-                [](auto u) { return pace::http::async_get(u); }
-            );
-            server.finish();
-        }
+TEST_CASE("closing an HTTP/1 listener cancels its handlers before serve returns")
+{
+    pace::run(listener_scope(
+        [](auto& l, auto h) { return pace::http::serve(l, h); },
+        [](auto u) { return pace::http1::async_get(u); }
+    ));
+}
+
+TEST_CASE("unified HTTP URL methods over HTTP/1")
+{
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    auto url = "http://127.0.0.1:" + std::to_string(listener.local_endpoint().port) + "/";
+    io.spawn(pace::http::serve(listener, routes()));
+    server_thread server(io);
+    exercise(
+        url,
+        [](auto u) { return pace::http::get(u); },
+        [](auto u, auto b) { return pace::http::post(u, b, "text/plain"); },
+        [](auto u, auto r) { return pace::http::fetch(u, r); },
+        [](auto u) { return pace::http::async_get(u); }
+    );
+    server.finish();
+}
 #endif
 #ifdef PACE_HAS_HTTP2
-        pace::run(listener_scope(
-            [](auto& l, auto h) { return pace::http2::serve(l, h); },
-            [](auto u) { return pace::http2::async_get(u); }
-        ));
-        {
-            pace::io_context io;
-            pace::tcp::listener listener(io, {"127.0.0.1", 0});
-            auto url = "http://127.0.0.1:" + std::to_string(listener.local_endpoint().port) + "/";
-            io.spawn(pace::http2::serve(listener, routes()));
-            server_thread server(io);
-            exercise(
-                url,
-                [](auto u) { return pace::http2::get(u); },
-                [](auto u, auto b) { return pace::http2::post(u, b, "text/plain"); },
-                [](auto u, auto r) { return pace::http2::fetch(u, r); },
-                [](auto u) { return pace::http2::async_get(u); }
-            );
-            server.finish();
-        }
+TEST_CASE("closing an HTTP/2 listener cancels its handlers before serve returns")
+{
+    pace::run(listener_scope(
+        [](auto& l, auto h) { return pace::http2::serve(l, h); },
+        [](auto u) { return pace::http2::async_get(u); }
+    ));
+}
+
+TEST_CASE("unified HTTP URL methods over cleartext HTTP/2")
+{
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    auto url = "http://127.0.0.1:" + std::to_string(listener.local_endpoint().port) + "/";
+    io.spawn(pace::http2::serve(listener, routes()));
+    server_thread server(io);
+    exercise(
+        url,
+        [](auto u) { return pace::http2::get(u); },
+        [](auto u, auto b) { return pace::http2::post(u, b, "text/plain"); },
+        [](auto u, auto r) { return pace::http2::fetch(u, r); },
+        [](auto u) { return pace::http2::async_get(u); }
+    );
+    server.finish();
+}
 #ifdef PACE_HAS_TLS
-        {
-            const auto certs = std::filesystem::path(__FILE__).parent_path() / "certs";
-            pace::tls::context security(pace::tls::role::server), trust;
-            security.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
-            security.set_alpn_protocols({"h2"});
-            trust.load_verify_file((certs / "ca.pem").string());
-            trust.set_alpn_protocols({"h2"});
-            pace::io_context io;
-            pace::tcp::listener listener(io, {"127.0.0.1", 0});
-            auto url = "https://127.0.0.1:" + std::to_string(listener.local_endpoint().port) + "/";
-            io.spawn(pace::http2::serve(listener, security, routes()));
-            server_thread server(io);
-            require(pace::http2::get(trust, url).body == "ok", "HTTP2 verified URL");
-            bool refused = false;
-            try
-            {
-                (void)pace::http2::get(url);
-            }
-            catch (const std::exception&)
-            {
-                refused = true;
-            }
-            require(refused, "HTTP2 trust bypass");
-            server.finish();
-        }
+TEST_CASE("HTTP/2 over TLS accepts a verified URL and refuses an untrusted one")
+{
+    const auto certs = std::filesystem::path(__FILE__).parent_path() / "certs";
+    pace::tls::context security(pace::tls::role::server), trust;
+    security.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
+    security.set_alpn_protocols({"h2"});
+    trust.load_verify_file((certs / "ca.pem").string());
+    trust.set_alpn_protocols({"h2"});
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    auto url = "https://127.0.0.1:" + std::to_string(listener.local_endpoint().port) + "/";
+    io.spawn(pace::http2::serve(listener, security, routes()));
+    server_thread server(io);
+    require(pace::http2::get(trust, url).body == "ok", "HTTP2 verified URL");
+    CHECK_THROWS_AS((void)pace::http2::get(url), std::exception);
+    server.finish();
+}
 #endif
 #endif
 #ifdef PACE_HAS_HTTP3
+TEST_CASE("unified HTTP URL methods over verified HTTP/3 without insecure fallback")
+{
+    const auto certs = std::filesystem::path(__FILE__).parent_path() / "certs";
+    pace::quic::context security(pace::quic::role::server), trust;
+    security.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
+    security.set_alpn_protocols({"h3"});
+    trust.load_verify_file((certs / "ca.pem").string());
+    trust.set_alpn_protocols({"h3"});
+    pace::io_context io;
+    pace::quic::listener listener(io, {"127.0.0.1", 0}, security);
+    auto url = "https://127.0.0.1:" + std::to_string(listener.local_endpoint().port) + "/";
+    io.spawn(pace::http3::serve(listener, routes()));
+    server_thread server(io);
+    exercise(
+        url,
+        [&](auto u) { return pace::http3::get(trust, u); },
+        [&](auto u, auto b)
         {
-            const auto certs = std::filesystem::path(__FILE__).parent_path() / "certs";
-            pace::quic::context security(pace::quic::role::server), trust;
-            security.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
-            security.set_alpn_protocols({"h3"});
-            trust.load_verify_file((certs / "ca.pem").string());
-            trust.set_alpn_protocols({"h3"});
-            pace::io_context io;
-            pace::quic::listener listener(io, {"127.0.0.1", 0}, security);
-            auto url = "https://127.0.0.1:" + std::to_string(listener.local_endpoint().port) + "/";
-            io.spawn(pace::http3::serve(listener, routes()));
-            server_thread server(io);
-            exercise(
-                url,
-                [&](auto u) { return pace::http3::get(trust, u); },
-                [&](auto u, auto b)
-                {
-                    pace::http::request r;
-                    r.method = "POST";
-                    r.body = std::move(b);
-                    r.headers = {{"Content-Type", "text/plain"}};
-                    return pace::http3::fetch(trust, u, std::move(r));
-                },
-                [&](auto u, auto r) { return pace::http3::fetch(trust, u, r); },
-                [&](auto u) -> pace::task<pace::http::response>
-                { co_return co_await pace::http3::async_get(pace::this_context(), trust, u); }
-            );
-            bool refused = false;
-            try
-            {
-                (void)pace::http3::get(url);
-            }
-            catch (const std::exception&)
-            {
-                refused = true;
-            }
-            require(refused, "HTTP3 trust bypass");
-            refused = false;
-            try
-            {
-                (void)pace::http3::get("http://127.0.0.1/");
-            }
-            catch (const std::invalid_argument&)
-            {
-                refused = true;
-            }
-            require(refused, "HTTP3 silent insecure downgrade");
-            server.finish();
-        }
-#endif
-        std::cout << "Unified HTTP URL methods, local deadlines, authority and verified protocols passed\n";
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-        status = 1;
-    }
-    {
-        std::lock_guard lock(mutex);
-        done = true;
-    }
-    cv.notify_one();
-    watchdog.join();
-    return status;
+            pace::http::request r;
+            r.method = "POST";
+            r.body = std::move(b);
+            r.headers = {{"Content-Type", "text/plain"}};
+            return pace::http3::fetch(trust, u, std::move(r));
+        },
+        [&](auto u, auto r) { return pace::http3::fetch(trust, u, r); },
+        [&](auto u) -> pace::task<pace::http::response>
+        { co_return co_await pace::http3::async_get(pace::this_context(), trust, u); }
+    );
+    CHECK_THROWS_AS((void)pace::http3::get(url), std::exception);
+    CHECK_THROWS_AS((void)pace::http3::get("http://127.0.0.1/"), std::invalid_argument);
+    server.finish();
 }
+#endif

@@ -1,3 +1,4 @@
+#include "support/pace_test.hpp"
 #include <pace/quic.hpp>
 #include <pace/tls.hpp>
 #include <pace/detail/reactor_signal.hpp>
@@ -6,11 +7,8 @@
 #include <array>
 #include <charconv>
 #include <chrono>
-#include <condition_variable>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
-#include <mutex>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -22,38 +20,7 @@ using namespace std::chrono_literals;
 
 namespace
 {
-void require(bool value, const char* message)
-{
-    if (!value)
-    {
-        throw std::runtime_error(message);
-    }
-}
-
-struct watchdog
-{
-    std::mutex mutex;
-    std::condition_variable changed;
-    bool done = false;
-    std::thread thread{[this]
-                       {
-                           std::unique_lock lock(mutex);
-                           if (!changed.wait_for(lock, 30s, [&] { return done; }))
-                           {
-                               std::abort();
-                           }
-                       }};
-
-    ~watchdog()
-    {
-        {
-            std::lock_guard lock(mutex);
-            done = true;
-        }
-        changed.notify_one();
-        thread.join();
-    }
-};
+using pace::test::require;
 
 struct finished
 {
@@ -1744,57 +1711,170 @@ void quic_transport(const std::filesystem::path& fixtures, const transport_conte
 }
 #endif
 
+std::filesystem::path certs()
+{
+    return std::filesystem::path(__FILE__).parent_path() / "certs";
+}
 } // namespace
 
-int main(int argc, char** argv)
+TEST_CASE("verified TLS round trip by host name and by IP address")
 {
-    watchdog guard;
-    try
+    verified_roundtrip(certs(), "localhost");
+    verified_roundtrip(certs(), "127.0.0.1");
+}
+
+TEST_CASE("verified TLS round trip after replaying a complete or partial ClientHello")
+{
+    verified_roundtrip(certs(), "localhost", replay_prefix::complete_hello);
+    verified_roundtrip(certs(), "localhost", replay_prefix::mid_record);
+}
+
+TEST_CASE("TLS handshake rejects a certificate for another host name")
+{
+    rejected_handshake(certs(), "wrong.example", true, false, false);
+}
+
+TEST_CASE("TLS handshake rejects a server without a trusted CA")
+{
+    rejected_handshake(certs(), "localhost", false, false, false);
+}
+
+TEST_CASE("TLS handshake rejects an expired certificate")
+{
+    rejected_handshake(certs(), "localhost", true, true, false);
+}
+
+TEST_CASE("TLS handshake rejects disjoint ALPN protocols")
+{
+    rejected_handshake(certs(), "localhost", true, false, true);
+}
+
+TEST_CASE("pending TLS handshake is canceled when its context stops")
+{
+    handshake_cancellation();
+}
+
+TEST_CASE("TLS reports unclean EOF as truncation after delivering authenticated data")
+{
+    truncation(certs());
+}
+
+TEST_CASE("TLS reads are canceled and overlapping operations are rejected")
+{
+    read_cancellation_and_serialization(certs());
+}
+
+TEST_CASE("TLS shutdown is bounded by its timeout or canceled with its context")
+{
+    for (const bool cancel_shutdown : {false, true})
     {
-        const auto fixtures =
-            argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path() / "certs";
-        verified_roundtrip(fixtures, "localhost");
-        verified_roundtrip(fixtures, "127.0.0.1");
-        verified_roundtrip(fixtures, "localhost", replay_prefix::complete_hello);
-        verified_roundtrip(fixtures, "localhost", replay_prefix::mid_record);
-        rejected_handshake(fixtures, "wrong.example", true, false, false);
-        rejected_handshake(fixtures, "localhost", false, false, false);
-        rejected_handshake(fixtures, "localhost", true, true, false);
-        rejected_handshake(fixtures, "localhost", true, false, true);
-        handshake_cancellation();
-        truncation(fixtures);
-        read_cancellation_and_serialization(fixtures);
-        shutdown_bounds(fixtures, false);
-        shutdown_bounds(fixtures, true);
-        configuration_errors(fixtures);
-        sni_and_application_trust(fixtures, false);
-        sni_and_application_trust(fixtures, true);
-        configuration_freeze_and_atomicity(fixtures);
-        shared_sni_threads(fixtures);
-        ipv6_application_trust(fixtures, false);
-        ipv6_application_trust(fixtures, true);
-        independent_client_sni(fixtures, false);
-        independent_client_sni(fixtures, true);
-        client_verification_modes(fixtures);
-        client_hello_routing(fixtures);
-        client_hello_handoffs();
-        const transport_contexts contexts(fixtures);
-        client_hello_handoff_roundtrip(contexts);
-        memory_transport(contexts, 64);
-        memory_transport<true>(contexts, 1024);
-        memory_shutdown_timeout(contexts);
-        simultaneous_memory_shutdown(contexts, 1);
-        simultaneous_memory_shutdown(contexts, 2);
-        memory_transport_truncation(contexts);
-        nested_tls_transport(contexts);
-#ifdef PACE_HAS_QUIC
-        quic_transport(fixtures, contexts);
-#endif
-        std::cout << "TLS tests passed\n";
-    }
-    catch (const std::exception& error)
-    {
-        std::cerr << error.what() << '\n';
-        return 1;
+        CAPTURE(cancel_shutdown);
+        shutdown_bounds(certs(), cancel_shutdown);
     }
 }
+
+TEST_CASE("TLS configuration rejects empty ALPN, missing trust files and anonymous clients")
+{
+    configuration_errors(certs());
+}
+
+TEST_CASE("SNI routing and application trust")
+{
+    for (const bool starttls : {false, true})
+    {
+        CAPTURE(starttls);
+        sni_and_application_trust(certs(), starttls);
+    }
+}
+
+TEST_CASE("frozen TLS configuration rejects setters and failed changes are atomic")
+{
+    configuration_freeze_and_atomicity(certs());
+}
+
+TEST_CASE("SNI configuration is shared by handshakes on several threads")
+{
+    shared_sni_threads(certs());
+}
+
+TEST_CASE("application trust verifies IPv6 address SANs")
+{
+    for (const bool starttls : {false, true})
+    {
+        CAPTURE(starttls);
+        ipv6_application_trust(certs(), starttls);
+    }
+}
+
+TEST_CASE("client SNI is independent of the verified peer name")
+{
+    for (const bool starttls : {false, true})
+    {
+        CAPTURE(starttls);
+        independent_client_sni(certs(), starttls);
+    }
+}
+
+TEST_CASE("client verification by pin, callback and insecure mode")
+{
+    client_verification_modes(certs());
+}
+
+TEST_CASE("ClientHello callback selects, rejects, hands off or proceeds")
+{
+    client_hello_routing(certs());
+}
+
+TEST_CASE("ClientHello handoff exposes the parsed hello and keeps every wire byte")
+{
+    client_hello_handoffs();
+}
+
+TEST_CASE("handed-off TCP stream completes a TLS handshake")
+{
+    const transport_contexts contexts(certs());
+    client_hello_handoff_roundtrip(contexts);
+}
+
+TEST_CASE("TLS round trip over an in-memory transport with and without a shutdown hook")
+{
+    const transport_contexts contexts(certs());
+    memory_transport(contexts, 64);
+    memory_transport<true>(contexts, 1024);
+}
+
+TEST_CASE("TLS shutdown times out over an in-memory transport")
+{
+    const transport_contexts contexts(certs());
+    memory_shutdown_timeout(contexts);
+}
+
+TEST_CASE("simultaneous TLS shutdown over a pipe that cannot buffer close_notify")
+{
+    const transport_contexts contexts(certs());
+    for (const unsigned layers : {1u, 2u})
+    {
+        CAPTURE(layers);
+        simultaneous_memory_shutdown(contexts, layers);
+    }
+}
+
+TEST_CASE("TLS over an in-memory transport rejects unauthenticated EOF")
+{
+    const transport_contexts contexts(certs());
+    memory_transport_truncation(contexts);
+}
+
+TEST_CASE("TLS runs nested inside another TLS stream")
+{
+    const transport_contexts contexts(certs());
+    nested_tls_transport(contexts);
+}
+
+#ifdef PACE_HAS_QUIC
+TEST_CASE("TLS runs over a QUIC stream")
+{
+    const transport_contexts contexts(certs());
+    quic_transport(certs(), contexts);
+}
+#endif
