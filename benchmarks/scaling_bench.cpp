@@ -21,8 +21,8 @@
 #include <sched.h>
 #endif
 
-#include <pace/runtime.hpp>
-#include <pace/tcp.hpp>
+#include <pace/net/tcp.hpp>
+#include <pace/runtime/runtime.hpp>
 
 #include <algorithm>
 #include <array>

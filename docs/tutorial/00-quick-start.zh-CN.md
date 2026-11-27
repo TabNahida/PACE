@@ -11,7 +11,7 @@
 将完整程序保存为 `client.cpp`：
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 #include <iostream>
 
 int main() {
@@ -36,7 +36,7 @@ int main() {
 保存为 `server.cpp`：
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 #include <iostream>
 
 int main() {

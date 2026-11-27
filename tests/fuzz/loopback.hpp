@@ -7,8 +7,8 @@
 // rewritten. Protocol errors are expected outcomes and are swallowed; only crashes, sanitizer
 // reports, hangs and leaks count as findings.
 
-#include <pace/run.hpp>
-#include <pace/tcp.hpp>
+#include <pace/net/tcp.hpp>
+#include <pace/runtime/run.hpp>
 
 #include <cstddef>
 #include <cstdint>

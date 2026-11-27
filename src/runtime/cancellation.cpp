@@ -1,4 +1,4 @@
-#include <pace/cancellation.hpp>
+#include <pace/runtime/cancellation.hpp>
 
 #include <atomic>
 #include <condition_variable>

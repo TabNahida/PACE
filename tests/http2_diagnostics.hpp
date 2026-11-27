@@ -1,6 +1,6 @@
 #pragma once
 
-#include <pace/platform.hpp>
+#include <pace/runtime/platform.hpp>
 
 #if defined(__FreeBSD__)
 #include <cerrno>

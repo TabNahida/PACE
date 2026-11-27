@@ -1,8 +1,8 @@
+#include <pace/http1/protocol.hpp>
+#include <pace/runtime/operation.hpp>
+#include <pace/runtime/task_group.hpp>
+#include "gateway/content_hash.hpp"
 #include "support/pace_test.hpp"
-#include <pace/http.hpp>
-#include <pace/operation.hpp>
-#include <pace/task_group.hpp>
-#include <pace/detail/content_hash.hpp>
 
 #include <atomic>
 #include <barrier>

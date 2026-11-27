@@ -1,6 +1,6 @@
+#include <pace/net/udp.hpp>
+#include "net/socket_address.hpp"
 #include "support/pace_test.hpp"
-#include <pace/udp.hpp>
-#include <pace/detail/socket_address.hpp>
 
 #include <array>
 #include <atomic>

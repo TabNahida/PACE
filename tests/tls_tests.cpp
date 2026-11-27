@@ -1,7 +1,7 @@
+#include <pace/quic/connection.hpp>
+#include <pace/tls/stream.hpp>
+#include "runtime/reactor_signal.hpp"
 #include "support/pace_test.hpp"
-#include <pace/quic.hpp>
-#include <pace/tls.hpp>
-#include <pace/detail/reactor_signal.hpp>
 
 #include <algorithm>
 #include <array>

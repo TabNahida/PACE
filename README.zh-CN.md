@@ -54,7 +54,7 @@ auto reply = pace::http::get("http://127.0.0.1:8080/health");
 ## 一个小型 HTTP 服务
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 
 int main() {
     pace::http::app app;

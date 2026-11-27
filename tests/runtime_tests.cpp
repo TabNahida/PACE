@@ -1,9 +1,9 @@
+#include <pace/runtime/run.hpp>
+#include <pace/runtime/runtime.hpp>
+#include "runtime/poller.hpp"
+#include "runtime/profiling.hpp"
+#include "runtime/reactor_signal.hpp"
 #include "support/pace_test.hpp"
-#include <pace/run.hpp>
-#include <pace/runtime.hpp>
-#include <pace/detail/poller.hpp>
-#include <pace/detail/profiling.hpp>
-#include <pace/detail/reactor_signal.hpp>
 
 #include <array>
 #include <atomic>

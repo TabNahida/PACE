@@ -10,7 +10,7 @@
 保存为 `tcp_client.cpp`：
 
 ```cpp
-#include <pace/tcp.hpp>
+#include <pace/net.hpp>
 #include <iostream>
 
 int main() {
@@ -36,8 +36,8 @@ PACE 自动处理短读；提前遇到 EOF 会抛异常。两端必须使用同�
 保存为 `tcp_server.cpp`：
 
 ```cpp
-#include <pace/run.hpp>
-#include <pace/tcp.hpp>
+#include <pace/runtime.hpp>
+#include <pace/net.hpp>
 #include <iostream>
 
 pace::task<void> echo(pace::tcp::stream socket) {

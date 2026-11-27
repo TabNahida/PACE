@@ -11,7 +11,7 @@
 `add_deps("pace_http1")`：
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 #include <iostream>
 
 int main() {
@@ -49,8 +49,8 @@ auto reply = pace::http::fetch("http://127.0.0.1:8080/health", std::move(request
 将下面的完整程序保存为 `server.cpp`，同样创建链接 `pace_http1` 的 `server` target。
 
 ```cpp
-#include <pace/http.hpp>
-#include <pace/run.hpp>
+#include <pace/http1.hpp>
+#include <pace/runtime.hpp>
 #include <iostream>
 
 namespace http = pace::http;

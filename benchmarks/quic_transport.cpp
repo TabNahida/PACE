@@ -1,5 +1,5 @@
 // Linux loopback benchmark. Both peers share one reactor and one process.
-#include <pace/quic.hpp>
+#include <pace/quic/connection.hpp>
 
 #include <algorithm>
 #include <array>

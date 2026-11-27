@@ -1,5 +1,5 @@
-#include "support/pace_test.hpp"
 #include <pace/pace.hpp>
+#include "support/pace_test.hpp"
 
 #include <array>
 #include <atomic>

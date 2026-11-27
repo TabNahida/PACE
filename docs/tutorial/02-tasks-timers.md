@@ -15,7 +15,7 @@ body: tasks are lazy. The entry runner will start it on the calling thread.
 Put this complete program in `main.cpp`:
 
 ```cpp
-#include <pace/run.hpp>
+#include <pace/runtime.hpp>
 #include <chrono>
 #include <iostream>
 #include <string>

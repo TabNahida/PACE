@@ -67,6 +67,10 @@ if has_config("sanitizers") and not is_plat("windows") then
     add_ldflags("-fsanitize=address,undefined")
 end
 
+-- Internal headers live beside the sources in src/<module>/ and are included as "<module>/name.hpp".
+-- They are never installed; tests and benchmarks that need them add src/ themselves.
+add_includedirs("src")
+
 -- Layer 0: no networking or optional protocol dependencies.
 target("pace_runtime")
     set_kind("static")
@@ -91,7 +95,7 @@ target_end()
 -- Layer 1: core sockets. Consumers can stop here with add_deps("pace_net").
 target("pace_net")
     set_kind("static")
-    add_files("src/networking/*.cpp")
+    add_files("src/net/*.cpp")
     add_deps("pace_runtime", {public = true})
 target_end()
 
@@ -101,15 +105,18 @@ local application_targets = {}
 local function protocol_target(name, layer, package_name, feature, dependencies)
     target("pace_" .. name)
         set_kind("static")
-        if name == "quic" and get_config("quic_backend") == "ngtcp2" then
-            add_files("src/extensions/quic_ngtcp2.cpp")
-            add_packages("ngtcp2", {public = true})
-            add_defines("PACE_QUIC_NGTCP2", {public = true})
+        if name == "quic" then
+            if get_config("quic_backend") == "ngtcp2" then
+                add_files("src/quic/quic_ngtcp2.cpp")
+                add_packages("ngtcp2", {public = true})
+                add_defines("PACE_QUIC_NGTCP2", {public = true})
+            else
+                add_files("src/quic/quic_openssl.cpp")
+            end
         else
-            add_files("src/" .. layer .. "/" .. name .. ".cpp")
+            add_files("src/" .. name .. "/*.cpp")
         end
         if name == "http2" or name == "http3" then
-            add_files("src/application/" .. name .. "_url.cpp")
             if has_config("dns") then add_deps("pace_dns", {public = true}) end
         end
         add_deps("pace_net", {public = true})
@@ -127,7 +134,7 @@ local tls_dependency = has_config("tls") and {"pace_tls"} or {}
 if has_config("http1") then
     target("pace_http1")
         set_kind("static")
-        add_files("src/application/http.cpp", "src/application/http_url.cpp", "src/application/http_services.cpp")
+        add_files("src/http1/*.cpp", "src/gateway/*.cpp")
         add_deps("pace_net", {public = true})
         for _, dep in ipairs(tls_dependency) do add_deps(dep, {public = true}) end
         if has_config("dns") then add_deps("pace_dns", {public = true}) end

@@ -19,9 +19,9 @@ flowchart BT
 | Layer | xmake targets | Implementation |
 |---|---|---|
 | 0, core | `pace_runtime` | `src/runtime/`: reactor, poller, execution, timers and worker runtime |
-| 1, core | `pace_net` | `src/networking/`: TCP and UDP; depends only on runtime |
-| 2, optional | `pace_tls`, `pace_dns`, `pace_quic`; aggregate `pace_extensions` | `src/extensions/` |
-| 3, optional | `pace_http1`, `pace_http2`, `pace_http3`, `pace_websocket`; aggregate `pace_application` | `src/application/` |
+| 1, core | `pace_net` | `src/net/`: TCP and UDP; depends only on runtime |
+| 2, optional | `pace_tls`, `pace_dns`, `pace_quic`; aggregate `pace_extensions` | `src/tls/`, `src/dns/`, `src/quic/` |
+| 3, optional | `pace_http1`, `pace_http2`, `pace_http3`, `pace_websocket`; aggregate `pace_application` | `src/http/`, `src/http1/`, `src/http2/`, `src/http3/`, `src/websocket/`, `src/gateway/` |
 
 `pace` is a compatibility aggregate target exporting the enabled modules. It no
 longer produces one monolithic `libpace.a`: applications link the individual

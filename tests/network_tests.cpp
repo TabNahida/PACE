@@ -1,7 +1,7 @@
-#include "support/pace_test.hpp"
+#include <pace/net/tcp.hpp>
 #include <pace/pace.hpp>
-#include <pace/tcp.hpp>
-#include <pace/detail/socket_address.hpp>
+#include "net/socket_address.hpp"
+#include "support/pace_test.hpp"
 #ifndef _WIN32
 #include <netinet/tcp.h>
 #else

@@ -1,6 +1,6 @@
+#include <pace/quic/connection.hpp>
+#include <pace/runtime/operation.hpp>
 #include "support/pace_test.hpp"
-#include <pace/operation.hpp>
-#include <pace/quic.hpp>
 
 #include <array>
 #include <chrono>

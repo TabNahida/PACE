@@ -4,8 +4,8 @@
 // The handshake itself is fixed so that the fuzzer spends its time in frame parsing; the HTTP/1
 // targets cover the request parser.
 
+#include <pace/websocket/stream.hpp>
 #include "fuzz/loopback.hpp"
-#include <pace/websocket.hpp>
 
 #include <cstddef>
 #include <cstdint>

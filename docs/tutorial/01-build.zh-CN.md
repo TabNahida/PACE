@@ -38,7 +38,7 @@ target("my_application")
 ## 第二步：写 main.cpp
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 #include <iostream>
 
 int main() {

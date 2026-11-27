@@ -12,7 +12,7 @@ Write `ws_server.cpp`:
 
 ```cpp
 #include <pace/websocket.hpp>
-#include <pace/run.hpp>
+#include <pace/runtime.hpp>
 #include <iostream>
 
 pace::task<void> serve() {
@@ -46,7 +46,7 @@ Write `ws_client.cpp`:
 
 ```cpp
 #include <pace/websocket.hpp>
-#include <pace/run.hpp>
+#include <pace/runtime.hpp>
 #include <iostream>
 
 pace::task<void> exchange() {

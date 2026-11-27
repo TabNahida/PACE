@@ -1,8 +1,8 @@
 // Fuzz input: the bytes a client sends to an HTTP/1.1 server connection (request line, headers,
 // chunked or length-delimited bodies, trailers, pipelined requests).
 
+#include <pace/http1/protocol.hpp>
 #include "fuzz/loopback.hpp"
-#include <pace/http.hpp>
 
 #include <cstddef>
 #include <cstdint>

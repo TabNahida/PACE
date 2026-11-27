@@ -13,23 +13,23 @@
 //     GET  /status/<n>    status n with an empty body
 //     anything else       404
 
-#include <pace/runtime.hpp>
-#include <pace/tcp.hpp>
+#include <pace/net/tcp.hpp>
+#include <pace/runtime/runtime.hpp>
 #ifdef PACE_HAS_HTTP1
-#include <pace/http.hpp>
+#include <pace/http1/protocol.hpp>
 #endif
 #ifdef PACE_HAS_HTTP2
-#include <pace/http2.hpp>
+#include <pace/http2/protocol.hpp>
 #endif
 #ifdef PACE_HAS_HTTP3
-#include <pace/http3.hpp>
-#include <pace/quic.hpp>
+#include <pace/http3/protocol.hpp>
+#include <pace/quic/connection.hpp>
 #endif
 #ifdef PACE_HAS_TLS
-#include <pace/tls.hpp>
+#include <pace/tls/stream.hpp>
 #endif
 #ifdef PACE_HAS_WEBSOCKET
-#include <pace/websocket.hpp>
+#include <pace/websocket/stream.hpp>
 #endif
 
 #include <cstdio>

@@ -48,15 +48,17 @@ def main():
             raise ValueError("refusing to replace the build manifest for existing measurements")
         manifest = {"compiler": command(["g++", "--version"]), "builds": {}}
         for label, root in (("before", args.baseline_root.resolve()), ("after", ROOT)):
+            # Either layout: 0.x (src/networking, src/application) or 1.0 module directories.
             sources = [ROOT / "benchmarks/websocket_bench.cpp", *sorted(root.glob("src/runtime/*.cpp")),
-                       *sorted(root.glob("src/networking/*.cpp")), root / "src/application/websocket.cpp"]
-            headers = [root / "include/pace" / name for name in (
-                "websocket.hpp", "tcp.hpp", "udp.hpp", "ip.hpp", "platform.hpp", "io_context.hpp",
-                "task.hpp", "runtime.hpp", "detail/poller.hpp", "detail/profiling.hpp", "detail/socket_address.hpp")]
+                       *sorted(root.glob("src/networking/*.cpp")), *sorted(root.glob("src/net/*.cpp")),
+                       *[path for path in (root / "src/application/websocket.cpp", root / "src/websocket/websocket.cpp")
+                         if path.exists()]]
+            headers = sorted({*root.glob("include/pace/**/*.hpp"), *root.glob("src/**/*.hpp")})
             for diagnostic in (False, True):
                 name = label + ("-diagnostic" if diagnostic else "")
                 binary = build / name
-                invocation = ["g++", "-O3", "-DNDEBUG", "-std=c++20", "-pthread", "-I" + str(root / "include")]
+                invocation = ["g++", "-O3", "-DNDEBUG", "-std=c++20", "-pthread", "-I" + str(root / "include"),
+                              "-I" + str(root / "src")]
                 if diagnostic:
                     invocation += ["-DPACE_WEBSOCKET_DIAGNOSTICS", "-Wl,--wrap=recv,--wrap=send,--wrap=getrandom"]
                 invocation += [str(path) for path in sources] + ["-o", str(binary)]

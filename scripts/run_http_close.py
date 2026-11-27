@@ -56,9 +56,8 @@ def main():
     binary = args.executable.resolve()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    source_paths = [*ROOT.glob("include/pace/*.hpp"), *ROOT.glob("include/pace/detail/*.hpp"),
-                    *ROOT.glob("src/runtime/*.cpp"), *ROOT.glob("src/networking/*.cpp"),
-                    ROOT / "src/application/http.cpp", ROOT / "src/extensions/tls.cpp",
+    source_paths = [*ROOT.glob("include/pace/**/*.hpp"), *ROOT.glob("src/runtime/*"), *ROOT.glob("src/net/*"),
+                    *ROOT.glob("src/http/*"), *ROOT.glob("src/http1/*"), *ROOT.glob("src/tls/*"),
                     ROOT / "benchmarks/http_close.cpp", Path(__file__).resolve()]
     environment = {
         "schema_version": 1, "status": "running", "label": args.label,

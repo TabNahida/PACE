@@ -9,7 +9,7 @@
 创建 `public/index.html`，写入 `<h1>Hello from PACE</h1>`。程序只需要：
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 int main() {
     pace::http::app app;
     app.mount("/", "./public");
@@ -27,7 +27,7 @@ int main() {
 另开一个程序作为上游：
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 int main() {
     pace::http::app origin;
     origin.get("/hello", [] { return pace::http::text("hello from the API\n"); });

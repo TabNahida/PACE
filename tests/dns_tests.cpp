@@ -1,7 +1,7 @@
+#include <pace/dns/resolver.hpp>
+#include <pace/net/tcp.hpp>
+#include <pace/net/udp.hpp>
 #include "support/pace_test.hpp"
-#include <pace/dns.hpp>
-#include <pace/tcp.hpp>
-#include <pace/udp.hpp>
 
 #include <array>
 #include <atomic>

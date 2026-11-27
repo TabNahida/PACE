@@ -6,7 +6,7 @@ Before making a long-lived server, build a small cancellation experiment. Replac
 `main.cpp` with this complete program, link `pace_runtime`, then build and run it:
 
 ```cpp
-#include <pace/io_context.hpp>
+#include <pace/runtime.hpp>
 #include <chrono>
 #include <iostream>
 

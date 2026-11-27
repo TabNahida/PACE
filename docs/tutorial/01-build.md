@@ -35,7 +35,7 @@ The dependency supplies headers and platform libraries. Do not copy PACE's
 Start `main.cpp` with this complete program:
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 #include <iostream>
 
 int main() {

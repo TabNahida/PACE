@@ -10,7 +10,7 @@
 在第一章的工程里将依赖改为 `pace_runtime`，把以下完整程序保存为 `main.cpp`：
 
 ```cpp
-#include <pace/task_group.hpp>
+#include <pace/runtime.hpp>
 #include <chrono>
 #include <iostream>
 #include <string>

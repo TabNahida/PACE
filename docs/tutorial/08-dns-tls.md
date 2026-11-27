@@ -12,7 +12,7 @@ Enable `--dns=y` and link `pace_dns`. Put this complete program in `main.cpp`:
 
 ```cpp
 #include <pace/dns.hpp>
-#include <pace/run.hpp>
+#include <pace/runtime.hpp>
 #include <iostream>
 
 int main() {

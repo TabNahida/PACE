@@ -1,4 +1,4 @@
-#include <pace/task_group.hpp>
+#include <pace/runtime.hpp>
 
 #include <chrono>
 #include <iostream>

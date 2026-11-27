@@ -71,12 +71,13 @@ SortIncludes: CaseSensitive
 IncludeBlocks: Regroup
 IncludeCategories:
   # Groups: PACE headers, standard library, third-party, platform. SortPriority orders within a group.
-  - Regex: '^<pace/detail/'
-    Priority: 1
-    SortPriority: 2
-  - Regex: '^(<pace/|")'
+  # Public <pace/...> headers first, then internal "module/name.hpp" headers from src/.
+  - Regex: '^<pace/'
     Priority: 1
     SortPriority: 1
+  - Regex: '^"'
+    Priority: 1
+    SortPriority: 2
   - Regex: '^<(openssl|ngtcp2|nghttp2|nghttp3|ares)'
     Priority: 4
   # Winsock headers stay in one group and keep this relative order.

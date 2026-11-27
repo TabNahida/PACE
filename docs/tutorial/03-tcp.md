@@ -10,7 +10,7 @@ reply bytes, using a numeric loopback address.
 Save this as `tcp_client.cpp`:
 
 ```cpp
-#include <pace/tcp.hpp>
+#include <pace/net.hpp>
 #include <iostream>
 
 int main() {
@@ -38,8 +38,8 @@ throws on premature EOF. Both peers must agree on framing.
 Save this as `tcp_server.cpp`:
 
 ```cpp
-#include <pace/run.hpp>
-#include <pace/tcp.hpp>
+#include <pace/runtime.hpp>
+#include <pace/net.hpp>
 #include <iostream>
 
 pace::task<void> echo(pace::tcp::stream socket) {

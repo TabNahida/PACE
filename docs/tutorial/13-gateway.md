@@ -10,7 +10,7 @@ Build from this checkout with HTTP/1 enabled (the default).
 Create `public/index.html` containing `<h1>Hello from PACE</h1>`. Write `main.cpp`:
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 
 int main() {
     pace::http::app app;
@@ -30,7 +30,7 @@ served; directory listings are not generated.
 Run a second PACE application on port 9000:
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 int main() {
     pace::http::app origin;
     origin.get("/hello", [] { return pace::http::text("hello from the API\n"); });

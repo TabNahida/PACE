@@ -54,7 +54,7 @@ These client APIs require PACE 0.4.0 or newer.
 ## A small HTTP server
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 
 int main() {
     pace::http::app app;

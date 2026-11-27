@@ -1,5 +1,5 @@
+#include <pace/websocket/stream.hpp>
 #include "support/pace_test.hpp"
-#include <pace/websocket.hpp>
 
 #include <array>
 #include <chrono>

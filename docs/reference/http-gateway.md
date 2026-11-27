@@ -195,5 +195,5 @@ Static ETags now use seed-zero XXH64 over file contents, including same-size edi
 with unchanged timestamps. ETag strings can change after this upgrade, causing a
 normal fresh response instead of 304. The compact internal implementation is
 adapted from [xxHash 0.8.3](https://github.com/Cyan4973/xxHash/tree/v0.8.3), BSD-2-Clause;
-its copyright/license are retained in `include/pace/detail/content_hash.hpp`.
+its copyright/license are retained in `src/gateway/content_hash.hpp`.
 It adds no runtime package dependency and is not a cryptographic integrity check.

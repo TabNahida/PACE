@@ -101,4 +101,4 @@ clear 后的新查找不会命中旧快照，已经选中的响应可以完成�
 静态 ETag 改为对内容计算 seed-zero XXH64，同大小且时间戳不变的编辑也会改变验证器。
 升级后旧 ETag 可能失配并正常返回完整响应。内部实现改编自
 [xxHash 0.8.3](https://github.com/Cyan4973/xxHash/tree/v0.8.3)，
-BSD-2-Clause 许可和版权保留在 `include/pace/detail/content_hash.hpp`，不新增运行时依赖，不能用作密码学完整性校验。
+BSD-2-Clause 许可和版权保留在 `src/gateway/content_hash.hpp`，不新增运行时依赖，不能用作密码学完整性校验。

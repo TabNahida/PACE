@@ -10,7 +10,7 @@ UDP 保留数据报边界，但不保证送达或顺序。
 保存为 `udp_client.cpp`：
 
 ```cpp
-#include <pace/udp.hpp>
+#include <pace/net.hpp>
 #include <iostream>
 
 int main() {
@@ -37,7 +37,7 @@ int main() {
 保存为 `udp_server.cpp`：
 
 ```cpp
-#include <pace/udp.hpp>
+#include <pace/net.hpp>
 #include <iostream>
 
 pace::task<void> serve() {

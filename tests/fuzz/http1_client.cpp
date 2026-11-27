@@ -1,8 +1,8 @@
 // Fuzz input: the bytes an HTTP/1.1 server answers to one GET (status line, informational
 // responses, headers, chunked / length / EOF-delimited bodies, trailers).
 
+#include <pace/http1/protocol.hpp>
 #include "fuzz/loopback.hpp"
-#include <pace/http.hpp>
 
 #include <cstddef>
 #include <cstdint>

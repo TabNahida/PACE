@@ -1,5 +1,5 @@
-#include <pace/http2.hpp>
-#include <pace/http3.hpp>
+#include <pace/http2/protocol.hpp>
+#include <pace/http3/protocol.hpp>
 
 #include <algorithm>
 #include <chrono>

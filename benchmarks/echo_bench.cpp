@@ -23,8 +23,8 @@
 #endif
 #endif
 
-#include <pace/tcp.hpp>
-#include <pace/detail/profiling.hpp>
+#include <pace/net/tcp.hpp>
+#include "runtime/profiling.hpp"
 #ifdef PACE_HAS_LIBUV
 #include <uv.h>
 #endif

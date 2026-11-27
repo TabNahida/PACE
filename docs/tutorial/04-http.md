@@ -11,7 +11,7 @@ Save this as `client.cpp`; add a binary target named `client` with
 `add_files("client.cpp")` and `add_deps("pace_http1")`:
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 #include <iostream>
 
 int main() {
@@ -53,8 +53,8 @@ Save the complete server below as `server.cpp`; create a `server` target linked 
 `pace_http1`, just as for the client.
 
 ```cpp
-#include <pace/http.hpp>
-#include <pace/run.hpp>
+#include <pace/http1.hpp>
+#include <pace/runtime.hpp>
 #include <iostream>
 
 namespace http = pace::http;

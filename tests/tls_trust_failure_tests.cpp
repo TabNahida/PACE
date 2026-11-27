@@ -1,7 +1,7 @@
 // Linux fault injection, linked with --wrap=SSL_CTX_set_default_verify_paths.
 // Exercises CA verification when OpenSSL's default trust paths are unavailable.
+#include <pace/tls/stream.hpp>
 #include "support/pace_test.hpp"
-#include <pace/tls.hpp>
 
 #include <array>
 #include <filesystem>

@@ -1,5 +1,5 @@
 #include "poller_backend.hpp"
-#include <pace/detail/profiling.hpp>
+#include "runtime/profiling.hpp"
 
 #include <algorithm>
 #include <array>

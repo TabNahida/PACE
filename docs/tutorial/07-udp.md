@@ -10,7 +10,7 @@ but does not promise delivery or ordering.
 Save this as `udp_client.cpp`:
 
 ```cpp
-#include <pace/udp.hpp>
+#include <pace/net.hpp>
 #include <iostream>
 
 int main() {
@@ -39,7 +39,7 @@ interpreting the message: bytes beyond the receive capacity are lost. An empty
 Save this as `udp_server.cpp`:
 
 ```cpp
-#include <pace/udp.hpp>
+#include <pace/net.hpp>
 #include <iostream>
 
 pace::task<void> serve() {

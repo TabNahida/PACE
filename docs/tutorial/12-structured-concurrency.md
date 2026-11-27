@@ -12,7 +12,7 @@ Save this complete program as `main.cpp` in chapter 1's project, and change its
 `add_deps` to `pace_runtime`:
 
 ```cpp
-#include <pace/task_group.hpp>
+#include <pace/runtime.hpp>
 #include <chrono>
 #include <iostream>
 #include <string>

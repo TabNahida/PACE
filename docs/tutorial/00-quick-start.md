@@ -11,7 +11,7 @@ clients and the `async_` HTTP names. Use the v0.4.0 source checkout below.
 Save this complete program as `client.cpp`:
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 #include <iostream>
 
 int main() {
@@ -37,7 +37,7 @@ The URL refers to a local service. Next we create that service and build both fi
 Save this as `server.cpp`:
 
 ```cpp
-#include <pace/http.hpp>
+#include <pace/http1.hpp>
 #include <iostream>
 
 int main() {

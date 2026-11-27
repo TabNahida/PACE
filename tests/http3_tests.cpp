@@ -1,5 +1,5 @@
+#include <pace/http3/protocol.hpp>
 #include "support/pace_test.hpp"
-#include <pace/http3.hpp>
 
 #include <algorithm>
 #include <array>

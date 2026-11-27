@@ -6,7 +6,7 @@
 将下面完整程序保存到 `main.cpp` 并构建运行：
 
 ```cpp
-#include <pace/io_context.hpp>
+#include <pace/runtime.hpp>
 #include <chrono>
 #include <iostream>
 

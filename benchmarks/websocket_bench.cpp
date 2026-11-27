@@ -1,4 +1,4 @@
-#include <pace/websocket.hpp>
+#include <pace/websocket/stream.hpp>
 
 #include <algorithm>
 #include <chrono>

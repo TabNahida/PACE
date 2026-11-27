@@ -1,8 +1,8 @@
+#include <pace/http2/protocol.hpp>
+#include <pace/runtime/run.hpp>
 #include "http2_diagnostics.hpp"
 #include "support/pace_test.hpp"
-#include <pace/http2.hpp>
-#include <pace/run.hpp>
-#include <pace/detail/protocol_driver.hpp>
+#include "tls/protocol_driver.hpp"
 
 #include <algorithm>
 #include <array>

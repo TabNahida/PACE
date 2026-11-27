@@ -1,6 +1,6 @@
-#include <pace/http_services.hpp>
-#include <pace/run.hpp>
-#include <pace/detail/content_hash.hpp>
+#include <pace/gateway/services.hpp>
+#include <pace/runtime/run.hpp>
+#include "gateway/content_hash.hpp"
 
 #include <barrier>
 #include <chrono>
