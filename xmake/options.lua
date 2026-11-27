@@ -1,0 +1,16 @@
+-- Build options for the libraries. Tests, examples, benchmarks, fuzzing and checks declare their own
+-- options in their files.
+option("cxxstandard", {default = "cxx20", values = {"cxx20", "cxx23", "cxxlatest"}, description = "C++ language standard (C++20 or newer)"})
+option("modules", {default = false, showmenu = true, description = "Build the optional C++20 named module (import pace)"})
+option("sanitizers", {default = false, description = "Enable AddressSanitizer and UndefinedBehaviorSanitizer"})
+option("uring", {default = false, showmenu = true, description = "Build the optional Linux io_uring readiness backend (liburing)"})
+option("profiling", {default = false, description = "Enable intrusive per-thread stage timings (diagnostics only)"})
+option("fuzz", {default = "none", values = {"none", "libfuzzer", "replay"}, showmenu = true, description = "Build fuzz targets with libFuzzer (Clang) or a corpus replay driver"})
+option("http1", {default = true, showmenu = true, description = "Enable the HTTP/1.0 and HTTP/1.1 application module"})
+option("websocket", {default = true, showmenu = true, description = "Enable the WebSocket application module"})
+option("tls", {default = false, showmenu = true, description = "Enable TLS/HTTPS with OpenSSL"})
+option("dns", {default = false, showmenu = true, description = "Enable asynchronous DNS with c-ares"})
+option("quic", {default = false, showmenu = true, description = "Enable QUIC (also enabled by http3)"})
+option("quic_backend", {default = "ngtcp2", values = {"ngtcp2", "openssl"}, showmenu = true, description = "QUIC transport implementation"})
+option("http2", {default = false, showmenu = true, description = "Enable HTTP/2 with nghttp2 (enable tls for HTTPS)"})
+option("http3", {default = false, showmenu = true, description = "Enable HTTP/3 with nghttp3 and QUIC"})
