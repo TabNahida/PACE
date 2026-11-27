@@ -1,4 +1,4 @@
-<!-- source-hash: dc972796a4fd -->
+<!-- source-hash: f1394cd7ba2e -->
 # 9. 有序关闭
 
 [English](09-graceful-shutdown.md) · [学习路线](README.zh.md) · [上一章：工作线程与线程](08-workers-and-threads.zh.md)
@@ -118,10 +118,36 @@ pace::task<void> drain_connections(
 
 ## 信号与外部所有者
 
-配套服务器（`tutorial_http serve`、`tutorial_tcp serve`）的信号处理函数只设置一个无锁的原子标志。一个普通协程检查这个标志并调用 `stop()`。不要在信号处理函数中调用反应器或 socket 的函数。在另一个普通线程上，调用 `stop()` 本身是安全的。
+服务通常由外部停止：Ctrl-C 发送 `SIGINT`，服务管理器发送 `SIGTERM`，Windows 上则是控制台的 Ctrl-C 和关闭事件。
+`pace::wait_for_signal` 把它们变成协程可以等待的值，于是在拥有这些工作的任务里，关闭只需两行：
+
+```cpp
+pace::task<void> serve_until_signal(pace::tcp::listener& listener)
+{
+    co_await pace::with_task_group(
+        [&](pace::task_group& group) -> pace::task<void>
+        {
+            (void)group.spawn(accept_loop(listener)); // 第 5 章中你自己的 accept 循环
+            co_await pace::wait_for_signal({pace::process_signal::interrupt, pace::process_signal::terminate});
+            group.cancel();
+        }
+    );
+}
+```
+
+`wait_for_signal` 在被调用时就完成订阅。从那以后这些信号归 PACE 处理：原本会结束进程的默认动作不再执行，信号的递送在
+协程自己的上下文上恢复它。`group.cancel()` 取消 accept 循环以及组里的其他一切，任务组在作用域返回之前汇合它们。若要先
+排空连接，就在这里执行上面 `drain_connections` 的步骤，而不是立即取消。最后一个订阅消失后，这些信号先前的处置会恢复，
+所以关闭开始之后再按一次 Ctrl-C，进程会照常结束。
+
+配套服务器（`tutorial_http serve`、`tutorial_tcp serve`、`tutorial_websocket serve`）就是这样停止各自的上下文的。需要
+多次响应同一个信号的程序，例如用 `SIGHUP` 重新加载配置，应保留一个 `pace::signal_set`，在循环中等待 `set.wait()`；两次
+等待之间到达的递送不会丢失。Windows 服务收不到控制台事件：它的控制处理函数调用
+`pace::deliver_signal(pace::process_signal::terminate)`。不要自己编写调用反应器或 socket 函数的信号处理函数；在另一个普通
+线程上，调用 `stop()` 本身是安全的。
 
 `runtime.run()` 和 `runtime.run_on_current_thread()` 在返回之前汇合各自的工作线程。如果你在应用自己拥有的线程上调用它们，仍然需要在销毁 runtime 之前汇合那个线程。你自己运行的 `io_context` 同样必须先停止，再汇合运行它的线程。也要汇合你自己的阻塞工作线程，以免它们向已销毁的上下文提交结果。
 
-参考：[`io_context`](../reference/runtime/io-context.zh.md)、[`runtime`](../reference/runtime/runtime.zh.md)、[TCP `close_gracefully`](../reference/net/tcp.zh.md)。
+参考：[`io_context`](../reference/runtime/io-context.zh.md)、[`runtime`](../reference/runtime/runtime.zh.md)、[句柄与信号](../reference/runtime/handles-and-signals.zh.md)、[TCP `close_gracefully`](../reference/net/tcp.zh.md)。
 
 下一章：[10. TLS 与 DNS](10-tls-and-dns.zh.md)

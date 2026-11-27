@@ -120,6 +120,7 @@ nav:
       - guides/README.md
       - guides/http-recipes.md
       - guides/protocol-tuning.md
+      - guides/tun-devices.md
   - Reference:
       - reference/README.md
       - Runtime:
@@ -130,6 +131,7 @@ nav:
           - reference/runtime/run.md
           - reference/runtime/structured-concurrency.md
           - reference/runtime/io-backends.md
+          - reference/runtime/handles-and-signals.md
       - Networking:
           - reference/net/README.md
           - reference/net/tcp.md

@@ -26,6 +26,7 @@ and `import pace;` exports every module.
 | [`run`](run.md) | `runtime/run.hpp`, `runtime/this_context.hpp`, `runtime/blocking.hpp` | `pace::run`, `this_context`, `sleep_for`, `yield`, `blocking_options`, `blocking_call` |
 | [Structured concurrency](structured-concurrency.md) | `runtime/task_group.hpp`, `runtime/operation.hpp`, `runtime/cancellation.hpp` | `task_group`, `join_handle`, `with_task_group`, `with_options`, `with_deadline`, `with_cancellation`, `shield`, `deadline`, `cancellation_source`, `cancellation_token` |
 | [I/O backends](io-backends.md) | `runtime/io_backend.hpp` | `io_backend`, `backend_name`, `PACE_IO_BACKEND` |
+| [Handles and signals](handles-and-signals.md) | `runtime/io_context.hpp`, `runtime/signal.hpp` | readiness on pipes, terminals and TUN devices; Windows `wait_handle`; `process_signal`, `signal_set`, `wait_for_signal`, `deliver_signal`, `signal_name` |
 | this page | `runtime/ascii.hpp`, `pace.hpp` | `ascii::to_lower`, `ascii::iequals`; the all-modules header |
 
 All headers are under `include/pace/`. `<pace/runtime.hpp>` includes every one of them except `pace.hpp`.

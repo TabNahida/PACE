@@ -101,8 +101,10 @@ declarations are on the [`io_context`](runtime/io-context.md) page. The platform
 
 - A Windows socket is pointer-sized: do not store it in an `int` or close it with POSIX `close`.
 - `native_handle()` members lend the handle; they never transfer ownership. Raw readiness waits need a valid
-  socket whose owner coordinates cancellation and closing with the context. On Windows they work only for Winsock
-  sockets, not arbitrary handles. PACE has no portable asynchronous file API.
+  descriptor whose owner coordinates cancellation and closing with the context. On POSIX any pollable descriptor
+  works (pipes, terminals, TUN devices); on Windows only Winsock sockets do, and `io_context::wait_handle` waits for
+  kernel objects such as events and processes (see [Handles and signals](runtime/handles-and-signals.md)). PACE has
+  no portable asynchronous file API.
 - On Windows, PACE initializes Winsock (`WSAStartup` 2.2, once per process) before it creates its first socket or
   poller; applications do not call `WSAStartup` for PACE. PACE creates overlapped, non-inheritable sockets.
 - On Windows, `<pace/runtime/platform.hpp>` includes `<winsock2.h>` and `<ws2tcpip.h>` and defines `NOMINMAX` and

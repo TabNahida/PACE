@@ -148,9 +148,37 @@ It bounds the drain, not the peer's acknowledgement, and reaching a bound is a n
 
 ## Signals and external owners
 
-The signal handlers of the companion servers (`tutorial_http serve`, `tutorial_tcp serve`) only set a lock-free
-atomic flag. An ordinary coroutine checks the flag and calls `stop()`. Do not call reactor or socket functions from a
-signal handler. From another ordinary thread, `stop()` itself is safe to call.
+A service is usually stopped from outside: Ctrl-C sends `SIGINT`, a service manager sends `SIGTERM`, and on Windows
+the console sends its Ctrl-C and close events. `pace::wait_for_signal` turns them into a value a coroutine awaits, so
+the shutdown is two lines in the task that owns the work:
+
+```cpp
+pace::task<void> serve_until_signal(pace::tcp::listener& listener)
+{
+    co_await pace::with_task_group(
+        [&](pace::task_group& group) -> pace::task<void>
+        {
+            (void)group.spawn(accept_loop(listener)); // your accept loop from chapter 5
+            co_await pace::wait_for_signal({pace::process_signal::interrupt, pace::process_signal::terminate});
+            group.cancel();
+        }
+    );
+}
+```
+
+`wait_for_signal` subscribes when it is called. From then on PACE owns those signals: the default action that would
+end the process does not run, and the delivery resumes the coroutine on its own context. `group.cancel()` cancels the
+accept loop and everything else in the group, and the group joins them before the scope returns. To drain first, run
+the `drain_connections` steps above at that point instead of cancelling right away. When the last subscription goes,
+the previous disposition of the signals comes back, so a second Ctrl-C after shutdown has begun ends the process
+the usual way.
+
+The companion servers (`tutorial_http serve`, `tutorial_tcp serve`, `tutorial_websocket serve`) stop their context
+this way. A program that must react to the same signal more than once, such as `SIGHUP` for reloading its
+configuration, keeps a `pace::signal_set` and awaits `set.wait()` in a loop; deliveries that arrive between waits are
+kept. A Windows service receives no console events: its control handler calls
+`pace::deliver_signal(pace::process_signal::terminate)`. Do not write your own signal handler that calls reactor or
+socket functions; from another ordinary thread, `stop()` itself is safe to call.
 
 `runtime.run()` and `runtime.run_on_current_thread()` join their worker threads before they return. If you call
 either from a thread your application owns, you still have to join that thread before destroying the runtime. An
@@ -158,6 +186,6 @@ either from a thread your application owns, you still have to join that thread b
 too, so that they cannot submit results to a destroyed context.
 
 Reference: [`io_context`](../reference/runtime/io-context.md), [`runtime`](../reference/runtime/runtime.md),
-[TCP `close_gracefully`](../reference/net/tcp.md).
+[handles and signals](../reference/runtime/handles-and-signals.md), [TCP `close_gracefully`](../reference/net/tcp.md).
 
 Next: [10. TLS and DNS](10-tls-and-dns.md)

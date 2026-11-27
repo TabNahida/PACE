@@ -1,4 +1,4 @@
-<!-- source-hash: 0b03d85b06d4 -->
+<!-- source-hash: 91b015fb5b7a -->
 # 运行时
 
 [English](README.md) · [参考](../README.zh.md)
@@ -25,6 +25,7 @@
 | [`run`](run.zh.md) | `runtime/run.hpp`、`runtime/this_context.hpp`、`runtime/blocking.hpp` | `pace::run`、`this_context`、`sleep_for`、`yield`、`blocking_options`、`blocking_call` |
 | [结构化并发](structured-concurrency.zh.md) | `runtime/task_group.hpp`、`runtime/operation.hpp`、`runtime/cancellation.hpp` | `task_group`、`join_handle`、`with_task_group`、`with_options`、`with_deadline`、`with_cancellation`、`shield`、`deadline`、`cancellation_source`、`cancellation_token` |
 | [I/O 后端](io-backends.zh.md) | `runtime/io_backend.hpp` | `io_backend`、`backend_name`、`PACE_IO_BACKEND` |
+| [句柄与信号](handles-and-signals.zh.md) | `runtime/io_context.hpp`、`runtime/signal.hpp` | 管道、终端与 TUN 设备上的就绪等待；Windows `wait_handle`；`process_signal`、`signal_set`、`wait_for_signal`、`deliver_signal`、`signal_name` |
 | 本页 | `runtime/ascii.hpp`、`pace.hpp` | `ascii::to_lower`、`ascii::iequals`；包含所有模块的头文件 |
 
 所有头文件都位于 `include/pace/` 下。`<pace/runtime.hpp>` 包含除 `pace.hpp` 之外的全部头文件。

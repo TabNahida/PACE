@@ -1,4 +1,4 @@
-<!-- source-hash: 34022da3d098 -->
+<!-- source-hash: dc8322726117 -->
 # 平台支持
 
 [English](platform-support.md) · [参考](README.zh.md)
@@ -97,8 +97,10 @@ C++ 命名模块（`--modules=y`）还需要 Clang 或 GCC 16；见[构建选项
 | `pace::invalid_socket` | `-1` | `INVALID_SOCKET`（所有位为 1） |
 
 - Windows 套接字与指针等宽：不要把它存进 `int`，也不要用 POSIX 的 `close` 关闭它。
-- `native_handle()` 成员只是出借句柄，从不转移所有权。原始就绪等待需要一个有效的套接字，其所有者负责与 context
-  协调取消和关闭。在 Windows 上它们只适用于 Winsock 套接字，不适用于任意句柄。PACE 没有可移植的异步文件 API。
+- `native_handle()` 成员只是出借句柄，从不转移所有权。原始就绪等待需要一个有效的描述符，其所有者负责与 context
+  协调取消和关闭。在 POSIX 上任何可轮询的描述符都可以（管道、终端、TUN 设备）；在 Windows 上只适用于 Winsock 套接字，
+  `io_context::wait_handle` 则用来等待事件、进程等内核对象（见[句柄与信号](runtime/handles-and-signals.zh.md)）。PACE
+  没有可移植的异步文件 API。
 - 在 Windows 上，PACE 在创建第一个套接字或轮询器之前初始化 Winsock（`WSAStartup` 2.2，每个进程一次）；应用无需为
   PACE 调用 `WSAStartup`。PACE 创建的套接字是重叠式且不可继承的。
 - 在 Windows 上，`<pace/runtime/platform.hpp>` 会包含 `<winsock2.h>` 和 `<ws2tcpip.h>`，并在 `NOMINMAX` 和

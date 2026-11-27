@@ -1,4 +1,4 @@
-<!-- source-hash: 223e39fea5dc -->
+<!-- source-hash: 66bc1de429f2 -->
 # `pace::io_context`
 
 [English](io-context.md) · [运行时](README.zh.md)
@@ -81,6 +81,10 @@ public:
     io_awaiter wait_readable(native_socket_type fd) noexcept;
     io_awaiter wait_writable(native_socket_type fd) noexcept;
     io_awaiter wait_ready(native_socket_type fd) noexcept;
+#ifdef _WIN32
+    struct handle_awaiter;
+    handle_awaiter wait_handle(HANDLE object) noexcept;
+#endif
 
     struct timer_awaiter;
     template <class Rep, class Period>
@@ -269,6 +273,10 @@ io_awaiter wait_ready(native_socket_type fd) noexcept;
 `wait_ready` 挂起到任一方向可以推进，即使两个方向同时就绪也只恢复一次。它们不传输字节，也不返回就绪掩码：
 等待结束后重试非阻塞操作。它们不拥有描述符，描述符必须保持打开、身份不变，直到等待结束。
 PACE 的 TCP 和 UDP 类型会替你完成这个循环。
+
+在 POSIX 上描述符不必是 socket：管道、终端、TUN 设备以及 Linux 的 `eventfd` 一族在每个后端上都可用。在 Windows 上
+就绪等待只接受 Winsock socket，`wait_handle` 用来等待内核对象。这两者以及可等待的进程信号见
+[句柄与信号](handles-and-signals.zh.md)。
 
 ### 定时器与让出
 

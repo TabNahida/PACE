@@ -35,6 +35,19 @@
 - The `pace.runtime` named module exports `blocking_call` and `operation_result`. `<pace/pace.hpp>` is installed
   with the `pace` target (now header-only, so that it installs it), which links every module the header
   includes, instead of with `pace_runtime`.
+- Readiness waits on descriptors that are not sockets are supported and tested on every POSIX backend, io_uring
+  included: pipes, pseudo-terminals and TUN devices (Linux `/dev/net/tun` with each `IFF_MULTI_QUEUE` queue, macOS
+  `utun`, FreeBSD `/dev/tun*`). See [handles and signals](docs/reference/runtime/handles-and-signals.md) and the new
+  [TUN devices guide](docs/guides/tun-devices.md).
+- Add `io_context::wait_handle(HANDLE)` on Windows: awaits an event (such as Wintun's read event), process or other
+  kernel object through a thread-pool wait, on both the IOCP and the WSAPoll backend. Cancellation and `stop()`
+  unregister it.
+- Add awaitable process signals (`<pace/runtime/signal.hpp>`): `process_signal`, `signal_set`, `wait_for_signal`,
+  `deliver_signal` and `signal_name`. `SIGHUP`, `SIGINT`, `SIGTERM`, `SIGUSR1` and `SIGUSR2` on POSIX; console
+  control events on Windows, and a service's stop through `deliver_signal`. Every set sees every delivery after its
+  creation, deliveries between waits are kept, and the previous disposition comes back with the last set. Graceful
+  shutdown is `co_await pace::wait_for_signal({interrupt, terminate}); group.cancel();`; the tutorial servers and
+  chapter 9 use it.
 
 ## 1.0.0-alpha.1 — 2026-11-27
 

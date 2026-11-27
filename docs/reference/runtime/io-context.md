@@ -80,6 +80,10 @@ public:
     io_awaiter wait_readable(native_socket_type fd) noexcept;
     io_awaiter wait_writable(native_socket_type fd) noexcept;
     io_awaiter wait_ready(native_socket_type fd) noexcept;
+#ifdef _WIN32
+    struct handle_awaiter;
+    handle_awaiter wait_handle(HANDLE object) noexcept;
+#endif
 
     struct timer_awaiter;
     template <class Rep, class Period>
@@ -272,6 +276,10 @@ io_awaiter wait_ready(native_socket_type fd) noexcept;
 both become ready together. They transfer no bytes and report no readiness mask: retry the nonblocking operation
 after the wait. They do not own the descriptor, which must stay open, with the same identity, until the wait ends.
 PACE's TCP and UDP types run this loop for you.
+
+On POSIX the descriptor need not be a socket: pipes, terminals, TUN devices and Linux's `eventfd` family work on
+every backend. On Windows readiness waits take Winsock sockets only, and `wait_handle` waits for kernel objects. See
+[Handles and signals](handles-and-signals.md) for both, and for awaitable process signals.
 
 ### Timers and yielding
 
