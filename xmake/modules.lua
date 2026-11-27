@@ -4,7 +4,7 @@ if has_config("modules") then
     local pace_root = path.directory(os.scriptdir())
     target("pace_module")
         set_kind("static")
-        add_files(path.join(pace_root, "modules/pace.cppm"), {public = true})
+        add_files(path.join(pace_root, "modules/*.cppm"), {public = true})
         add_deps("pace", {public = true})
     target_end()
 end

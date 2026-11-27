@@ -1,0 +1,41 @@
+// ABI-preserving facade: declarations belong to the global module, just as they do for #include
+// consumers. Keep this export list in sync with the module's public headers.
+module;
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 16
+#error PACE_named_modules_require_Clang_or_GCC_16_with_coroutine_module_fixes
+#endif
+#include <pace/runtime.hpp>
+
+export module pace.runtime;
+
+export namespace pace
+{
+using ::pace::backend_name;
+using ::pace::blocking_options;
+using ::pace::cancellation_source;
+using ::pace::cancellation_token;
+using ::pace::deadline;
+using ::pace::invalid_socket;
+using ::pace::io_backend;
+using ::pace::io_context;
+using ::pace::join_handle;
+using ::pace::native_socket_type;
+using ::pace::operation_options;
+using ::pace::run;
+using ::pace::runtime;
+using ::pace::shield;
+using ::pace::sleep_for;
+using ::pace::task;
+using ::pace::task_group;
+using ::pace::this_context;
+using ::pace::with_cancellation;
+using ::pace::with_deadline;
+using ::pace::with_options;
+using ::pace::with_task_group;
+using ::pace::yield;
+} // namespace pace
+
+export namespace pace::this_task
+{
+using ::pace::this_task::cancellation;
+} // namespace pace::this_task

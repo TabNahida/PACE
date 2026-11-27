@@ -1,0 +1,44 @@
+// ABI-preserving facade: declarations belong to the global module, just as they do for #include
+// consumers. Keep this export list in sync with the module's public headers.
+module;
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 16
+#error PACE_named_modules_require_Clang_or_GCC_16_with_coroutine_module_fixes
+#endif
+#include <pace/http1.hpp>
+
+export module pace.http1;
+export import pace.net;
+export import pace.http;
+
+#ifdef PACE_HAS_HTTP1
+export namespace pace::http
+{
+using ::pace::http::admission;
+using ::pace::http::app;
+using ::pace::http::async_fetch;
+using ::pace::http::async_get;
+using ::pace::http::async_post;
+using ::pace::http::basic_client;
+using ::pace::http::body_source;
+using ::pace::http::client;
+using ::pace::http::client_close_policy;
+using ::pace::http::client_options;
+using ::pace::http::fetch;
+using ::pace::http::get;
+using ::pace::http::limits;
+using ::pace::http::post;
+using ::pace::http::request_head;
+using ::pace::http::serve;
+using ::pace::http::serve_connection;
+using ::pace::http::server_handler;
+using ::pace::http::server_options;
+using ::pace::http::server_response;
+using ::pace::http::streaming_response;
+} // namespace pace::http
+#ifdef PACE_HAS_TLS
+export namespace pace::http
+{
+using ::pace::http::secure_client;
+} // namespace pace::http
+#endif
+#endif

@@ -29,7 +29,8 @@ if has_config("tests") then
     if has_config("modules") then
         target("pace_module_tests")
             set_kind("binary")
-            add_files(path.join(pace_root, "tests/modules/module_tests.cpp"), path.join(pace_root, "tests/modules/module_headers.cpp"))
+            add_files(path.join(pace_root, "tests/modules/module_tests.cpp"), path.join(pace_root, "tests/modules/module_headers.cpp"),
+                      path.join(pace_root, "tests/modules/single_module.cpp"))
             add_deps("pace_module")
             set_rundir(pace_root)
             add_tests("default")

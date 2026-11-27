@@ -1,0 +1,24 @@
+// ABI-preserving facade: declarations belong to the global module, just as they do for #include
+// consumers. Keep this export list in sync with the module's public headers.
+module;
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 16
+#error PACE_named_modules_require_Clang_or_GCC_16_with_coroutine_module_fixes
+#endif
+#include <pace/quic.hpp>
+
+export module pace.quic;
+export import pace.net;
+
+#ifdef PACE_HAS_QUIC
+export namespace pace::quic
+{
+using ::pace::quic::connect;
+using ::pace::quic::connection;
+using ::pace::quic::context;
+using ::pace::quic::listen;
+using ::pace::quic::listener;
+using ::pace::quic::role;
+using ::pace::quic::stream;
+using ::pace::quic::stream_type;
+} // namespace pace::quic
+#endif
