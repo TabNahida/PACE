@@ -1,15 +1,20 @@
+<!-- source-hash: fabb23a39b47 -->
 # HTTP 配置与进阶用法
 
-[HTTP 入门教程](../tutorial/03-http-server.zh.md) · [English](http-recipes.md)
+[English](http-recipes.md) · [指南](README.zh.md) · [HTTP 服务端教程](../tutorial/03-http-server.zh.md)
+
+本页的用法都基于 HTTP/1 模块：包含 `<pace/http1.hpp>`，链接 `pace_http1`；该模块默认构建（`--http1=y`）。
+HTTPS 部分还需要 `--tls=y`。代码片段运行在协程内或 `io.run()` 之前，`io` 是持有这些 socket 的
+`pace::io_context`。
 
 ## 完整响应与连接关闭
 
-默认的 `async_get`、`async_fetch` 和 `client.send` 在完整解析 Content-Length、chunked 或无 body
-响应后返回，不因 `Connection: close` 继续等待对端 FIN。库会尝试发送本端 TCP FIN / TLS
-`close_notify` 并释放连接，没有后台清理任务。完整响应后的清理错误不会覆盖结果；上下文
-取消仍会传播。没有长度或分块 framing 的响应仍须等到 EOF，HTTPS 还须验证 TLS 关闭通知。
+默认情况下，响应按 Content-Length、chunked 完整收齐或本身没有 body 时，调用直接返回，
+不再等待对端 FIN。PACE 会尝试发送本端 TCP FIN / TLS `close_notify`，然后释放连接，
+不留后台清理任务。清理阶段的传输错误不会覆盖已经完成的响应；上下文取消仍会传播。
+以 EOF 界定的响应仍要等到 EOF，HTTPS 还要验证 TLS 关闭通知。
 
-需要保留有界等待时，在原有 `limits` 参数之后传入 `client_options`：
+需要有界的优雅关闭时，在 limits 参数之后传入 `client_options`：
 
 ```cpp
 pace::http::client_options closing{
@@ -17,18 +22,20 @@ pace::http::client_options closing{
     .close_timeout = std::chrono::milliseconds(25),
 };
 auto response = co_await pace::http::async_get(io, endpoint, "/health", {}, closing);
-// 对持久客户端：http::client client(std::move(socket), {}, closing);
+// 持久客户端：http::client client(std::move(socket), {}, closing);
 ```
 
-`graceful` 等待对端关闭或预算耗尽，并传播清理错误和取消。预算为 0 时只尝试本端通知，
-负数会被拒绝；默认 `no_wait` 不使用这个预算。它不是请求或读取超时。截断 body、未完成
-chunk、非法 trailer 仍会失败。服务端发送最终响应后的有界 drain 保持不变，包括提前拒绝
-尚未收完的请求 body。[完整语义](../reference/http1/README.md#final-response-close-policy)。
+`graceful` 等待对端关闭或预算耗尽，并传播清理错误。预算为 0 时只尝试本端通知；负数会以
+`std::invalid_argument` 拒绝。它不是请求超时，也不是读取超时。默认的 `no_wait` 不使用这个预算
+（默认 100 ms）。两种策略下，截断的 body、未完成的 chunk 和非法 trailer 都仍会失败。
+服务端发送最终响应后的 drain 与此无关，保持不变，包括提前拒绝请求的情形。
+关闭策略的完整语义见 [HTTP/1 参考](../reference/http1/README.zh.md)。
 
-## 需要独立控制监听时，显式持有 listener
+## 需要控制监听时，显式持有 listener
 
-希望立即得到绑定错误、查询临时端口，或者先停止接收再排空已有连接时，
-使用原来的 listener 重载。listener 放在任务外面，保持到 `io.run()` 返回：
+`http::serve(io, endpoint, handler)` 自己持有 listener，在任务启动时才绑定。
+需要立即拿到绑定结果、查询端口 0 分配到的端口，或者单独停止接收新连接时，改用 listener 重载。
+listener 声明在任务之外，并保持到 `io.run()` 返回：
 
 ```cpp
 pace::io_context io;
@@ -40,28 +47,26 @@ io.spawn(pace::http::serve(listener, app));
 io.run();
 ```
 
-router 也能作为 HTTP/2、HTTP/3 的共享 handler 使用。
-只有一个普通回调、不需要路由时，用 `http::make_handler(callback)` 即可。
-不同 worker 共享的可变状态仍需同步；[接口契约](../reference/http/router.md)
-说明了闭包所有权、线性查找和适用边界。
+router（`<pace/http/router.hpp>`，包含在 `<pace/http.hpp>` 中）同时也是 HTTP/2 和 HTTP/3 接受的 handler。
+只有一个回调、不需要路由时，用 `http::make_handler(callback)`。handler 可能同时在多个 worker 上下文中运行，
+共享的可变状态需要自行同步。添加共享捕获之前，先读 [router 契约](../reference/http/router.zh.md)。
 
 ## 启用 HTTPS
 
-配置并构建 `--tls=y`，然后给客户端增加 TLS 配置和要验证的名称：
+用 `--tls=y` 构建。HTTP 调用的形式不变，只需加上 TLS 配置和要验证的对端名称：
 
 ```cpp
-pace::tls::context trust;
-trust.load_verify_file("my-ca.pem"); // 按需添加 CA；默认使用 OpenSSL 信任路径。
+pace::tls::context trust; // OpenSSL 默认信任路径，验证对端。
+trust.load_verify_file("my-ca.pem"); // 可选：私有 CA 或显式 CA 文件。
 auto response = co_await pace::http::async_get(io, trust, {"127.0.0.1", 8443},
                                        "localhost", "/health");
 ```
 
-TCP 连接地址和证书身份是分开的：上例连接本机地址，但必须验证证书中的 `localhost`。
-TLS 配置必须保持有效，直到这个惰性任务使用结束。
-如果 OpenSSL 安装没有可用的默认根证书，需要显式提供 CA 文件，详见
-[TLS 配置说明](../reference/tls/README.zh.md#配置与连接)。
+证书按 `localhost` 验证，与连接所用的数字 TCP 地址无关。这个惰性任务使用 TLS 配置期间，
+配置必须保持有效；endpoint、对端名称和 target 则由任务自己持有。
+如果 OpenSSL 安装需要显式提供 CA 文件，见 [TLS 参考](../reference/tls/README.zh.md)。
 
-HTTPS 服务端先配置证书链及对应私钥：
+HTTPS 服务端在接收连接之前配置证书链和私钥：
 
 ```cpp
 pace::tls::context security(pace::tls::role::server);
@@ -72,29 +77,57 @@ io.spawn(pace::http::serve(listener, security, route));
 io.run();
 ```
 
-这些对象须活到 accept 任务结束。每个连接独立完成 TLS 握手。HTTP/1.1 接口只接受
-`http/1.1` 或未协商 ALPN；HTTP/2 的 `h2` 使用单独 API。仓库 `tests/certs` 中的密钥
-是公开测试材料，不可作为部署凭据。
+证书与私钥必须匹配，并覆盖客户端要验证的名称。这些对象必须活到 accept 循环结束；`io` 要声明在它们之前。
+每个连接独立完成握手。基于 TLS 的 HTTP/1.1 只接受 ALPN `http/1.1` 或未协商 ALPN；`h2` 请使用单独的
+HTTP/2 接口。仓库中 `tests/certs` 的密钥是公开的测试材料，不能用作部署凭据。
 
-## 复用与限额
+## 复用连接
 
-将已连接的 `tcp::stream` 移入 `http::client`，便可依次 `co_await client.send(request)`；
-对已握手的 `tls::stream` 使用 `http::secure_client`。持续客户端的 HTTP/1.1 request
-须自行提供 Host。一次只能有一个 send 未完成，不能把 HTTP/1.1 当作并发多路复用。
-收到关闭响应、非法响应或遇到取消后，客户端不能再复用。需要新请求时重新连接。
+需要多次交换时，用已连接的传输构造一个持久客户端：
 
-给 `serve`、`async_get`、`async_fetch` 或 client 构造传入 `http::limits` 可调整请求头、body、
-trailer、字段数量、chunk 行长、chunk 数量等上限。默认 body 上限为 1 MiB；
-歧义 Content-Length/Transfer-Encoding、非法 chunk 或危险 trailer 都会被拒绝并关闭连接。
-这些限额不是全局连接数或全局内存策略。下方可选服务端 API 另提供超时和流式响应。
-Expect、CONNECT、流式请求 body、HTTP/3 不在这个接口范围内；HTTP/2、[HTTP/3](../reference/http3/README.md) 和 WebSocket
-使用各自独立接口。主机名可先用可选的 [DNS 扩展](../reference/dns/README.md)显式解析。
+```cpp
+pace::tcp::stream socket(io);
+co_await socket.connect(endpoint);
+pace::http::client client(std::move(socket));
+pace::http::request request;
+request.method = "GET";
+request.target = "/health";
+request.headers.push_back({"Host", "localhost"});
+auto first = co_await client.send(request);
+auto second = co_await client.send(std::move(request));
+client.close();
+```
 
+客户端持有 socket 和解析缓冲区。交换进行期间，客户端对象的地址必须保持不变。持久客户端上的 HTTP/1.1
+请求必须自带 `Host`。同一时间只能有一个 `send` 未完成；HTTP/1.1 不做多路复用。
+收到要求关闭或以 EOF 界定的响应、收到非法响应或被取消之后，客户端不能再发下一个请求
+（`is_open()` 返回 false），需要重新连接。对已完成握手的 `tls::stream` 使用 `secure_client`，
+即可在 HTTPS 上沿用同样的模式。不要在 HTTP 操作之间穿插对底层传输的直接读取。
 
-## 先检查请求头，再决定是否收取 body
+## 设置合理的上限
 
-把新 handler 的返回类型设为 `task<http::server_response>`，即可通过
-`server_options` 启用准入，仍可直接返回原有 `response`：
+```cpp
+pace::http::limits bounds;
+bounds.max_header_bytes = 8192;
+bounds.max_body_bytes = 65536;
+bounds.max_requests_per_connection = 100;
+bounds.max_trailer_bytes = 2048;
+io.spawn(pace::http::serve(listener, route, bounds));
+```
+
+同一个 `limits` 也可以传给 `async_get`、`async_fetch` 和客户端构造函数。默认值还限制了字段数量、
+chunk 行长度、chunk 数量和客户端可接收的 1xx 响应数；body 默认上限为 1 MiB。格式错误或有歧义的
+Content-Length/chunked 分帧会被拒绝并关闭连接。trailer 不能重新定义分帧、Host、连接控制或认证字段。
+
+这些限额约束的是单条消息和解析元数据。下文的可选服务端选项另外提供接收和写入期限；全局内存和连接数
+策略仍由应用负责。endpoint 重载不解析主机名；启用可选的 [DNS 模块](../reference/dns/README.zh.md)后，
+URL 客户端会解析主机名。不支持重定向、重试和解压。HTTP/2、[HTTP/3](../reference/http3/README.zh.md)
+和 [WebSocket](../reference/websocket/README.zh.md) 各有独立接口。
+
+## 先检查请求头，再决定是否接收 body
+
+返回 `task<http::server_response>` 的 handler（即 `server_handler` 类型）可以启用准入、逐请求 body 上限、
+期限和流式响应，同时仍能直接返回普通的缓冲 `response`：
 
 ```cpp
 pace::task<pace::http::server_response> admitted_route(pace::http::request request) {
@@ -112,18 +145,20 @@ options.write_timeout = std::chrono::seconds(30);
 io.spawn(pace::http::serve(listener, admitted_route, options));
 ```
 
-准入回调拿到已经检查请求行、头字段和 framing 的只读视图；视图只在同步回调内有效。
-拒绝时立即发送所选响应，再关闭连接，不等待客户端上传其声明的 body。接受时选择的限额
-只作用于本次请求，同时约束 Content-Length 和 chunked；下一个 keep-alive 请求重新选择。
-小量 socket 预读允许带入少量 body，但不会先等待或收集完整 body。最终 handler 仍收到
-限额内完整缓冲的请求。
+准入回调在请求行、头字段和分帧验证之后、收集 body 之前运行。拒绝时立即发送所给响应，即使对端迟迟不发
+body 也不等待，随后关闭连接。接受时选定的上限同时约束 Content-Length 和 chunked 输入，每个 keep-alive
+请求重新选择一次。借给回调的请求头视图只在这次同步调用内有效；一次有界的 socket 读取可能已经带入少量
+body 字节，但不会等待 body。被接受的请求仍以完整缓冲的 body 交给最终 handler。准入回调抛出异常时返回 500。
 
-响应也可返回 `streaming_response`，提供已知的 `content_length` 和独占的 `body_source`。
-PACE 给 `read(span<char>)` 的缓冲区默认最多 64 KiB；上一块写完才继续读取。断连、取消或
-写超时会停止后续读取并释放 source。可把已经打开的文件句柄放进 source，使发送期间一直
-持有同一个快照，避免把整个归档载入内存。详见[已打开文件的完整示例](../reference/http1/README.md#bounded-response-producers)。
+同一个 handler 也可以返回 `streaming_response`，提供独占的 `body_source` 和已知的 `content_length`。
+PACE 用一个有界缓冲区（`server_options::response_buffer_bytes`，默认 64 KiB）调用 `source->read(span<char>)`，
+等这一块写完再读下一块。断连、取消或写入超时会停止后续读取并释放 source。把已经打开的文件放进 source，
+就能在发送期间始终使用同一份快照，而不必把整个文件读进内存；完整示例见
+[HTTP/1 参考](../reference/http1/README.zh.md)。
 
-请求超时覆盖每次请求头和 body 的接收（含 keep-alive 等待），写超时覆盖响应头和 body 的
-发送；两者均为绝对期限，收到少量数据不会重新计时。提前拒绝后撤销请求定时器，响应使用
-写期限。过期直接关闭连接，不保证另发 408。最终业务 handler 和 TLS 握手不在这两段期限内。
-准入和 producer 是同步调用，必须及时返回；期限无法抢占一个阻塞的应用回调。
+请求超时和写入超时分别是接收阶段和发送阶段的绝对期限：收到少量数据不会重新计时，设为 0 表示不启用。
+两者都不包括最终 handler 和 TLS 握手。超时直接关闭传输，不保证另发 408。提前拒绝时请求期限随之结束，
+拒绝响应改由写入期限约束。准入回调和 producer 都是同步调用，必须及时返回：期限无法抢占一个阻塞的应用回调。
+
+参考：[HTTP/1 模块](../reference/http1/README.zh.md) · [共享 HTTP 客户端](../reference/http/clients.zh.md)。
+下一步：[worker 与线程](../tutorial/08-workers-and-threads.zh.md)。
