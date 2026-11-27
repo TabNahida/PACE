@@ -1,5 +1,7 @@
 # Local Linux gateway comparison with nginx
 
+[简体中文](http-gateway.zh.md) · [Performance](README.md)
+
 For the latest single-worker optimization, before/after comparison and contention diagnostics, see [gateway optimization](history/gateway-optimization-2026-11-03.md). This page retains the earlier measurements.
 
 Measured 2026-11-03 on a **shared local Linux / WSL2 host**. A first run coincided

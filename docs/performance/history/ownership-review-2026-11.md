@@ -1,5 +1,7 @@
 # Ownership and hot-path review (16–18 November 2026)
 
+[简体中文](ownership-review-2026-11.zh.md) · [Performance history](README.md)
+
 This review covers runtime scheduling and worker ownership, HTTP dispatch and
 routing, TLS configuration, DNS lookups, and QUIC pumps. Changes preserve the
 existing context-affinity and shutdown contracts. Benchmark timings describe

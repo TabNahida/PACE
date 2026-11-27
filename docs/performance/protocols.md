@@ -1,6 +1,6 @@
 # HTTP and WebSocket performance investigation
 
-[TCP comparison](README.md) · [CI architecture coverage](../contributing/ci.md)
+[简体中文](protocols.zh.md) · [Performance](README.md) · [CI architecture coverage](../contributing/ci.md)
 
 These measurements use local Linux. HTTP/1 and WebSocket compare PACE with its
 own v0.1.1 behavior; the HTTP/2 and HTTP/3 experiment compares handler limits in

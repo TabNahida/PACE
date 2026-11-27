@@ -1,6 +1,6 @@
 # Gateway optimization · local Linux · 3 November 2026
 
-[Documentation](../../README.md) · [Gateway API and limits](../../reference/gateway/README.md) · [Earlier nginx comparison](../http-gateway.md) · [TCP/Asio/libuv results](../README.md)
+[简体中文](gateway-optimization-2026-11-03.zh.md) · [Documentation](../../README.md) · [Gateway API and limits](../../reference/gateway/README.md) · [Earlier nginx comparison](../http-gateway.md) · [TCP/Asio/libuv results](../README.md)
 
 This is a same-session, rotating **before/after** comparison on local Linux / WSL2,
 not a comparison against numbers from another run. This earlier optimization
@@ -122,7 +122,7 @@ metadata. This is additional retained memory, not extra stored cache entries.
 Contexts retain cache internals until destruction, so services should be created
 once per mount, not once per request. The cache's configured budget is not an RSS cap. Bodies are still copied, and
 uncached file reads still run synchronously on the reactor. These tradeoffs are
-spelled out in the [reference](../../reference/gateway/README.md#reactor-local-cache-hits).
+spelled out in the [reference](../../reference/gateway/README.md).
 
 ## Isolated contention and hashing diagnostics
 
