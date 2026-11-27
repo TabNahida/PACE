@@ -2,6 +2,16 @@ option("tests", {default = true, showmenu = true, description = "Build correctne
 
 -- Paths stay anchored to PACE when included by another project.
 local pace_root = path.directory(os.scriptdir())
+-- doctest is a test-only dependency; the libraries never link it.
+if has_config("tests") then add_requires("doctest 2.5.3") end
+
+-- Every test executable shares one doctest main() with a per-test-case watchdog.
+local function use_doctest()
+    add_files(path.join(pace_root, "tests/support/main.cpp"))
+    add_includedirs(path.join(pace_root, "tests"))
+    add_packages("doctest")
+end
+
 if has_config("tests") then
     if has_config("modules") then
         target("pace_module_tests")
@@ -28,6 +38,7 @@ if has_config("tests") then
         target("pace_" .. name .. "_tests")
             set_kind("binary")
             add_files(path.join(pace_root, "tests", name .. "_tests.cpp"))
+            use_doctest()
             add_deps("pace")
             if name == "network" and not has_config("http1") then add_defines("PACE_CORE_ONLY_TESTS") end
             set_rundir(pace_root)
@@ -40,6 +51,7 @@ if has_config("tests") then
         target("pace_tls_trust_failure_tests")
             set_kind("binary")
             add_files(path.join(pace_root, "tests", "tls_trust_failure_tests.cpp"))
+            use_doctest()
             add_deps("pace_tls")
             add_ldflags("-Wl,--wrap=SSL_CTX_set_default_verify_paths", {force = true})
             set_rundir(pace_root)

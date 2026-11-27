@@ -1,10 +1,10 @@
+#include "support/pace_test.hpp"
 #include <pace/udp.hpp>
 #include <pace/detail/socket_address.hpp>
 
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <thread>
@@ -14,13 +14,7 @@ namespace
 {
 using namespace std::chrono_literals;
 
-void require(bool value, const char* what)
-{
-    if (!value)
-    {
-        throw std::runtime_error(what);
-    }
-}
+using pace::test::require;
 
 pace::task<void> owned_packets(pace::io_context& io)
 {
@@ -402,84 +396,71 @@ void run(pace::io_context& io)
 }
 } // namespace
 
-int main()
+TEST_CASE("owned UDP sockets send, receive, truncate and cancel")
 {
-    try
+    pace::io_context io;
+    io.spawn(owned_packets(io));
+    run(io);
+}
+
+TEST_CASE("UDP exchange ignores packets from other peers")
+{
+    pace::io_context io;
+    io.spawn(exchange_filtered(io));
+    run(io);
+}
+
+TEST_CASE("UDP IPv4 round trip")
+{
+    pace::io_context io;
+    io.spawn(roundtrip(io));
+    run(io);
+}
+
+TEST_CASE("UDP IPv6 round trip")
+{
+    pace::io_context io;
+    io.spawn(ipv6_roundtrip(io));
+    run(io);
+}
+
+TEST_CASE("UDP IPv6 wildcard endpoints")
+{
+    pace::io_context io;
+    io.spawn(ipv6_wildcards(io));
+    run(io);
+}
+
+TEST_CASE("UDP IPv6 endpoint validation")
+{
+    pace::io_context io;
+    io.spawn(ipv6_validation(io));
+    run(io);
+}
+
+TEST_CASE("UDP receive cancellation and duplicate receive")
+{
+    for (const auto* address : {"127.0.0.1", "::1"})
     {
+        for (const bool close : {false, true})
         {
+            CAPTURE(address);
+            CAPTURE(close);
             pace::io_context io;
-            io.spawn(owned_packets(io));
+            pace::udp::socket socket(io, {address, 0});
+            bool canceled = false, duplicate = false;
+            io.spawn(receive_wait(socket, canceled));
+            io.spawn(cancel_wait(socket, close, duplicate));
             run(io);
+            CHECK(canceled);
+            CHECK(duplicate);
         }
-        {
-            pace::io_context io;
-            io.spawn(exchange_filtered(io));
-            run(io);
-        }
-        {
-            pace::io_context io;
-            io.spawn(roundtrip(io));
-            run(io);
-        }
-        {
-            pace::io_context io;
-            io.spawn(ipv6_roundtrip(io));
-            run(io);
-        }
-        {
-            pace::io_context io;
-            io.spawn(ipv6_wildcards(io));
-            run(io);
-        }
-        {
-            pace::io_context io;
-            io.spawn(ipv6_validation(io));
-            run(io);
-        }
-        for (const auto* address : {"127.0.0.1", "::1"})
-        {
-            for (const bool close : {false, true})
-            {
-                pace::io_context io;
-                pace::udp::socket socket(io, {address, 0});
-                bool canceled = false, duplicate = false;
-                io.spawn(receive_wait(socket, canceled));
-                io.spawn(cancel_wait(socket, close, duplicate));
-                run(io);
-                require(canceled && duplicate, "cancel/duplicate receive");
-            }
-        }
-        {
-            pace::io_context io;
-            bool invalid = false;
-            try
-            {
-                pace::udp::socket socket(io, {"invalid", 0});
-            }
-            catch (const std::invalid_argument&)
-            {
-                invalid = true;
-            }
-            require(invalid, "numeric address validation");
-        }
-        {
-            pace::io_context io;
-            bool invalid = false;
-            try
-            {
-                pace::udp::socket socket(io, {std::string("127.0.0.1\0suffix", 16), 0});
-            }
-            catch (const std::invalid_argument&)
-            {
-                invalid = true;
-            }
-            require(invalid, "embedded NUL address validation");
-        }
-        std::cout << "UDP IPv4/IPv6, dual-stack endpoints, boundaries, truncation and cancellation passed\n";
     }
-    catch (const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-        return 1;
-    }
+}
+
+TEST_CASE("UDP rejects non-numeric and NUL-embedded addresses")
+{
+    pace::io_context io;
+    CHECK_THROWS_AS(pace::udp::socket(io, {"invalid", 0}), std::invalid_argument);
+    CHECK_THROWS_AS(pace::udp::socket(io, {std::string("127.0.0.1\0suffix", 16), 0}), std::invalid_argument);
 }
