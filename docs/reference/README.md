@@ -1,88 +1,45 @@
-# Public API reference
+# Reference
 
-[Direct clients and HTTP name migration](direct-clients.md)
+[简体中文](README.zh.md) · [Documentation](../README.md)
 
-[Component conveniences (0.3.1)](component-conveniences.md) · [Protocol tuning](../guides/protocol-tuning.md) · [HTTP recipes](../guides/http-recipes.md) · [Build options](build-options.md)
+Every public header under `include/pace/`, one section per module. Each module page follows the same order:
+overview, synopsis, types, functions, errors, threads and concurrency, lifetime and ownership, limits and
+defaults. Headers under `src/` are internal and not documented here.
 
-[Application conveniences: app, async URL client, TCP, context](convenience.md)
+| Module | Umbrella header | Target | Pages |
+|:--|:--|:--|:--|
+| Runtime | `<pace/runtime.hpp>` | `pace_runtime` | [overview](runtime/README.md) · [task](runtime/task.md) · [io_context](runtime/io-context.md) · [runtime](runtime/runtime.md) · [run](runtime/run.md) · [structured concurrency](runtime/structured-concurrency.md) · [I/O backends](runtime/io-backends.md) |
+| Networking | `<pace/net.hpp>` | `pace_net` | [overview](net/README.md) · [TCP](net/tcp.md) · [UDP](net/udp.md) |
+| TLS | `<pace/tls.hpp>` | `pace_tls` | [TLS](tls/README.md) |
+| DNS | `<pace/dns.hpp>` | `pace_dns` | [DNS](dns/README.md) |
+| QUIC | `<pace/quic.hpp>` | `pace_quic` | [QUIC](quic/README.md) |
+| HTTP | `<pace/http.hpp>` | `pace_http` | [overview](http/README.md) · [routing](http/router.md) · [URL clients](http/clients.md) |
+| HTTP/1.1 | `<pace/http1.hpp>` | `pace_http1` | [HTTP/1.1](http1/README.md) |
+| HTTP/2 | `<pace/http2.hpp>` | `pace_http2` | [HTTP/2](http2/README.md) |
+| HTTP/3 | `<pace/http3.hpp>` | `pace_http3` | [HTTP/3](http3/README.md) |
+| WebSocket | `<pace/websocket.hpp>` | `pace_websocket` | [WebSocket](websocket/README.md) |
+| Gateway | `<pace/gateway.hpp>` | in `pace_http1` | [gateway](gateway/README.md) |
 
-Convenience APIs: [pace::run](runtime/run.md) · [HTTP routing and handler adapters](http/router.md) · [Guided tutorials](../tutorial/README.md)
+`<pace/pace.hpp>` includes the umbrella header of every enabled module.
 
-[中文索引与关键约定](README.zh.md)
+| Across modules | |
+|:--|:--|
+| [Errors](errors.md) | Exception types and error codes used everywhere |
+| [Build options](build-options.md) | xmake options, targets, named modules, diagnostics |
+| [Platform support](platform-support.md) | Systems, compilers, I/O backends, native handles |
 
-This reference describes the public headers in `include/pace/`. Signatures use
-C++20. A type in `pace::detail` is an implementation detail even if visible through
-a public header; it has no compatibility guarantee.
+## Rules every module shares
 
-| Header | Public symbols |
-|---|---|
-| [`task.hpp`](runtime/task.md) | `task<T = void>`, `task<void>`, their `promise_type`, `handle_type`, constructors, move assignment, destructor, `release`, `operator co_await`, nested `awaiter` and its protocol members |
-| [`io_context.hpp`](runtime/io-context.md) | `io_context`, construction/destruction, `spawn`, `post`, `run`, `stop`, `stopped`, `current`, `cancel`, `wait_readable`, `wait_writable`, `sleep_for`, `call_at`, `call_after`, `timer_handle`, `yield`, `io_awaiter`, `timer_awaiter`, `yield_awaiter` |
-| [`runtime.hpp`](runtime/runtime.md) | `runtime`, construction/destruction, `size`, `context`, `run`, `run_on_current_thread`, `stop` |
-| [`task_group.hpp`, `operation.hpp`, `cancellation.hpp`](runtime/structured-concurrency.md) | Structured child ownership, result handles, cancellation sources, shared deadlines and concurrency contracts |
-| [Unified HTTP clients](http/clients.md) | HTTP/1, 2, 3 direct/async URL calls and naming migration |
-| [`blocking.hpp`](direct-clients.md) | `blocking_options`, shared direct-client deadline options |
-| [`ip.hpp`](net/tcp.md) | Shared `address_family` for TCP and UDP endpoints |
-| [`stream_io.hpp`](component-conveniences.md#byte-streams-and-tcp) | Owning `write`, bounded string/span `read_exact` for TCP/TLS/QUIC |
-| [`tcp.hpp`](net/tcp.md) | `tcp::endpoint`, `tcp::listen_options`, `tcp::stream`, `tcp::listener` and all their members |
-| [`udp.hpp`](net/udp.md) | `udp::endpoint`, `udp::datagram`, `udp::socket`, `send_to`, `receive_from` |
-| [`dns.hpp`](dns/README.md) | Optional `dns::resolver`, A/AAAA results, deadlines and cancellation |
-| [`quic.hpp`](quic/README.md) | Optional authenticated QUIC contexts, listeners, connections and multiplexed streams |
-| [`http3.hpp`](http3/README.md) | Optional HTTP/3 batch `async_exchange`, `serve_connection`, `serve`, limits |
-| `http_types.hpp` | Transport-independent `http::request`, `response`, `header_field`, `handler`, `protocol_error` |
-| [`http.hpp`](http1/README.md) | HTTP/1.1 types/limits, `request_head`, `admission`, `body_source`, `streaming_response`, `server_handler`, `server_options`, `serve_connection`, `serve`, `client`/`secure_client`, `basic_client`, direct `fetch`/`get`/`post`, asynchronous `async_fetch`/`async_get`/`async_post`, and HTTPS overloads |
-| [`tls.hpp`](tls/README.md) | Optional verified TLS: `tls::context`, `tls::stream`, `trust_source`, `sni_policy`, SNI routing, PEM trust bundles, handshake, ALPN, record I/O and shutdown |
-| [`http2.hpp`](http2/README.md) | Optional HTTP/2: `http2::limits`, batch `async_exchange`, `serve_connection`, `serve` |
-| [`websocket.hpp`](websocket/README.md) | WebSocket handshake, messages, control frames and optional secure transport |
-| [`platform.hpp`](platform-support.md) | `native_socket_type`, `invalid_socket` |
-| [`net.hpp`](platform-support.md) | Compatibility aliases `tcp_stream`, `tcp_listener`, `ipv4_endpoint`, `listen_options` |
-| [`pace.hpp`](platform-support.md) | Umbrella header; no additional types or functions |
+These hold for every API unless its page says otherwise; the [runtime overview](runtime/README.md) states them
+precisely and [Explanation](../explanation/README.md) gives the reasons.
 
-## Rules shared by the APIs
-
-For a runnable starting point, [choose a protocol example](../tutorial/README.md).
-TLS needs `--tls=y`; DNS needs `--dns=y`; QUIC needs `--quic=y`.
-HTTP/2 needs `--http2=y`; enable TLS as well for HTTP/2 over TLS.
-HTTP/3 needs `--http3=y`, which also enables QUIC. See the
-[four-layer module and header map](../explanation/architecture.md#four-independently-linkable-layers).
-
-**Ownership.** A task is lazy and consumed once. Parameters passed by value become
-part of its coroutine frame, but references, pointers, spans and string views do
-not acquire ownership. The context must outlive its sockets, listeners and pending
-operations. A socket object must remain at a stable address until its member
-operations finish. Prefer named coroutine functions with owned value parameters.
-
-**Execution.** One thread runs each context. `spawn`, `post` and `stop` are the
-cross-thread entry points. Socket I/O and timer/yield waits execute on their owning
-context. Construction before `run()` and cleanup after it returns are supported;
-concurrent object access from an unrelated thread is not. Read-only accessors do
-not make a concurrently modified socket safe to inspect.
-
-Concurrency limits differ by protocol. TCP allows one read and one write at once;
-the initial TLS stream allows **one asynchronous operation total**. Check the
-specific protocol's contract before sharing a connection between coroutines.
-
-**Errors.** Awaited tasks rethrow their exceptions. A root task or posted callback
-with an unhandled exception stops its context; `run()` rethrows the first recorded
-exception after draining. Runtime worker errors stop peer contexts and propagate
-after joining. Allocation failures can propagate in addition to documented
-argument, state and native I/O errors.
-
-**Cancellation.** `stop()` is a permanent cooperative shutdown request, not a task
-join or a forced interruption. Registered readiness waits and timers resume with
-`std::system_error` whose code compares equal to
-`std::errc::operation_canceled`. Catch that code where cancellation is expected.
-An already-stopping context suppresses uncaught root cancellation while draining;
-other errors remain failures. [Structured scopes](runtime/structured-concurrency.md) inherit
-local cancellation tokens and deadlines without stopping the context.
-
-**Progress.** A coroutine runs until it suspends or finishes. Blocking work and
-unbounded CPU loops prevent that reactor from serving other work or finishing
-shutdown. `run()` stays alive while idle until explicitly stopped. Contexts are
-single-use and cannot be restarted.
-
-The [tutorials](../tutorial/README.md) show these rules together. The linked signatures
-describe the current implementation; they do not promise APIs from Asio or libuv.
-
-- [HTTP gateway services](gateway/README.md): directory mounts, reverse proxies, caching and balancing.
-- [I/O backends](runtime/io-backends.md): selection, defaults and readiness/completion boundaries.
+- **Ownership.** Tasks are lazy and consumed once. Parameters passed by value belong to the task; references,
+  spans and string views are borrowed and must outlive it. A socket stays at a stable address until its operations
+  finish, and the context outlives its sockets. [More](../explanation/ownership.md)
+- **Threads.** One thread runs each context. Only `spawn`, `post` and `stop` may be called from other threads.
+  [More](../explanation/execution-model.md)
+- **Concurrency per object.** TCP allows one read and one write at a time; TLS, WebSocket and the HTTP clients
+  allow one operation at a time. Each page states its limit.
+- **Errors.** Exceptions, rethrown through `co_await`. [More](errors.md)
+- **Cancellation.** `stop()` and cancellation tokens resume suspended operations with
+  `std::errc::operation_canceled`; deadlines with `std::errc::timed_out`.

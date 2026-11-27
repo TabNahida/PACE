@@ -1,125 +1,150 @@
 <p align="center">
-  <img src="docs/performance/assets/project-card.svg" alt="PACE — C++20 coroutine networking. Your threads. Your pace." width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/banner-dark.svg">
+    <img src="docs/assets/readme/banner-light.svg" alt="PACE — C++20 coroutine networking" width="100%">
+  </picture>
 </p>
 
 <p align="center">
   <a href="https://github.com/TabNahida/PACE/actions/workflows/ci.yml"><img src="https://github.com/TabNahida/PACE/actions/workflows/ci.yml/badge.svg" alt="Build and test"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-70dfc3" alt="MIT license"></a>
+  <a href="https://github.com/TabNahida/PACE/releases"><img src="https://img.shields.io/github/v/release/TabNahida/PACE?color=0f766e" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/C%2B%2B-20-0f766e" alt="C++20">
+  <img src="https://img.shields.io/badge/platforms-Linux%20%C2%B7%20macOS%20%C2%B7%20Windows%20%C2%B7%20FreeBSD-0f766e" alt="Linux, macOS, Windows, FreeBSD">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0f766e" alt="MIT license"></a>
 </p>
 
-<p align="center">English · <a href="README.zh.md">简体中文</a> · <a href="docs/README.md">Documentation</a> · <a href="docs/reference/README.md">API</a></p>
+<p align="center">English · <a href="README.zh.md">简体中文</a> · <a href="https://tabnahida.github.io/PACE/">Website</a> · <a href="docs/README.md">Documentation</a></p>
 
-**C++20 coroutine networking, from sockets to HTTP/3.** PACE (Parallel Async Coroutine Engine) runs on one thread, a fixed worker pool, or threads your application owns.
-
-- **Write asynchronous code in sequence.** Await connections, reads, writes and timers with `co_await`.
-- **Choose where work runs.** One reactor per worker, explicit task placement, caller-owned execution.
-- **Build only what you use.** A core without third-party runtime dependencies, with optional protocol modules above it.
+**PACE is a C++20 coroutine networking library: TCP and UDP, TLS, DNS, QUIC, HTTP/1.1, HTTP/2, HTTP/3 and
+WebSocket, on one thread, a fixed worker pool, or threads your application owns.**
 
 <p align="center">
-  <a href="docs/performance/README.md"><img src="docs/performance/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
+  <a href="docs/performance/README.md">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/numbers-dark.svg">
+      <img src="docs/assets/readme/numbers-light.svg" alt="PACE 0.6.1 headline measurements: coroutine switch, TCP echo and WebSocket round trips" width="100%">
+    </picture>
+  </a>
 </p>
 
-<p align="center"><a href="docs/performance/README.md">Full benchmark results, methodology &amp; raw data →</a></p>
+<p align="center">
+  <a href="docs/performance/README.md">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/tcp-echo-dark.svg">
+      <img src="docs/assets/readme/tcp-echo-light.svg" alt="TCP echo throughput and latency of PACE, Asio and libuv on PACE 0.6.1" width="100%">
+    </picture>
+  </a>
+</p>
 
-## Four layers. Your stack.
+Measured on PACE 0.6.1 on one Apple M6 laptop, every library with the same clients in the same run. On this
+machine libuv leads the TCP echo workload; on Linux, PACE had the highest throughput of the three in the
+[0.5.0 measurement](docs/performance/tcp.md), and Asio the lowest tail latency. Numbers describe these workloads on these machines, not general
+superiority. [Methodology and raw data →](docs/performance/README.md)
 
-| Layer | Modules | xmake targets |
-|:--|:--|:--|
-| **3 · Applications** | [HTTP/1.1](docs/reference/http1/README.md) · [HTTP/2](docs/reference/http2/README.md) · [HTTP/3](docs/reference/http3/README.md) · [WebSocket](docs/reference/websocket/README.md) | `pace_http1` · `pace_http2` · `pace_http3` · `pace_websocket` |
-| **2 · Extensions** | [TLS](docs/reference/tls/README.md) · [DNS](docs/reference/dns/README.md) · [QUIC](docs/reference/quic/README.md) | `pace_tls` · `pace_dns` · `pace_quic` |
-| **1 · Networking** | [TCP](docs/reference/net/tcp.md) · [UDP](docs/reference/net/udp.md) · Socket API | `pace_net` |
-| **0 · Runtime** | Event loop · Native polling · Tasks · Timers · Workers | `pace_runtime` |
+## 30-second example
 
-Link individual modules, each with its own header such as `<pace/tls.hpp>`, or `pace` and `<pace/pace.hpp>` for the enabled stack. HTTP/1.1 and WebSocket are enabled by default; TLS, DNS, QUIC, HTTP/2 and HTTP/3 are opt-in. QUIC and HTTP/3 require POSIX; see the [platform matrix](docs/reference/platform-support.md).
-
-[Architecture →](docs/explanation/architecture.md) · [Build options & integration →](docs/tutorial/01-install-and-first-program.md)
-
-## A direct HTTP client
-
-```cpp
-auto reply = pace::http::get("http://127.0.0.1:8080/health");
-```
-
-One call returns an owned response; no `run` is needed. It blocks this thread,
-with a default 30-second deadline. In a coroutine use
-`co_await pace::http::async_get(url)`. HTTP/2 and HTTP/3 use the same URL names. TCP and UDP offer `exchange` / `async_exchange`.
-Use [structured task groups](docs/tutorial/07-structured-concurrency.md) to join
-concurrent work and share one cancellation token and deadline.
-
-[Write your first client →](docs/tutorial/02-http-client.md) ·
-[Signatures and migration from 0.3.1 →](docs/reference/direct-clients.md)
-
-These client APIs require PACE 0.4.0 or newer.
-
-## A small HTTP server
+<table>
+<tr><th>Client</th><th>Server</th></tr>
+<tr>
+<td>
 
 ```cpp
 #include <pace/http1.hpp>
 
-int main() {
+#include <iostream>
+
+int main()
+{
+    auto reply = pace::http::get("http://127.0.0.1:8080/hello");
+    std::cout << reply.status << ' ' << reply.body;
+}
+```
+
+</td>
+<td>
+
+```cpp
+#include <pace/http1.hpp>
+
+int main()
+{
     pace::http::app app;
-    app.get("/health", [] { return pace::http::text("ok\n"); });
+    app.get("/hello", [] { return pace::http::text("Hello from PACE\n"); });
     app.run(8080);
 }
 ```
 
-Link with `add_deps("pace_http1")`. [Write the client and server step by step →](docs/tutorial/02-http-client.md)
+</td>
+</tr>
+</table>
 
-Continue step by step: [TCP](docs/tutorial/05-tcp.md) · [UDP](docs/tutorial/06-udp.md) · [DNS](docs/tutorial/10-tls-and-dns.md) · [QUIC](docs/tutorial/13-quic-and-http3.md) · [HTTP/3](docs/tutorial/13-quic-and-http3.md) · [WebSocket](docs/tutorial/11-websocket.md)
+The client call blocks its thread with a 30-second default deadline and returns an owned response; inside a
+coroutine, `co_await pace::http::async_get(url)` does the same without blocking. The server runs its event loop on
+the calling thread until stopped. Both link one target: `add_deps("pace_http1")`.
+[Write them step by step →](docs/tutorial/02-http-client.md)
 
-## Files and reverse proxies
+## Modules
 
-```cpp
-app.mount("/assets", "./public")
-   .proxy("/api", {"http://127.0.0.1:9000", "http://127.0.0.1:9001"});
-app.run_workers(4, {"0.0.0.0", 8080});
+Link only what you use. Every module has its own umbrella header and xmake target; `pace` and `<pace/pace.hpp>`
+bring in every enabled module.
+
+| Module | Header | Target | Builds on | Option | Implementation today |
+|:--|:--|:--|:--|:--|:--|
+| [Runtime](docs/reference/runtime/README.md) | `<pace/runtime.hpp>` | `pace_runtime` | — | always | PACE: tasks, timers, epoll / kqueue / IOCP / io_uring reactors |
+| [Networking](docs/reference/net/README.md) | `<pace/net.hpp>` | `pace_net` | runtime | always | PACE: TCP, UDP |
+| [TLS](docs/reference/tls/README.md) | `<pace/tls.hpp>` | `pace_tls` | net | `--tls=y` | OpenSSL 3 |
+| [DNS](docs/reference/dns/README.md) | `<pace/dns.hpp>` | `pace_dns` | net | `--dns=y` | c-ares |
+| [QUIC](docs/reference/quic/README.md) | `<pace/quic.hpp>` | `pace_quic` | net | `--quic=y` | ngtcp2 or OpenSSL QUIC |
+| [HTTP](docs/reference/http/README.md) | `<pace/http.hpp>` | `pace_http` | runtime | with any HTTP | PACE: messages, routing |
+| [HTTP/1.1](docs/reference/http1/README.md) | `<pace/http1.hpp>` | `pace_http1` | net, http | default on | PACE |
+| [HTTP/2](docs/reference/http2/README.md) | `<pace/http2.hpp>` | `pace_http2` | net, http | `--http2=y` | nghttp2 |
+| [HTTP/3](docs/reference/http3/README.md) | `<pace/http3.hpp>` | `pace_http3` | quic, http | `--http3=y` | nghttp3 |
+| [WebSocket](docs/reference/websocket/README.md) | `<pace/websocket.hpp>` | `pace_websocket` | net | default on | PACE |
+| [Gateway](docs/reference/gateway/README.md) | `<pace/gateway.hpp>` | in `pace_http1` | http1 | with HTTP/1.1 | PACE: static files, reverse proxy, cache, balancing |
+
+**On the way to 1.0:** TLS 1.2/1.3, QUIC, HTTP/2, HTTP/3 and DNS are being reimplemented inside PACE, with only
+cryptographic primitives taken from OpenSSL or AWS-LC. The API of each module is documented as it is today and
+updated as each rewrite lands. QUIC and HTTP/3 currently require a POSIX system; see
+[platform support](docs/reference/platform-support.md).
+
+## Install
+
+You need [xmake](https://xmake.io/) and a C++20 compiler; [platform support](docs/reference/platform-support.md)
+lists the compilers and systems CI tests. Add PACE to your project, for example as `third_party/PACE`, and depend on the modules you use:
+
+```lua
+set_languages("cxx20")
+includes("third_party/PACE")
+
+target("app")
+    set_kind("binary")
+    add_files("main.cpp")
+    add_deps("pace_http1")
 ```
 
-Optional bounded caches, per-worker connection pools and round-robin or
-least-connections balancing. Available since PACE 0.5.0.
-[Walk through a gateway →](docs/tutorial/14-gateway.md) ·
-[nginx comparison →](docs/performance/README.md#http-gateways--pace-and-nginx) · [I/O backends →](docs/reference/runtime/io-backends.md)
-
-## Get started
-
-You need [xmake](https://xmake.io/guide/quick-start.html) 2.9.8+ and a C++20 compiler.
-
 ```sh
-git clone https://github.com/TabNahida/PACE.git
-cd PACE
-xmake f -m release -y
-xmake -y tutorial_http
-xmake run tutorial_http
-```
-
-The example starts a local server, verifies a request and exits. To keep it listening on port 8080, run `xmake run tutorial_http serve`.
-
-<details>
-<summary>Enable all protocols on Linux</summary>
-
-```sh
-xmake f -m release --tls=y --dns=y --quic=y --http2=y --http3=y -y
+xmake f -m release -y                                     # HTTP/1.1 and WebSocket, no third-party dependencies
+xmake f -m release --tls=y --dns=y --http2=y --http3=y -y # every protocol; xmake fetches OpenSSL, c-ares, …
 xmake -y
 ```
 
-For a sockets-only build, disable the default application protocols with `--http1=n --websocket=n`. See the [build guide](docs/tutorial/01-install-and-first-program.md) for dependencies and per-module targets.
+C++20 named modules are available with `--modules=y`: `import pace;`, or one module at a time such as
+`import pace.runtime;` and `import pace.net;`. [Build options →](docs/reference/build-options.md)
 
-</details>
-
-Optional **C++20 named module** support is available with `--modules=y` and `add_deps("pace_module")`: use `import pace;`. See the [build guide](docs/tutorial/01-install-and-first-program.md#c-named-module-import-pace) for validated toolchains and setup.
-
-## Explore
+## Documentation
 
 | | |
 |:--|:--|
-| [Tutorials](docs/tutorial/README.md) | Tasks, protocols, workers and graceful shutdown |
-| [API reference](docs/reference/README.md) | Signatures, ownership, errors and protocol limits |
-| [Execution models](docs/tutorial/08-workers-and-threads.md) | Calling thread, fixed workers and application-owned threads |
-| [Platform support](docs/reference/platform-support.md) | Linux, macOS, FreeBSD and Windows backends |
-| [Performance](docs/performance/README.md) | Local Linux measurements, tradeoffs and reproduction |
+| [Tutorial](docs/tutorial/README.md) | From the first program to HTTP/3 and a gateway, one runnable chapter at a time |
+| [Guides](docs/guides/README.md) | Recipes for specific tasks: tuning, HTTP configuration |
+| [Reference](docs/reference/README.md) | Every public type and function, its errors, threading and lifetime rules |
+| [Explanation](docs/explanation/README.md) | Architecture, execution model, ownership and API design |
+| [Performance](docs/performance/README.md) | Every measurement with its method, raw data and history |
+| [Migration](docs/migration/README.md) | Upgrading between versions |
 
-PACE is under active development; APIs and protocol coverage are evolving. See the [reference](docs/reference/README.md) for current limits.
+The same documentation is published at [tabnahida.github.io/PACE](https://tabnahida.github.io/PACE/), in English
+and Chinese.
+
+## License
 
 [MIT](LICENSE) · © 2026 Tab Nahida
-
-QUIC uses ngtcp2 by default. Select the native OpenSSL backend with `--quic_backend=openssl`. Both expose the same QUIC/HTTP3 API. See the [QUIC reference](docs/reference/quic/README.md).

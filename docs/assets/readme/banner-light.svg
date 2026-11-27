@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-label="PACE — C++20 coroutine networking">
+<title>PACE — C++20 coroutine networking</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0fdfa"/><stop offset="1" stop-color="#ffffff"/></linearGradient></defs>
+<rect width="1280" height="300" rx="16" fill="url(#bg)"/>
+<rect x="0.5" y="0.5" width="1279" height="299" rx="16" fill="none" stroke="#d1d9e0"/>
+<text x="72" y="138" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="92" font-weight="800" fill="#1f2328" text-anchor="start" letter-spacing="6">PACE</text>
+<text x="76" y="186" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="30" font-weight="600" fill="#0f766e" text-anchor="start">C++20 coroutine networking</text>
+<text x="76" y="228" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="20" font-weight="400" fill="#59636e" text-anchor="start">From sockets to HTTP/3 — on one thread, a worker pool, or threads you own.</text>
+<rect x="760" y="52" width="448" height="44" rx="10" fill="#5cbdb0"/>
+<text x="780" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="17" font-weight="600" fill="#ffffff" text-anchor="start">HTTP/1.1 · HTTP/2 · HTTP/3 · WebSocket</text>
+<text x="1190" y="80" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" font-weight="500" fill="#ffffff" text-anchor="end" opacity="0.75">L3</text>
+<rect x="760" y="106" width="448" height="44" rx="10" fill="#2aa396"/>
+<text x="780" y="134" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="17" font-weight="600" fill="#ffffff" text-anchor="start">TLS · DNS · QUIC</text>
+<text x="1190" y="134" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" font-weight="500" fill="#ffffff" text-anchor="end" opacity="0.75">L2</text>
+<rect x="760" y="160" width="448" height="44" rx="10" fill="#14897f"/>
+<text x="780" y="188" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="17" font-weight="600" fill="#ffffff" text-anchor="start">TCP · UDP</text>
+<text x="1190" y="188" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" font-weight="500" fill="#ffffff" text-anchor="end" opacity="0.75">L1</text>
+<rect x="760" y="214" width="448" height="44" rx="10" fill="#0f766e"/>
+<text x="780" y="242" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="17" font-weight="600" fill="#ffffff" text-anchor="start">Runtime · tasks · timers · reactors</text>
+<text x="1190" y="242" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" font-weight="500" fill="#ffffff" text-anchor="end" opacity="0.75">L0</text>
+</svg>

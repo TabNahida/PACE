@@ -1,124 +1,145 @@
 <p align="center">
-  <img src="docs/performance/assets/project-card.svg" alt="PACE — C++20 协程网络库，由你掌控线程与执行节奏。" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/banner-dark.svg">
+    <img src="docs/assets/readme/banner-light.svg" alt="PACE — C++20 协程网络库" width="100%">
+  </picture>
 </p>
 
 <p align="center">
   <a href="https://github.com/TabNahida/PACE/actions/workflows/ci.yml"><img src="https://github.com/TabNahida/PACE/actions/workflows/ci.yml/badge.svg" alt="构建与测试"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-70dfc3" alt="MIT 许可证"></a>
+  <a href="https://github.com/TabNahida/PACE/releases"><img src="https://img.shields.io/github/v/release/TabNahida/PACE?color=0f766e" alt="最新版本"></a>
+  <img src="https://img.shields.io/badge/C%2B%2B-20-0f766e" alt="C++20">
+  <img src="https://img.shields.io/badge/platforms-Linux%20%C2%B7%20macOS%20%C2%B7%20Windows%20%C2%B7%20FreeBSD-0f766e" alt="Linux、macOS、Windows、FreeBSD">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0f766e" alt="MIT 许可证"></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · 简体中文 · <a href="docs/README.zh.md">文档</a> · <a href="docs/reference/README.zh.md">API</a></p>
+<p align="center"><a href="README.md">English</a> · 简体中文 · <a href="https://tabnahida.github.io/PACE/zh/">网站</a> · <a href="docs/README.zh.md">文档</a></p>
 
-**从 Socket 到 HTTP/3 的 C++20 协程网络库。** PACE（Parallel Async Coroutine Engine）支持单线程、固定工作线程池，也可以运行在应用自己管理的线程上。
-
-- **按顺序编写异步代码。** 通过 `co_await` 等待连接、读写与定时器。
-- **自己决定任务在哪里执行。** 每个工作线程拥有独立事件循环，任务放置和线程归属清晰可控。
-- **只构建需要的模块。** 核心没有第三方运行时依赖，协议模块按需启用。
+**PACE 是一个 C++20 协程网络库：TCP 与 UDP、TLS、DNS、QUIC、HTTP/1.1、HTTP/2、HTTP/3 和 WebSocket，
+可以运行在单个线程、固定的工作线程池，或者由应用自己管理的线程上。**
 
 <p align="center">
-  <a href="docs/performance/README.md"><img src="docs/performance/assets/readme-performance.svg" alt="PACE, Asio and libuv: local Linux TCP throughput and p50/p95/p99 latency, measured on the 0.5.0 code." width="100%"></a>
+  <a href="docs/performance/README.zh.md">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/numbers-dark.svg">
+      <img src="docs/assets/readme/numbers-light.svg" alt="PACE 0.6.1 核心测量：协程切换、TCP 回显与 WebSocket 往返" width="100%">
+    </picture>
+  </a>
 </p>
 
-<p align="center"><a href="docs/performance/README.md">完整性能数据、测试方法与原始记录 →</a></p>
+<p align="center">
+  <a href="docs/performance/README.zh.md">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/tcp-echo-dark.svg">
+      <img src="docs/assets/readme/tcp-echo-light.svg" alt="PACE 0.6.1 上 PACE、Asio 与 libuv 的 TCP 回显吞吐与延迟" width="100%">
+    </picture>
+  </a>
+</p>
 
-## 四层架构，按需组合
+以上数据在 PACE 0.6.1 上测得：同一台 Apple M6 笔记本，同一次运行，各库使用相同的客户端。在这台机器上，TCP 回显
+负载 libuv 领先；在 Linux 上的 [0.5.0 测量](docs/performance/tcp.zh.md)中，PACE 吞吐量最高，Asio 尾延迟最低。
+这些数字只描述这些负载在这些机器上的表现，不代表全面的优劣。[测量方法与原始数据 →](docs/performance/README.zh.md)
 
-| 层级 | 模块 | xmake 目标 |
-|:--|:--|:--|
-| **3 · 应用协议** | [HTTP/1.1](docs/reference/http1/README.md) · [HTTP/2](docs/reference/http2/README.md) · [HTTP/3](docs/reference/http3/README.md) · [WebSocket](docs/reference/websocket/README.zh.md) | `pace_http1` · `pace_http2` · `pace_http3` · `pace_websocket` |
-| **2 · 基础协议扩展** | [TLS](docs/reference/tls/README.zh.md) · [DNS](docs/reference/dns/README.md) · [QUIC](docs/reference/quic/README.md) | `pace_tls` · `pace_dns` · `pace_quic` |
-| **1 · 网络核心** | [TCP](docs/reference/net/tcp.md) · [UDP](docs/reference/net/udp.md) · Socket API | `pace_net` |
-| **0 · 运行时** | 事件循环 · 原生轮询 · 任务 · 定时器 · 工作线程 | `pace_runtime` |
+## 30 秒示例
 
-可以只链接单个模块（各有自己的头文件，如 `<pace/tls.hpp>`），或通过 `pace` 与 `<pace/pace.hpp>` 使用已启用的完整协议栈。HTTP/1.1 与 WebSocket 默认启用；TLS、DNS、QUIC、HTTP/2 和 HTTP/3 按需开启。QUIC 与 HTTP/3 要求 POSIX，Windows 暂不支持，详见[平台矩阵](docs/reference/platform-support.md)。
-
-[架构设计 →](docs/explanation/architecture.md) · [构建选项与项目集成 →](docs/tutorial/01-install-and-first-program.md)
-
-[结构化任务组](docs/tutorial/07-structured-concurrency.zh.md)让并发子任务自动汇合，
-共享局部取消与 deadline；HTTP/1、2、3 使用[统一 URL 接口](docs/reference/http/clients.zh.md)。
-
-## 直接获取 HTTP 响应
-
-```cpp
-auto reply = pace::http::get("http://127.0.0.1:8080/health");
-```
-
-一次调用直接返回响应，不需要 `run`，阻塞当前线程，默认总超时 30 秒。
-协程里使用 `co_await pace::http::async_get(url)`。TCP、UDP 也提供 `exchange` / `async_exchange`。
-
-[从第一个客户端开始 →](docs/tutorial/02-http-client.zh.md) ·
-[接口与 0.3.1 迁移说明 →](docs/reference/direct-clients.zh.md)
-
-这些客户端接口需要 PACE 0.4.0 或更新版本。
-
-## 一个小型 HTTP 服务
+<table>
+<tr><th>客户端</th><th>服务端</th></tr>
+<tr>
+<td>
 
 ```cpp
 #include <pace/http1.hpp>
 
-int main() {
+#include <iostream>
+
+int main()
+{
+    auto reply = pace::http::get("http://127.0.0.1:8080/hello");
+    std::cout << reply.status << ' ' << reply.body;
+}
+```
+
+</td>
+<td>
+
+```cpp
+#include <pace/http1.hpp>
+
+int main()
+{
     pace::http::app app;
-    app.get("/health", [] { return pace::http::text("ok\n"); });
+    app.get("/hello", [] { return pace::http::text("Hello from PACE\n"); });
     app.run(8080);
 }
 ```
 
-使用 `add_deps("pace_http1")` 链接。[一步步写出这个 HTTP 服务 →](docs/tutorial/02-http-client.zh.md)
+</td>
+</tr>
+</table>
 
-继续学习：[TCP](docs/tutorial/05-tcp.zh.md) · [UDP](docs/tutorial/06-udp.zh.md) · [DNS](docs/tutorial/10-tls-and-dns.zh.md) · [QUIC](docs/tutorial/13-quic-and-http3.zh.md) · [HTTP/3](docs/tutorial/13-quic-and-http3.zh.md) · [WebSocket](docs/tutorial/11-websocket.zh.md)
+客户端调用会阻塞当前线程，默认截止时间 30 秒，返回一个自有所有权的响应；在协程里用
+`co_await pace::http::async_get(url)` 可以得到同样的结果而不阻塞线程。服务端在调用线程上运行事件循环，直到被停止。
+两者都只需链接一个 target：`add_deps("pace_http1")`。[一步步写出这两个程序 →](docs/tutorial/02-http-client.zh.md)
 
-## 快速开始
+## 模块
 
-需要 [xmake](https://xmake.io/guide/quick-start.html) 2.9.8+ 和支持 C++20 的编译器。
+只链接需要的部分。每个模块都有自己的伞头和 xmake target；`pace` 与 `<pace/pace.hpp>` 包含所有已启用的模块。
 
-```sh
-git clone https://github.com/TabNahida/PACE.git
-cd PACE
-xmake f -m release -y
-xmake -y tutorial_http
-xmake run tutorial_http
+| 模块 | 头文件 | Target | 依赖 | 选项 | 当前实现 |
+|:--|:--|:--|:--|:--|:--|
+| [运行时](docs/reference/runtime/README.zh.md) | `<pace/runtime.hpp>` | `pace_runtime` | — | 始终 | PACE：任务、定时器、epoll / kqueue / IOCP / io_uring 反应器 |
+| [网络](docs/reference/net/README.zh.md) | `<pace/net.hpp>` | `pace_net` | runtime | 始终 | PACE：TCP、UDP |
+| [TLS](docs/reference/tls/README.zh.md) | `<pace/tls.hpp>` | `pace_tls` | net | `--tls=y` | OpenSSL 3 |
+| [DNS](docs/reference/dns/README.zh.md) | `<pace/dns.hpp>` | `pace_dns` | net | `--dns=y` | c-ares |
+| [QUIC](docs/reference/quic/README.zh.md) | `<pace/quic.hpp>` | `pace_quic` | net | `--quic=y` | ngtcp2 或 OpenSSL QUIC |
+| [HTTP](docs/reference/http/README.zh.md) | `<pace/http.hpp>` | `pace_http` | runtime | 启用任一 HTTP 时 | PACE：消息、路由 |
+| [HTTP/1.1](docs/reference/http1/README.zh.md) | `<pace/http1.hpp>` | `pace_http1` | net、http | 默认开启 | PACE |
+| [HTTP/2](docs/reference/http2/README.zh.md) | `<pace/http2.hpp>` | `pace_http2` | net、http | `--http2=y` | nghttp2 |
+| [HTTP/3](docs/reference/http3/README.zh.md) | `<pace/http3.hpp>` | `pace_http3` | quic、http | `--http3=y` | nghttp3 |
+| [WebSocket](docs/reference/websocket/README.zh.md) | `<pace/websocket.hpp>` | `pace_websocket` | net | 默认开启 | PACE |
+| [网关](docs/reference/gateway/README.zh.md) | `<pace/gateway.hpp>` | 在 `pace_http1` 中 | http1 | 随 HTTP/1.1 | PACE：静态文件、反向代理、缓存、负载均衡 |
+
+**迈向 1.0：** TLS 1.2/1.3、QUIC、HTTP/2、HTTP/3 和 DNS 正在 PACE 内部重新实现，只从 OpenSSL 或 AWS-LC 取用
+密码学原语。各模块的 API 按当前状态记录，每完成一项重写就同步更新。QUIC 与 HTTP/3 目前需要 POSIX 系统，详见
+[平台支持](docs/reference/platform-support.zh.md)。
+
+## 安装
+
+需要 [xmake](https://xmake.io/) 和支持 C++20 的编译器；CI 实际测试的编译器与系统见
+[平台支持](docs/reference/platform-support.zh.md)。把 PACE 加入工程（例如放在 `third_party/PACE`），然后依赖所需的模块：
+
+```lua
+set_languages("cxx20")
+includes("third_party/PACE")
+
+target("app")
+    set_kind("binary")
+    add_files("main.cpp")
+    add_deps("pace_http1")
 ```
 
-示例会启动本地服务、验证一次请求后退出。要持续监听 8080 端口，运行 `xmake run tutorial_http serve`。
-
-<details>
-<summary>在 Linux 上启用所有协议</summary>
-
 ```sh
-xmake f -m release --tls=y --dns=y --quic=y --http2=y --http3=y -y
+xmake f -m release -y                                     # HTTP/1.1 与 WebSocket，无第三方依赖
+xmake f -m release --tls=y --dns=y --http2=y --http3=y -y # 全部协议；xmake 会获取 OpenSSL、c-ares 等
 xmake -y
 ```
 
-只需要 Socket 时，通过 `--http1=n --websocket=n` 关闭默认应用协议。依赖与各模块目标见[构建指南](docs/tutorial/01-install-and-first-program.md)。
+加上 `--modules=y` 即可使用 C++20 具名模块：`import pace;`，或按模块导入，例如 `import pace.runtime;` 和
+`import pace.net;`。[构建选项 →](docs/reference/build-options.zh.md)
 
-</details>
-
-## 静态文件与反向代理
-
-```cpp
-app.mount("/assets", "./public")
-   .proxy("/api", {"http://127.0.0.1:9000", "http://127.0.0.1:9001"});
-app.run_workers(4, {"0.0.0.0", 8080});
-```
-
-按需配置有界缓存、每 worker 连接池、轮询或最少连接数分配。适用于 PACE 0.5.0 或更新版本。
-[一步步搭建网关 →](docs/tutorial/14-gateway.zh.md) ·
-[nginx 性能对照 →](docs/performance/README.md#http-gateways--pace-and-nginx) · [I/O 后端 →](docs/reference/runtime/io-backends.md)
-
-## 继续探索
+## 文档
 
 | | |
 |:--|:--|
-| [教程](docs/tutorial/README.zh.md) | 任务、协议、工作线程与优雅退出 |
-| [API 参考](docs/reference/README.zh.md) | 接口、所有权、错误处理与协议限制 |
-| [执行模型](docs/tutorial/08-workers-and-threads.md) | 当前线程、固定工作线程与应用自有线程 |
-| [平台支持](docs/reference/platform-support.md) | Linux、macOS、FreeBSD 与 Windows 后端 |
-| [性能数据](docs/performance/README.md) | 本地 Linux 测量、取舍与复现步骤 |
+| [教程](docs/tutorial/README.zh.md) | 从第一个程序到 HTTP/3 和网关，每章都有能运行的程序 |
+| [指南](docs/guides/README.zh.md) | 针对具体任务的做法：调优、HTTP 配置 |
+| [参考](docs/reference/README.zh.md) | 每个公开类型和函数，及其错误、线程与生命周期规则 |
+| [设计说明](docs/explanation/README.zh.md) | 架构、执行模型、所有权与 API 设计 |
+| [性能](docs/performance/README.zh.md) | 每一次测量的方法、原始数据与历史 |
+| [迁移](docs/migration/README.zh.md) | 版本升级指南 |
 
-PACE 正在积极开发，API 与协议覆盖仍在演进。当前限制请参阅 [API 文档](docs/reference/README.zh.md)。
+同一套文档也发布在 [tabnahida.github.io/PACE](https://tabnahida.github.io/PACE/zh/)，提供中英文两个版本。
+
+## 许可证
 
 [MIT](LICENSE) · © 2026 Tab Nahida
-
-可选的 **C++20 命名模块**支持：开启 `--modules=y`，依赖 `pace_module`，即可使用 `import pace;`。已验证工具链与使用方法见[构建指南](docs/tutorial/01-install-and-first-program.zh.md)。
-
-QUIC 默认使用 ngtcp2，可通过 `--quic_backend=openssl` 切换到 OpenSSL。两者共用 QUIC/HTTP3 API。参见 [QUIC 文档](docs/reference/quic/README.md)。
