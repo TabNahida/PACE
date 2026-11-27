@@ -690,6 +690,6 @@ TEST_CASE("invalid upgrade requests fail with the expected HTTP status")
 #ifdef PACE_HAS_TLS
 TEST_CASE("WebSocket echo roundtrip over TLS")
 {
-    secure_roundtrip(std::filesystem::path(__FILE__).parent_path() / "certs");
+    secure_roundtrip(pace::test::certificates());
 }
 #endif

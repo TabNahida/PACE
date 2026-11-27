@@ -166,14 +166,14 @@ QUIC cryptography: those protocol mechanisms remain in OpenSSL and ngtcp2.
 
 ## Validation and references
 
-`tests/quic_tests.cpp` uses local IPv4/IPv6 loopback: real TLS 1.3/QUIC handshakes,
+`tests/quic/quic_tests.cpp` uses local IPv4/IPv6 loopback: real TLS 1.3/QUIC handshakes,
 certificate hostname/IP matching, untrusted/expired certificate rejection, ALPN
 rejection, concurrent binary bidirectional streams, unidirectional streams in
 both directions, FIN, handshake timeouts, cancellation, connection/listener close,
 stream reset and overlapping-operation rejection. A lossy UDP relay drops the
 first Initial and subsequent data packets in both directions. Stream recycling
 tests exceed stream-count and connection-window limits.
-`tests/quic_backend_interop.py` exchanges payloads between OpenSSL and ngtcp2
+`tests/quic/quic_backend_interop.py` exchanges payloads between OpenSSL and ngtcp2
 binaries with each backend acting as both client and server. HTTP/3 has separate protocol
 and interoperability tests; these are functional checks, not performance claims.
 

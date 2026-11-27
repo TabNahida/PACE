@@ -138,7 +138,7 @@ jobs:
       - name: Verify PE architecture and execute enabled functional suites and tutorials
         run: python scripts/ci_portability.py --build-dir build/portability --target x86_64 --mode native --output ci-results/mingw.json
       - name: Verify WebSocket with independent Python peers
-        run: python tests/websocket_interop.py --build-dir build/portability
+        run: python tests/websocket/websocket_interop.py --build-dir build/portability
       - uses: actions/upload-artifact@v4
         if: always()
         with:

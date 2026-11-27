@@ -160,7 +160,7 @@ void run_case(
 
 std::filesystem::path fixtures()
 {
-    return std::filesystem::path(__FILE__).parent_path() / "certs";
+    return pace::test::certificates();
 }
 } // namespace
 

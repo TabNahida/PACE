@@ -17,7 +17,7 @@
 
 namespace
 {
-const std::filesystem::path certificate_directory = std::filesystem::path(__FILE__).parent_path() / "certs";
+const std::filesystem::path certificate_directory = pace::test::certificates();
 using namespace std::chrono_literals;
 using pace::http::request;
 using pace::http::response;

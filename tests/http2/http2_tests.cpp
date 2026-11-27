@@ -1328,7 +1328,7 @@ void tls_driver_abandonment(const tls_configs& configs)
 
 std::filesystem::path certificates()
 {
-    return std::filesystem::path(__FILE__).parent_path() / "certs";
+    return pace::test::certificates();
 }
 #endif
 } // namespace

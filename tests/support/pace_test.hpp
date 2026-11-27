@@ -3,6 +3,7 @@
 // Shared helpers for PACE correctness tests. Tests use doctest's TEST_CASE / SUBCASE / CHECK / REQUIRE.
 // tests/support/main.cpp provides main() and a watchdog that ends a hung test case.
 
+#include <filesystem>
 #include <source_location>
 #include <stdexcept>
 #include <string>
@@ -29,6 +30,18 @@ inline void require(bool value, std::string_view what, std::source_location wher
     {
         throw failure(std::string(where.file_name()) + ":" + std::to_string(where.line()) + ": " + std::string(what));
     }
+}
+
+// tests/ in the source tree, set by xmake/tests.lua, so tests find fixtures wherever their file lives.
+inline std::filesystem::path test_root()
+{
+    return std::filesystem::path(PACE_TEST_ROOT);
+}
+
+// Test-only certificates and keys (tests/certs/README.md). Never use them outside tests.
+inline std::filesystem::path certificates()
+{
+    return test_root() / "certs";
 }
 
 // A test executable can also act as an interop peer (for example `pace_quic_tests --interop-server`).

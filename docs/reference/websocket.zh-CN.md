@@ -109,5 +109,5 @@ true，超时返回 false，其他错误继续抛出；无论结果如何都会�
 独立实现的客户端和服务端互通；尚未取得 Autobahn 完整一致性验证。
 
 ```sh
-python3 tests/websocket_interop.py /path/to/tutorial_websocket
+python3 tests/websocket/websocket_interop.py /path/to/tutorial_websocket
 ```

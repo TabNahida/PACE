@@ -318,7 +318,7 @@ TEST_CASE("direct HTTP client methods, statuses, deadlines and URL validation")
 #ifdef PACE_HAS_TLS
 TEST_CASE("direct HTTPS client verifies the server certificate")
 {
-    const auto certs = std::filesystem::path(__FILE__).parent_path() / "certs";
+    const auto certs = pace::test::certificates();
     pace::tls::context security(pace::tls::role::server), trust;
     security.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
     security.set_alpn_protocols({"http/1.1"});

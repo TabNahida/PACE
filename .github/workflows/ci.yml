@@ -63,7 +63,7 @@ jobs:
       - name: Run all supported protocol tests and tutorials
         run: xmake test -v
       - name: Verify WebSocket with independent Python peers
-        run: python tests/websocket_interop.py --build-dir build/ci
+        run: python tests/websocket/websocket_interop.py --build-dir build/ci
       - name: Validate reporting code
         if: matrix.smoke == 'y'
         run: python -m unittest discover -s tests -p "test_*.py"
@@ -185,7 +185,7 @@ jobs:
             xmake -y
             python3 scripts/ci_portability.py --build-dir build/ci --target x86_64 --mode native --metadata-only --output ci-results/architecture.json
             PACE_HTTP2_TRACE=1 xmake test -v
-            python3 tests/websocket_interop.py --build-dir build/ci
+            python3 tests/websocket/websocket_interop.py --build-dir build/ci
             python3 -m unittest discover -s tests -p "test_*.py"
             python3 scripts/ci_smoke.py --build-dir build/ci --output ci-results/smoke.json
             xmake f -c -m release -o build/ci-profile --cxxstandard=cxx20 --http1=n --websocket=n --tls=n --dns=n --quic=n --http2=n --http3=n --benchmarks=y --components=n --scaling=n --profiling=y --sanitizers=n --examples=n --tests=y -y

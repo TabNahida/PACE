@@ -21,7 +21,7 @@ using pace::test::require;
 
 std::filesystem::path certificates()
 {
-    return std::filesystem::path(__FILE__).parent_path() / "certs";
+    return pace::test::certificates();
 }
 
 // Interop peer mode runs outside doctest and its per-test-case watchdog, so the
@@ -732,7 +732,7 @@ void interop(const std::filesystem::path& fixtures, bool server, uint16_t port)
     }
 }
 
-// Cross-backend interop peer for tests/quic_backend_interop.py; main() calls it instead of doctest:
+// Cross-backend interop peer for tests/quic/quic_backend_interop.py; main() calls it instead of doctest:
 //   --interop-server       listen on 127.0.0.1, print the port and a newline to stdout, serve one exchange
 //   --interop-client PORT  connect to 127.0.0.1:PORT and run one exchange
 // Returns 0 on success; prints the error to stderr and returns 1 on failure.

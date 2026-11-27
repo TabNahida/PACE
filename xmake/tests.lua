@@ -10,13 +10,26 @@ local function use_doctest()
     add_files(path.join(pace_root, "tests/support/main.cpp"))
     add_includedirs(path.join(pace_root, "tests"))
     add_packages("doctest")
+    add_defines("PACE_TEST_ROOT=\"" .. path.join(pace_root, "tests"):gsub("\\", "/") .. "\"")
+end
+
+-- Tests live in tests/<module>/<name>_tests.cpp.
+local test_modules = {
+    runtime = "runtime", backend = "runtime", structured = "runtime",
+    network = "net", udp = "net", direct_client = "net",
+    tls = "tls", dns = "dns", quic = "quic",
+    unified_client = "http", http_extended = "http1", http_services = "gateway",
+    http2 = "http2", http3 = "http3", websocket = "websocket",
+}
+local function test_file(name)
+    return path.join(pace_root, "tests", test_modules[name], name .. "_tests.cpp")
 end
 
 if has_config("tests") then
     if has_config("modules") then
         target("pace_module_tests")
             set_kind("binary")
-            add_files(path.join(pace_root, "tests/module_tests.cpp"), path.join(pace_root, "tests/module_headers.cpp"))
+            add_files(path.join(pace_root, "tests/modules/module_tests.cpp"), path.join(pace_root, "tests/modules/module_headers.cpp"))
             add_deps("pace_module")
             set_rundir(pace_root)
             add_tests("default")
@@ -37,7 +50,7 @@ if has_config("tests") then
     for _, name in ipairs(test_names) do
         target("pace_" .. name .. "_tests")
             set_kind("binary")
-            add_files(path.join(pace_root, "tests", name .. "_tests.cpp"))
+            add_files(test_file(name))
             use_doctest()
             add_deps("pace")
             if name == "network" and not has_config("http1") then add_defines("PACE_CORE_ONLY_TESTS") end
@@ -50,7 +63,7 @@ if has_config("tests") then
     if has_config("tls") and is_plat("linux") then
         target("pace_tls_trust_failure_tests")
             set_kind("binary")
-            add_files(path.join(pace_root, "tests", "tls_trust_failure_tests.cpp"))
+            add_files(path.join(pace_root, "tests/tls/tls_trust_failure_tests.cpp"))
             use_doctest()
             add_deps("pace_tls")
             add_ldflags("-Wl,--wrap=SSL_CTX_set_default_verify_paths", {force = true})
@@ -62,7 +75,7 @@ if has_config("tests") then
         -- Independent dependency probe: no PACE transport or coroutine code.
         target("pace_openssl_diagnostic")
             set_kind("binary")
-            add_files(path.join(pace_root, "tests", "openssl_diagnostic.cpp"))
+            add_files(path.join(pace_root, "tests/tls/openssl_diagnostic.cpp"))
             add_packages("openssl3")
             if is_plat("windows") then
                 add_cxxflags("/utf-8")
@@ -89,7 +102,7 @@ end
 if has_config("tests") and is_plat("windows") then
     target("pace_iocp_diagnostic")
         set_kind("binary")
-        add_files(path.join(pace_root, "tests", "iocp_diagnostic.cpp"))
+        add_files(path.join(pace_root, "tests/runtime/iocp_diagnostic.cpp"))
         add_syslinks("ws2_32")
         add_tests("default")
     target_end()

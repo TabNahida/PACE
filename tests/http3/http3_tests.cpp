@@ -785,7 +785,7 @@ void rejection(const std::filesystem::path& certs)
 
 std::filesystem::path certificates()
 {
-    return std::filesystem::path(__FILE__).parent_path() / "certs";
+    return pace::test::certificates();
 }
 } // namespace
 

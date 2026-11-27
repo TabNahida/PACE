@@ -1713,7 +1713,7 @@ void quic_transport(const std::filesystem::path& fixtures, const transport_conte
 
 std::filesystem::path certs()
 {
-    return std::filesystem::path(__FILE__).parent_path() / "certs";
+    return pace::test::certificates();
 }
 } // namespace
 

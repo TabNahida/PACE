@@ -100,4 +100,4 @@ jobs:
       - name: Exchange payloads between different backends in both directions
         run: |
           chmod +x peers/*/pace_quic_tests
-          python3 tests/quic_backend_interop.py peers/quic-peer-clang-21-openssl/pace_quic_tests peers/quic-peer-clang-21-ngtcp2/pace_quic_tests
+          python3 tests/quic/quic_backend_interop.py peers/quic-peer-clang-21-openssl/pace_quic_tests peers/quic-peer-clang-21-ngtcp2/pace_quic_tests

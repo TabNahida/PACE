@@ -188,5 +188,5 @@ operations, timer lifetime, and independent Python-standard-library peers in
 both roles. This is not an Autobahn conformance certification.
 
 ```sh
-python3 tests/websocket_interop.py /path/to/tutorial_websocket
+python3 tests/websocket/websocket_interop.py /path/to/tutorial_websocket
 ```

@@ -208,7 +208,7 @@ TEST_CASE("unified HTTP URL methods over cleartext HTTP/2")
 #ifdef PACE_HAS_TLS
 TEST_CASE("HTTP/2 over TLS accepts a verified URL and refuses an untrusted one")
 {
-    const auto certs = std::filesystem::path(__FILE__).parent_path() / "certs";
+    const auto certs = pace::test::certificates();
     pace::tls::context security(pace::tls::role::server), trust;
     security.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
     security.set_alpn_protocols({"h2"});
@@ -228,7 +228,7 @@ TEST_CASE("HTTP/2 over TLS accepts a verified URL and refuses an untrusted one")
 #ifdef PACE_HAS_HTTP3
 TEST_CASE("unified HTTP URL methods over verified HTTP/3 without insecure fallback")
 {
-    const auto certs = std::filesystem::path(__FILE__).parent_path() / "certs";
+    const auto certs = pace::test::certificates();
     pace::quic::context security(pace::quic::role::server), trust;
     security.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
     security.set_alpn_protocols({"h3"});

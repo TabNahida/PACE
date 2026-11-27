@@ -487,8 +487,8 @@ int main(int argc, char** argv)
         install_crash_trace();
 #endif
         const std::string selected = argc > 1 ? argv[1] : "all";
-        const auto fixtures =
-            argc > 2 ? std::filesystem::path(argv[2]) : std::filesystem::path(__FILE__).parent_path() / "certs";
+        const auto fixtures = argc > 2 ? std::filesystem::path(argv[2])
+                                       : std::filesystem::path(__FILE__).parent_path().parent_path() / "certs";
         require(
             argc <= 3
                 && (selected == "all" || selected == "crypto" || selected == "context" || selected == "bio"
