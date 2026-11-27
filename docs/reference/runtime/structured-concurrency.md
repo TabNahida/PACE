@@ -1,145 +1,404 @@
 # Structured concurrency, cancellation and deadlines
 
-[中文](structured-concurrency.zh.md) · [Guided tutorial](../../tutorial/07-structured-concurrency.md)
+[简体中文](structured-concurrency.zh.md) · [Runtime](README.md)
 
-Include `<pace/runtime.hpp>` for groups, `<pace/runtime.hpp>` for operation
-boundaries, or `<pace/runtime.hpp>` for sources/tokens/deadlines. All link to
-`pace_runtime` and need no third-party dependency. These APIs require PACE 0.4.0 or newer.
+## Overview
 
-## Scope and ownership
+Task groups run child tasks concurrently inside a scope that joins them; cancellation tokens and deadlines stop
+work cooperatively without stopping the context; operation boundaries attach a token and a deadline to any task.
 
-`with_task_group(factory, operation_options={})` returns a lazy `task<T>`; the owned
-factory takes `task_group&` and returns `task<T>`. The group runs on the current
-context. Its constructor is private; it cannot accidentally be stack-created and
-destroyed with active children. `task_group::run(factory)` is the same boundary
-without extra options. Groups cannot be copied or moved.
+| Header | Target | Build option |
+|:--|:--|:--|
+| `<pace/runtime/task_group.hpp>` (also `<pace/runtime.hpp>`) | `pace_runtime` | always built |
+| `<pace/runtime/operation.hpp>` (also `<pace/runtime.hpp>`) | `pace_runtime` | always built |
+| `<pace/runtime/cancellation.hpp>` (also `<pace/runtime.hpp>`) | `pace_runtime` | always built |
 
-| API | Contract |
-|---|---|
-| `group.spawn(factory)` | Owns a nullary or `io_context&` factory, starts a child on this loop, returns `join_handle<T>` |
-| `group.spawn(task<T>)` | Owns the task, but references already captured by that task remain borrowed |
-| `co_await handle` | Consumes its result once, rethrows its failure; a handle is move-only and context-affine |
-| `group.own(value)` | Moves a value into group storage and returns `T&`; storage is destroyed after joining children, before the boundary returns/throws |
-| `co_await group.join()` | Seals the group and waits for children; observes local cancellation, rejects overlapping joins; no further spawn/own; the boundary always drains before reporting failure |
-| `group.cancel()` | Requests cooperative cancellation of the body and descendants; still requires join |
-| `group.token()` | Copyable token observing the group's local cancellation |
+Every task carries a `cancellation_token`. Awaiting a task passes the caller's token down; an operation boundary
+(`with_options`, `with_deadline`, `with_cancellation`, `with_task_group`) makes a new token linked to it, with the
+earliest of the inherited and new deadlines. Cancelling a token wakes the waits registered under it with
+`std::system_error` (`operation_canceled`, or `timed_out` for a deadline); the context keeps running.
 
-Normal body completion waits for children. The first observed escaping body/child
-exception cancels siblings, and is rethrown only after all children finish. Later
-failures do not replace it. Cancellation observed first can therefore win over a
-later application error; errors are not aggregated. A dropped handle does not
-detach a child or suppress its error. A failure escaping a nested group fails its
-parent child; catch a recoverable operation error inside the child to contain it.
-A group is cooperative concurrency on one reactor, not a CPU thread pool.
+## Synopsis
 
-Borrowing data from the caller *outside* the entire boundary is safe while that
-caller awaits the boundary. Body-local variables are destroyed when the body
-returns/throws, potentially before children: use value captures or `group.own`.
-Factories remain owned until child completion and captures are destroyed before
-join finishes. Return owned values; a view/reference into scope storage cannot
-outlive it. Never immediately invoke a temporary capturing coroutine lambda.
+```cpp
+#include <pace/runtime.hpp>
 
-Existing `io.spawn` remains an explicit unstructured root operation: it does not
-inherit a caller's cancellation token or join ownership. Use `group.spawn` for
-structured application work. `pace::run` remains the outer execution entry.
+#include <chrono>
+#include <iostream>
+#include <string>
 
-## Local cancellation
+using namespace std::chrono_literals;
 
-`cancellation_source` is copyable; `token()` produces a cheap copyable observer.
-`request_cancellation()` is thread-safe and returns whether it won the first
-request; requests are idempotent. `request_timeout()` records `errc::timed_out`.
-`token.error()`/`stop_requested()` also observe an expired token deadline;
-`throw_if_cancelled()` throws `system_error`. `source.link(parent)` propagates
-cancellation one way; configure links before concurrent use. Deadline composition
-belongs to operation boundaries. Use `io.on_cancel` to integrate custom asynchronous waits.
+pace::task<std::string> fetch_both()
+{
+    co_return co_await pace::with_task_group(
+        [](pace::task_group& group) -> pace::task<std::string>
+        {
+            auto first = group.spawn(
+                []() -> pace::task<std::string>
+                {
+                    co_await pace::sleep_for(10ms);
+                    co_return "Hello";
+                }
+            );
+            auto second = group.spawn(
+                []() -> pace::task<std::string>
+                {
+                    co_await pace::sleep_for(5ms);
+                    co_return "structured PACE";
+                }
+            );
+            auto a = co_await first; // rethrows the child's exception, if any
+            auto b = co_await second;
+            co_return a + ", " + b + "!";
+        },
+        {.deadline = pace::deadline::after(2s)} // one budget for the whole group
+    );
+}
 
-`with_cancellation(token, work)` and `with_options(work, options)` own a task or
-factory until completion. Ordinary `co_await task` inherits the current task's
-token. New boundaries link parent and explicit tokens; cancellation never flows
-back up merely because an inner deadline expires. `co_await this_task::cancellation()`
-returns the current token without throwing, useful for inspection during cleanup.
+int main()
+{
+    std::cout << pace::run(fetch_both) << '\n';
+}
+```
 
-Cancellation wakes only the registered wait. A read cancellation does not cancel
-an independent write on the same descriptor. TCP/UDP sockets remain open at the
-primitive layer, but partial writes/reads may have occurred. Protocol operations
-may close an owned connection when its state can no longer be reused: HTTP/1
-`client.send` closes on failure, and HTTP/2/3 batches own/close their connection.
-QUIC cancellation unlinks only that event waiter; other streams continue. DNS
-cancels its lookup and can be reused afterward. Cancellation is not rollback.
+## Types
 
-Callbacks from another thread only mark pending cancellation and wake the poller.
-The reactor unregisters and resumes operations on their owning thread. Timer
-cancellation removes its pending wait rather than leaving a dangling heap pointer.
-Ready operations check cancellation at resumption; cancellation observed at that
-point wins over an otherwise completed result. Never destroy an active coroutine
-to cancel it; request cancellation and join it.
+### `deadline`
 
-## One deadline across layers
+```cpp
+class deadline
+{
+public:
+    using clock = std::chrono::steady_clock;
+    deadline() noexcept = default;
+    explicit deadline(clock::time_point when) noexcept;
+    template <class Rep, class Period>
+    static deadline after(std::chrono::duration<Rep, Period> delay) noexcept;
+    clock::time_point time() const noexcept;
+    bool expired() const noexcept;
+    friend deadline earlier(deadline a, deadline b) noexcept;
+};
+```
 
-`deadline{steady_clock::time_point}` is absolute; default construction means no
-deadline. `deadline::after(duration)` calculates one now, saturating on overflow;
-zero/negative durations are already expired. `earlier(a,b)` selects the tighter
-budget. `operation_options` contains `cancellation_token cancellation` and
-`pace::deadline deadline`.
+An absolute point on `steady_clock`.
 
-`with_deadline(deadline, work)` is an operation boundary. Its budget covers nested
-resolution, connection, handshake, transfer and cleanup. Parent, explicit token
-and new deadlines compose by minimum, so a nested timeout cannot reset the total.
-The boundary arms a scoped callback timer; local expiry reports `timed_out`.
-No timeout is added by an unwrapped async API. Protocol-specific phase timers and
-limits remain available and can fail sooner; they do not extend a total deadline.
+| Member | Behaviour |
+|:--|:--|
+| `deadline()` | No deadline: `time()` is `clock::time_point::max()` and it never expires. |
+| `deadline(when)` | Expires at `when`. |
+| `after(delay)` | Now + `delay`, computed when called. Zero and negative delays give a deadline that has already expired; a delay too large for the clock gives no deadline. |
+| `time()` | The time point (`max()` for none). |
+| `expired()` | Whether the deadline exists and has passed. |
+| `earlier(a, b)` | The earlier of two deadlines; found by argument-dependent lookup. |
 
-Direct clients accept `blocking_options` with the same `cancellation` and `deadline`
-fields. Its existing positive `timeout` (default 30 seconds) is shorthand for a
-relative total bound; the earlier absolute bound wins. All HTTP versions, TCP and
-UDP use the same boundary implementation. Blocking calls still reject a current
-PACE context.
+### `cancellation_token`
 
-Cancellation cannot preempt synchronous computation, OS scheduling or blocking
-foreign code. A child that ignores all cancellation points can prevent join from
-finishing. Custom awaiters must participate through `io.on_cancel(token, callback)`:
-the callback runs on the owner loop, and the returned move-only handle unregisters
-it. Handles are context-affine (or destroyed after the loop joins), may outlive
-the context, and callbacks must promptly finish/unlink the wait exactly once.
-Register only for a token from an active operation boundary to get its deadline
-timer. Context stop also dispatches registered cancellation; registration with a live
-token after stop is rejected. An empty callback with a live token is invalid. Callback exceptions
-follow the reactor's error/stop/drain policy.
+```cpp
+class cancellation_token
+{
+public:
+    cancellation_token() noexcept = default;
+    bool stop_possible() const noexcept;
+    std::error_code error() const noexcept;
+    bool stop_requested() const noexcept;
+    void throw_if_cancelled() const;
+    pace::deadline expires() const noexcept;
+};
+```
 
-## Cleanup shielding
+A cheap, copyable view of one `cancellation_source`. A default-constructed token is empty: it can never be
+cancelled.
 
-`shield(work)` masks inherited local cancellation for that task subtree. Use
-`shield(with_deadline(deadline::after(100ms), cleanup_factory))` for bounded async
-cleanup. The outer boundary still reports its original cancellation afterward.
-Shield does not override `io.stop()`, and does not permit detached cleanup. The boundary
-shields its final drain so cancellation of an explicit join cannot skip children.
-Do not join a group from its own child; that would wait for itself. If the body
-exits with another join pending, the boundary rejects that misuse and cancels/joins
-the children before throwing.
-Prefer synchronous RAII cleanup when sufficient.
+| Member | Behaviour |
+|:--|:--|
+| `stop_possible()` | Whether the token belongs to a source. |
+| `error()` | The source's reason (`operation_canceled` or `timed_out`), else `timed_out` if the source's deadline has passed, else an empty code. |
+| `stop_requested()` | `error()` is non-empty. |
+| `throw_if_cancelled()` | Throws `std::system_error(error())` if `stop_requested()`. |
+| `expires()` | The source's deadline (none for an empty token). |
 
-## Protocol concurrency and server lifetime
+A passed deadline is seen whenever the token is checked, but nothing wakes a suspended wait at that moment: the
+timer that does is armed by an operation boundary.
 
-All sockets/protocol objects are context-affine, must stay unmoved during pending
-operations, and must outlive those operations. Source cancellation is thread-safe;
-this does not make socket methods thread-safe.
+### `cancellation_source`
 
-| Component | Permitted overlap / ownership |
-|---|---|
-| TCP / UDP socket | One read/receive and one write/send; no competing same-direction operations; caller owns borrowed buffers |
-| TLS stream | One async public stream operation total; HTTP/2's internal duplex driver owns its exclusive TLS access |
-| QUIC connection / stream | One protocol driver per connection; independent stream waits can overlap; same stream/direction operations must not compete |
-| HTTP/1 persistent client | One `send` at a time; independent clients may overlap |
-| HTTP/1/2/3 URL client | Each invocation owns a fresh connection; independent calls may overlap |
-| HTTP/2/3 batch | One call owns its transport/session; multiple streams are multiplexed within that batch, results preserve input order |
-| HTTP handler | HTTP/1 serializes requests per connection; HTTP/2/3 bound concurrent handlers by their configured cap |
+```cpp
+class cancellation_source
+{
+public:
+    explicit cancellation_source(pace::deadline expires = {});
+    cancellation_token token() const noexcept;
+    bool request_cancellation() const noexcept;
+    bool request_timeout() const noexcept;
+    void link(cancellation_token parent);
+};
+```
 
-HTTP `serve` invocations own accepted tasks through a group. Closing the listener,
-parent cancellation or context shutdown cancels and joins accepted work before
-`serve` returns. HTTP/2/3 connection drivers also cancel and join active handlers
-before returning or propagating a transport failure. This intentionally replaces
-the old detached-late-handler behavior. A TCP half-close still allows complete
-requests to finish while the protocol driver remains active. A reset HTTP stream
-may discard its result; the handler is guaranteed joined by connection exit, not
-necessarily canceled individually at reset. User handlers must cooperate with
-cancellation; no library can interrupt a blocking callback.
+The owner of a cancellation state. Copies share the same state.
+
+| Member | Behaviour |
+|:--|:--|
+| `cancellation_source(expires)` | A new state with deadline `expires`. |
+| `token()` | A token observing this source. |
+| `request_cancellation()` | Cancels with `operation_canceled`. Returns `true` if this call was the first request; later requests change nothing (the first reason wins). Thread-safe. |
+| `request_timeout()` | The same with `timed_out`; used by deadline timers. |
+| `link(parent)` | Cancels this source when `parent` is cancelled, with `timed_out` if the parent's reason is `timed_out` and `operation_canceled` otherwise; immediately if `parent` already is. One way only: cancelling this source does not affect `parent`. Does not copy the parent's deadline. An empty `parent` is ignored; linking a source to its own token throws `std::invalid_argument`. |
+
+Requests may come from any thread. `link` is not synchronized: link before the source is shared or work starts.
+
+### `cancellation_registration`
+
+```cpp
+class cancellation_registration
+{
+public:
+    cancellation_registration(const cancellation_token&, std::function<void()>);
+    ~cancellation_registration();
+    cancellation_registration(const cancellation_registration&) = delete;
+    cancellation_registration& operator=(const cancellation_registration&) = delete;
+};
+```
+
+The low-level subscription that `link` and `io_context::on_cancel` are built on. The callback runs once, on the
+thread that requests cancellation, or inside the constructor if the token is already cancelled; for an empty token
+nothing is registered. It must not throw and should only record state and wake something. The destructor
+unregisters the callback and, if it is running on another thread, waits for it to return; a callback may destroy
+its own registration. Custom awaiters should use [`io_context::on_cancel`](io-context.md), which runs the callback
+on the context instead.
+
+### `operation_options`
+
+```cpp
+struct operation_options
+{
+    cancellation_token cancellation{};
+    pace::deadline deadline{};
+};
+```
+
+The token and deadline an operation boundary adds to the ones it inherits. Both default to none.
+
+### `task_group`
+
+```cpp
+class task_group
+{
+public:
+    task_group(const task_group&) = delete;
+    task_group& operator=(const task_group&) = delete;
+    ~task_group() = default;
+
+    template <class Factory>
+    auto spawn(Factory factory);           // join_handle<T>
+    template <class T>
+    auto spawn(task<T> work);              // join_handle<T>
+    template <class T>
+    T& own(T value);
+    void cancel();
+    cancellation_token token() const noexcept;
+    task<void> join();
+    template <class Factory>
+    static auto run(Factory factory) -> task<typename entry_result<std::invoke_result_t<Factory&, task_group&>>::type>;
+};
+```
+
+A scope of child tasks on one context. Only `task_group::run` and `with_task_group` create one, and they hand it
+to the body by reference; it cannot be copied or moved, so it cannot outlive the scope that joins its children.
+
+| Member | Behaviour |
+|:--|:--|
+| `spawn(factory)` | Takes ownership of `factory` (callable with `io_context&` or nothing, returning `task<T>`), starts the child on this context on a later turn, and returns a `join_handle<T>`. The child's token is the group's. |
+| `spawn(work)` | The same for an already-created task. The group owns the task; what the task borrowed stays borrowed. |
+| `own(value)` | Moves `value` into storage the group keeps until all children have finished, and returns a reference to it. Use it for data that children borrow. |
+| `cancel()` | Cancels the group's token: the body and every child see `operation_canceled` at their next wait. The scope still joins them. |
+| `token()` | The group's token. |
+| `join()` | Closes the group (no more `spawn` or `own`) and waits until every child has finished. The wait observes the group's token, so a cancelled group makes `join()` throw instead of waiting. It does not rethrow children's exceptions. |
+| `run(factory)` | The scope itself, a lazy task; see `with_task_group`. |
+
+### `join_handle<T>`
+
+```cpp
+template <class T>
+class [[nodiscard]] join_handle
+{
+public:
+    join_handle(join_handle&&) noexcept = default;
+    join_handle& operator=(join_handle&&) noexcept = default;
+    join_handle(const join_handle&) = delete;
+    join_handle& operator=(const join_handle&) = delete;
+    ~join_handle() = default;
+    struct awaiter;
+    awaiter operator co_await() &;
+    awaiter operator co_await() &&;
+};
+```
+
+The result of one child. `co_await handle` waits for the child and returns its value or rethrows its exception.
+A handle can be awaited once, on the group's context; awaiting moves the result out and empties the handle.
+Dropping a handle neither detaches nor cancels the child: the group still joins it, and its failure still fails
+the group. The nested `awaiter` (`await_ready`, `await_suspend`, `await_resume` over the child's shared state)
+is opaque.
+
+### Implementation support
+
+```cpp
+template <class Factory>
+using operation_result = /* T of the task<T> that Factory returns */;
+
+struct group_state;
+template <class T> struct child_state;
+template <class Factory> struct owned_child;
+template <class Factory>
+task<void> run_child(std::shared_ptr<group_state> group, std::shared_ptr<owned_child<Factory>> child);
+struct group_wait;
+inline task<void> drain_group(std::shared_ptr<group_state> state, bool boundary = false);
+```
+
+Declared in the public headers because the templates above use them: the shared state of a group and of each child,
+the root task that runs a child, and the awaiter and task that wait for a group to drain. They are not an
+application API. `operation_result<Factory>` is the result type a boundary or `spawn` returns for `Factory`.
+
+## Functions
+
+### `with_options`, `with_deadline`, `with_cancellation`
+
+```cpp
+template <class Factory>
+auto with_options(Factory factory, operation_options options);
+template <class T>
+auto with_options(task<T> work, operation_options options);
+template <class Work>
+auto with_deadline(pace::deadline when, Work work);
+template <class Work>
+auto with_cancellation(cancellation_token token, Work work);
+```
+
+An operation boundary: a lazy `task<T>` that runs `work` (a factory callable with `io_context&` or nothing, or a
+`task<T>`) under a new cancellation source and returns its result. `with_deadline` and `with_cancellation` are
+`with_options` with one field set.
+
+When the boundary starts it
+
+1. makes a source whose deadline is the earliest of the inherited token's deadline, `options.cancellation`'s and
+   `options.deadline`, so a nested boundary can shorten the budget but never extend it;
+2. links it to the inherited token and to `options.cancellation`, so either cancels the work;
+3. throws at once if the result is already cancelled (the work is never invoked);
+4. arms a callback timer on the current context that requests `timed_out` at the deadline;
+5. runs the work with the new token, and after it finishes throws if the source was cancelled or the deadline has
+   passed, even if the work returned a value.
+
+Cancellation flows only inward: an inner deadline expiring does not cancel the caller, which simply receives the
+`timed_out` exception. The boundary owns `work` until it finishes; pass a capturing lambda itself rather than the
+task from calling it. The `async_` calls of other modules add no total deadline of their own; wrap them in a
+boundary to bound them. Protocol phase timeouts can still fail sooner, but nothing extends the boundary's budget.
+
+### `shield`
+
+```cpp
+template <class Work>
+auto shield(Work work);
+```
+
+Runs `work` with no inherited token and no inherited deadline, for cleanup that must run even though the caller is
+being cancelled. `io_context::stop()` still applies. Bound it with a deadline of its own:
+
+```cpp
+co_await pace::shield(pace::with_deadline(pace::deadline::after(100ms), send_goodbye));
+```
+
+`shield` does not detach: the caller waits for the cleanup, and its own cancellation is reported at its next
+cancellation point afterwards. Prefer synchronous RAII cleanup when it is enough.
+
+### `with_task_group`
+
+```cpp
+template <class Factory>
+auto with_task_group(Factory factory, operation_options options = {});
+```
+
+A lazy `task<T>` that creates a `task_group` on the current context, runs `factory(group)` (which returns
+`task<T>`) as the body, joins every child, and returns the body's result. With non-empty `options` the scope runs
+inside `with_options`. `task_group::run(factory)` is the same scope without options.
+
+How the scope ends:
+
+1. The group's token is linked to the inherited token and has its deadline.
+2. The first exception that escapes the body or a child is recorded and cancels the group, so the siblings and the
+   body see `operation_canceled`. Later exceptions are dropped; errors are not aggregated.
+3. When the body returns or throws, the scope waits for every child, ignoring cancellation for that wait.
+4. It then destroys the storage made by `own`.
+5. It rethrows the recorded exception; otherwise, if the group was cancelled (by `cancel()`, the inherited token or
+   the deadline), it throws `std::system_error` with that reason; otherwise it returns the body's value.
+
+Because a child's exception propagates out of the scope, a failure in a nested group fails the child that ran it;
+catch errors inside a child to contain them.
+
+### `scoped_operation`
+
+```cpp
+template <class Factory>
+task<operation_result<Factory>> scoped_operation(Factory factory, operation_options options);
+```
+
+The coroutine behind `with_options`. Call `with_options` instead.
+
+## Errors
+
+| Error | When |
+|:--|:--|
+| `std::system_error(operation_canceled)` | A wait whose token was cancelled by a source, a linked parent, `task_group::cancel()` or a sibling's failure; `spawn` on a cancelled group |
+| `std::system_error(timed_out)` | A boundary's deadline passed, during the work or before its result was returned |
+| The first exception of the body or a child | Rethrown by `with_task_group` after all children have finished |
+| `std::logic_error` | `spawn`, `own`, `cancel`, `join` or awaiting a `join_handle` off the group's context; `spawn` or `own` after `join` started; a second concurrent `join`; the body returning while a `join` (for example from a child) is still pending; awaiting an empty or already-awaited `join_handle` |
+| `std::invalid_argument` | `cancellation_source::link` with the source's own token |
+
+Cancellation is not rollback. A cancelled read does not cancel a write on the same descriptor, sockets stay open,
+and bytes may already have been sent or received. Each protocol's page says what cancellation leaves behind for its
+objects.
+
+## Threads and concurrency
+
+- `cancellation_source::request_cancellation` and `request_timeout` may be called from any thread. The callbacks
+  PACE registers for a request only mark work and wake the owning reactor; waits are unregistered and resumed on their own
+  context.
+- Everything else here (boundaries, groups, handles) runs on one context. A group is cooperative concurrency on one
+  reactor, not a thread pool: a child that blocks or loops holds every other child.
+- Cancellation is cooperative. It cannot interrupt CPU work, OS scheduling or blocking foreign code, and a child
+  that never reaches a cancellation point keeps its scope from finishing.
+- When a wait completes and its token is cancelled by the time the task resumes, the cancellation wins over the
+  result.
+- Do not join a group from one of its own children: it would wait for itself. The scope rejects this when the body
+  exits, after cancelling and draining the children.
+- `io_context::spawn` remains an unstructured root: it inherits no token and nobody joins it. Use
+  `task_group::spawn` for work that belongs to a scope.
+
+## Lifetime and ownership
+
+- Boundaries and groups own their factories until the work finishes; a child's factory and its captures are
+  destroyed before the join completes.
+- The caller's data outside the whole scope may be borrowed: the caller is suspended until the scope returns.
+- The body's locals are destroyed when the body returns or throws, possibly before the children finish. Children
+  must capture by value or borrow storage made by `group.own`.
+- Return owned values from a scope, not views into its storage.
+- Never destroy a running coroutine to cancel it: request cancellation and join it.
+
+## Limits and defaults
+
+| Item | Value |
+|:--|:--|
+| `operation_options` | no token, no deadline |
+| `cancellation_source` deadline | none |
+| `with_task_group` options | none |
+| Children per group | no fixed limit |
+| Awaits per `join_handle` | 1 |
+| Errors kept per group | the first |
+
+## See also
+
+- [`task`](task.md): token inheritance on `co_await`
+- [`io_context`](io-context.md): `on_cancel` and callback timers for custom awaiters
+- [`pace::run`](run.md): `blocking_options` and `blocking_call`
+- [Tutorial: structured concurrency](../../tutorial/07-structured-concurrency.md) ·
+  [graceful shutdown](../../tutorial/09-graceful-shutdown.md)
+- [Execution model](../../explanation/execution-model.md)

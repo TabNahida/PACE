@@ -1,16 +1,38 @@
-# Select an I/O backend
+# I/O backends
 
-The development branch after 0.4.0 exposes selection without changing TCP/UDP or
-protocol code:
+[简体中文](io-backends.zh.md) · [Runtime](README.md)
+
+## Overview
+
+`io_backend` names the readiness poller an `io_context` uses; the choice changes no socket or protocol code.
+
+| Header | Target | Build option |
+|:--|:--|:--|
+| `<pace/runtime/io_backend.hpp>` (also `<pace/runtime.hpp>`) | `pace_runtime` | always built; io_uring needs `--uring=y` on Linux |
+
+All backends are **readiness** backends: they report that a socket can be read or written, and PACE then performs
+the nonblocking socket call itself. The io_uring backend submits `IORING_OP_POLL_ADD`/`POLL_REMOVE`; the Windows
+IOCP backend uses `ProcessSocketNotifications` with a completion port. Neither does completion-based I/O (io_uring
+`SEND`/`RECV`, registered buffers, zero copy, or overlapped `WSARecv`/`WSASend`/`AcceptEx`), and a newer backend is
+not automatically faster: measure your own workload.
+
+## Synopsis
 
 ```cpp
 #include <pace/runtime.hpp>
-pace::io_context io(pace::io_backend::io_uring);
-pace::runtime workers(4, pace::io_backend::io_uring);
-// io.backend() reports the selected enum; pace::backend_name(...) returns its name.
+
+#include <iostream>
+
+int main()
+{
+    pace::io_context io;                         // automatic: PACE_IO_BACKEND, else the platform default
+    std::cout << pace::backend_name(io.backend()) << '\n';
+    pace::runtime workers(2, pace::io_backend::automatic);
+    std::cout << pace::backend_name(workers.context(0).backend()) << '\n';
+}
 ```
 
-For existing helpers such as `app.run()` / `run_workers()`:
+Choosing io_uring for a program that uses the automatic default, without changing its code:
 
 ```sh
 xmake f -m release --uring=y -y
@@ -18,81 +40,112 @@ xmake -y
 PACE_IO_BACKEND=io_uring ./your-server
 ```
 
-`--uring=y` adds liburing on Linux. It does not change the Linux default.
-The core without that option still has no third-party runtime dependencies.
-`PACE_IO_BACKEND` is consulted only for `automatic` constructors; an explicit
-constructor takes precedence. Accepted values are `automatic`, `epoll`, `kqueue`,
-`wsapoll`, `io_uring`, `iocp`. Invalid names fail immediately; an explicitly selected
-unavailable backend throws instead of silently substituting another.
+## Types
 
-| Platform | Automatic selection | Other choice |
-|---|---|---|
-| Linux | epoll | io_uring, built with `--uring=y` |
-| macOS / FreeBSD | kqueue | — |
-| Windows | 64-bit IOCP when supported by the OS API | WSAPoll compatibility path |
+### `io_backend`
 
-These are **socket readiness backends**. The current io_uring implementation uses
-`IORING_OP_POLL_ADD`/`POLL_REMOVE`; Windows IOCP uses the documented
-`ProcessSocketNotifications` API and a completion port. Actual socket read/write
-operations still use nonblocking socket calls. This is not an implementation of
-io_uring direct SEND/RECV, registered buffers, zero-copy or overlapped
-WSARecv/WSASend/AcceptEx. Merely selecting a newer backend does not guarantee a
-speedup; compare your own workload and the [local Linux results](../../performance/http-gateway.md).
+```cpp
+enum class io_backend
+{
+    automatic,
+    epoll,
+    kqueue,
+    wsapoll,
+    io_uring,
+    iocp
+};
+```
 
-## Linux io_uring
+| Value | Platform | Notes |
+|:--|:--|:--|
+| `automatic` | all | `PACE_IO_BACKEND` if set, otherwise the platform default below |
+| `epoll` | Linux | default on Linux |
+| `kqueue` | macOS, FreeBSD | default there |
+| `wsapoll` | Windows | fallback when IOCP notifications are unavailable; always used by 32-bit builds |
+| `io_uring` | Linux built with `--uring=y` | explicit choice only |
+| `iocp` | 64-bit Windows, build 20348 or later | default on Windows when available |
 
-A 256-entry submission ring batches subscriptions/cancellations, submitting when
-full. This is a batch size, **not** a maximum number of connections. Small rings
-bound per-worker locked memory. The kernel must support `IORING_FEAT_NODROP`;
-restricted containers/seccomp and low per-user locked-memory limits can still
-prevent construction. PACE does not alter these system limits automatically.
-Each context owns its ring and an eventfd wakeup. Monotonic registration identities
-reject late poll/cancel completions after cancellation or descriptor reuse.
+The value is passed to `io_context`'s and `runtime`'s constructors. `io_context::backend()` reports the backend
+actually in use, never `automatic`.
 
-Linux epoll retains persistent interests to avoid unnecessary re-registration.
-io_uring currently uses one-shot polls, so it can issue more submission/completion
-work for the same workload. It remains an explicit choice until measurements
-justify changing the default.
+### Selection
 
-## Windows IOCP
+1. A constructor argument other than `automatic` is used as given. If that backend is not available in this build
+   or on this system, construction throws `std::system_error` with `std::errc::not_supported`; PACE never
+   substitutes another backend for an explicit choice.
+2. With `automatic`, the environment variable `PACE_IO_BACKEND` is read. Accepted values are the enumerator names
+   (`automatic`, `epoll`, `kqueue`, `wsapoll`, `io_uring`, `iocp`); the named backend is then treated as in step 1.
+   Any other value throws `std::invalid_argument` at construction.
+3. Otherwise the platform default is used: epoll on Linux, kqueue on macOS and FreeBSD, and on Windows IOCP if the
+   system supports socket notifications, else WSAPoll.
 
-Socket state notifications require Windows build 20348+ and Microsoft Winsock
-provider sockets. PACE x86 builds use WSAPoll: the independent SDK probe returns
-WSAEINVAL for registrations under WoW64 on Server 2025. Explicit IOCP selection
-on 32-bit builds reports `not_supported`; there is no silent fallback. The function is loaded dynamically so older Windows can use
-WSAPoll. Each context owns a completion port and one-shot level-triggered socket
-registrations. Cross-thread wakeups use `PostQueuedCompletionStatus`; no helper
-thread scans sockets with WSAPoll when IOCP is selected.
+## Functions
 
-Registrations carry opaque monotonically increasing integer keys, not awaiter or
-buffer pointers, so late packets cannot dereference a destroyed coroutine.
-Re-registration after cancellation waits for the REMOVE acknowledgement before
-changing the completion key.
-The backend is still subject to PACE's one-reactor-per-worker ownership rules.
-Multi-worker listener sharing on Windows is a separate concern: `run_workers`
-currently uses `SO_REUSEPORT` and supports only one Windows worker.
+### `backend_name`
 
-Microsoft describes this API as an alternative to WSAPoll and also explains when
-[overlapped I/O can use fewer kernel transitions](https://learn.microsoft.com/en-us/windows/win32/winsock/winsock-socket-state-notifications).
-See the [registration contract](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/ns-winsock2-sock_notify_registration)
-and [liburing API source](https://github.com/axboe/liburing).
+```cpp
+inline const char* backend_name(io_backend value) noexcept;
+```
 
-Backend tests exercise queue pressure beyond the ring size, cancellation, late
-notifications and descriptor reuse. Remote OS checks are functional evidence;
-performance results in this repository are measured on local Linux only.
+The lower-case name of `value`, the same string `PACE_IO_BACKEND` accepts: `"epoll"`, `"kqueue"`, `"wsapoll"`,
+`"io_uring"`, `"iocp"` or `"automatic"`.
 
-### Raw-handle ownership
+## Errors
 
-Use `io_context::cancel(fd)` to interrupt waits while retaining an open socket.
-When the owner closes a raw socket, call `release_socket(fd)` immediately before
-that native close. Socket wrappers and the c-ares adapter do this automatically.
-This distinguishes cancellation (which waits for REMOVE before re-registering)
-from closure (which auto-deregisters and may suppress REMOVE). A context must not
-retain an old key for a recycled native handle.
+| Error | When |
+|:--|:--|
+| `std::invalid_argument` | `PACE_IO_BACKEND` holds an unknown name |
+| `std::system_error(not_supported)` | An explicitly chosen backend is unavailable: io_uring without `--uring=y` or off Linux, a kernel without `IORING_FEAT_NODROP`, IOCP off Windows, in a 32-bit build or before build 20348, or a native backend of another platform |
+| `std::system_error` (native code) | The kernel refused the poller, for example io_uring setup blocked by a container's seccomp policy or a low locked-memory limit |
 
-The independent `pace_iocp_diagnostic` executable exercises the SDK API directly,
-without PACE's poller, and logs structure layout, flags and native return codes.
-On the tested Server 2025 WoW64 runner, all 32-bit variants returned registration
-error WSAEINVAL; x64/ARM64 one-shot level registrations succeeded. This is the
-basis for the explicit 64-bit support boundary, not a claim that all future
-Windows releases necessarily behave identically.
+PACE does not change system limits for you.
+
+## Threads and concurrency
+
+Every context owns its own poller: an epoll or kqueue descriptor, an io_uring ring, or a completion port, plus a
+wakeup channel (eventfd on Linux, a kqueue user event, `PostQueuedCompletionStatus` on Windows) that `spawn`, `post`
+and `stop` use from other threads. No helper thread polls sockets. The one-thread-per-context rules of
+[`io_context`](io-context.md#threads-and-concurrency) apply to every backend.
+
+## Lifetime and ownership
+
+A context registers a socket on its first wait and keeps that registration until the socket is cancelled or
+released. When you own a raw socket:
+
+- `io_context::cancel(fd)` interrupts its waits and leaves it open; it can be awaited again.
+- `io_context::release_socket(fd)` must be called immediately before you close it. It cancels the waits and drops
+  the backend's registration, so a later socket that reuses the descriptor number cannot be confused with the old
+  one.
+
+PACE's sockets, and the DNS module's resolver, do this themselves. Internally, registrations carry monotonically
+increasing integer keys, never pointers to awaiters or buffers, so a notification that arrives late (after
+cancellation or descriptor reuse) is discarded instead of resuming a destroyed coroutine. On IOCP a socket
+re-registered after a cancellation waits for the removal to be acknowledged first.
+
+## Limits and defaults
+
+| Item | Value |
+|:--|:--|
+| Default | `io_backend::automatic` |
+| Linux default | epoll, with persistent level-triggered interests |
+| macOS / FreeBSD default | kqueue, one-shot filters |
+| Windows default | IOCP (64-bit, build 20348+), else WSAPoll |
+| io_uring submission ring | 256 entries per context; a batch size for submissions, not a connection limit |
+| io_uring kernel requirement | `IORING_FEAT_NODROP` |
+| io_uring polls | one-shot, so the same workload can need more submissions than epoll |
+| IOCP sockets | Microsoft Winsock provider sockets; one-shot level-triggered registrations |
+| Readiness events per poll | 256 |
+
+io_uring is not the Linux default: it stays an explicit choice until measurements justify a change. The
+`pace_iocp_diagnostic` test program exercises the Windows API directly, without PACE's poller; the 64-bit-only
+limit for IOCP comes from its result that every 32-bit registration fails with `WSAEINVAL` under WoW64.
+
+## See also
+
+- [`io_context`](io-context.md) and [`runtime`](runtime.md): the constructors that take a backend
+- [Build options](../build-options.md): `--uring`
+- [Platform support](../platform-support.md)
+- [HTTP gateway performance](../../performance/http-gateway.md)
+- Microsoft: [Winsock socket state notifications](https://learn.microsoft.com/en-us/windows/win32/winsock/winsock-socket-state-notifications)
+  and [`SOCK_NOTIFY_REGISTRATION`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/ns-winsock2-sock_notify_registration);
+  [liburing](https://github.com/axboe/liburing)

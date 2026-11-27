@@ -1,125 +1,242 @@
-# `pace::task<T>`
+# `pace::task`
 
-For a synchronous entry that returns a task result, see [`pace::run`](run.md).
+[简体中文](task.zh.md) · [Runtime](README.md)
 
-Include `<pace/runtime.hpp>`. `task<T = void>` is a lazy, move-only coroutine result
-with one consumer. Creating a task allocates its coroutine frame as needed and
-copies/moves parameters into it; its body starts only when awaited or spawned.
-`T` must be suitable for storage in `std::optional<T>`; references are not supported.
-Use `task<void>` for operations without a result.
+## Overview
+
+`task<T>` is the coroutine type of every PACE asynchronous call: a lazy, move-only result with exactly one
+consumer.
+
+| Header | Target | Build option |
+|:--|:--|:--|
+| `<pace/runtime/task.hpp>` (also `<pace/runtime.hpp>`) | `pace_runtime` | always built |
+
+A task does nothing when it is created. Its body starts when it is awaited (`co_await std::move(work)`) or handed
+to a context as a root (`io_context::spawn`, `pace::run`, `task_group::spawn`). It carries no executor of its own:
+it runs on the context of whoever starts it.
+
+## Synopsis
 
 ```cpp
-template<class T = void> class task;
-template<> class task<void>;
+#include <pace/runtime.hpp>
+
+#include <chrono>
+#include <string>
+
+using namespace std::chrono_literals;
+
+pace::task<std::string> greet(std::string name) // name is owned by the frame
+{
+    co_await pace::sleep_for(5ms);
+    co_return "Hello, " + name;
+}
+
+pace::task<std::size_t> entry()
+{
+    auto pending = greet("PACE"); // lazy: nothing has run yet
+    const auto text = co_await std::move(pending);
+    co_return text.size();
+}
+
+int main()
+{
+    return pace::run(entry) == 11 ? 0 : 1;
+}
 ```
 
-Both specializations expose these ownership operations:
+## Types
+
+### `task<T>` and `task<void>`
 
 ```cpp
-task() noexcept;                         // Empty; no coroutine state.
+template <class T = void>
+class [[nodiscard]] task;
+template <>
+class [[nodiscard]] task<void>;
+```
+
+`T` is stored in a `std::optional<T>`, so it must be an object type that `std::optional` accepts; references are
+not supported. Both specializations have the same members:
+
+```cpp
+using handle_type = std::coroutine_handle<promise_type>;
+task() noexcept;
 task(task&& other) noexcept;
 task& operator=(task&& other) noexcept;
 task(const task&) = delete;
+task& operator=(const task&) = delete;
 ~task();
 handle_type release() noexcept;
 awaiter operator co_await() && noexcept;
 ```
 
-Copying is unavailable. Moving empties the source; move assignment first destroys
-any state already owned by the destination. Destruction destroys a still-owned
-frame, including its parameter and local objects, without executing an unstarted
-body. It does not wait for external work. Destroying a coroutine that still has
-an operation registered in a context is not a supported cancellation mechanism.
+| Member | Behaviour |
+|:--|:--|
+| `task()` | An empty task: no coroutine frame. Awaiting it throws `std::logic_error`. |
+| move constructor | Takes the frame; the source becomes empty. |
+| move assignment | Destroys the frame the destination owned, then takes the source's. |
+| `~task()` | Destroys a frame it still owns, with its parameters and locals, without running an unstarted body. It does not wait for anything. |
+| `release()` | Empties the task and returns its raw handle (possibly empty). The caller must then resume, complete and destroy the frame exactly once. It neither schedules nor safely detaches the task. |
+| `operator co_await() &&` | Moves the frame into an owning `awaiter`. Only an rvalue can be awaited: write `co_await std::move(work)` for a named task. |
 
-`co_await` accepts an rvalue and transfers frame ownership to an awaiter. To await
-a named task use `co_await std::move(work)`. There is no lvalue await, `get()`,
-`result()`, `done()` or implicit conversion to `bool` on `task`.
+There is no lvalue await, `get()`, `result()`, `done()` or conversion to `bool`.
 
-```cpp
-pace::task<int> answer() { co_return 42; }
-
-pace::task<void> use_answer(pace::io_context& io) {
-    auto pending = answer();
-    const int value = co_await std::move(pending);
-    if (value != 42) throw std::runtime_error("wrong answer");
-    io.stop();
-}
-```
-
-Awaiting an empty or already-consumed task throws `std::logic_error`. An exception
-thrown in the child body is stored and rethrown by `await_resume()`. Successful
-`task<T>` completion moves its value out; `task<void>` returns nothing. The child
-frame is then destroyed by the owning awaiter. A child that completes without
-suspending may continue directly into its parent; awaiting a task is not a promise
-of a scheduler turn or a change of thread.
-
-`io_context::spawn` accepts only `task<void>`. Wrap a value-returning child in a
-named `task<void>` that awaits and consumes its result. A task carries no executor
-of its own: it inherits execution from the parent or root context. Operations
-inside it must still belong to that context.
-
-## Compiler-facing members
-
-These members are public to implement the coroutine protocol. Application code
-normally uses `co_return`, `co_await` and `spawn` instead of calling them directly.
+### `task<T>::awaiter`
 
 ```cpp
-struct promise_type;  // Nested in each specialization.
-using handle_type = std::coroutine_handle<promise_type>;
-
-// task<T>::promise_type
-std::optional<T> value;
-task get_return_object() noexcept;
-template<class U> void return_value(U&& result);
-
-// task<void>::promise_type
-task get_return_object() noexcept;
-void return_void() const noexcept;
-```
-
-`return_value` constructs `value` from the forwarded operand of `co_return`.
-The promise derives from an internal base that initially suspends, captures
-unhandled exceptions, and transfers control to the parent at final suspension.
-Its continuation and completion bookkeeping are implementation details, not an
-application scheduling interface.
-
-Both nested awaiters expose:
-
-```cpp
-struct awaiter {
+struct awaiter
+{
     handle_type handle;
     awaiter(handle_type h) noexcept;
     awaiter(awaiter&& other) noexcept;
+    awaiter(const awaiter&) = delete;
+    awaiter& operator=(const awaiter&) = delete;
+    awaiter& operator=(awaiter&&) = delete;
     ~awaiter();
     bool await_ready() const noexcept;
-    std::coroutine_handle<> await_suspend(std::coroutine_handle<> parent) noexcept;
-    T await_resume();  // void for task<void>.
+    template <class P>
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<P> parent);
+    T await_resume(); // void for task<void>
 };
 ```
 
-The awaiter is an owner: moving transfers its handle, and destruction destroys
-that handle's frame. `await_ready` is true for an empty or completed handle.
-`await_suspend` installs the parent continuation and transfers execution to the
-child. `await_resume` checks for an empty state and stored exception before
-returning the result. Do not construct multiple owning awaiters for one handle.
+The awaiter owns the frame and destroys it when the `co_await` expression ends.
 
-`release()` is a low-level ownership escape hatch. It empties the task and returns
-the raw coroutine handle, possibly empty. The caller must then arrange safe
-resumption, completion and exactly one destruction. It neither schedules the task
-nor detaches it safely. Do not destroy a released frame while its waits are
-registered or while another thread may resume it.
+- `await_ready` is true for an empty or already finished frame.
+- `await_suspend` gives the child the parent's cancellation token (unless the child was bound to its own token by
+  an operation boundary), throws `std::system_error` if that token is already cancelled, so the child body never
+  starts, and otherwise transfers control to the child (symmetric transfer).
+- `await_resume` throws `std::logic_error` for an empty task, rethrows an exception that escaped the child body,
+  throws `std::system_error` if the child's token was cancelled by the time it finished, and otherwise moves the
+  result out.
 
-## Lifetimes
+The last rule means a cancellation observed when a child finishes wins over the value it returned.
 
-Passing `std::string` or a `tcp::stream` by value to a named coroutine can transfer
-ownership into its frame. Passing `std::string_view`, `std::span`, `T&` or a pointer
-does not extend the referenced object's lifetime. A temporary capturing coroutine
-lambda can leave its coroutine referring to a destroyed closure. Prefer the
-named-function pattern in [tasks and timers](../../tutorial/04-tasks-and-timers.md).
+### `promise_type`
 
-## Cancellation inheritance
+```cpp
+// task<T>::promise_type
+struct promise_type : promise_base
+{
+    std::optional<T> value;
+    task get_return_object() noexcept;
+    template <class U>
+    void return_value(U&& result);
+};
 
-Awaited tasks inherit the current task token and deadline. New local boundaries
-can shorten the budget; explicit shielding supports cleanup. Use
-[structured task groups](structured-concurrency.md) for concurrent children with
-owned lifetimes, rather than detached `io.spawn` roots.
+// task<void>::promise_type
+struct promise_type : promise_base
+{
+    std::size_t root_index = 0; // used only while io_context::spawn owns the frame
+    task get_return_object() noexcept;
+    void return_void() const noexcept;
+};
+```
+
+The compiler uses these to build the coroutine. `return_value` constructs `value` from the operand of
+`co_return`.
+
+### `promise_base`
+
+```cpp
+struct promise_base
+{
+    cancellation_token cancellation;
+    bool cancellation_bound = false;
+    std::coroutine_handle<> continuation = std::noop_coroutine();
+    std::exception_ptr exception;
+    std::coroutine_handle<> completed_next{};
+    void* completion_context = nullptr;
+    void (*on_completion)(void*, std::coroutine_handle<>) noexcept = nullptr;
+    std::suspend_always initial_suspend() const noexcept;
+    void unhandled_exception() noexcept;
+    struct final_awaiter;
+    final_awaiter final_suspend() const noexcept;
+};
+```
+
+The shared promise base. `initial_suspend` makes every task lazy; `unhandled_exception` stores the escaping
+exception for `await_resume`; `final_suspend` resumes `continuation` (the awaiting parent, or nothing for a root).
+`cancellation` is the token the frame observes; `this_task::cancellation()` reads it. The other fields are
+bookkeeping for `io_context` roots. Application code does not touch them.
+
+### `task_access`
+
+```cpp
+struct task_access
+{
+    template <class T>
+    static task<T> bind(task<T> work, cancellation_token token);
+};
+```
+
+Implementation support for operation boundaries and task groups: `bind` gives an unstarted task its own token,
+which it then keeps instead of inheriting its parent's. Use [`with_cancellation`](structured-concurrency.md) or
+[`shield`](structured-concurrency.md) instead.
+
+## Functions
+
+### `this_task::cancellation`
+
+```cpp
+namespace pace::this_task
+{
+cancellation_awaiter cancellation() noexcept;
+}
+```
+
+`co_await pace::this_task::cancellation()` returns a copy of the current task's `cancellation_token` without
+suspending and without throwing, even if the token is cancelled. Use it to check `stop_requested()` during cleanup
+or to pass the token to a custom wait. In a coroutine whose promise has no PACE token the result is an empty token.
+The awaiter type
+`this_task::cancellation_awaiter` has a public `cancellation_token value` member and the usual
+`await_ready`/`await_suspend`/`await_resume`; treat it as opaque.
+
+## Errors
+
+| Situation | Thrown by |
+|:--|:--|
+| Awaiting an empty or moved-from task | `std::logic_error` from `co_await` |
+| The child body throws | The same exception, rethrown from `co_await` |
+| The inherited token is cancelled before the child starts, or by the time it finishes | `std::system_error` with the token's code (`std::errc::operation_canceled`, or `std::errc::timed_out` for a deadline) |
+
+An exception escaping a root task (one given to `io_context::spawn`) is not lost: the context records it and stops,
+see [`io_context`](io-context.md#errors).
+
+## Threads and concurrency
+
+A task is not tied to a thread until it starts; from then on it runs on the context that resumed it. Awaiting a
+task does not switch threads and does not promise a scheduler turn: a child that finishes without suspending
+continues straight into its parent. Everything a task awaits must belong to the context it runs on.
+
+A task has one consumer. Awaiting it consumes it; there is no way to await the same task twice or from two
+coroutines.
+
+## Lifetime and ownership
+
+- Arguments passed by value (`std::string`, `tcp::stream`, …) are moved into the coroutine frame and live until the
+  task finishes or is destroyed.
+- References, pointers, `std::span` and `std::string_view` parameters are borrowed: the frame does not keep the
+  object alive, so the referenced object must outlive the task.
+- A lambda coroutine's captures live in the closure object, not in the frame. Calling a temporary capturing lambda
+  (`[x] () -> task<void> { … }()`) leaves the task pointing at a destroyed closure. Pass the lambda itself to an API
+  that owns it (`pace::run`, `with_options`, `task_group::spawn`), or use a named coroutine function with value
+  parameters.
+- Destroying a task that has not started is safe. Destroying a frame that is suspended inside a registered wait is
+  not a way to cancel it: request cancellation and let it finish instead.
+
+## Limits and defaults
+
+| Item | Value |
+|:--|:--|
+| Default `T` | `void` |
+| Consumers per task | 1 |
+| Supported `T` | object types accepted by `std::optional<T>` |
+
+## See also
+
+- [`io_context`](io-context.md): running root tasks, timers and readiness waits
+- [`pace::run`](run.md): run one task to completion from `main`
+- [Structured concurrency](structured-concurrency.md): tokens, deadlines and task groups
+- [Tutorial: tasks and timers](../../tutorial/04-tasks-and-timers.md)
+- [Ownership](../../explanation/ownership.md)
