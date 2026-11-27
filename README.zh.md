@@ -1,3 +1,4 @@
+<!-- source-hash: 1320b975dbb6 -->
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/banner-dark.svg">
@@ -31,13 +32,13 @@
   <a href="docs/performance/README.zh.md">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/tcp-echo-dark.svg">
-      <img src="docs/assets/readme/tcp-echo-light.svg" alt="PACE 0.6.1 上 PACE、Asio 与 libuv 的 TCP 回显吞吐与延迟" width="100%">
+      <img src="docs/assets/readme/tcp-echo-light.svg" alt="PACE 0.6.1 上 PACE、Asio 与 libuv 的 TCP 回显吞吐量与延迟" width="100%">
     </picture>
   </a>
 </p>
 
 以上数据在 PACE 0.6.1 上测得：同一台 Apple M6 笔记本，同一次运行，各库使用相同的客户端。在这台机器上，TCP 回显
-负载 libuv 领先；在 Linux 上的 [0.5.0 测量](docs/performance/tcp.zh.md)中，PACE 吞吐量最高，Asio 尾延迟最低。
+负载中 libuv 领先；在 Linux 上的 [0.5.0 测量](docs/performance/tcp.zh.md)中，PACE 吞吐量最高，Asio 尾延迟最低。
 这些数字只描述这些负载在这些机器上的表现，不代表全面的优劣。[测量方法与原始数据 →](docs/performance/README.zh.md)
 
 ## 30 秒示例
@@ -77,7 +78,7 @@ int main()
 </tr>
 </table>
 
-客户端调用会阻塞当前线程，默认截止时间 30 秒，返回一个自有所有权的响应；在协程里用
+客户端调用会阻塞当前线程，默认截止时间 30 秒，返回的响应自己持有全部数据；在协程里用
 `co_await pace::http::async_get(url)` 可以得到同样的结果而不阻塞线程。服务端在调用线程上运行事件循环，直到被停止。
 两者都只需链接一个 target：`add_deps("pace_http1")`。[一步步写出这两个程序 →](docs/tutorial/02-http-client.zh.md)
 
