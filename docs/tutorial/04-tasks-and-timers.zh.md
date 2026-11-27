@@ -1,14 +1,22 @@
-# 2. 写出第一个异步程序
+<!-- source-hash: da0130ea14c6 -->
+# 4. 任务与定时器
 
-[English](04-tasks-and-timers.md) · [上一章：构建](01-install-and-first-program.zh.md) · [下一章：TCP](05-tcp.zh.md)
+[English](04-tasks-and-timers.md) · [学习路线](README.zh.md) · [上一章：HTTP 服务器](03-http-server.zh.md)
 
-这一章从“等待一下，再返回字符串”开始。完成后你会知道任务何时执行、
-`co_await` 暂停了谁，以及结果和错误怎样回到 `main`。
-使用第一章的 `my_application` target，依赖 `pace_runtime`。
+学完本章，你会写出一个函数：它为定时器挂起，把值返回给 `main`，并通过普通的 C++ 异常报告失败。在 `hello` 项目中为新文件 `tasks.cpp` 添加一个目标：
 
-## 第一步：写一个会返回值的任务
+```lua
+target("tasks")
+    set_kind("binary")
+    add_files("tasks.cpp")
+    add_deps("pace_runtime")
+```
 
-把下面的完整程序写入 `main.cpp`：
+## 先返回一个值，再引入等待
+
+返回 `pace::task<std::string>` 的协程最终会产出一个字符串。在协程里用 `co_return` 代替 `return`。调用协程只会创建它的任务，不会执行函数体：任务是惰性的。入口运行器会在调用线程上启动它。
+
+把这个完整程序写入 `tasks.cpp`：
 
 ```cpp
 #include <pace/runtime.hpp>
@@ -16,98 +24,82 @@
 #include <iostream>
 #include <string>
 
-pace::task<std::string> greet(pace::io_context& io) {
+pace::task<std::string> greet(pace::io_context& io)
+{
     co_await io.sleep_for(std::chrono::milliseconds(10));
     co_return "Hello, PACE";
 }
 
-int main() {
-    try {
+int main()
+{
+    try
+    {
         std::cout << pace::run(greet) << '\n';
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-运行 `xmake -y my_application`，然后 `xmake run my_application`。
-预期输出 `Hello, PACE`，程序随即正常退出。
+运行 `xmake -y tasks` 和 `xmake run tasks`。预期输出 `Hello, PACE` 并正常退出。`greet` 等待定时器期间，事件循环可以执行其他就绪的工作；没有任何线程为这个协程睡眠。实际延迟可能超过 10 ms：定时器不提供实时保证。
 
-`task<std::string>` 表示这个函数最终产生一个字符串；`co_return` 交出结果。
-`co_await` 暂停的是当前协程，事件循环可以继续处理别的就绪工作，
-并没有为这个等待单独创建一个睡眠线程。定时器到期只代表可以恢复，实际恢复可能更晚。
+`pace::run(greet)` 创建一个新的 `io_context`，在其上调用 `greet(io)` 并返回任务的结果。入口结束时，`run` 会停止该上下文，并等待已取消的后台工作展开完毕，所以这个一次性程序从不需要自己调用 `io.stop()`。对于返回 `task<void>` 的入口，`run` 返回 `void`。
 
-`pace::run(greet)` 创建事件循环，在当前线程上启动 `greet(io)`，拿到结果后
-请求停止，并处理后台任务的取消。因此这里不需要手写 `spawn` 和 `stop`。
-入口返回 `task<void>` 时，`run` 也返回 `void`。
+## 传入自有的输入
 
-## 第二步：给任务传入数据
-
-将函数改为 `greet(pace::io_context& io, std::string name)`，
-最后返回 `"Hello, " + name`。字符串按值传入，等待期间仍由协程自己持有。
-现在在 `main` 中用工厂函数补上额外参数：
+要接受一个名字，把签名改为 `greet(pace::io_context& io, std::string name)`，并返回 `"Hello, " + name`。在等待期间，这个字符串归协程帧所有。用一个普通的工厂 lambda 传入额外参数：
 
 ```cpp
-const auto message = pace::run([](pace::io_context& io) {
-    return greet(io, "reader");
-});
+const auto message = pace::run([](pace::io_context& io) { return greet(io, "reader"); });
 ```
 
-这里的 lambda 是普通函数，返回一个尚未执行的 task。
-如果想直接写协程 lambda，也可以交给 `run`：
+这个 lambda 返回一个任务，它本身不是协程。`run` 也能在整个运行期间安全地持有一个带捕获的协程 lambda：
 
 ```cpp
-const auto answer = pace::run([value = 42](pace::io_context& io) -> pace::task<int> {
-    co_await io.yield();
-    co_return value;
-});
+const auto answer = pace::run(
+    [value = 42](pace::io_context& io) -> pace::task<int>
+    {
+        co_await io.yield();
+        co_return value;
+    }
+);
 ```
 
-`run` 会持有整个闭包直到运行及取消结束，所以等待后仍能读取 `value`。
-这不代表任意临时协程 lambda 都安全：不要写
-`io.spawn([capture]() -> task<void> { ... }())`，临时闭包可能先于协程销毁。
-引用捕获仍然只是借用；被引用的对象必须活得足够久。
+这种生命周期保证只属于 `run`。不要把它推广到 `io.spawn([capture]() -> task<void> { ... }())`：立即调用的协程 lambda 是临时对象，它可能在协程仍引用其捕获时就被销毁。即使 `run` 持有闭包，引用捕获也仍然只是引用。
 
-## 第三步：组合两个异步操作
+## 等待另一个任务
 
-在另一个协程中，直接写：
+在协程中直接调用子任务：
 
 ```cpp
 const auto message = co_await greet(io, "reader");
 ```
 
-父任务会在子任务产生结果之后继续。如果先把 task 保存为 `pending`，
-则使用 `co_await std::move(pending)` 消费它。task 是惰性的、不可复制的，
-只能被消费一次。调用函数得到 task 并不等于已经在后台运行它。
+子任务的结果就绪后，父协程才恢复。如果先把任务保存起来，要用 `co_await std::move(pending)` 消费它：任务只能移动，且只能被等待一次。子任务的异常会在 `co_await` 表达式处抛出。父协程能恢复时就在那里捕获；否则它会传到 `run`，再到 `main` 里的 `catch`。
 
-子任务抛出的异常会在 `co_await` 处重新抛出；能恢复就在那里捕获，
-否则让异常到达 `main`。试着在定时器后抛出异常，确认程序报告错误并退出。
-`io.yield()` 和零时长定时器只是让出一轮调度，不会把计算搬到另一个线程。
+`co_await io.yield()` 和零时长定时器都会让其他就绪工作先执行一轮，但都不会把 CPU 工作移到别的线程。阻塞的文件读取或耗时计算仍会阻塞这个事件循环；[第 8 章](08-workers-and-threads.zh.md)说明这类工作该放在哪里。
 
-## 第四步：区分“入口结束”和“服务停止”
+## 理解结束时谁拥有什么
 
-`run` 适合有明确结束点的入口。它返回的数据应当独立拥有内容，
-例如数字、字符串；不要返回绑定到临时事件循环的 socket，
-也不要返回指向入口局部变量或闭包内容的 view。
+`run` 返回**自有的结果**，例如字符串或数字。不要返回绑定在其临时上下文上的 socket，也不要返回指向入口或其捕获所拥有存储的视图。
 
-入口可以 `io.spawn` 后台任务，但入口完成意味着取消这些任务，
-而不是等待它们自然完成。后台任务应按值持有数据，或者借用 `run` 外、
-直到 `run` 返回都仍存活的对象。入口局部变量可能先于后台取消处理被销毁。
+入口可以用 `io.spawn` 启动后台工作，但入口结束会取消这些工作；`run` 不会等它们自然完成。后台任务必须拥有自己的数据，或者只借用在 `run` 之外声明、存活到 `run` 返回的对象。入口的局部变量会在入口返回时销毁，此时后台任务未必已经观察到取消。如果程序需要多个独立的根任务并显式排空，请使用下面的手动模式以及[第 9 章](09-graceful-shutdown.zh.md)。
 
-需要自己安排多个根任务、停止接收和排空连接时，使用显式形式：
+## 需要时显式掌控
 
 ```cpp
 pace::io_context io;
-io.spawn(service(io)); // service 返回 task<void>
-io.run();             // 需要由某个控制路径显式调用 io.stop()
+io.spawn(service(io)); // service returns task<void>
+io.run();              // Returns only after someone calls io.stop().
 ```
 
-`io.run()` 不会因为最后一个任务结束就自动退出；`pace::run(factory)` 会。
-两者都不能在同一线程正在运行的 PACE 事件循环内嵌套调用。
-入口被取消时，`pace::run` 抛出 `operation_canceled`，不会悄悄给出空结果。
+与 `pace::run(factory)` 不同，`io.run()` 在最后一个任务结束后仍会继续运行，适合从其他线程接收工作的服务。选择其中一种形式之前，先确定由谁负责关闭。两种形式都不能在已经运行着事件循环的线程上再嵌套运行一个。`pace::run` 的入口被取消时，`run` 会以 `std::system_error`（错误码 `std::errc::operation_canceled`）报告，而不是返回一个值。
 
-最后运行 `xmake run tutorial_tasks`，对照[扩展练习源码](../../examples/tutorial_tasks.cpp)
-检查子任务异常、惰性启动和上下文归属。下一章用相同写法连接 TCP。
+试着让入口在定时器之后抛出异常，确认 `main` 报告了失败并退出，而不是挂住。然后运行配套程序 `xmake run tutorial_tasks`（[源码](../../examples/tutorial_tasks.cpp)）：它的 `lesson` 协程还会等待一个先保存起来的任务，检查自己仍在同一个上下文上运行，让出执行，并捕获子任务的异常。
 
-[完整入口契约](../reference/runtime/run.md) · [task 参考](../reference/runtime/task.md)
+完整约定见 [`pace::run`](../reference/runtime/run.zh.md) 和 [`task`](../reference/runtime/task.zh.md)。
+
+下一章：[5. TCP](05-tcp.zh.md)

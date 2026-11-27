@@ -1,92 +1,127 @@
-# 6. 从请求停止到安全销毁
+<!-- source-hash: dc972796a4fd -->
+# 9. 有序关闭
 
-[English](09-graceful-shutdown.md) · [上一章：执行方式](08-workers-and-threads.zh.md) · [下一章：UDP](06-udp.zh.md)
+[English](09-graceful-shutdown.md) · [学习路线](README.zh.md) · [上一章：工作线程与线程](08-workers-and-threads.zh.md)
 
-这一章先亲眼验证取消，再把它用于服务器。依赖 `pace_runtime`，
-将下面完整程序保存到 `main.cpp` 并构建运行：
+编写长期运行的服务器之前，先做一个小小的取消实验。把这个完整程序保存为 `shutdown.cpp`，添加一个依赖 `pace_runtime` 的 `shutdown` 目标，然后构建并运行：
 
 ```cpp
 #include <pace/runtime.hpp>
 #include <chrono>
 #include <iostream>
 
-pace::task<void> waiting(pace::io_context& io, bool& canceled) {
-    try { co_await io.sleep_for(std::chrono::hours(1)); }
-    catch (const std::system_error& error) {
-        if (error.code() != std::errc::operation_canceled) throw;
+pace::task<void> waiting(pace::io_context& io, bool& canceled)
+{
+    try
+    {
+        co_await io.sleep_for(std::chrono::hours(1));
+    }
+    catch (const std::system_error& error)
+    {
+        if (error.code() != std::errc::operation_canceled)
+        {
+            throw;
+        }
         canceled = true;
     }
 }
 
-int main() {
-    try {
+int main()
+{
+    try
+    {
         pace::io_context io;
         bool canceled = false;
         auto stop = io.call_after(std::chrono::milliseconds(10), [&io] { io.stop(); });
         io.spawn(waiting(io, canceled));
         io.run();
-        if (!canceled) throw std::runtime_error("cancellation was not observed");
+        if (!canceled)
+        {
+            throw std::runtime_error("cancellation was not observed");
+        }
         std::cout << "Canceled and drained\n";
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-应很快输出 `Canceled and drained`，而不是等待一小时。
-10ms 定时器先请求停止，等待中的任务恢复并观察到取消，最后 `io.run()` 才返回。
-定时器 handle 必须保存在变量里，否则临时对象销毁会立即取消回调。
-`canceled` 在任务外面，一直活到 run 返回，所以取消时仍能安全写入。
+预期输出 `Canceled and drained`，而不必等上一小时。定时器回调停止上下文；等待中的协程随后带着取消错误恢复，只有在它展开完毕后，`io.run()` 才返回。要把定时器句柄保存在变量中：销毁它会解除回调。`canceled` 位于任务之外，所以在取消期间它仍然存活。[第 4 章](04-tasks-and-timers.zh.md)的入口运行器在入口完成时执行的正是这种停止；手动运行的服务则自己选择停止的时机。
 
+配套程序 [`tutorial_shutdown.cpp`](../../examples/tutorial_shutdown.cpp) 做同样的事，由另一个任务在 5 ms 后停止上下文。`xmake run tutorial_shutdown` 检查取消已被观察到，并且协程中的局部 RAII 守卫在 `run()` 返回之前已经执行，然后输出 `Cancellation observed; coroutine resources released`。
 
-单个操作或一组相关任务优先使用[局部取消与结构化任务组](07-structured-concurrency.zh.md)。
-io.stop 是整个 context 的关闭。原始 listener.close 只取消 accept；HTTP serve 便捷接口
-增加了结构化作用域，会在返回前取消并等待其接受的连接。
+对于单个操作或一组相关任务，优先使用[第 7 章](07-structured-concurrency.zh.md)的局部取消和任务组：`io.stop()` 会关闭整个上下文。关闭监听器只会取消它挂起的 accept；HTTP 的 `serve` 函数在结构化作用域中运行各个连接，返回之前会取消并汇合它们。
 
-## 第一步：认识取消的错误路径
+## 取消是一条普通的错误路径
 
-取消通过 `std::system_error` 报告，错误码是 `operation_canceled`。
-处理它时释放同步资源并返回；其他错误继续抛出。stop 后的新 I/O 和定时等待也会取消，
-所以需要异步刷新的数据应当在 stop 前处理。
+```cpp
+try
+{
+    co_await io.sleep_for(std::chrono::hours(1));
+}
+catch (const std::system_error& error)
+{
+    if (error.code() != std::errc::operation_canceled)
+    {
+        throw;
+    }
+    // Release synchronous application resources and finish this task.
+}
+```
 
-`stop()` 只是请求，不会强制中断线程。一个不暂停、不返回的循环，或阻塞调用，
-仍然可能阻止关闭。`pace::run` 在入口完成时自动请求停止；它不是等待所有后台任务
-自然完成的 join-all。显式 `io.run()` 则由应用决定何时停止。
+`stop()` 永久地请求关闭并唤醒事件循环。挂起的 socket 等待和定时器等待以取消恢复；已经就绪的任务和回调仍会执行。协程帧中的 RAII 对象随着协程展开而销毁。已停止的上下文拒绝新的 `spawn` 和 `post` 调用，之后的每次等待也都会看到取消。任何异步刷新都要在停止上下文**之前**完成。
 
-## 第二步：把“停止接收”和“停止所有工作”分开
+上下文正在停止时，以未捕获的取消结束的根任务不算错误。根任务的其他失败仍会在排空完成后从 `run()` 传出。从不挂起或从不返回的代码，以及阻塞在同步调用中的代码，都可能让关闭无法完成：停止不会中断线程。
 
-希望尽量完成已接收的 HTTP 请求时，先在所属 context 上关闭 listener，
-再等已有连接完成，达到业务宽限期后才 stop。最后等待 run 返回或 join，
-然后销毁网络对象与 context。
+## 先停止接受连接，再停止事件循环
 
-关闭 listener 只取消 accept，不会关闭已接受的 socket。
-自己写 accept 循环时，应捕获这个预期取消并退出；否则 stop 前的未捕获根任务异常
-会停止整个循环。`http::serve` 已有这条处理路径。
+对于需要完成已开始响应的服务，按顺序执行以下步骤：
 
-当前库没有公开的连接计数/join handle。需要精确 drain 时，写自己的 accept 包装，
-给每个连接用 RAII 维护活动计数，配合有界宽限期。
-[完整 drain 示例](09-graceful-shutdown.md#stop-accepting-before-stopping-the-reactor)
-解释了计数和监听对象必须保持多久；不要把立即 stop 宣称为优雅排空。
+1. 在所属上下文上把应用标记为排空中，并关闭监听器。
+2. 让已接受的连接完成；在合适的情况下，让处理函数返回 `close = true` 的响应。
+3. 等待活跃连接计数降到零，最长等到应用自己选定的宽限期。
+4. 调用 `io.stop()` 或 `runtime.stop()`，取消剩下的一切。
+5. 等待 `run` 返回并汇合运行它的线程，销毁 socket 和监听器，最后销毁上下文。
 
-## 第三步：等待成员协程退栈后再销毁对象
+关闭监听器只会取消挂起的 accept；已接受的流继续运行。接受循环必须捕获这个预期中的取消并返回，[第 5 章](05-tcp.zh.md)的配套程序就是这样做的。否则，在上下文停止**之前**以未捕获的取消结束的根任务会被当作失败，过早地停止事件循环。`http::serve` 已经以这种方式处理监听器关闭。
 
-`socket.close()` 取消它注册的等待并释放底层句柄，但没有等待成员协程完成。
-成员协程仍可能通过 `this` 访问 socket 对象，因此不能先销毁或移动 socket，
-再指望取消替你修复生命周期。缓冲区、listener、TLS 配置和回调引用同样需要活得足够久。
+下面的辅助函数假设 `active_connections` 只在同一个上下文上修改，并且每个连接任务都通过 RAII 守卫递减它：
 
-`co_await socket.close_gracefully()` 是另一种操作：在没有其他并行 socket 操作时，
-半关闭发送并有界 drain，再关闭句柄。默认有 100ms/64KiB 上限；到达上限是正常结果，
-不是对端业务处理成功的证明。应在 stop 之前调用。
+```cpp
+pace::task<void> drain_connections(
+    pace::io_context& io,
+    pace::tcp::listener& listener,
+    const std::size_t& active_connections,
+    std::chrono::milliseconds grace
+)
+{
+    listener.close();
+    const auto deadline = std::chrono::steady_clock::now() + grace;
+    while (active_connections != 0 && std::chrono::steady_clock::now() < deadline)
+    {
+        co_await io.sleep_for(std::chrono::milliseconds(1));
+    }
+    io.stop();
+}
+```
 
-## 第四步：把外部所有者也收好
+这是应用层的模式，不是库提供的连接计数 API。监听器、计数和上下文都必须比这个辅助函数和各连接任务活得更久；请选择有界的宽限期。`http::serve` 不提供活跃连接计数，也不提供汇合句柄。如果需要，请自己写接受循环，在一个负责计数的协程中运行 `http::serve_connection`。有多个工作线程时，通过各自的上下文分别排空；跨线程共享的计数必须同步。
 
-普通控制线程可以调用 `stop()`。信号处理器则只设置安全的标志，让正常任务读取后
-请求停止；不要直接从信号处理器调用任意 reactor/socket API。
+## socket 关闭与对象生命周期
 
-`runtime.run()` 和 `run_on_current_thread()` 会等待自己的 worker；
-如果它们又运行在应用创建的外层线程上，应用仍需 join 那个外层线程。
-任何还会 post 结果的业务线程也必须先停止/join，不能向已销毁的 context 投递。
+`socket.close()` 取消 socket 已登记的等待，并在所属事件循环上释放原生句柄。它不会等待挂起的操作结束。要让 C++ socket 对象一直存活到这些操作恢复并展开：先销毁或移动它，会让那些成员协程持有悬空的 `this`。不要用销毁挂起任务的方式来模拟取消。
 
-运行 `xmake run tutorial_shutdown`，查看[配套练习](../../examples/tutorial_shutdown.cpp)
-怎样额外验证 RAII 清理已在 run 返回前完成。
+`co_await socket.close_gracefully()` 是另一种操作。在 socket 上没有其他未完成操作时，它关闭发送方向，默认在最多 100 ms 或 64 KiB 的范围内丢弃对端的输入，然后关闭。即使出错或被取消，它也总会关闭 socket。请在最后一次写入之后、停止上下文之前使用它。它限制的是排空过程，而不是对端的确认；达到限制属于正常完成。
+
+## 信号与外部所有者
+
+配套服务器（`tutorial_http serve`、`tutorial_tcp serve`）的信号处理函数只设置一个无锁的原子标志。一个普通协程检查这个标志并调用 `stop()`。不要在信号处理函数中调用反应器或 socket 的函数。在另一个普通线程上，调用 `stop()` 本身是安全的。
+
+`runtime.run()` 和 `runtime.run_on_current_thread()` 在返回之前汇合各自的工作线程。如果你在应用自己拥有的线程上调用它们，仍然需要在销毁 runtime 之前汇合那个线程。你自己运行的 `io_context` 同样必须先停止，再汇合运行它的线程。也要汇合你自己的阻塞工作线程，以免它们向已销毁的上下文提交结果。
+
+参考：[`io_context`](../reference/runtime/io-context.zh.md)、[`runtime`](../reference/runtime/runtime.zh.md)、[TCP `close_gracefully`](../reference/net/tcp.zh.md)。
+
+下一章：[10. TLS 与 DNS](10-tls-and-dns.zh.md)

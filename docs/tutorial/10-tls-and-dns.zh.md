@@ -1,42 +1,55 @@
-# 8. 把域名解析和 TLS 身份验证接起来
+<!-- source-hash: c35037d44690 -->
+# 10. TLS 与 DNS
 
-[English](10-tls-and-dns.md) · [上一章：UDP](06-udp.zh.md) · [下一章：WebSocket](11-websocket.zh.md)
+[English](10-tls-and-dns.md) · [学习路线](README.zh.md) · [上一章：有序关闭](09-graceful-shutdown.zh.md)
 
-网络地址回答“连接到哪里”，TLS peer name 回答“验证对方是谁”。
-解析得到 IP 后仍应保留原域名，不能把两者混为一谈。
+网络地址告诉你连到哪里，TLS 对端名告诉你要校验哪个身份。两者要分开：解析出的 IP 地址并不能代替原来的主机名。
 
-## 第一步：先完成一个不依赖外网的解析
+这两个模块都是可选的。开始之前，用它们重新配置 `hello` 项目；xmake 第一次会下载 c-ares 和 OpenSSL：
 
-配置 `--dns=y`，应用依赖 `pace_dns`，将 main.cpp 写成：
+```sh
+xmake f -m release --tests=n --examples=n --dns=y --tls=y -y
+```
+
+## 从确定性的解析开始
+
+把这个完整程序保存为 `resolve.cpp`，并添加一个依赖 `pace_dns` 的 `resolve` 目标：
 
 ```cpp
 #include <pace/dns.hpp>
 #include <pace/runtime.hpp>
 #include <iostream>
 
-int main() {
-    try {
-        pace::run([]() -> pace::task<void> {
-            const auto result = co_await pace::dns::resolve("127.0.0.1");
-            for (const auto& address : result.addresses)
-                std::cout << address.text << '\n';
-        });
-    } catch (const std::exception& error) {
+int main()
+{
+    try
+    {
+        pace::run(
+            []() -> pace::task<void>
+            {
+                const auto result = co_await pace::dns::resolve("127.0.0.1");
+                for (const auto& address : result.addresses)
+                {
+                    std::cout << address.text << '\n';
+                }
+            }
+        );
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-应输出 `127.0.0.1`。数字地址解析不需要外部 nameserver，适合先验证程序结构。
-随后换成实际服务域名；结果可能包含 IPv4 和 IPv6，选择一个数字地址再和端口组成 endpoint。
-解析不会自动连接，也不等于自动尝试所有地址；便捷函数会持有 resolver 到解析完成。
-配套命令 `xmake run tutorial_dns example.com` 需要可用的外部 DNS。
+预期输出 `127.0.0.1`。数字形式的名字无需询问名字服务器即可解析。现在把它换成你的服务的主机名。结果可能同时包含 IPv4 和 IPv6 地址：选一个，再加上服务端口构造 TCP 端点。解析既不会建立连接，也不会替你逐个尝试地址。`dns::resolve` 在完成之前拥有自己的解析器，默认五秒后放弃。
 
-## 第二步：连接之前先配置证书与信任
+配套程序 `xmake run tutorial_dns` 解析 `127.0.0.1`，并输出每个地址及其地址族；`xmake run tutorial_dns example.com` 解析真实的名字，需要可用的外部 DNS。先在 PACE 源码目录中以 `--dns=y --examples=y` 配置。
 
-启用 `--tls=y`，依赖 `pace_tls`；HTTPS 应用仍依赖 `pace_http1`。
-在 PACE 仓库根的本地练习可使用以下公开测试证书：
+## 打开 TLS 流之前配置信任
+
+链接 `pace_tls`（如果做 HTTPS 则链接 `pace_http1`，启用 TLS 时它会一并带上 TLS）。本地练习使用 PACE 源码中公开的测试 CA 和 localhost 证书：
 
 ```cpp
 pace::tls::context server_config(pace::tls::role::server), client_config;
@@ -46,12 +59,11 @@ server_config.set_alpn_protocols({"pace-demo"});
 client_config.set_alpn_protocols({"pace-demo"});
 ```
 
-部署时换成自己的证书、私钥和正确的信任配置，不能部署公开测试私钥。
-调用前完成配置，并让自定义配置活到 helper 的 await 完成；返回的 stream 会继续持有配置状态。
+这些路径相对于 PACE 源码目录。`xmake run` 在构建目录中启动程序，所以请在 `hello` 目录下用 `xmake run -w third_party/PACE <target>` 运行，或者改用绝对路径。部署时请使用你自己的证书链、私钥和信任根。不要为了让示例连通而关闭校验。context 在首次使用之前就要配置完整：某个流使用过它之后，再调用设置函数会抛出异常。在借用 context 的操作完成之前保持它存活；流本身共享其状态的所有权。
 
-## 第三步：在 TCP 连接任务里完成 TLS 握手
+## 升级 TCP 连接任务
 
-把接受到的 TCP stream 移入 TLS stream，再握手：
+在 TCP 服务器处理单个连接的协程中，把普通流换成 TLS 流：
 
 ```cpp
 auto connection = co_await pace::tls::accept(std::move(accepted_tcp_stream), server_config);
@@ -59,7 +71,7 @@ co_await pace::write(connection, "Hello over verified TLS!\n");
 co_await connection.shutdown();
 ```
 
-客户端明确写出网络端点和验证身份：
+在客户端，指明握手必须校验的身份：
 
 ```cpp
 auto connection = co_await pace::tls::connect(client_config, endpoint, "localhost");
@@ -68,35 +80,23 @@ std::cout << message;
 co_await connection.shutdown();
 ```
 
-这两个 helper 都在握手成功后才返回。`pace::read_exact`、`pace::write` 与 TCP
-使用相同写法，本例问候语恰好 25 字节。endpoint 可以是 `127.0.0.1`，证书身份则验证 `localhost`。
-实际域名解析后，把原域名保留为 peer name。读写形式和 TCP 类似，但 TLS 的认证关闭
-有额外意义；底层 TCP 突然 EOF 不应被当成一个正常完整的 TLS 结尾。
+两个调用都只在握手成功后返回。`pace::read_exact` 和 `pace::write` 在 TLS 流上的用法与 TCP 相同；这里的问候语恰好 25 字节。端点可以是 `127.0.0.1`，而证书按 `localhost` 校验。对于真实主机，把你解析时用的主机名保留为对端名。TLS 用经过认证的关闭通知结束一个流：裸的 TCP 流结束并不代表 TLS 消息成功结束。
 
-## 第四步：验证成功路径，再主动制造一次失败
+## 运行两端，再试一次失败
 
-在仓库根运行：
+在 PACE 源码目录中：
 
 ```sh
-xmake f --tls=y --dns=y --examples=y -y
+xmake f -m release --tls=y --dns=y --examples=y -y
 xmake -y tutorial_tls tutorial_dns
 xmake run tutorial_tls
 xmake run tutorial_dns
 ```
 
-[TLS 配套程序](../../examples/tutorial_tls.cpp)把配置和 listener 放在任务外，
-检查 ALPN、完整正文，并等两端完成关闭再 stop。
-在你自己的副本中把 peer name 换成不相干域名，确认握手被拒绝；
-这正是身份验证的效果，不应通过关闭验证来消除它。
+配套程序 [`tutorial_tls.cpp`](../../examples/tutorial_tls.cpp) 把两个配置和监听器都放在任务之外，检查协商出的 ALPN 协议，读取完整的问候语，确认其后紧跟对端的关闭通知，并等两端都完成关闭后才停止。它输出 `Hello over verified TLS!`。在你自己的副本中，把期望的对端名改成一个无关的主机，确认握手失败。不要为了掩盖这个失败而关闭校验。
 
-HTTPS 可以直接复用这些配置，见[第四章](03-http-server.zh.md#启用-https)。
-[DNS 参考](../reference/dns/README.md) · [TLS 参考](../reference/tls/README.md)
+对于证书受公开信任、又不需要自定义 ALPN 的服务，客户端无需任何配置：`co_await pace::tls::connect(endpoint, hostname)` 用 OpenSSL 的默认信任库校验（信任库为空时见[第 2 章](02-http-client.zh.md)）。把原始的 DNS 主机名作为要校验的名字。在没有运行上下文的地方做单次查询，可以用 `auto result = pace::run(pace::dns::resolve("127.0.0.1"));`。
 
-使用系统信任且不需要自定义 ALPN 时，可省略客户端配置：
-`co_await pace::tls::connect(endpoint, hostname)`，仍要保留原始 DNS 名用于证书验证。
-在事件循环外只做一次解析，可以直接写
-`auto addresses = pace::run(pace::dns::resolve("127.0.0.1"));`。
+对于 HTTP，给 HTTPS 重载传入一个加载了你的 CA 的客户端 context，例如[第 2 章](02-http-client.zh.md)中的 `pace::http::get(trust, url)`；不要设置 `pace-demo` 这个 ALPN，它只是这两个对端之间的约定。HTTPS 服务器见 [HTTP 实用配方](../guides/http-recipes.zh.md)。[DNS 参考](../reference/dns/README.zh.md)和 [TLS 参考](../reference/tls/README.zh.md)描述超时、信任、SNI 和所有权；[协议调优](../guides/protocol-tuning.zh.md)介绍如何复用配置和选择 ALPN。
 
-[便捷接口契约](../reference/component-conveniences.zh.md)和
-[配置复用、ALPN 调优](../guides/protocol-tuning.zh.md#dns-与-tls)介绍后续细节。
-本章新增 helper 需要 PACE v0.3.1 或更新版本。
+下一章：[11. WebSocket](11-websocket.zh.md)

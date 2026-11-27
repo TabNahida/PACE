@@ -1,14 +1,23 @@
-# 1. 从自己的 main.cpp 开始
+<!-- source-hash: 780d1d2f548b -->
+# 1. 安装 PACE，构建第一个程序
 
-[English](01-install-and-first-program.md) · [完整构建选项](../reference/build-options.md) · [下一章：异步任务](04-tasks-and-timers.zh.md)
+[English](01-install-and-first-program.md) · [学习路线](README.zh.md)
 
-这一章要做出你自己的程序，不是只运行仓库里写好的 example。
-需要 xmake 2.9.8+ 和支持 C++20 的编译器。教程需要 PACE 0.4.0 或更新版本；
-下文使用 v0.4.0 源码 checkout。
+本章建立一个属于你自己的项目，从源码构建 PACE，写一个小型 HTTP 服务器，并用 curl 验证它。后续各章都在这个项目里继续添加程序。
 
-## 第一步：准备三个文件位置
+## 安装 xmake 和编译器
 
-创建练习目录，把包含本教程的 PACE 源码放在 `third_party/PACE`：
+构建 PACE 需要 [xmake](https://xmake.io/) 2.9.8 或更新版本，以及一个 C++20 编译器：GCC、Clang 或 MSVC。CI 在 Linux、macOS、Windows 和 64 位 FreeBSD 上构建；具体配置见[平台支持](../reference/platform-support.zh.md)。
+
+- Linux 和 macOS：按 xmake 官网的说明安装 xmake，编译器用系统包管理器或 Xcode 命令行工具提供的即可。
+- Windows：安装 xmake 和带 C++ 工作负载的 Visual Studio，然后在具备 Visual Studio C++ 环境的 shell 中操作。
+- FreeBSD：从上游安装 **xmake-io**。FreeBSD 中名为 `xmake` 的包是另一个工具。[CI 工作流](../../.github/workflows/ci.yml)里有固定版本的源码安装示例。
+
+用 `xmake --version` 检查安装结果。此外还需要 git，以及用来访问下面服务器的 curl。
+
+## 创建项目
+
+按以下结构建立目录：
 
 ```text
 hello/
@@ -17,7 +26,13 @@ hello/
   third_party/PACE/
 ```
 
-在 **hello/xmake.lua** 写入：
+在 `hello` 目录下，把 PACE 源码放到 `third_party/PACE`：
+
+```sh
+git clone https://github.com/TabNahida/PACE.git third_party/PACE
+```
+
+编写 `xmake.lua`：
 
 ```lua
 set_project("hello")
@@ -25,135 +40,128 @@ set_languages("cxx20")
 add_rules("mode.debug", "mode.release")
 includes("third_party/PACE")
 
-target("my_application")
+target("hello")
     set_kind("binary")
     add_files("main.cpp")
     add_deps("pace_http1")
 ```
 
-`includes` 加载库的构建定义，`add_deps` 让应用得到头文件路径、编译定义和
-系统链接依赖。无需复制库的 `.cpp` 文件，也不用手写静态库链接顺序。
-这里链接 `pace_http1`，它自动带上 TCP 和 runtime 依赖；数字 HTTP 地址不需要第三方协议库。
+`includes` 加载 PACE 的构建描述，它的选项和库目标由此成为你项目的一部分。`add_deps("pace_http1")` 链接 HTTP/1 模块，并通过它带上其依赖的模块（runtime、net 和共享的 HTTP 类型），同时提供头文件路径、特性宏定义和平台库。不要把 PACE 的 `.cpp` 文件复制进你的目标，也不要手写链接顺序。
 
-## 第二步：写 main.cpp
+## 编写第一个程序
+
+编写 `main.cpp`：
 
 ```cpp
 #include <pace/http1.hpp>
 #include <iostream>
 
-int main() {
-    try {
-        auto reply = pace::http::get("http://127.0.0.1:8080/health");
-        std::cout << reply.status << " " << reply.body;
-    } catch (const std::exception& error) {
+int main()
+{
+    try
+    {
+        pace::http::app app;
+        app.get("/health", [] { return pace::http::text("ok\n"); });
+        app.post("/echo", [](pace::http::request request) { return pace::http::text(std::move(request.body)); });
+        std::cout << "Listening on http://127.0.0.1:8080\n";
+        app.run(8080);
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-`get` 直接返回响应，不需要协程或 `run`。保持[快速入门的服务端](02-http-client.zh.md)
-在另一个终端运行，再构建和运行本章客户端。
+`http::app` 保存路由。`get` 和 `post` 为某个方法和某个精确路径注册处理函数。`http::text` 生成一个纯文本响应，响应拥有自己的 body；`/echo` 的处理函数把收到的 body 原样返回。`app.run(8080)` 监听 `127.0.0.1:8080`，在当前线程上提供服务，直到进程结束。这个程序里没有协程；[第 3 章](03-http-server.zh.md)会说明协程从哪里开始出现。
 
-## 第三步：构建并核对结果
+## 构建并运行
 
-在 **hello 目录**执行：
+在 `hello` 目录下：
 
 ```sh
-xmake f -m release --tests=n --examples=n --http1=y --websocket=n -y
-xmake -y my_application
-xmake run my_application
+xmake f -m release --tests=n --examples=n -y
+xmake -y hello
+xmake run hello
 ```
 
-应输出 `200 ok` 后退出。找不到头文件时检查 `includes` 路径和 `add_deps`；
-连接失败时先确认本地服务端仍在运行，并检查 URL 端口。
-
-接着按需阅读 HTTP、TCP 或 UDP 章节，需要异步组合时再读第二章。
-TCP/UDP 只需把依赖换成 `pace_net`。TLS、DNS、HTTP/2、QUIC、HTTP/3 要分别启用：
-
-| 功能 | 选项 | 应用依赖 |
-|---|---|---|
-| TCP / UDP | 无额外选项 | `pace_net` |
-| HTTP/1 | `--http1=y` | `pace_http1` |
-| WebSocket | `--websocket=y` | `pace_websocket` |
-| TLS / HTTPS | `--tls=y` | `pace_tls` / `pace_http1` |
-| DNS | `--dns=y` | `pace_dns` |
-| HTTP/2 | `--http2=y`，HTTPS 另加 `--tls=y` | `pace_http2` |
-| QUIC / HTTP/3 | `--quic=y` / `--http3=y` | `pace_quic` / `pace_http3` |
-
-QUIC/HTTP3 当前需要 POSIX 平台。HTTP3 自动启用 QUIC；它自己的 TLS 1.3
-不要求开启 TCP TLS 模块。首次启用可选协议时，xmake 可能需要下载依赖。
-
-## 第四步：用配套练习核对理解
-
-文中的 `tutorial_*` 命令在 **PACE 仓库根目录**执行，和 hello 应用是两套 target：
+`xmake f` 用来配置项目；`--tests=n --examples=n` 让 PACE 自带的测试和示例不进入你的构建。在第二个终端中：
 
 ```sh
-xmake f -m release --examples=y --tests=y -y
-xmake -y tutorial_tasks
+curl -i http://127.0.0.1:8080/health
+curl --data-binary hello http://127.0.0.1:8080/echo
+```
+
+预期先得到状态 200 和 `ok`，然后是 `hello`。用 Ctrl-C 停止服务器。保留这个项目：下一章会用你自己写的程序向这个服务器发请求。
+
+如果找不到 PACE 的头文件，检查 `includes` 路径和 `add_deps` 一行。如果 xmake 报告 `pace_tls` 之类的目标不存在，请打开对应的构建选项（见下一节）后重新配置。如果 curl 连不上，说明服务器没有运行，或者 8080 端口已被其他程序占用；后一种情况下服务器会报告绑定错误。
+
+## 依赖需要的模块
+
+每个模块都是单独的库目标。程序用到哪个就依赖哪个，它所依赖的模块会自动带上。
+
+| 程序用到 | 构建选项 | 目标 |
+|:--|:--|:--|
+| 任务、定时器、运行时 | 始终构建 | `pace_runtime` |
+| TCP 和 UDP | 始终构建 | `pace_net` |
+| HTTP/1 客户端和服务器、`http::app`、静态文件与反向代理 | `--http1=y`（默认） | `pace_http1` |
+| WebSocket | `--websocket=y`（默认） | `pace_websocket` |
+| TLS | `--tls=y` | `pace_tls` |
+| DNS | `--dns=y` | `pace_dns` |
+| QUIC | `--quic=y` | `pace_quic` |
+| HTTP/2 | `--http2=y`（HTTPS 另加 `--tls=y`） | `pace_http2` |
+| HTTP/3 | `--http3=y`（同时启用 QUIC） | `pace_http3` |
+| 本次构建启用的全部模块 | | `pace` |
+
+修改 `add_deps` 后要重新配置再构建。启用某个模块的选项，在适用时也会把它接入 HTTP/1：`--dns=y` 后 URL 客户端可以使用主机名，`--tls=y` 后可以使用 `https://`。可选模块第一次配置时，xmake 会下载它们的第三方库（OpenSSL、c-ares、nghttp2、ngtcp2、nghttp3）。QUIC 和 HTTP/3 需要 POSIX 平台。`--http1=n --websocket=n` 得到只含运行时、TCP/UDP 和共享 HTTP 类型的构建，不依赖任何可选库。
+
+[构建选项](../reference/build-options.zh.md)列出了所有开关、C++ 标准、sanitizer、QUIC 后端和 I/O 后端。
+
+## 构建配套程序
+
+大多数章节都会提到 PACE `examples/` 目录中的一个配套程序，它是本章练习的完整、可自检的版本。在 PACE 源码目录（`third_party/PACE`）中：
+
+```sh
+xmake f -m release --examples=y -y
+xmake -y
 xmake run tutorial_tasks
 ```
 
-先按 Markdown 自己写，再用配套程序核对结果。所有默认教程命令都是有结束点的
-本地练习；带 `serve` 的 TCP/HTTP 示例会持续监听，等待 Ctrl-C。
-
-配置会被 xmake 保留。切换协议选项后重新运行配置和构建；独立构建可使用
-`XMAKE_CONFIGDIR`，仅改变输出目录 `-o` 并不能隔离配置。
-Windows 需要可用的 Visual Studio C++ 工具链；FreeBSD 应安装 xmake-io 的工具，
-不要误用系统中同名的另一种 xmake。详见[完整构建说明](../reference/build-options.md)。
+`tutorial_tasks` 输出 `Hello, PACE` 后退出。`xmake test` 运行 PACE 的正确性测试。介绍可选模块的章节会给出需要追加到 `xmake f` 的选项。
 
 ## C++ 命名模块（`import pace`）
 
-使用 `--modules=y` 开启 C++20 及以上的命名模块接口，默认关闭，无需 C++23
-或 `import std`。应用目标依赖 `pace_module`，源文件使用 `import pace;`；
-原有头文件模式和各协议库目标继续可用。这与“HTTP/TLS 协议模块”的构建选项是两回事。
+除了头文件，PACE 也可以通过 C++20 命名模块使用。模块默认关闭；配置 `--modules=y`，并依赖 `pace_module` 而不是某个库目标：
 
-本地验证工具链为 **Clang 18.1.3 + libstdc++ 13 + xmake 3.1.1**。
-需要配套的 `clang-scan-deps`（Ubuntu 包名 `clang-tools-18`）可在 PATH 中找到。
-xmake 3.1.1 的备用扫描器会丢弃标准选项，无法扫描协程头文件。
-GCC 13.3 不能正确向导入方暴露 `export using` 声明；GCC 15.2 在导入内联协程时
-触发 `expand_CO_FRAME` 编译器内部错误。因此 module 对 GCC 16 以下版本给出
-明确诊断；普通头文件模式不受影响。GCC 16 包含上游的
-[协程与模块序列化修复](https://gcc.gnu.org/pipermail/gcc-patches/2026-January/705464.html)。
-GCC 16.2 和 Clang 21.1.8 均已通过两种 QUIC 后端的 C++20 module 及头文件混合 ABI 测试。
-见 [Actions 记录](https://github.com/TabNahida/PACE/actions/runs/44238306831)。
-MSVC、Apple Clang 的 module 模式尚未验证。
-
-```sh
-export PATH="/usr/lib/llvm-18/bin:$PATH"
-xmake f -c -m release --toolchain=clang --modules=y --cxxstandard=cxx20 --tests=y --examples=n -y
-xmake -y pace_module_tests
-xmake run pace_module_tests
+```lua
+target("hello_module")
+    set_kind("binary")
+    add_files("module_main.cpp")
+    add_deps("pace_module")
 ```
 
-应用目标改用 `add_deps("pace_module")`，并开启 `--modules=y`：
+`import pace;` 导入本次构建启用的所有模块，相当于 `#include <pace/pace.hpp>`。每个库模块还有自己的命名模块 `pace.<module>`：`pace.runtime`、`pace.net`、`pace.http`、`pace.http1`、`pace.gateway`、`pace.tls`、`pace.dns`、`pace.quic`、`pace.http2`、`pace.http3` 和 `pace.websocket`。每个命名模块只导出自己的名字，所以使用 TCP 的程序要同时导入 `pace.net` 和 `pace.runtime`。下面的程序只需要运行时：
 
 ```cpp
 #include <coroutine>
 #include <iostream>
-import pace;
+import pace.runtime;
 
-pace::task<int> answer() {
+pace::task<int> answer()
+{
     co_await pace::yield();
     co_return 42;
 }
-int main() {
+
+int main()
+{
     std::cout << pace::run(answer) << '\n';
 }
 ```
 
-将应用自身使用的标准库头文件放在 `import pace` 之前；导入方无需包含 PACE
-头文件。接口导出 runtime、TCP/UDP、公共 HTTP 消息与 router，以及构建时已启用
-的可选协议。使用 `--http1=n --websocket=n` 可构建不依赖可选协议库的核心模式。
+把 `import pace.runtime;` 换成 `import pace;` 即可导入全部内容。源文件用到的标准库头文件要放在 `import` 之前包含；不需要包含任何 PACE 头文件。模块不导出宏，xmake 仍然通过 `pace_module` 传递特性宏定义和链接依赖。
 
-实现继续来自现有静态库。不同翻译单元可分别使用头文件和 module，并共享同一套类型
-和 ABI；测试覆盖了跨翻译单元的协程及 HTTP 类型传递。不要将实现 `.cpp` 文件改成
-模块实现单元。命名模块不导出宏，功能宏和链接依赖由 xmake 的 `pace_module` 目标传递。
-切换编译器、语言标准或协议配置时必须重建 BMI，不能跨工具链复用缓存。
-xmake 关于缺少 `std`/`std.compat` 的提示不影响本接口，因为本接口使用标准库头文件。
+命名模块只是同一组静态库之上的导入接口：包含 PACE 头文件的翻译单元和导入 PACE 模块的翻译单元使用相同的类型，可以链接在一起。构建模块需要 Clang 并在 `PATH` 中提供与之匹配的 `clang-scan-deps`，或者使用 GCC 16 及以上版本；低于 16 的 GCC 会直接报错。MSVC 和 Apple Clang 的模块构建尚未验证。更换编译器、C++ 标准或模块选项后需要重新构建，也不要在不同工具链之间共享已构建的模块接口。已验证的工具链见[构建选项](../reference/build-options.zh.md)。
 
-新增的 [module CI](../../.github/workflows/modules.yml) 覆盖 Clang 的 C++20
-核心/默认配置，以及 C++23 全协议配置。module 本身尚未测量编译速度收益。
-实现采用 [Clang 文档中的 ABI 兼容 export-using 方案](https://clang.llvm.org/docs/StandardCPlusPlusModules.html#abi-non-breaking-styles)。
-
-QUIC 后端通过 `--quic_backend=ngtcp2`（默认）或 `--quic_backend=openssl` 选择，需要同时启用 `--quic=y` 或 `--http3=y`。两者均支持 C++20，使用 OpenSSL 3.5.7 提供 TLS；ngtcp2 后端额外依赖 ngtcp2 1.26.0。
+下一章：[2. 发送 HTTP 请求](02-http-client.zh.md)

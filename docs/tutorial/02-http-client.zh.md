@@ -1,145 +1,130 @@
-# 0. 一次调用，拿到响应
+<!-- source-hash: 6b0313141bd2 -->
+# 2. 发送 HTTP 请求
 
-[English](02-http-client.md) · [学习路线](README.zh.md) · [构建细节](01-install-and-first-program.zh.md)
+[English](02-http-client.md) · [学习路线](README.zh.md) · [上一章：第一个程序](01-install-and-first-program.zh.md)
 
-先从普通 C++ 开始。单次客户端请求不需要协程、事件循环配置，也不需要 `run`。
-本教程需要 **PACE 0.4.0 或更新版本**，包含直接客户端和 HTTP 的 `async_` 命名；
-下文使用 v0.4.0 源码 checkout。
+发一个 HTTP 请求不需要协程、事件循环或 `run`：直接客户端会阻塞调用线程并返回响应。学习本章时，请在一个终端里保持[第 1 章](01-install-and-first-program.zh.md)的 `hello` 服务器运行。
 
-## 1. 先写客户端
+## 编写客户端
 
-将完整程序保存为 `client.cpp`：
+在 `hello` 项目中保存为 `client.cpp`：
 
 ```cpp
 #include <pace/http1.hpp>
 #include <iostream>
 
-int main() {
-    try {
+int main()
+{
+    try
+    {
         auto reply = pace::http::get("http://127.0.0.1:8080/health");
         std::cout << reply.status << " " << reply.body;
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception& error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }
 }
 ```
 
-`get` 完成连接、GET 请求、响应读取和连接关闭，然后直接返回。调用期间当前线程会阻塞；
-`reply` 自己持有响应数据。404 等 HTTP 错误状态也会正常返回，因此要检查 `reply.status`；
-连接、协议或超时错误会抛异常。整个调用默认最多等待 30 秒。
-
-这个 URL 指向本地服务。接下来创建服务端，再一起构建两个文件。
-
-## 2. 准备一个小服务端
-
-保存为 `server.cpp`：
-
-```cpp
-#include <pace/http1.hpp>
-#include <iostream>
-
-int main() {
-    try {
-        pace::http::app app;
-        app.get("/health", [] { return pace::http::text("ok\n"); });
-        app.post("/echo", [](pace::http::request request) {
-            return pace::http::text(std::move(request.body));
-        });
-        app.run(8080);
-    } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
-}
-```
-
-`http::app` 持有路由，`text` 用字符串构造响应，POST 处理函数返回收到的 body。
-`app.run(8080)` 在当前线程监听回环地址并持续服务。本入门程序用 Ctrl-C 结束。
-
-## 3. 构建并运行
-
-需要 xmake 2.9.8+ 和 C++20 编译器。将当前 PACE 源码放在应用目录的
-`third_party/PACE`，与 `client.cpp`、`server.cpp` 和下面的 `xmake.lua` 配套：
+在 `xmake.lua` 中为它添加一个目标：
 
 ```lua
-set_project("hello")
-set_languages("cxx20")
-add_rules("mode.debug", "mode.release")
-includes("third_party/PACE")
-
-for _, name in ipairs({"client", "server"}) do
-    target(name)
-        set_kind("binary")
-        add_files(name .. ".cpp")
-        add_deps("pace_http1")
-end
+target("client")
+    set_kind("binary")
+    add_files("client.cpp")
+    add_deps("pace_http1")
 ```
 
-在应用目录执行：
+用 `xmake -y client` 构建，再运行 `xmake run client`。预期输出 `200 ok`。
 
-```sh
-xmake f -m release --tests=n --examples=n --http1=y --websocket=n -y
-xmake -y client server
-xmake run server
-```
+`get` 会建立连接、发送请求、读取完整响应并关闭连接，然后才返回。它阻塞当前线程，`reply` 拥有自己的状态码、头部和 body。404 这样的 HTTP 错误状态是一个响应，而不是异常：请检查 `reply.status`。连接错误和超时抛出 `std::system_error`，格式错误的响应抛出 `http::protocol_error`。客户端不会跟随重定向，也不会重试请求。
 
-另开终端执行 `xmake run client`，应输出 `200 ok` 后退出。服务端继续等待下次请求。
-[第一章](01-install-and-first-program.zh.md)解释模块选择和仓库内配套 example 的构建。
+## 发送 body
 
-## 4. 发送 body 或设置超时
-
-把客户端的 `get` 那行替换为：
+把 `get` 那一行换成：
 
 ```cpp
 auto reply = pace::http::post("http://127.0.0.1:8080/echo", "hello", "text/plain");
 ```
 
-重新构建并运行客户端，应输出 `200 hello`。如果希望 GET 最多等待两秒，包含 `<chrono>` 后写：
+重新构建并运行客户端，预期输出 `200 hello`。第三个参数是 `Content-Type`；省略时 body 以 `application/octet-stream` 发送。
+
+## 选择超时
+
+直接调用默认有 30 秒的总预算，涵盖建立连接、发送请求和接收响应。要让一次 GET 只用两秒，包含 `<chrono>` 并在 URL 后传入选项：
 
 ```cpp
-auto reply = pace::http::get("http://127.0.0.1:8080/health",
-                             {.timeout = std::chrono::seconds(2)});
+auto reply = pace::http::get("http://127.0.0.1:8080/health", {.timeout = std::chrono::seconds(2)});
 ```
 
-域名 URL 需要配置 `--dns=y`，HTTPS 需要 `--tls=y`。HTTPS 默认通过系统信任根验证 URL
-中的主机名。其他方法和自定义信任见 [HTTP 章节](03-http-server.zh.md)。请求不会自动重定向或重试。
+预算用尽时，调用抛出 `std::system_error`，错误码为 `std::errc::timed_out`。停掉服务器再运行客户端，可以看到连接被拒绝时的报错。
 
-## 5. TCP、UDP 也从一行开始
+## 使用其他方法
 
-连接[第三章](05-tcp.zh.md)的四字节 TCP 回显服务端：
+`fetch` 发送你自己构造的请求，例如一个 HEAD 请求：
+
+```cpp
+pace::http::request request;
+request.method = "HEAD";
+auto reply = pace::http::fetch("http://127.0.0.1:8080/health", std::move(request));
+```
+
+预期输出 `200 `，body 为空。URL 提供请求目标和 `Host` 头部；你自己添加的 `Host` 头部会被拒绝。请求需要的其他内容通过 `request.headers` 和 `request.body` 设置。
+
+## 访问主机名和 HTTPS
+
+前面的 URL 都使用数字地址，默认构建即可支持。主机名 URL 需要 DNS，`https://` URL 需要 TLS。启用两者后重新配置；xmake 第一次会下载 c-ares 和 OpenSSL：
+
+```sh
+xmake f -m release --tests=n --examples=n --dns=y --tls=y -y
+```
+
+然后同样的调用就能访问公开的 HTTPS 服务器：
+
+```cpp
+auto reply = pace::http::get("https://example.com/");
+```
+
+HTTPS 用 OpenSSL 的默认信任库校验服务器证书，并检查证书是否与 URL 中的主机匹配。如果这个信任库为空，校验会以 `unable to get local issuer certificate` 失败；在 macOS 上使用 xmake 构建的 OpenSSL 时就是这种情况。此时可以把环境变量 `SSL_CERT_FILE` 指向一个 CA 证书包（例如 `/etc/ssl/cert.pem`），或者自己加载证书包。要信任你自己的 CA，在 URL 之前传入一个 `tls::context`：`pace::http::get(trust, url)`。[第 10 章](10-tls-and-dns.zh.md)会构造这样的 context 和一个本地 TLS 对端。
+
+## 一次调用完成 TCP 和 UDP
+
+TCP 和 UDP 也有同类的直接调用。配合[第 5 章](05-tcp.zh.md)的 TCP 回显服务器：
 
 ```cpp
 auto reply = pace::tcp::exchange({"127.0.0.1", 9090}, "ping", 4);
 ```
 
-连接[第七章](06-udp.zh.md)的 UDP 回显服务端：
+配合[第 6 章](06-udp.zh.md)的 UDP 回显服务器：
 
 ```cpp
 auto packet = pace::udp::exchange({"127.0.0.1", 9091}, "hello");
-if (packet.truncated) throw std::runtime_error("UDP reply truncated");
+if (packet.truncated)
+{
+    throw std::runtime_error("UDP reply truncated");
+}
 ```
 
-分别包含 `<pace/net.hpp>`、`<pace/net.hpp>` 并链接 `pace_net`，两者使用同样的超时选项。
-TCP 需要约定回复长度；UDP 返回一个包含来源地址的数据报。对应章节会带你写出完整客户端和服务端。
+包含 `<pace/net.hpp>` 并链接 `pace_net`。两者都接受与 HTTP 调用相同的超时选项。TCP 需要给出回复的长度，因为 TCP 不保留消息边界；UDP 返回一个数据报及其发送方。
 
-## 6. 需要组合异步操作时再用协程
+## 组合多项工作时改用异步
 
-在 PACE 协程里使用 `async_get`、`async_post` 或 `async_fetch`：
+在 PACE 协程内部，使用 `async_get`、`async_post` 或 `async_fetch`：
 
 ```cpp
-pace::run([]() -> pace::task<void> {
-    auto reply = co_await pace::http::async_get("http://127.0.0.1:8080/health");
-    std::cout << reply.body;
-});
+pace::run(
+    []() -> pace::task<void>
+    {
+        auto reply = co_await pace::http::async_get("http://127.0.0.1:8080/health");
+        std::cout << reply.body;
+    }
+);
 ```
 
-异步版本等待时会让出事件循环线程，适合已经在运行任务、处理连接或管理并发的应用。
-直接客户端会拒绝在运行中的 PACE context 内调用；处理函数里使用异步版本。
-异步调用不会自动获得直接客户端的 30 秒总超时。
+`pace::run` 在当前线程上创建事件循环，并把协程运行到结束。请求等待期间，事件循环可以处理其他工作。当程序本身已经在运行任务、处理连接或同时发出多个请求时，就该使用异步形式。阻塞调用在正在运行的 PACE 上下文中被调用时会抛出 `std::logic_error`，所以处理函数和协程里一律使用异步形式。异步调用不附加 30 秒预算；需要时请自行设置截止时间（[第 7 章](07-structured-concurrency.zh.md)）。
 
-接着按需要阅读 [HTTP](03-http-server.zh.md)、[TCP](05-tcp.zh.md) 或 [UDP](06-udp.zh.md)，
-需要异步组合时再读[任务与定时器](04-tasks-and-timers.zh.md)。精确约定、调优和 0.3.1
-迁移表见[直接客户端参考](../reference/direct-clients.zh.md)。
+配套程序 `xmake run tutorial_http_client` 在本地监听器上提供一个协程处理函数，并用 `async_get` 检查它的分块响应。[第 4 章](04-tasks-and-timers.zh.md)讲解任务和 `pace::run`。[HTTP/1](../reference/http1/README.zh.md) 和 [URL 客户端](../reference/http/clients.zh.md)列出了所有重载和默认值。
 
-[下一步：并发多个请求，共用一个 deadline](07-structured-concurrency.zh.md)。
+下一章：[3. 构建 HTTP 服务器](03-http-server.zh.md)

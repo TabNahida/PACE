@@ -1,48 +1,44 @@
-# 用 PACE 逐步构建应用
+<!-- source-hash: 743952b48790 -->
+# 教程
 
-[English](README.md) · [API 参考](../reference/README.zh.md)
+[English](README.md) · [文档首页](../README.zh.md) · [API 参考](../reference/README.zh.md)
 
-从[一次调用的客户端](02-http-client.zh.md)开始：先写直接 HTTP GET，准备本地服务，
-构建运行并观察响应，再按需尝试 TCP 或 UDP。需要组合异步操作或编写服务端时，再学习协程。
+本教程是按顺序阅读的一条学习路线。你先建立自己的项目和一个 HTTP 服务器，在不使用任何协程的情况下向它发请求，然后依次学习任务、socket、并发和关闭，最后进入可选协议。每一章都给出完整的文件、构建命令和预期输出，并以一个能运行的程序结束。
 
-教程需要 PACE 0.4.0 或更新版本，包含直接客户端和 HTTP 的 `async_` 命名；
-下文的源码构建方式适用于 v0.4.0 checkout。每章包含完整文件、构建步骤、预期结果和可修改的练习；配套程序用于独立验证。
+## 学习路线
 
-## 先完成主线
+| 章节 | 构建什么、学到什么 | 配套程序 |
+|:--|:--|:--|
+| [1. 安装 PACE，构建第一个程序](01-install-and-first-program.zh.md) | 安装 xmake 和编译器，创建 `main.cpp` 与 `xmake.lua`，依赖一个模块，构建并运行；命名模块 | `tutorial_tasks` |
+| [2. 发送 HTTP 请求](02-http-client.zh.md) | 直接调用 `get`、`post` 和 `fetch`，发送 body、设置超时、HTTPS；何时改用 `async_*` | `tutorial_http_client` |
+| [3. 构建 HTTP 服务器](03-http-server.zh.md) | 路由、构造响应、会等待的处理函数、在处理函数中等待另一个请求 | `tutorial_http` |
+| [4. 任务与定时器](04-tasks-and-timers.zh.md) | 从协程返回结果；所有权、异常以及 `pace::run` 如何结束 | `tutorial_tasks` |
+| [5. TCP](05-tcp.zh.md) | `tcp::exchange`、回显服务器、分帧 | `tutorial_tcp` |
+| [6. UDP](06-udp.zh.md) | 请求与回复、只发送、回显服务器 | `tutorial_udp` |
+| [7. 结构化并发](07-structured-concurrency.zh.md) | 任务组、共享截止时间、局部取消 | `tutorial_structured` |
+| [8. 工作线程与线程](08-workers-and-threads.zh.md) | 两个事件循环、应用线程、跨线程提交工作 | `tutorial_workers` |
+| [9. 有序关闭](09-graceful-shutdown.zh.md) | 取消、停止接受连接、排空、按顺序销毁 | `tutorial_shutdown` |
+| [10. TLS 与 DNS](10-tls-and-dns.zh.md) | 解析名字、校验 TLS 对端、区分地址与身份 | `tutorial_dns`、`tutorial_tls` |
+| [11. WebSocket](11-websocket.zh.md) | 升级 TCP 连接、交换消息、关闭 | `tutorial_websocket` |
+| [12. HTTP/2](12-http2.zh.md) | 一个 GET，然后是多路复用的批量请求 | `tutorial_http2` |
+| [13. QUIC 与 HTTP/3](13-quic-and-http3.zh.md) | QUIC 流与 FIN，然后在其上运行 HTTP/3 | `tutorial_quic`、`tutorial_http3` |
+| [14. 静态文件与反向代理](14-gateway.zh.md) | 挂载目录、代理 API、缓存、多工作线程 | |
 
-| 章节 | 这一章会写出什么、理解什么 |
-|---|---|
-| [1. 自己的工程](01-install-and-first-program.zh.md) | 创建 main.cpp、xmake.lua，选择实际需要的库模块 |
-| [4. HTTP](03-http-server.zh.md) | 先直接 GET/POST/fetch，再讲路由、异步处理与 HTTPS |
-| [3. TCP](05-tcp.zh.md) | 先用 `tcp::exchange`，再编写回显服务端、理解分帧 |
-| [7. UDP](06-udp.zh.md) | 直接收发、只发送，再编写异步回显服务端 |
-| [2. 任务与定时器](04-tasks-and-timers.zh.md) | 等待后返回结果，理解惰性、所有权、异常和入口自动停止 |
-| [12. 结构化并发](07-structured-concurrency.zh.md) | 并发子任务、局部取消与共同 deadline |
-| [5. 执行方式](08-workers-and-threads.zh.md) | 选择 worker 和应用线程，明确任务实际在哪里执行 |
-| [6. 关闭](09-graceful-shutdown.zh.md) | 观察取消，理解停止接收、drain、join、销毁的先后顺序 |
+除了第 2 章的 HTTPS 一节，第 1 到 9 章只用到默认构建包含的内容。你自己的程序放在第 1 章的练习项目中，并在那里运行。配套程序是各章练习的完整、可自检的版本，位于 PACE 的 `examples/` 目录；在 PACE 源码目录中以 `--examples=y` 配置后构建，再用 `xmake run <名称>` 运行。它们会自行结束；保持监听的服务器（`tutorial_http serve`、`tutorial_tcp serve`、`tutorial_websocket serve`）用 Ctrl-C 停止。
 
-先完成快速入门，再按需要选择协议章节。
-`my_application` 等命令在自己的练习工程运行；`tutorial_*` 是 PACE 仓库根目录的
-配套目标，需要 `--examples=y`。默认配套程序会自行结束，带 `serve` 的服务器则持续运行。
+## 可选模块
 
-## 再按需要增加协议
+第 10 到 13 章需要默认关闭的模块。配置时加上它们的选项，你的项目和用于运行配套程序的 PACE 源码目录都要加；xmake 第一次会下载第三方库。
 
-| 章节 | 相比已有代码增加的能力 | 配套目标 |
-|---|---|---|
-| [8. DNS 与 TLS](10-tls-and-dns.zh.md) | 地址解析、保留域名身份、验证握手与关闭 | `tutorial_dns`、`tutorial_tls` |
-| [9. WebSocket](11-websocket.zh.md) | 从 TCP 升级到完整消息与关闭握手 | `tutorial_websocket` |
-| [10. HTTP/2](12-http2.zh.md) | 先完成单次 GET，再进入批量多路复用 | `tutorial_http2` |
-| [11. QUIC 与 HTTP/3](13-quic-and-http3.zh.md) | 流方向、ALPN，以及协议连接的所有权转移 | `tutorial_quic`、`tutorial_http3` |
+| 章节 | 选项 | 下载 |
+|:--|:--|:--|
+| 10. TLS 与 DNS | `--tls=y --dns=y` | OpenSSL、c-ares |
+| 11. WebSocket | `--websocket=y`（默认开启） | |
+| 12. HTTP/2 | `--http2=y`，HTTPS 另加 `--tls=y` | nghttp2 |
+| 13. QUIC 与 HTTP/3 | 只用 QUIC 时 `--quic=y`，两者都用时 `--http3=y` | OpenSSL、ngtcp2、nghttp3 |
 
-每章开头给出要启用的选项。TLS/QUIC 配套练习使用公开测试证书和本地连接，
-不能把测试私钥拿去部署。DNS 默认解析数字回环地址，传入真实域名才需要外部网络。
-QUIC/HTTP3 当前要求 POSIX；详见[构建配置](01-install-and-first-program.zh.md)和[平台范围](../reference/platform-support.md)。
+QUIC 和 HTTP/3 需要 POSIX 平台。TLS 和 QUIC 练习使用 `tests/certs` 中公开的测试证书，它们仅供本地练习。DNS 默认解析数字形式的 `127.0.0.1`，只有解析真实主机名时才需要外部网络。具体配置见[构建选项](../reference/build-options.zh.md)和[平台支持](../reference/platform-support.zh.md)。
 
-写通一个实验后，再查链接中的 API 契约，确认默认值、边界与生命周期。
-简化接口的设计取舍见[易用性说明](../explanation/api-design.md)。
+## 学完教程之后
 
-完整接口约定见[组件便捷接口](../reference/component-conveniences.zh.md)；缓冲区复用、期限和并发等细节见[协议调优](../guides/protocol-tuning.zh.md)。
-
-[直接客户端与 API 迁移](../reference/direct-clients.zh.md)
-
-[13. 静态文件、缓存与反向代理](14-gateway.zh.md) — 从一行挂载开始搭建网关（开发分支）。
+某一章的练习跑通之后，它对应的参考页给出默认值、限制和生命周期规则。[实用指南](../guides/README.zh.md)收录面向任务的配方，例如 [HTTP 实用配方](../guides/http-recipes.zh.md)和[协议调优](../guides/protocol-tuning.zh.md)。想了解简短的客户端、入口和路由写法背后的考虑，请阅读 [API 设计](../explanation/api-design.zh.md)。
