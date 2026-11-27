@@ -743,6 +743,11 @@ pace::task<void> close_after_reply(
 )
 {
     auto stream = co_await listener->accept();
+    // Wait for the peer's input before closing. Reading one byte proves the
+    // whole single-segment write is queued here, so the rest is unread input
+    // at close time; closing before it arrives would let it reset the peer.
+    std::array<char, 1> first{};
+    require(co_await stream.read_some(first) == 1, "graceful close peer input missing");
     co_await stream.write_all("done");
     const auto started = std::chrono::steady_clock::now();
     co_await stream.close_gracefully(5ms);
@@ -769,9 +774,14 @@ pace::task<void> graceful_close_bounds(pace::io_context& context)
     }
     require(std::string_view(reply.data(), reply.size()) == "done", "graceful close reply mismatch");
     // Keep our send side open: the server must finish when its drain timeout
-    // expires instead of waiting indefinitely for peer EOF.
-    co_await context.sleep_for(25ms);
-    require(result->finished && result->elapsed >= 5ms, "graceful close must honor its drain deadline");
+    // expires instead of waiting indefinitely for peer EOF. Poll for that
+    // rather than sleeping a fixed time, which a loaded machine can overrun;
+    // the test watchdog bounds a server that never finishes.
+    while (!result->finished)
+    {
+        co_await context.sleep_for(1ms);
+    }
+    require(result->elapsed >= 5ms, "graceful close must honor its drain deadline");
     require(co_await client.read_some(reply) == 0, "drained connection must close without reset");
 }
 
