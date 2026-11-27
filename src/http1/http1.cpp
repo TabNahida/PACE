@@ -359,7 +359,7 @@ task<std::optional<std::string>> read_head(
             throw parse_failure{431};
         }
         const auto wanted = std::min(buffer.size(), bounds.max_header_bytes - pending.size());
-        const auto count = co_await stream.read_some(std::span<char>(buffer.data(), wanted));
+        const auto count = co_await stream.read_some(pace::as_writable_bytes(std::span<char>(buffer.data(), wanted)));
         if (!count)
         {
             if (pending.empty())
@@ -380,7 +380,7 @@ task<void> ensure_bytes(Transport& stream, std::string& pending, std::size_t siz
     while (pending.size() < size)
     {
         const auto wanted = std::min(buffer.size(), size - pending.size());
-        const auto count = co_await stream.read_some(std::span<char>(buffer.data(), wanted));
+        const auto count = co_await stream.read_some(pace::as_writable_bytes(std::span<char>(buffer.data(), wanted)));
         if (!count)
         {
             throw parse_failure{400};
@@ -412,7 +412,7 @@ task<std::string> read_line(Transport& stream, std::string& pending, std::size_t
             throw parse_failure{431};
         }
         const auto count = co_await stream.read_some(
-            std::span<char>(buffer.data(), std::min(buffer.size(), maximum - pending.size()))
+            pace::as_writable_bytes(std::span<char>(buffer.data(), std::min(buffer.size(), maximum - pending.size())))
         );
         if (!count)
         {
@@ -987,7 +987,7 @@ task<response> read_response(Transport& stream, std::string& pending, limits bou
             std::array<char, 8192> buffer; // Only bytes returned by read_some are consumed.
             for (;;)
             {
-                const auto count = co_await stream.read_some(buffer);
+                const auto count = co_await stream.read_some(pace::as_writable_bytes(buffer));
                 if (!count)
                 {
                     break;
@@ -1112,7 +1112,7 @@ task<bool> write_response(
         encoded = encode_response(std::get<response>(outgoing), false, head_request);
     }
     deadline.check();
-    co_await stream.write_all(encoded);
+    co_await stream.write_all(pace::as_bytes(encoded));
     deadline.check();
     if (send_body)
     {
@@ -1136,7 +1136,7 @@ task<bool> write_response(
                 {
                     throw protocol_error("HTTP response producer returned an invalid byte count");
                 }
-                co_await stream.write_all(std::string_view(buffer.data(), count));
+                co_await stream.write_all(pace::as_bytes(std::string_view(buffer.data(), count)));
                 deadline.check();
                 remaining -= count;
             }
@@ -1400,7 +1400,7 @@ task<response> basic_client<Transport>::send(request outgoing)
     try
     {
         check_http_protocol(stream_);
-        co_await stream_.write_all(encoded);
+        co_await stream_.write_all(pace::as_bytes(encoded));
         auto incoming = co_await read_response(stream_, pending_, bounds_, outgoing.method);
         if (incoming.close || !outgoing.keep_alive)
         {

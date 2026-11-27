@@ -222,7 +222,7 @@ void socket::set_broadcast(bool enabled)
     family_selected_ = true;
 }
 
-task<std::size_t> socket::send_to(std::string_view bytes, endpoint destination)
+task<std::size_t> socket::send_to(std::span<const std::byte> bytes, endpoint destination)
 {
     check(*context_, fd_, true);
     if (bytes.size() > 65507)
@@ -243,7 +243,7 @@ task<std::size_t> socket::send_to(std::string_view bytes, endpoint destination)
         check(*context_, fd_, true);
         const auto count = ::sendto(
             fd_,
-            bytes.empty() ? "" : bytes.data(),
+            bytes.empty() ? "" : reinterpret_cast<const char*>(bytes.data()),
             static_cast<int>(bytes.size()),
             0,
             target.data(),
@@ -270,7 +270,7 @@ task<std::size_t> socket::send_to(std::string_view bytes, endpoint destination)
     }
 }
 
-task<datagram> socket::receive_from(std::span<char> buffer)
+task<datagram> socket::receive_from(std::span<std::byte> buffer)
 {
     check(*context_, fd_, true);
     net::pending_operation guard(receiving_, "another UDP operation is pending in this direction");
@@ -286,7 +286,14 @@ task<datagram> socket::receive_from(std::span<char> buffer)
         bool truncated = false;
         const auto capacity = std::min<std::size_t>(buffer.size(), INT_MAX);
 #if defined(_WIN32)
-        auto count = ::recvfrom(fd_, buffer.data(), static_cast<int>(capacity), 0, sender.data(), &sender.length);
+        auto count = ::recvfrom(
+            fd_,
+            reinterpret_cast<char*>(buffer.data()),
+            static_cast<int>(capacity),
+            0,
+            sender.data(),
+            &sender.length
+        );
         if (count < 0 && last_socket_error() == WSAEMSGSIZE)
         {
             count = static_cast<int>(capacity);
@@ -355,7 +362,7 @@ task<packet> async_exchange(io_context& io, endpoint peer, std::string request, 
     unsigned skipped = 0;
     for (;;)
     {
-        auto reply = co_await connection.receive_from(std::span<char>(data));
+        auto reply = co_await connection.receive_from(as_writable_bytes(data));
         if (reply.sender.address == expected.address && reply.sender.port == expected.port
             && reply.sender.family == expected.family && reply.sender.scope_id == expected.scope_id)
         {

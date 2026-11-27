@@ -44,7 +44,7 @@ pace::task<void> client(
     }
     auto received = co_await pace::read_exact(connection, std::string_view("Hello over verified TLS!\n").size());
     std::array<char, 1> end{};
-    if (co_await connection.read_some(end) != 0)
+    if (co_await connection.read_some(pace::as_writable_bytes(end)) != 0)
     {
         throw std::runtime_error("extra TLS response bytes");
     }

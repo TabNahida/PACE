@@ -83,7 +83,7 @@ pace::task<std::string> read_head(pace::tcp::stream& socket, std::string& pendin
         }
         require(pending.size() < 16384, "raw HTTP head too large");
         std::array<char, 1024> bytes{};
-        const auto count = co_await socket.read_some(bytes);
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(bytes));
         require(count != 0, "raw peer ended before upgrade head");
         pending.append(bytes.data(), count);
     }
@@ -94,7 +94,7 @@ pace::task<std::string> take(pace::tcp::stream& socket, std::string& pending, st
     while (pending.size() < length)
     {
         std::array<char, 2048> bytes{};
-        const auto count = co_await socket.read_some(bytes);
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(bytes));
         require(count != 0, "raw WebSocket frame truncated");
         pending.append(bytes.data(), count);
     }
@@ -266,7 +266,7 @@ pace::task<void> fragmented_raw_client(pace::io_context& io, pace::tcp::endpoint
     pace::tcp::stream socket(io);
     co_await socket.connect(std::move(endpoint));
     const std::string bytes = std::string(request) + frame(1, "\xE2", false) + frame(9, "ping") + frame(0, "\x82\xAC");
-    co_await socket.write_all(bytes); // First frame coalesced with upgrade headers.
+    co_await socket.write_all(pace::as_bytes(bytes)); // First frame coalesced with upgrade headers.
     std::string pending;
     const auto head = co_await read_head(socket, pending);
     require(
@@ -278,7 +278,7 @@ pace::task<void> fragmented_raw_client(pace::io_context& io, pace::tcp::endpoint
     const auto text = co_await read_frame(socket, pending, false);
     require(text.first == 0x81 && text.second == "\xE2\x82\xAC", "raw text echo mismatch");
     const auto closing = frame(8, std::string("\x03\xE8", 2));
-    co_await socket.write_all(closing);
+    co_await socket.write_all(pace::as_bytes(closing));
     const auto close = co_await read_frame(socket, pending, false);
     require(close.first == 0x88 && close.second == std::string("\x03\xE8", 2), "close reply mismatch");
     socket.close();
@@ -329,7 +329,7 @@ pace::task<void> buffered_raw_client(pace::io_context& io, pace::tcp::endpoint e
 {
     pace::tcp::stream socket(io);
     co_await socket.connect(std::move(endpoint));
-    co_await socket.write_all(request);
+    co_await socket.write_all(pace::as_bytes(request));
     std::string pending;
     (void)co_await read_head(socket, pending);
     std::string wire;
@@ -340,15 +340,15 @@ pace::task<void> buffered_raw_client(pace::io_context& io, pace::tcp::endpoint e
     // Split the first masked frame's prefix/key across separate readiness events.
     for (std::size_t i = 0; i < 7; ++i)
     {
-        co_await socket.write_all(std::string_view(wire).substr(i, 1));
+        co_await socket.write_all(pace::as_bytes(std::string_view(wire).substr(i, 1)));
         co_await io.sleep_for(1ms);
     }
     // Coalesce the remainder, crossing both read-ahead and direct-read thresholds.
-    co_await socket.write_all(std::string_view(wire).substr(7));
+    co_await socket.write_all(pace::as_bytes(std::string_view(wire).substr(7)));
     const auto reply = co_await read_frame(socket, pending, false);
     require(reply.first == 0x81 && reply.second == "validated", "buffered validation missing");
     const auto closing = frame(8, std::string("\x03\xE8", 2));
-    co_await socket.write_all(closing);
+    co_await socket.write_all(pace::as_bytes(closing));
     require((co_await read_frame(socket, pending, false)).first == 0x88, "buffered close reply missing");
     socket.close();
     done.finish();
@@ -396,15 +396,15 @@ pace::task<void> invalid_raw_client(
 {
     pace::tcp::stream socket(io);
     co_await socket.connect(std::move(endpoint));
-    co_await socket.write_all(request);
+    co_await socket.write_all(pace::as_bytes(request));
     std::string pending;
     (void)co_await read_head(socket, pending);
-    co_await socket.write_all(wire);
+    co_await socket.write_all(pace::as_bytes(wire));
     // The endpoint reports protocol_error independently of peer TCP reset timing.
     try
     {
         std::array<char, 256> buffer{};
-        while (co_await socket.read_some(buffer))
+        while (co_await socket.read_some(pace::as_writable_bytes(buffer)))
         {
         }
     }
@@ -452,7 +452,7 @@ pace::task<void> invalid_upgrade_client(
 {
     pace::tcp::stream socket(io);
     co_await socket.connect(std::move(endpoint));
-    co_await socket.write_all(wire);
+    co_await socket.write_all(pace::as_bytes(wire));
     std::string pending;
     const auto response = co_await read_head(socket, pending);
     require(response.starts_with("HTTP/1.1 " + std::to_string(status) + " "), "upgrade rejection HTTP status");

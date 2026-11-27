@@ -79,10 +79,10 @@ pace::task<std::string> raw_exchange(pace::io_context& io, pace::tcp::endpoint e
 {
     pace::tcp::stream socket(io);
     co_await socket.connect(std::move(endpoint));
-    co_await socket.write_all(bytes);
+    co_await socket.write_all(pace::as_bytes(bytes));
     std::string result;
     std::array<char, 2048> buffer{};
-    while (const auto count = co_await socket.read_some(buffer))
+    while (const auto count = co_await socket.read_some(pace::as_writable_bytes(buffer)))
     {
         result.append(buffer.data(), count);
         require(result.size() < 1024 * 1024, "raw response exceeded test bound");
@@ -177,12 +177,12 @@ pace::task<void> chunk_pipeline(pace::io_context& io)
     };
     for (auto piece : pieces)
     {
-        co_await fragmented.write_all(piece);
+        co_await fragmented.write_all(pace::as_bytes(piece));
         co_await io.sleep_for(1ms);
     }
     result.clear();
     std::array<char, 512> buffer{};
-    while (const auto count = co_await fragmented.read_some(buffer))
+    while (const auto count = co_await fragmented.read_some(pace::as_writable_bytes(buffer)))
     {
         result.append(buffer.data(), count);
     }
@@ -203,17 +203,17 @@ pace::task<void> fixed_body_pipeline(pace::io_context& io)
         co_await socket.connect(listener->local_endpoint());
         if (fragmented)
         {
-            co_await socket.write_all(prefix + "he");
+            co_await socket.write_all(pace::as_bytes(prefix + "he"));
             co_await io.sleep_for(1ms);
-            co_await socket.write_all("llo" + next);
+            co_await socket.write_all(pace::as_bytes("llo" + next));
         }
         else
         {
-            co_await socket.write_all(prefix + "hello" + next);
+            co_await socket.write_all(pace::as_bytes(prefix + "hello" + next));
         }
         std::string result;
         std::array<char, 1024> buffer{};
-        while (const auto count = co_await socket.read_some(buffer))
+        while (const auto count = co_await socket.read_some(pace::as_writable_bytes(buffer)))
         {
             result.append(buffer.data(), count);
         }
@@ -297,7 +297,7 @@ pace::task<void> raw_server(
     std::array<char, 1024> buffer{};
     while (head.find("\r\n\r\n") == std::string::npos)
     {
-        const auto count = co_await socket.read_some(buffer);
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(buffer));
         if (!count)
         {
             co_return;
@@ -310,13 +310,13 @@ pace::task<void> raw_server(
         {
             for (std::size_t i = 0; i < response_bytes.size(); i += 3)
             {
-                co_await socket.write_all(std::string_view(response_bytes).substr(i, 3));
+                co_await socket.write_all(pace::as_bytes(std::string_view(response_bytes).substr(i, 3)));
                 co_await socket.context().yield();
             }
         }
         else
         {
-            co_await socket.write_all(response_bytes);
+            co_await socket.write_all(pace::as_bytes(response_bytes));
         }
         co_await socket.close_gracefully();
     }
@@ -446,7 +446,7 @@ pace::task<void> stalled_server(std::shared_ptr<pace::tcp::listener> listener)
 {
     auto socket = co_await listener->accept();
     std::array<char, 1024> buffer{};
-    co_await socket.read_some(buffer);
+    co_await socket.read_some(pace::as_writable_bytes(buffer));
     co_await socket.context().sleep_for(1h);
 }
 
@@ -849,11 +849,11 @@ pace::task<void> close_probe_peer(
     std::array<char, 2048> buffer{};
     while (head.find("\r\n\r\n") == std::string::npos)
     {
-        const auto count = co_await socket.read_some(buffer);
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(buffer));
         require(count != 0, "close policy peer received a truncated request");
         head.append(buffer.data(), count);
     }
-    co_await socket.write_all(wire);
+    co_await socket.write_all(pace::as_bytes(wire));
     state->response_written = true;
     if (gate_close)
     {
@@ -1172,14 +1172,14 @@ pace::task<void> stop_at_client_close(Transport socket)
     std::string request;
     while (request.find("\r\n\r\n") == std::string::npos)
     {
-        const auto count = co_await socket.read_some(bytes);
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(bytes));
         require(count != 0, "graceful cancellation request was truncated");
         request.append(bytes.data(), count);
     }
-    co_await socket.write_all("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+    co_await socket.write_all(pace::as_bytes("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"));
     // The client's FIN/close_notify proves it parsed the complete response and
     // entered graceful cleanup. Keep this side open, then cancel that wait.
-    require(co_await socket.read_some(bytes) == 0, "client did not begin graceful cleanup");
+    require(co_await socket.read_some(pace::as_writable_bytes(bytes)) == 0, "client did not begin graceful cleanup");
     socket.context().stop();
 }
 
@@ -1236,12 +1236,12 @@ pace::task<std::string> admitted_raw(
 )
 {
     auto socket = co_await admitted_connect<Transport>(io, fixture);
-    co_await socket.write_all(wire);
+    co_await socket.write_all(pace::as_bytes(wire));
     std::array<char, 2048> buffer{};
     std::string result;
     try
     {
-        while (const auto count = co_await socket.read_some(buffer))
+        while (const auto count = co_await socket.read_some(pace::as_writable_bytes(buffer)))
         {
             result.append(buffer.data(), count);
             require(result.size() < 16384, "small response exceeded bound");
@@ -1328,13 +1328,13 @@ pace::task<void> consume_large(pace::io_context& io, const http_fixture& fixture
 {
     auto socket = co_await admitted_connect<Transport>(io, fixture);
     co_await socket.write_all(
-        std::string("GET ") + target + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        pace::as_bytes(std::string("GET ") + target + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
     );
     std::array<char, 8192> buffer{};
     std::string head;
     std::uint64_t received = 0;
     bool parsed_head = false;
-    while (const auto count = co_await socket.read_some(buffer))
+    while (const auto count = co_await socket.read_some(pace::as_writable_bytes(buffer)))
     {
         std::string_view payload(buffer.data(), count);
         if (!parsed_head)
@@ -1434,9 +1434,9 @@ pace::task<void> disconnect_scenarios(pace::io_context& io)
 {
     auto fixture = start_admitted_server<Transport>(io);
     auto socket = co_await admitted_connect<Transport>(io, fixture);
-    co_await socket.write_all("GET /stalled HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    co_await socket.write_all(pace::as_bytes("GET /stalled HTTP/1.1\r\nHost: localhost\r\n\r\n"));
     std::array<char, 1024> buffer{};
-    require(co_await socket.read_some(buffer) != 0, "stream never began");
+    require(co_await socket.read_some(pace::as_writable_bytes(buffer)) != 0, "stream never began");
     socket.close();
     for (unsigned i = 0; fixture.state->destroyed == 0 && i < 100; ++i)
     {
@@ -1457,12 +1457,12 @@ pace::task<void> deadline_scenarios(pace::io_context& io)
          {"POST /small HTTP/1.1\r\nHost:", "POST /small HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\nx"})
     {
         auto socket = co_await admitted_connect<Transport>(io, fixture);
-        co_await socket.write_all(wire);
+        co_await socket.write_all(pace::as_bytes(wire));
         std::array<char, 32> buffer{};
         bool closed = false;
         try
         {
-            closed = co_await socket.read_some(buffer) == 0;
+            closed = co_await socket.read_some(pace::as_writable_bytes(buffer)) == 0;
         }
         catch (const std::system_error&)
         {
@@ -1471,7 +1471,7 @@ pace::task<void> deadline_scenarios(pace::io_context& io)
         require(closed && fixture.state->handled == 0, "receive deadline failed on partial head/body");
     }
     auto socket = co_await admitted_connect<Transport>(io, fixture);
-    co_await socket.write_all("GET /stalled HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    co_await socket.write_all(pace::as_bytes("GET /stalled HTTP/1.1\r\nHost: localhost\r\n\r\n"));
     // Never read: writes must reach backpressure, then the write deadline must
     // destroy the producer without waiting for the peer or retaining a timer.
     for (unsigned i = 0; fixture.state->destroyed == 0 && i < 100; ++i)
@@ -1501,9 +1501,9 @@ pace::task<void> context_stop_scenario(pace::io_context& io, std::shared_ptr<pro
 {
     auto fixture = start_admitted_server<Transport>(io, 1s, 2s, 4096, std::move(state));
     auto socket = co_await admitted_connect<Transport>(io, fixture);
-    co_await socket.write_all("GET /stalled HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    co_await socket.write_all(pace::as_bytes("GET /stalled HTTP/1.1\r\nHost: localhost\r\n\r\n"));
     std::array<char, 1024> buffer{};
-    require(co_await socket.read_some(buffer) != 0, "stream never began before context stop");
+    require(co_await socket.read_some(pace::as_writable_bytes(buffer)) != 0, "stream never began before context stop");
     io.stop();
     // run() drains the canceled server write after this client task returns.
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pace/net/buffer.hpp>
 #include <pace/net/ip.hpp>
 #include <pace/net/stream_io.hpp>
 #include <pace/runtime/blocking.hpp>
@@ -67,35 +68,21 @@ public:
     /// Connects to a numeric endpoint; one attempt per stream (a second throws std::logic_error). Throws
     /// std::system_error on failure, including address_family_not_supported for an explicit-family mismatch.
     task<void> connect(endpoint endpoint);
-    /// Completes when at least one byte was read and returns the count; 0 with a nonempty buffer means EOF.
-    task<std::size_t> read_some(std::span<char> buffer);
-    /// Fill the buffer or throw std::system_error(connection_reset) on premature EOF. A failed read may have
+    /// Completes when at least one byte was read and returns the count; 0 with a nonempty buffer means EOF. The
+    /// buffer is borrowed until completion. One read may be outstanding (std::logic_error otherwise).
+    task<std::size_t> read_some(std::span<std::byte> buffer);
+    /// Fills the buffer or throws std::system_error(connection_reset) on premature EOF. A failed read may have
     /// filled a prefix; no bytes beyond buffer.size() are consumed.
-    task<void> read_exact(std::span<char> buffer);
-
-    /// Byte-span form of read_exact(std::span<char>).
-    task<void> read_exact(std::span<std::byte> buffer)
-    {
-        return read_exact(std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
-    }
-
+    task<void> read_exact(std::span<std::byte> buffer);
     /// Owned convenience result with a pre-allocation bound (1 MiB by default); throws std::length_error
     /// before allocating when `size > maximum`.
     task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
-    /// Completes when the OS has accepted every byte of `bytes`, which stay borrowed until then.
-    task<void> write_all(std::string_view bytes);
-
-    /// Byte-span form of read_some(std::span<char>).
-    task<std::size_t> read_some(std::span<std::byte> buffer)
-    {
-        return read_some(std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
-    }
-
-    /// Byte-span form of write_all(std::string_view).
-    task<void> write_all(std::span<const std::byte> bytes)
-    {
-        return write_all(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
-    }
+    /// Completes when the OS has accepted every byte of `bytes`, which stay borrowed until then. One write may be
+    /// outstanding (std::logic_error otherwise). Text: `write_all(pace::as_bytes(text))`.
+    task<void> write_all(std::span<const std::byte> bytes);
+    /// Sends FIN (shutdown(SHUT_WR)): the peer reads EOF while this side can still read. Completes at once; throws
+    /// std::system_error. Do not overlap a write.
+    task<void> shutdown_write();
 
     /// Sets or clears TCP_NODELAY. Call before run() or on the owning loop; throws std::system_error.
     void set_no_delay(bool enabled = true);

@@ -187,7 +187,7 @@ pace::task<std::vector<pace::quic::stream>> raw_controls(pace::quic::connection&
     {
         streams.push_back(co_await connection.open_stream(pace::quic::stream_type::unidirectional));
         const auto wire = type == 0 ? bytes({0, 4, 0}) : bytes({type});
-        co_await streams.back().write_all(wire);
+        co_await streams.back().write_all(pace::as_bytes(wire));
     }
     co_return streams;
 }
@@ -196,7 +196,7 @@ pace::task<std::string> read_all(pace::quic::stream& stream)
 {
     std::string result;
     std::array<char, 4096> buffer{};
-    while (const auto size = co_await stream.read_some(buffer))
+    while (const auto size = co_await stream.read_some(pace::as_writable_bytes(buffer)))
     {
         result.append(buffer.data(), size);
     }
@@ -222,7 +222,7 @@ pace::task<void> raw_server(fixture& test, bool malformed)
         // content-length=5 then DATA="wire" exposes truncated-message handling.
         auto response = malformed ? bytes({1, 6, 0, 0, 0xd9, 0x54, 1, '5', 0, 4}) : bytes({1, 3, 0, 0, 0xd9, 0, 4});
         response += "wire";
-        co_await stream.write_all(response);
+        co_await stream.write_all(pace::as_bytes(response));
         stream.finish_write();
         // Keep the connection and critical streams alive until the client closes.
         try
@@ -305,7 +305,7 @@ pace::task<void> raw_client(fixture& test, bool& complete)
     // literal :authority value with static name reference.
     auto request = bytes({1, 16, 0, 0, 0xd1, 0xd7, 0xc1, 0x50, 9});
     request += "localhost";
-    co_await stream.write_all(request);
+    co_await stream.write_all(pace::as_bytes(request));
     stream.finish_write();
     const auto response = co_await read_all(stream);
     std::size_t cursor = 0;
@@ -565,7 +565,7 @@ pace::task<void> delayed_peer(
     auto controls = co_await raw_controls(connection);
     const auto request = bytes({1, 16, 0, 0, 0xd1, 0xd7, 0xc1, 0x50, 9}) + "localhost";
     auto slow = co_await connection.open_stream();
-    co_await slow.write_all(request);
+    co_await slow.write_all(pace::as_bytes(request));
     slow.finish_write();
     co_await handler.entered.wait();
     if (mode == 2)
@@ -576,7 +576,7 @@ pace::task<void> delayed_peer(
     if (mode == 0)
     {
         auto fast = co_await connection.open_stream();
-        co_await fast.write_all(request);
+        co_await fast.write_all(pace::as_bytes(request));
         fast.finish_write();
         require(
             !(co_await read_all(fast)).empty() && !handler.finished,

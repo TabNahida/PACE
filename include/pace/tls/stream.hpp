@@ -24,32 +24,6 @@ namespace pace::tls
 {
 class tls_driver;
 
-/// A transport closed with `close() noexcept`.
-template <class Transport>
-concept tls_closeable = requires(Transport& transport) {
-    { transport.close() } noexcept -> std::same_as<void>;
-};
-
-/// A QUIC-style transport: `finish_write()` sends FIN and `reset() noexcept` aborts both directions.
-template <class Transport>
-concept tls_resettable = requires(Transport& transport) {
-    { transport.finish_write() } -> std::same_as<void>;
-    { transport.reset() } noexcept -> std::same_as<void>;
-};
-
-/// A connected, ordered, bidirectional byte stream that tls::stream can own and run TLS over. read_some returns 0
-/// only at EOF, write_all accepts every byte, and close/reset cancels outstanding operations with
-/// operation_canceled. Optional: `is_open() const noexcept`, `supports_concurrent_io() const noexcept` (false for
-/// serialized I/O) and `shutdown(std::chrono::milliseconds) -> task<void>` run before close().
-template <class Transport>
-concept tls_byte_stream =
-    (tls_closeable<Transport> || tls_resettable<Transport>)
-    && requires(Transport& transport, const Transport& owner, std::span<char> input, std::string_view output) {
-           { owner.context() } noexcept -> std::same_as<io_context&>;
-           { transport.read_some(input) } -> std::same_as<task<std::size_t>>;
-           { transport.write_all(output) } -> std::same_as<task<void>>;
-       };
-
 /// Type erasure behind the generic tls::stream constructor; not part of the public API.
 class tls_transport
 {
@@ -59,14 +33,14 @@ public:
     virtual bool is_open() const noexcept = 0;
     virtual tls::stream* nested_stream() noexcept = 0;
     virtual bool supports_concurrent_io() const noexcept = 0;
-    virtual task<std::size_t> read_some(std::span<char>) = 0;
-    virtual task<void> write_all(std::string_view) = 0;
+    virtual task<std::size_t> read_some(std::span<std::byte>) = 0;
+    virtual task<void> write_all(std::span<const std::byte>) = 0;
     virtual task<void> shutdown(std::chrono::milliseconds) = 0;
     virtual void close() noexcept = 0;
 };
 
-/// Adapts a tls_byte_stream to tls_transport; not part of the public API.
-template <tls_byte_stream Transport>
+/// Adapts a byte_stream to tls_transport; not part of the public API.
+template <byte_stream Transport>
 class tls_transport_model final : public tls_transport
 {
 public:
@@ -125,30 +99,30 @@ public:
         }
     }
 
-    task<std::size_t> read_some(std::span<char> buffer) override
+    task<std::size_t> read_some(std::span<std::byte> buffer) override
     {
         return transport_.read_some(buffer);
     }
 
-    task<void> write_all(std::string_view bytes) override
+    task<void> write_all(std::span<const std::byte> bytes) override
     {
         return transport_.write_all(bytes);
     }
 
     task<void> shutdown(std::chrono::milliseconds timeout) override
     {
-        if constexpr (tls_closeable<Transport> && requires {
+        if constexpr (requires {
                           { transport_.shutdown(timeout) } -> std::same_as<task<void>>;
                       })
         {
             co_await transport_.shutdown(timeout);
             close();
         }
-        else if constexpr (tls_resettable<Transport>)
+        else if constexpr (requires { transport_.finish_write(); })
         {
-            transport_.finish_write();
-            // Dropping a QUIC stream before the peer's FIN cancels its send side.
-            std::array<char, 4096> discard{};
+            // QUIC: send FIN and drain; dropping the stream before the peer's FIN cancels its send side.
+            co_await transport_.shutdown_write();
+            std::array<std::byte, 4096> discard{};
             while (co_await transport_.read_some(discard))
             {
                 co_await context().yield();
@@ -168,14 +142,7 @@ public:
         {
             return;
         }
-        if constexpr (tls_closeable<Transport>)
-        {
-            transport_.close();
-        }
-        else
-        {
-            transport_.reset();
-        }
+        transport_.close();
     }
 
     Transport release()
@@ -390,7 +357,7 @@ public:
     /// Its close/reset must cancel pending operations on its owning reactor.
     /// Shutdown may overlap a transport read and write. Adapters with serialized
     /// I/O can declare supports_concurrent_io() const noexcept returning false.
-    template <tls_byte_stream Transport>
+    template <byte_stream Transport>
     requires(!std::same_as<Transport, tcp::stream>)
     stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {})
         : stream(std::make_unique<tls_transport_model<Transport>>(std::move(transport)), configuration, pre_read)
@@ -420,7 +387,7 @@ public:
     /// Server only. Empty on a completed TLS handshake. On handoff this stream
     /// becomes moved-from and the caller owns the original, still-open transport
     /// and its pre-read bytes. Transport must match the type passed at construction.
-    template <tls_byte_stream Transport = tcp::stream>
+    template <byte_stream Transport = tcp::stream>
     task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff()
     {
         using model_type = tls_transport_model<Transport>;
@@ -451,21 +418,13 @@ public:
 
     /// Returns decrypted bytes after the handshake; 0 with a nonempty buffer means a verified close_notify.
     /// Transport EOF without close_notify throws std::system_error(protocol_error).
-    task<std::size_t> read_some(std::span<char> buffer);
+    task<std::size_t> read_some(std::span<std::byte> buffer);
     /// Encrypts and sends every byte; completes once the ciphertext was handed to the transport.
-    task<void> write_all(std::string_view bytes);
-
-    /// Byte-span form of read_some(std::span<char>).
-    task<std::size_t> read_some(std::span<std::byte> buffer)
-    {
-        return read_some(std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
-    }
-
-    /// Byte-span form of write_all(std::string_view).
-    task<void> write_all(std::span<const std::byte> bytes)
-    {
-        return write_all(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
-    }
+    task<void> write_all(std::span<const std::byte> bytes);
+    /// Sends close_notify and leaves the connection open for reading: the peer reads end of stream, and read_some
+    /// keeps returning its data until its own close_notify. Writing afterwards fails. Requires a completed
+    /// handshake and no other active operation; throws std::system_error(protocol_error) on a TLS failure.
+    task<void> shutdown_write();
 
     /// Exchange close_notify cooperatively, closing even on cancellation/error or
     /// timeout. Expiring this bound closes normally, without promising peer receipt.

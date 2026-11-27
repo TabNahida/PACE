@@ -92,13 +92,13 @@ pace::task<void> reply(std::shared_ptr<pace::udp::socket> peer, std::size_t coun
     std::array<char, 16> buffer;
     for (std::size_t i = 0; i < count; ++i)
     {
-        const auto request = co_await peer->receive_from(buffer);
+        const auto request = co_await peer->receive_from(pace::as_writable_bytes(buffer));
         require(request.size == 1 && buffer[0] == 'x', "bad UDP request");
         for (unsigned j = 0; j < 8; ++j)
         {
-            co_await other.send_to("other", request.sender);
+            co_await other.send_to(pace::as_bytes("other"), request.sender);
         }
-        co_await peer->send_to("reply", request.sender);
+        co_await peer->send_to(pace::as_bytes("reply"), request.sender);
     }
 }
 

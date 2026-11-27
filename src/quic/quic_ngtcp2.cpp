@@ -1598,25 +1598,26 @@ io_context& stream::context() const noexcept
     return state_->owner->owner->io;
 }
 
-std::optional<std::size_t> stream::try_read(std::span<char> buffer)
+std::optional<std::size_t> stream::try_read(std::span<std::byte> buffer)
 {
     guard operation(state_->reading);
-    return read(*state_, buffer);
+    return read(*state_, std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
 }
 
-std::size_t stream::try_write(std::string_view bytes)
+std::size_t stream::try_write(std::span<const std::byte> bytes)
 {
     guard operation(state_->writing);
-    return write(*state_, bytes);
+    return write(*state_, as_text(bytes));
 }
 
-task<std::size_t> stream::read_some(std::span<char> buffer)
+task<std::size_t> stream::read_some(std::span<std::byte> buffer)
 {
     auto state = state_;
     guard operation(state->reading);
+    const std::span<char> characters(reinterpret_cast<char*>(buffer.data()), buffer.size());
     for (;;)
     {
-        if (auto count = read(*state, buffer))
+        if (auto count = read(*state, characters))
         {
             co_return *count;
         }
@@ -1624,10 +1625,11 @@ task<std::size_t> stream::read_some(std::span<char> buffer)
     }
 }
 
-task<void> stream::write_all(std::string_view bytes)
+task<void> stream::write_all(std::span<const std::byte> data)
 {
     auto state = state_;
     guard operation(state->writing);
+    auto bytes = as_text(data);
     while (!bytes.empty())
     {
         const auto count = write(*state, bytes);
@@ -1671,6 +1673,17 @@ void stream::finish_write()
     }
     state_->buffer.finish = true;
     state_->owner->schedule();
+}
+
+task<void> stream::shutdown_write()
+{
+    finish_write();
+    co_return;
+}
+
+void stream::close() noexcept
+{
+    reset();
 }
 
 void stream::reset(std::uint64_t application_error) noexcept
@@ -1773,5 +1786,7 @@ void quic_driver::wake(quic::connection& connection)
         connection.state_->schedule();
     }
 }
+
+static_assert(byte_stream<stream>);
 } // namespace pace::quic
 #endif

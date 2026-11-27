@@ -146,7 +146,7 @@ pace::task<void> serve(Stream socket, sample& test)
     std::array<char, 4096> bytes{};
     while (request.find("\r\n\r\n") == std::string::npos)
     {
-        const auto count = co_await socket.read_some(bytes);
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(bytes));
         if (!count || request.size() + count > 16384)
         {
             throw std::runtime_error("invalid probe request");
@@ -171,7 +171,7 @@ pace::task<void> serve(Stream socket, sample& test)
     {
         response += "2\r\nok\r\n0\r\nX-Check: yes\r\n\r\n";
     }
-    co_await socket.write_all(response);
+    co_await socket.write_all(pace::as_bytes(response));
     test.response_written = clock_type::now();
     if (test.delay)
     {

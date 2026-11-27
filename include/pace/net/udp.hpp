@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pace/net/buffer.hpp>
 #include <pace/net/ip.hpp>
 #include <pace/runtime/blocking.hpp>
 #include <pace/runtime/io_context.hpp>
@@ -89,31 +90,16 @@ public:
     void set_broadcast(bool enabled = true);
     /// Sends one datagram and returns its size; `bytes` stay borrowed until completion. More than 65,507 bytes,
     /// or a partial send, throws std::system_error(message_size).
-    task<std::size_t> send_to(std::string_view bytes, endpoint destination);
+    task<std::size_t> send_to(std::span<const std::byte> bytes, endpoint destination);
     /// Receives one datagram into `buffer`, which must not be empty (std::invalid_argument).
-    task<datagram> receive_from(std::span<char> buffer);
-
-    /// Byte-span form of send_to(std::string_view, endpoint).
-    task<std::size_t> send_to(std::span<const std::byte> bytes, endpoint destination)
-    {
-        return send_to(
-            std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()),
-            std::move(destination)
-        );
-    }
-
-    /// Byte-span form of receive_from(std::span<char>).
-    task<datagram> receive_from(std::span<std::byte> buffer)
-    {
-        return receive_from(std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
-    }
+    task<datagram> receive_from(std::span<std::byte> buffer);
 
     /// Owned datagrams for small applications. receive() allocates up to 64 KiB;
     /// use receive_from(span) to reuse storage or control larger datagrams.
     /// send() owns `bytes` and otherwise behaves like send_to().
     task<std::size_t> send(std::string bytes, endpoint destination)
     {
-        co_return co_await send_to(bytes, std::move(destination));
+        co_return co_await send_to(as_bytes(bytes), std::move(destination));
     }
 
     /// Receives one datagram into an owned packet of at most `capacity` bytes. Throws std::invalid_argument for 0
@@ -130,7 +116,7 @@ public:
         }
         packet result;
         result.data.resize(capacity);
-        auto received = co_await receive_from(std::span<char>(result.data));
+        auto received = co_await receive_from(as_writable_bytes(result.data));
         result.data.resize(received.size);
         result.sender = std::move(received.sender);
         result.truncated = received.truncated;

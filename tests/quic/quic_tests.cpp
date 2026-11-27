@@ -93,7 +93,7 @@ pace::task<std::string> read_to_end(pace::quic::stream& stream)
 {
     std::string result;
     std::array<char, 8191> buffer{};
-    while (auto count = co_await stream.read_some(buffer))
+    while (auto count = co_await stream.read_some(pace::as_writable_bytes(buffer)))
     {
         result.append(buffer.data(), count);
         require(result.size() <= 512 * 1024, "QUIC test message grew without bound");
@@ -116,7 +116,7 @@ pace::task<void> echo_stream(pace::quic::stream stream, completion& done)
     require(!stream.is_unidirectional() && !stream.is_local(), "server accepted wrong stream direction");
     auto message = co_await read_to_end(stream);
     require(message.size() >= 192 * 1024, "short QUIC binary request");
-    co_await stream.write_all(message);
+    co_await stream.write_all(pace::as_bytes(message));
     stream.finish_write();
     // Retain the transport until its bytes have actually been acknowledged.
     while (stream.pending_write_bytes())
@@ -130,7 +130,7 @@ pace::task<void> request_stream(pace::quic::stream stream, unsigned index, compl
 {
     require(stream.is_local() && !stream.is_unidirectional(), "client stream metadata mismatch");
     auto message = payload(index);
-    co_await stream.write_all(message);
+    co_await stream.write_all(pace::as_bytes(message));
     stream.finish_write();
     require(co_await read_to_end(stream) == message, "QUIC binary stream roundtrip mismatch");
     done.arrive();
@@ -163,7 +163,7 @@ pace::task<void> server_roundtrip(pace::quic::listener& listener, completion& do
     require(uni && ids == 15 && !uni->is_local(), "missing concurrent streams");
     require(co_await read_to_end(*uni) == "client uni", "unidirectional request mismatch");
     auto reply = co_await connection.open_stream(pace::quic::stream_type::unidirectional);
-    co_await reply.write_all("server uni");
+    co_await reply.write_all(pace::as_bytes("server uni"));
     reply.finish_write();
     while (reply.pending_write_bytes())
     {
@@ -187,7 +187,7 @@ pace::task<void> client_roundtrip(
         io.spawn(request_stream(co_await connection.open_stream(), i, done));
     }
     auto stream = co_await connection.open_stream(pace::quic::stream_type::unidirectional);
-    co_await stream.write_all("client uni");
+    co_await stream.write_all(pace::as_bytes("client uni"));
     stream.finish_write();
     auto reply = co_await connection.accept_stream();
     require(reply.is_unidirectional() && !reply.is_local(), "missing server uni stream");
@@ -204,7 +204,7 @@ pace::task<void> lossy_relay(pace::udp::socket& socket, pace::udp::endpoint serv
     {
         for (;;)
         {
-            auto packet = co_await socket.receive_from(bytes);
+            auto packet = co_await socket.receive_from(pace::as_writable_bytes(bytes));
             const bool reply = packet.sender.port == server.port;
             if (!reply)
             {
@@ -223,7 +223,10 @@ pace::task<void> lossy_relay(pace::udp::socket& socket, pace::udp::endpoint serv
             {
                 continue;
             }
-            co_await socket.send_to(std::string_view(bytes.data(), packet.size), reply ? *client : server);
+            co_await socket.send_to(
+                pace::as_bytes(std::string_view(bytes.data(), packet.size)),
+                reply ? *client : server
+            );
         }
     }
     catch (const std::system_error& error)
@@ -377,14 +380,14 @@ pace::task<void> closing_server(pace::quic::listener& listener, bool close_liste
     auto connection = co_await listener.accept();
     auto stream = co_await connection.accept_stream();
     std::array<char, 1> byte{};
-    require(co_await stream.read_some(byte) == 1, "QUIC close synchronization failed");
+    require(co_await stream.read_some(pace::as_writable_bytes(byte)) == 1, "QUIC close synchronization failed");
     if (close_listener)
     {
         listener.close();
         bool canceled = false;
         try
         {
-            co_await stream.read_some(byte);
+            co_await stream.read_some(pace::as_writable_bytes(byte));
         }
         catch (const std::system_error& e)
         {
@@ -410,11 +413,11 @@ pace::task<void> closed_client(
     pace::quic::connection connection(io, config);
     co_await connection.connect(endpoint, "localhost");
     auto stream = co_await connection.open_stream();
-    co_await stream.write_all("x");
+    co_await stream.write_all(pace::as_bytes("x"));
     try
     {
         char byte;
-        co_await stream.read_some(std::span<char>(&byte, 1));
+        co_await stream.read_some(pace::as_writable_bytes(std::span<char>(&byte, 1)));
     }
     catch (const std::system_error& e)
     {
@@ -441,7 +444,7 @@ pace::task<void> conflicting_reader(pace::quic::stream& stream, bool& rejected)
     std::array<char, 1> bytes{};
     try
     {
-        co_await stream.read_some(bytes);
+        co_await stream.read_some(pace::as_writable_bytes(bytes));
     }
     catch (const std::logic_error&)
     {
@@ -462,12 +465,12 @@ pace::task<void> reset_client(
     pace::quic::connection connection(io, config);
     co_await connection.connect(endpoint, "localhost");
     auto stream = co_await connection.open_stream();
-    co_await stream.write_all("x");
+    co_await stream.write_all(pace::as_bytes("x"));
     io.spawn(conflicting_reader(stream, rejected));
     try
     {
         char byte;
-        co_await stream.read_some(std::span<char>(&byte, 1));
+        co_await stream.read_some(pace::as_writable_bytes(std::span<char>(&byte, 1)));
     }
     catch (const std::system_error& error)
     {
@@ -524,7 +527,7 @@ pace::task<void> isolated_server(
     require(second.is_open() && listener.is_open(), "closing a peer closed the shared listener");
     auto stream = co_await second.accept_stream();
     require(co_await read_to_end(stream) == "second", "second connection lost after first close");
-    co_await stream.write_all("survived");
+    co_await stream.write_all(pace::as_bytes("survived"));
     stream.finish_write();
     while (stream.pending_write_bytes())
     {
@@ -542,7 +545,7 @@ pace::task<void> isolated_client(
 {
     co_await connection.connect(endpoint, "localhost");
     auto stream = co_await connection.open_stream();
-    co_await stream.write_all(first ? "first" : "second");
+    co_await stream.write_all(pace::as_bytes(first ? "first" : "second"));
     stream.finish_write();
     if (first)
     {
@@ -658,7 +661,7 @@ pace::task<void> recycle_client(pace::quic::connection& connection, pace::udp::e
     {
         auto stream = co_await connection.open_stream(pace::quic::stream_type::unidirectional);
         const std::string message(48 * 1024, static_cast<char>(i));
-        co_await stream.write_all(message);
+        co_await stream.write_all(pace::as_bytes(message));
         stream.finish_write();
         while (stream.pending_write_bytes())
         {
@@ -690,7 +693,7 @@ pace::task<void> interop_server(pace::quic::listener& listener)
     auto stream = co_await connection.accept_stream();
     auto message = co_await read_to_end(stream);
     require(message == payload(0), "cross-backend request mismatch");
-    co_await stream.write_all(message);
+    co_await stream.write_all(pace::as_bytes(message));
     stream.finish_write();
     while (stream.pending_write_bytes())
     {
@@ -704,7 +707,7 @@ pace::task<void> interop_client(pace::quic::connection& connection, pace::udp::e
     co_await connection.connect(endpoint, "localhost");
     auto stream = co_await connection.open_stream();
     const auto message = payload(0);
-    co_await stream.write_all(message);
+    co_await stream.write_all(pace::as_bytes(message));
     stream.finish_write();
     require(co_await read_to_end(stream) == message, "cross-backend response mismatch");
     // Allow the delayed final ACK to leave before stopping the UDP reactor.

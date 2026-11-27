@@ -128,7 +128,7 @@ pace::task<void> nameserver(pace::udp::socket& socket, unsigned& queries)
     {
         for (;;)
         {
-            const auto packet = co_await socket.receive_from(buffer);
+            const auto packet = co_await socket.receive_from(pace::as_writable_bytes(buffer));
             ++queries;
             std::string hostname;
             unsigned type = 0;
@@ -146,7 +146,7 @@ pace::task<void> nameserver(pace::udp::socket& socket, unsigned& queries)
                 reply[7] = 0;
                 reply.resize(12 + dns_name(hostname).size() + 4);
             }
-            co_await socket.send_to(reply, packet.sender);
+            co_await socket.send_to(pace::as_bytes(reply), packet.sender);
         }
     }
     catch (const std::system_error& error)
@@ -164,14 +164,14 @@ pace::task<void> tcp_nameserver(pace::tcp::listener& listener, unsigned& queries
     std::array<char, 2> prefix{};
     for (std::size_t n = 0; n < prefix.size();)
     {
-        const auto count = co_await socket.read_some(std::span<char>(prefix).subspan(n));
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(std::span<char>(prefix).subspan(n)));
         require(count != 0, "truncated TCP DNS prefix");
         n += count;
     }
     std::string query(get16(std::string_view(prefix.data(), prefix.size()), 0), '\0');
     for (std::size_t n = 0; n < query.size();)
     {
-        const auto count = co_await socket.read_some(std::span<char>(query).subspan(n));
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(std::span<char>(query).subspan(n)));
         require(count != 0, "truncated TCP DNS question");
         n += count;
     }
@@ -182,7 +182,7 @@ pace::task<void> tcp_nameserver(pace::tcp::listener& listener, unsigned& queries
     std::string framed;
     put16(framed, answer.size());
     framed += answer;
-    co_await socket.write_all(framed);
+    co_await socket.write_all(pace::as_bytes(framed));
 }
 
 // TCP and UDP have independent allocations/reservations. A UDP ephemeral port
@@ -461,9 +461,9 @@ pace::task<void> stalled_tcp_nameserver(pace::tcp::listener& listener, bool& acc
 {
     auto socket = co_await listener.accept();
     std::array<char, 4096> buffer{};
-    require(co_await socket.read_some(buffer) != 0, "TCP fallback did not send query");
+    require(co_await socket.read_some(pace::as_writable_bytes(buffer)) != 0, "TCP fallback did not send query");
     accepted = true;
-    while (co_await socket.read_some(buffer))
+    while (co_await socket.read_some(pace::as_writable_bytes(buffer)))
     {
     }
     closed = true;

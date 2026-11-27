@@ -173,7 +173,8 @@ pace::task<std::string> read_exact(pace::tcp::stream& stream, std::size_t size)
     std::size_t offset = 0;
     while (offset < size)
     {
-        const auto count = co_await stream.read_some(std::span<char>(bytes.data() + offset, size - offset));
+        const auto count =
+            co_await stream.read_some(pace::as_writable_bytes(std::span<char>(bytes.data() + offset, size - offset)));
         require(count != 0, "raw peer early EOF");
         offset += count;
     }
@@ -190,7 +191,7 @@ pace::task<void> raw_client(pace::io_context& io, pace::tcp::endpoint endpoint, 
     // Deliberately fragment every preface and frame byte across write calls.
     for (const char& byte : request)
     {
-        co_await stream.write_all(std::string_view(&byte, 1));
+        co_await stream.write_all(pace::as_bytes(std::string_view(&byte, 1)));
     }
     std::string body;
     bool ended = false;
@@ -202,7 +203,7 @@ pace::task<void> raw_client(pace::io_context& io, pace::tcp::endpoint endpoint, 
         const auto data = co_await read_exact(stream, size);
         if (head[3] == 4 && head[4] == 0)
         {
-            co_await stream.write_all(frame(4, 1, 0));
+            co_await stream.write_all(pace::as_bytes(frame(4, 1, 0)));
         }
         if (head[3] == 0)
         {
@@ -215,7 +216,7 @@ pace::task<void> raw_client(pace::io_context& io, pace::tcp::endpoint endpoint, 
     }
     require(body == "ok", "independent client body");
     const std::string goaway(8, '\0');
-    co_await stream.write_all(frame(7, 0, 0, goaway));
+    co_await stream.write_all(pace::as_bytes(frame(7, 0, 0, goaway)));
     co_await stream.close_gracefully();
     done.arrive();
 }
@@ -226,7 +227,7 @@ pace::task<void> raw_server(pace::tcp::listener& listener, completion& done, uns
     require(co_await read_exact(stream, 24) == "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n", "client preface");
     if (variant == 1)
     {
-        co_await stream.write_all(std::string_view("\0\0", 2));
+        co_await stream.write_all(pace::as_bytes(std::string_view("\0\0", 2)));
         stream.close();
         done.arrive();
         co_return;
@@ -278,11 +279,11 @@ pace::task<void> raw_server(pace::tcp::listener& listener, completion& done, uns
         }
         reply += frame(1, 4, 1, headers) + frame(0, 1, 1, variant == 2 ? "too large" : "ok");
     }
-    co_await stream.write_all(reply);
+    co_await stream.write_all(pace::as_bytes(reply));
     std::array<char, 1024> bytes{};
     try
     {
-        while (co_await stream.read_some(bytes))
+        while (co_await stream.read_some(pace::as_writable_bytes(bytes)))
         {
         }
     }
@@ -703,7 +704,7 @@ pace::task<void> delayed_peer(
     co_await stream.connect(endpoint);
     const std::string headers = std::string("\x82\x86\x84\x01\x09", 5) + "localhost";
     co_await stream.write_all(
-        std::string("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") + frame(4, 0, 0) + frame(1, 5, 1, headers)
+        pace::as_bytes(std::string("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") + frame(4, 0, 0) + frame(1, 5, 1, headers))
     );
     while (!handler.started)
     {
@@ -720,9 +721,9 @@ pace::task<void> delayed_peer(
         // only requests from the original read would deadlock this exchange.
         if (mode == 3)
         {
-            co_await stream.write_all(frame(3, 0, 1, std::string("\0\0\0\x08", 4)));
+            co_await stream.write_all(pace::as_bytes(frame(3, 0, 1, std::string("\0\0\0\x08", 4))));
         }
-        co_await stream.write_all(frame(1, 5, 3, headers));
+        co_await stream.write_all(pace::as_bytes(frame(1, 5, 3, headers)));
         bool fast_done = false;
         while (!fast_done)
         {
@@ -732,7 +733,7 @@ pace::task<void> delayed_peer(
             (void)co_await read_exact(stream, size);
             if (head[3] == 4 && head[4] == 0)
             {
-                co_await stream.write_all(frame(4, 1, 0));
+                co_await stream.write_all(pace::as_bytes(frame(4, 1, 0)));
             }
             fast_done = head[8] == 3 && (head[3] == 0 || head[3] == 1) && (head[4] & 1);
         }
@@ -819,8 +820,10 @@ pace::task<void> eof_peer(pace::tcp::endpoint endpoint, eof_case& test)
     co_await stream.connect(endpoint);
     const std::string headers = std::string("\x82\x86\x84\x01\x09", 5) + "localhost";
     co_await stream.write_all(
-        std::string("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") + frame(4, 0, 0)
-        + frame(1, test.variant == 2 ? 4 : 5, 1, headers)
+        pace::as_bytes(
+            std::string("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") + frame(4, 0, 0)
+            + frame(1, test.variant == 2 ? 4 : 5, 1, headers)
+        )
     );
 #ifdef _WIN32
     require(::shutdown(stream.native_handle(), SD_SEND) == 0, "HTTP2 peer write shutdown");
@@ -841,7 +844,7 @@ pace::task<void> eof_peer(pace::tcp::endpoint endpoint, eof_case& test)
     }
     std::string wire;
     std::array<char, 16384> buffer{};
-    while (const auto count = co_await stream.read_some(buffer))
+    while (const auto count = co_await stream.read_some(pace::as_writable_bytes(buffer)))
     {
         wire.append(buffer.data(), count);
     }
@@ -1005,7 +1008,7 @@ pace::task<void> tls_driver_server(
     std::size_t received = 0;
     while (received < 1024 * 1024)
     {
-        const auto count = co_await stream.read_some(buffer);
+        const auto count = co_await stream.read_some(pace::as_writable_bytes(buffer));
         require(count != 0, "TLS driver truncated retry");
         require(
             std::all_of(buffer.begin(), buffer.begin() + count, [](char c) { return c == 'x'; }),
@@ -1013,10 +1016,13 @@ pace::task<void> tls_driver_server(
         );
         received += count;
     }
-    co_await stream.write_all("ok");
+    co_await stream.write_all(pace::as_bytes("ok"));
     if (withhold_close)
     {
-        require(co_await stream.read_some(buffer) == 0, "TLS driver shutdown omitted close_notify");
+        require(
+            co_await stream.read_some(pace::as_writable_bytes(buffer)) == 0,
+            "TLS driver shutdown omitted close_notify"
+        );
         co_await listener.context().sleep_for(20ms);
         stream.close();
     }
@@ -1053,7 +1059,7 @@ pace::task<void> tls_driver_client(
         bool guarded = false;
         try
         {
-            (void)co_await stream.read_some(input);
+            (void)co_await stream.read_some(pace::as_writable_bytes(input));
         }
         catch (const std::logic_error&)
         {
@@ -1138,14 +1144,14 @@ pace::task<void> tls_abort_server(pace::tcp::listener& listener, const pace::tls
     co_await stream.handshake();
     // A client's handshake can finish before the server consumes its Finished
     // message. Confirm server completion before the client deliberately aborts.
-    co_await stream.write_all("ready");
+    co_await stream.write_all(pace::as_bytes("ready"));
     // Leave the peer's tiny send buffer blocked while it abandons queued output.
     co_await listener.context().sleep_for(10ms);
     std::array<char, 16384> input{};
     bool truncated = false;
     try
     {
-        while (co_await stream.read_some(input))
+        while (co_await stream.read_some(pace::as_writable_bytes(input)))
         {
         }
     }
@@ -1179,7 +1185,7 @@ pace::task<void> tls_abort_client(
     std::size_t received = 0;
     while (received < ready.size())
     {
-        const auto count = co_await stream.read_some(std::span<char>(ready).subspan(received));
+        const auto count = co_await stream.read_some(pace::as_writable_bytes(std::span<char>(ready).subspan(received)));
         require(count != 0, "TLS abort peer closed before handshake barrier");
         received += count;
     }

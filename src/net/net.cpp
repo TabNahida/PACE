@@ -300,7 +300,7 @@ task<void> stream::connect(endpoint endpoint)
     }
 }
 
-task<std::size_t> stream::read_some(std::span<char> buffer)
+task<std::size_t> stream::read_some(std::span<std::byte> buffer)
 {
     check_operation(*context_, fd_);
     net::pending_operation guard(reading_, "another TCP read is pending");
@@ -322,7 +322,14 @@ task<std::size_t> stream::read_some(std::span<char> buffer)
         const auto count = profiling::measure(
             profiling::stage::recv,
             [&]
-            { return ::recv(fd_, buffer.data(), static_cast<int>(std::min<std::size_t>(buffer.size(), INT_MAX)), 0); }
+            {
+                return ::recv(
+                    fd_,
+                    reinterpret_cast<char*>(buffer.data()),
+                    static_cast<int>(std::min<std::size_t>(buffer.size(), INT_MAX)),
+                    0
+                );
+            }
         );
         if (count >= 0)
         {
@@ -342,7 +349,7 @@ task<std::size_t> stream::read_some(std::span<char> buffer)
     }
 }
 
-task<void> stream::write_all(std::string_view bytes)
+task<void> stream::write_all(std::span<const std::byte> bytes)
 {
     constexpr std::size_t write_quantum = std::size_t{1024} * 1024;
     auto budget = write_quantum;
@@ -360,8 +367,10 @@ task<void> stream::write_all(std::string_view bytes)
         constexpr int flags = 0;
 #endif
         const auto size = static_cast<int>(std::min(bytes.size(), budget));
-        const auto count =
-            profiling::measure(profiling::stage::send, [&] { return ::send(fd_, bytes.data(), size, flags); });
+        const auto count = profiling::measure(
+            profiling::stage::send,
+            [&] { return ::send(fd_, reinterpret_cast<const char*>(bytes.data()), size, flags); }
+        );
         if (count > 0)
         {
             const auto sent = static_cast<std::size_t>(count);
@@ -369,7 +378,7 @@ task<void> stream::write_all(std::string_view bytes)
             {
                 co_return;
             }
-            bytes.remove_prefix(sent);
+            bytes = bytes.subspan(sent);
             budget -= sent;
             if (budget == 0)
             {
@@ -732,7 +741,7 @@ task<stream> connect(endpoint destination)
     co_return co_await connect(this_context(), std::move(destination));
 }
 
-task<void> stream::read_exact(std::span<char> buffer)
+task<void> stream::read_exact(std::span<std::byte> buffer)
 {
     while (!buffer.empty())
     {
@@ -755,7 +764,29 @@ task<std::string> stream::read_exact(std::size_t size, std::size_t maximum)
         throw std::length_error("read_exact exceeds maximum");
     }
     std::string buffer(size, '\0');
-    co_await read_exact(std::span<char>(buffer));
+    co_await read_exact(as_writable_bytes(buffer));
     co_return buffer;
 }
+
+task<void> stream::shutdown_write()
+{
+    check_operation(*context_, fd_);
+#if defined(_WIN32)
+    constexpr int send_side = SD_SEND;
+#else
+    constexpr int send_side = SHUT_WR;
+#endif
+    int result;
+    do
+    {
+        result = ::shutdown(fd_, send_side);
+    } while (result < 0 && interrupted(last_socket_error()));
+    if (result < 0)
+    {
+        socket_error("shutdown(send)");
+    }
+    co_return;
+}
+
+static_assert(byte_stream<stream>);
 } // namespace pace::tcp

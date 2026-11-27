@@ -57,9 +57,9 @@ pace::task<void> echo(pace::tcp::stream stream)
     {
         stream.set_no_delay();
         std::array<char, 16 * 1024> buffer;
-        while (const auto count = co_await stream.read_some(buffer))
+        while (const auto count = co_await stream.read_some(pace::as_writable_bytes(buffer)))
         {
-            co_await stream.write_all(std::string_view(buffer.data(), count));
+            co_await stream.write_all(pace::as_bytes(std::string_view(buffer.data(), count)));
         }
     }
     catch (const std::system_error&)

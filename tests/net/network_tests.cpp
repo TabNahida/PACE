@@ -33,9 +33,9 @@ pace::task<void> echo_connection(pace::tcp::stream stream)
     try
     {
         std::array<char, 4096> buffer{};
-        while (const auto size = co_await stream.read_some(buffer))
+        while (const auto size = co_await stream.read_some(pace::as_writable_bytes(buffer)))
         {
-            co_await stream.write_all(std::string_view(buffer.data(), size));
+            co_await stream.write_all(pace::as_bytes(std::string_view(buffer.data(), size)));
         }
     }
     catch (const std::system_error& error)
@@ -65,12 +65,12 @@ pace::task<void> tcp_roundtrip(pace::io_context& context)
     {
         payload[i] = static_cast<char>(i % 251);
     }
-    co_await client.write_all(payload);
+    co_await client.write_all(pace::as_bytes(payload));
     std::string received;
     std::array<char, 3071> buffer{};
     while (received.size() < payload.size())
     {
-        const auto size = co_await client.read_some(buffer);
+        const auto size = co_await client.read_some(pace::as_writable_bytes(buffer));
         require(size != 0, "unexpected echo EOF");
         received.append(buffer.data(), size);
     }
@@ -86,7 +86,7 @@ pace::task<void> tcp_roundtrip(pace::io_context& context)
     bool bad_fd = false;
     try
     {
-        co_await moved.read_some(buffer);
+        co_await moved.read_some(pace::as_writable_bytes(buffer));
     }
     catch (const std::system_error& error)
     {
@@ -132,7 +132,7 @@ pace::task<void> large_write(pace::io_context& io)
     co_await pace::with_task_group(
         [&](pace::task_group& group) -> pace::task<void>
         {
-            auto written = group.spawn(client.write_all(bytes));
+            auto written = group.spawn(client.write_all(pace::as_bytes(bytes)));
             require((co_await peer.read_exact(bytes.size(), bytes.size())) == bytes, "large TCP write lost bytes");
             co_await written;
         }
@@ -230,21 +230,22 @@ pace::task<void> endpoint_exchange(
         require(client_local.address == server_remote.address, "TCP peer address inspection");
     }
     const std::string payload("IPv6\0payload", 12);
-    co_await client.write_all(payload);
+    co_await client.write_all(pace::as_bytes(payload));
     std::array<char, 64> buffer{};
     std::size_t received = 0;
     while (received < payload.size())
     {
-        const auto size = co_await accepted.read_some(std::span<char>(buffer).subspan(received));
+        const auto size =
+            co_await accepted.read_some(pace::as_writable_bytes(std::span<char>(buffer).subspan(received)));
         require(size != 0, "IPv6 premature EOF");
         received += size;
     }
     require(std::string_view(buffer.data(), received) == payload, "IPv6 binary transfer");
-    co_await accepted.write_all("ok");
+    co_await accepted.write_all(pace::as_bytes("ok"));
     received = 0;
     while (received < 2)
     {
-        const auto size = co_await client.read_some(std::span<char>(buffer).subspan(received));
+        const auto size = co_await client.read_some(pace::as_writable_bytes(std::span<char>(buffer).subspan(received)));
         require(size != 0, "IPv6 reply EOF");
         received += size;
     }
@@ -372,10 +373,13 @@ pace::task<void> ipv6_address_validation(pace::io_context& io)
 pace::task<void> short_read_server(std::shared_ptr<pace::tcp::listener> listener, std::shared_ptr<bool> tail_sent)
 {
     auto stream = co_await listener->accept();
-    co_await stream.write_all("A");
+    co_await stream.write_all(pace::as_bytes("A"));
     std::array<char, 1> acknowledgement{};
-    require(co_await stream.read_some(acknowledgement) == 1 && acknowledgement[0] == '!', "short-read acknowledgement");
-    co_await stream.write_all("BC");
+    require(
+        co_await stream.read_some(pace::as_writable_bytes(acknowledgement)) == 1 && acknowledgement[0] == '!',
+        "short-read acknowledgement"
+    );
+    co_await stream.write_all(pace::as_bytes("BC"));
     *tail_sent = true;
 }
 
@@ -387,13 +391,13 @@ pace::task<void> short_read_rearm(pace::io_context& context)
     pace::tcp::stream client(context);
     co_await client.connect(listener->local_endpoint());
     std::array<char, 64> buffer{};
-    require(co_await client.read_some(buffer) == 1 && buffer[0] == 'A', "initial short read");
+    require(co_await client.read_some(pace::as_writable_bytes(buffer)) == 1 && buffer[0] == 'A', "initial short read");
     // A zero-size operation must finish even when the peer is awaiting our ack.
-    require(co_await client.read_some(std::span<char>{}) == 0, "empty read after short read");
+    require(co_await client.read_some(pace::as_writable_bytes(std::span<char>{})) == 0, "empty read after short read");
     pace::tcp::stream moved(std::move(client));
     pace::tcp::stream assigned(context);
     assigned = std::move(moved);
-    co_await assigned.write_all("!");
+    co_await assigned.write_all(pace::as_bytes("!"));
     while (!*tail_sent)
     {
         co_await context.yield();
@@ -401,11 +405,14 @@ pace::task<void> short_read_rearm(pace::io_context& context)
     // Data is already queued before rearming. A level subscription must find it;
     // a full one-byte read must also preserve the unread remainder.
     require(
-        co_await assigned.read_some(std::span<char>(buffer).first(1)) == 1 && buffer[0] == 'B',
+        co_await assigned.read_some(pace::as_writable_bytes(std::span<char>(buffer).first(1))) == 1 && buffer[0] == 'B',
         "queued readiness after short read and moves"
     );
-    require(co_await assigned.read_some(buffer) == 1 && buffer[0] == 'C', "read remainder after full buffer");
-    require(co_await assigned.read_some(buffer) == 0, "EOF after short read");
+    require(
+        co_await assigned.read_some(pace::as_writable_bytes(buffer)) == 1 && buffer[0] == 'C',
+        "read remainder after full buffer"
+    );
+    require(co_await assigned.read_some(pace::as_writable_bytes(buffer)) == 0, "EOF after short read");
 }
 
 #ifndef PACE_CORE_ONLY_TESTS
@@ -507,12 +514,12 @@ pace::task<std::string> read_responses(pace::tcp::stream& stream, std::size_t ex
     std::array<char, 1024> buffer{};
     while (!complete_responses(output, expected, head_response))
     {
-        const auto size = co_await stream.read_some(buffer);
+        const auto size = co_await stream.read_some(pace::as_writable_bytes(buffer));
         require(size != 0, "EOF before complete HTTP response");
         output.append(buffer.data(), size);
         require(output.size() <= 1024 * 1024, "HTTP test response exceeds safety bound");
     }
-    require(co_await stream.read_some(buffer) == 0, "unexpected trailing HTTP response bytes");
+    require(co_await stream.read_some(pace::as_writable_bytes(buffer)) == 0, "unexpected trailing HTTP response bytes");
     co_return output;
 }
 
@@ -525,7 +532,7 @@ pace::task<std::string> exchange(
 {
     pace::tcp::stream stream(context);
     co_await stream.connect(std::move(endpoint));
-    co_await stream.write_all(request);
+    co_await stream.write_all(pace::as_bytes(request));
     co_return co_await read_responses(stream, expected, request.starts_with("HEAD "));
 }
 
@@ -561,11 +568,13 @@ pace::task<void> http_protocol(pace::io_context& context)
 
     pace::tcp::stream fragmented(context);
     co_await fragmented.connect(endpoint);
-    co_await fragmented.write_all("POST /echo HTTP/1.1\r\nHo");
+    co_await fragmented.write_all(pace::as_bytes("POST /echo HTTP/1.1\r\nHo"));
     co_await context.sleep_for(1ms);
-    co_await fragmented.write_all("st: example.test\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhe");
+    co_await fragmented.write_all(
+        pace::as_bytes("st: example.test\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhe")
+    );
     co_await context.sleep_for(1ms);
-    co_await fragmented.write_all("llo");
+    co_await fragmented.write_all(pace::as_bytes("llo"));
     result = co_await read_responses(fragmented);
     require(result.ends_with("\r\n\r\nhello"), "fragmented HTTP head/body");
 
@@ -669,7 +678,7 @@ pace::task<void> accept_idle(std::shared_ptr<pace::tcp::listener> listener)
     std::array<char, 8> buffer;
     try
     {
-        co_await stream.read_some(buffer);
+        co_await stream.read_some(pace::as_writable_bytes(buffer));
     }
     catch (const std::system_error& error)
     {
@@ -691,7 +700,7 @@ pace::task<void> stop_pending_read(pace::io_context& context)
     std::array<char, 8> buffer;
     try
     {
-        co_await client.read_some(buffer);
+        co_await client.read_some(pace::as_writable_bytes(buffer));
     }
     catch (const std::system_error& error)
     {
@@ -703,7 +712,7 @@ pace::task<void> stop_pending_read(pace::io_context& context)
 pace::task<void> read_into(std::shared_ptr<pace::tcp::stream> stream, std::shared_ptr<std::string> received)
 {
     std::array<char, 8> buffer{};
-    const auto count = co_await stream->read_some(buffer);
+    const auto count = co_await stream->read_some(pace::as_writable_bytes(buffer));
     received->assign(buffer.data(), count);
 }
 
@@ -725,7 +734,7 @@ pace::task<void> second_operation_rejected(pace::io_context& context)
     auto received = std::make_shared<std::string>();
     context.spawn(read_into(server, received));
     co_await context.yield(); // the first read runs until it waits for data
-    co_await client.write_all("x");
+    co_await client.write_all(pace::as_bytes("x"));
     // Wait until the byte has reached the server (loopback delivery can be asynchronous), so that an unguarded
     // second read would find it instead of waiting.
     for (;;)
@@ -741,7 +750,7 @@ pace::task<void> second_operation_rejected(pace::io_context& context)
     try
     {
         std::array<char, 8> buffer{};
-        (void)co_await server->read_some(buffer);
+        (void)co_await server->read_some(pace::as_writable_bytes(buffer));
     }
     catch (const std::logic_error&)
     {
@@ -792,7 +801,7 @@ pace::task<void> close_pending_read(pace::io_context& context)
     std::array<char, 8> buffer;
     try
     {
-        co_await client->read_some(buffer);
+        co_await client->read_some(pace::as_writable_bytes(buffer));
     }
     catch (const std::system_error& error)
     {
@@ -817,8 +826,8 @@ pace::task<void> close_after_reply(
     // whole single-segment write is queued here, so the rest is unread input
     // at close time; closing before it arrives would let it reset the peer.
     std::array<char, 1> first{};
-    require(co_await stream.read_some(first) == 1, "graceful close peer input missing");
-    co_await stream.write_all("done");
+    require(co_await stream.read_some(pace::as_writable_bytes(first)) == 1, "graceful close peer input missing");
+    co_await stream.write_all(pace::as_bytes("done"));
     const auto started = std::chrono::steady_clock::now();
     co_await stream.close_gracefully(5ms);
     result->elapsed = std::chrono::steady_clock::now() - started;
@@ -833,12 +842,12 @@ pace::task<void> graceful_close_bounds(pace::io_context& context)
     context.spawn(close_after_reply(listener, result));
     pace::tcp::stream client(context);
     co_await client.connect(listener->local_endpoint());
-    co_await client.write_all("discard this pending input");
+    co_await client.write_all(pace::as_bytes("discard this pending input"));
     std::array<char, 4> reply{};
     std::size_t received = 0;
     while (received < reply.size())
     {
-        const auto count = co_await client.read_some(std::span<char>(reply).subspan(received));
+        const auto count = co_await client.read_some(pace::as_writable_bytes(std::span<char>(reply).subspan(received)));
         require(count != 0, "graceful close truncated its final reply");
         received += count;
     }
@@ -852,7 +861,10 @@ pace::task<void> graceful_close_bounds(pace::io_context& context)
         co_await context.sleep_for(1ms);
     }
     require(result->elapsed >= 5ms, "graceful close must honor its drain deadline");
-    require(co_await client.read_some(reply) == 0, "drained connection must close without reset");
+    require(
+        co_await client.read_some(pace::as_writable_bytes(reply)) == 0,
+        "drained connection must close without reset"
+    );
 }
 
 pace::task<void> graceful_close_timer_cleanup(pace::io_context& context)
@@ -931,7 +943,7 @@ pace::task<void> exact_reads(pace::io_context& io)
     require(bounded && (co_await client.read_exact(2)) == "ef", "bounded read consumed bytes");
     require((co_await client.read_exact(0)).empty(), "empty member exact read blocked");
     require((co_await pace::read_exact(client, 0)).empty(), "empty shared exact read blocked");
-    co_await peer.write_all("x");
+    co_await peer.write_all(pace::as_bytes("x"));
     peer.close();
     bool eof = false;
     try

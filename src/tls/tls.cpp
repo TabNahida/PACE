@@ -1435,11 +1435,11 @@ struct stream::implementation
                         }
                         if (socket)
                         {
-                            co_await socket->write_all(owned);
+                            co_await socket->write_all(as_bytes(owned));
                         }
                         else
                         {
-                            co_await transport->write_all(owned);
+                            co_await transport->write_all(as_bytes(owned));
                         }
                     }
                     catch (...)
@@ -1452,7 +1452,7 @@ struct stream::implementation
         }
         else
         {
-            co_await transport->write_all(bytes);
+            co_await transport->write_all(as_bytes(bytes));
         }
         output.consume(bytes.size());
     }
@@ -1501,7 +1501,8 @@ struct stream::implementation
         {
             throw std::logic_error("TLS transport input buffer is full");
         }
-        auto read = socket ? socket->read_some(available) : transport->read_some(available);
+        auto read = socket ? socket->read_some(as_writable_bytes(available))
+                           : transport->read_some(as_writable_bytes(available));
         const auto count = co_await std::move(read);
         if (count > available.size())
         {
@@ -1876,7 +1877,7 @@ task<void> stream::handshake_impl(std::string peer_name, std::optional<std::stri
     }
 }
 
-task<std::size_t> stream::read_some(std::span<char> buffer)
+task<std::size_t> stream::read_some(std::span<std::byte> buffer)
 {
     if (!impl_)
     {
@@ -1920,7 +1921,7 @@ task<std::size_t> stream::read_some(std::span<char> buffer)
     }
 }
 
-task<void> stream::write_all(std::string_view bytes)
+task<void> stream::write_all(std::span<const std::byte> bytes)
 {
     if (!impl_)
     {
@@ -1946,11 +1947,46 @@ task<void> stream::write_all(std::string_view bytes)
                 {
                     co_await p.flush_output();
                 }
-                bytes.remove_prefix(count);
+                bytes = bytes.subspan(count);
                 continue;
             }
             const int error = SSL_get_error(p.ssl.get(), result);
             co_await p.wait(error);
+        }
+    }
+    catch (...)
+    {
+        close();
+        throw;
+    }
+}
+
+task<void> stream::shutdown_write()
+{
+    if (!impl_)
+    {
+        throw std::logic_error("moved-from TLS stream");
+    }
+    auto& p = *impl_;
+    implementation::operation operation(p);
+    try
+    {
+        p.check(true);
+        // One SSL_shutdown call queues close_notify without waiting for the peer's; SSL_read keeps working until
+        // the peer's close_notify arrives (TLS allows this half-close).
+        ERR_clear_error();
+        const int result = SSL_shutdown(p.ssl.get());
+        if (result < 0)
+        {
+            const int error = SSL_get_error(p.ssl.get(), result);
+            if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE)
+            {
+                tls_error("TLS shutdown failed", p.ssl.get());
+            }
+        }
+        if (p.has_output())
+        {
+            co_await p.flush_output();
         }
     }
     catch (...)
@@ -2256,5 +2292,7 @@ std::size_t tls_driver::write(std::string_view bytes)
     }
     tls::tls_error("TLS protocol driver write failed", p.ssl.get());
 }
+
+static_assert(byte_stream<stream>);
 } // namespace pace::tls
 #endif // PACE_HAS_TLS

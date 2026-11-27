@@ -270,12 +270,12 @@ private:
         std::array<char, 64 * 1024> buffer{};
         for (;;)
         {
-            const auto size = co_await socket.read_some(buffer);
+            const auto size = co_await socket.read_some(pace::as_writable_bytes(buffer));
             if (!size)
             {
                 co_return;
             }
-            co_await socket.write_all({buffer.data(), size});
+            co_await socket.write_all(pace::as_writable_bytes(buffer).first(size));
         }
     }
 

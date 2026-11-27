@@ -69,8 +69,8 @@ pace::task<void> exchange_replies(std::shared_ptr<pace::udp::socket> peer)
     auto request = co_await peer->receive(16);
     require(request.data == "request", "UDP exchange request");
     auto other = pace::udp::bind(peer->context(), {"127.0.0.1", 0});
-    co_await other.send_to("unrelated", request.sender);
-    co_await peer->send_to("reply", request.sender);
+    co_await other.send_to(pace::as_bytes("unrelated"), request.sender);
+    co_await peer->send_to(pace::as_bytes("reply"), request.sender);
 }
 
 pace::task<void> exchange_filtered(pace::io_context& io)
@@ -94,29 +94,32 @@ pace::task<void> roundtrip(pace::io_context& io)
     sender.set_broadcast();
     sender.set_broadcast(false);
     std::string data("a\0b\xff", 4);
-    require(co_await sender.send_to(data, destination) == data.size(), "send length");
+    require(co_await sender.send_to(pace::as_bytes(data), destination) == data.size(), "send length");
     std::array<char, 16> buffer{};
-    auto packet = co_await receiver.receive_from(buffer);
+    auto packet = co_await receiver.receive_from(pace::as_writable_bytes(buffer));
     require(
         packet.size == data.size() && !packet.truncated && std::string_view(buffer.data(), packet.size) == data,
         "binary datagram mismatch"
     );
     require(packet.sender.address == source.address && packet.sender.port == source.port, "sender endpoint");
-    co_await receiver.send_to("reply", packet.sender);
-    require((co_await sender.receive_from(buffer)).size == 5, "reply");
-    co_await sender.send_to(std::string_view{}, destination);
-    require((co_await receiver.receive_from(buffer)).size == 0, "zero datagram must not mean EOF");
-    co_await sender.send_to("123456789", destination);
-    auto cut = co_await receiver.receive_from(std::span<char>(buffer.data(), 3));
+    co_await receiver.send_to(pace::as_bytes("reply"), packet.sender);
+    require((co_await sender.receive_from(pace::as_writable_bytes(buffer))).size == 5, "reply");
+    co_await sender.send_to(pace::as_bytes(std::string_view{}), destination);
+    require(
+        (co_await receiver.receive_from(pace::as_writable_bytes(buffer))).size == 0,
+        "zero datagram must not mean EOF"
+    );
+    co_await sender.send_to(pace::as_bytes("123456789"), destination);
+    auto cut = co_await receiver.receive_from(pace::as_writable_bytes(std::span<char>(buffer.data(), 3)));
     require(cut.size == 3 && cut.truncated && std::string_view(buffer.data(), 3) == "123", "truncated datagram");
-    co_await sender.send_to("next", destination);
-    packet = co_await receiver.receive_from(buffer);
+    co_await sender.send_to(pace::as_bytes("next"), destination);
+    packet = co_await receiver.receive_from(pace::as_writable_bytes(buffer));
     require(packet.size == 4 && !packet.truncated && std::string_view(buffer.data(), 4) == "next", "datagram boundary");
     std::string oversized(65508, 'x');
     bool rejected = false;
     try
     {
-        co_await sender.send_to(oversized, destination);
+        co_await sender.send_to(pace::as_bytes(oversized), destination);
     }
     catch (const std::system_error& e)
     {
@@ -126,7 +129,7 @@ pace::task<void> roundtrip(pace::io_context& io)
     rejected = false;
     try
     {
-        co_await receiver.receive_from(std::span<char>{});
+        co_await receiver.receive_from(pace::as_writable_bytes(std::span<char>{}));
     }
     catch (const std::invalid_argument&)
     {
@@ -140,7 +143,7 @@ pace::task<void> roundtrip(pace::io_context& io)
     rejected = false;
     try
     {
-        co_await moved.send_to("x", destination);
+        co_await moved.send_to(pace::as_bytes("x"), destination);
     }
     catch (const std::system_error& e)
     {
@@ -161,23 +164,23 @@ pace::task<void> ipv6_roundtrip(pace::io_context& io)
         "IPv6 bound UDP endpoint"
     );
     const std::string payload("IPv6\0UDP", 8);
-    co_await sender.send_to(payload, destination); // First send chooses IPv6.
+    co_await sender.send_to(pace::as_bytes(payload), destination); // First send chooses IPv6.
     const auto source = sender.local_endpoint();
     require(source.family == address_family::ipv6 && source.port != 0, "IPv6 UDP automatic bind");
     std::array<char, 32> bytes{};
-    auto packet = co_await receiver.receive_from(bytes);
+    auto packet = co_await receiver.receive_from(pace::as_writable_bytes(bytes));
     require(
         packet.sender.family == address_family::ipv6 && packet.sender.address == "::1"
             && packet.sender.port == source.port && packet.sender.scope_id == 0 && packet.size == payload.size()
             && std::string_view(bytes.data(), packet.size) == payload,
         "IPv6 UDP payload and source inspection"
     );
-    co_await receiver.send_to("reply", packet.sender);
-    require((co_await sender.receive_from(bytes)).size == 5, "IPv6 UDP reply");
-    co_await sender.send_to(std::string_view{}, destination);
-    require((co_await receiver.receive_from(bytes)).size == 0, "IPv6 empty datagram");
-    co_await sender.send_to("truncated", destination);
-    packet = co_await receiver.receive_from(std::span<char>(bytes).first(3));
+    co_await receiver.send_to(pace::as_bytes("reply"), packet.sender);
+    require((co_await sender.receive_from(pace::as_writable_bytes(bytes))).size == 5, "IPv6 UDP reply");
+    co_await sender.send_to(pace::as_bytes(std::string_view{}), destination);
+    require((co_await receiver.receive_from(pace::as_writable_bytes(bytes))).size == 0, "IPv6 empty datagram");
+    co_await sender.send_to(pace::as_bytes("truncated"), destination);
+    packet = co_await receiver.receive_from(pace::as_writable_bytes(std::span<char>(bytes).first(3)));
     require(
         packet.truncated && packet.size == 3 && packet.sender.family == address_family::ipv6,
         "IPv6 datagram truncation"
@@ -185,7 +188,7 @@ pace::task<void> ipv6_roundtrip(pace::io_context& io)
     bool rejected = false;
     try
     {
-        co_await sender.send_to("wrong family", {"127.0.0.1", destination.port});
+        co_await sender.send_to(pace::as_bytes("wrong family"), {"127.0.0.1", destination.port});
     }
     catch (const std::system_error& error)
     {
@@ -209,14 +212,14 @@ pace::task<void> ipv6_roundtrip(pace::io_context& io)
         assigned.local_endpoint().family == address_family::ipv6 && assigned.local_endpoint().port == source.port,
         "IPv6 UDP move ownership"
     );
-    co_await assigned.send_to("moved", destination);
-    require((co_await receiver.receive_from(bytes)).size == 5, "IPv6 UDP send after move");
+    co_await assigned.send_to(pace::as_bytes("moved"), destination);
+    require((co_await receiver.receive_from(pace::as_writable_bytes(bytes))).size == 5, "IPv6 UDP send after move");
     pace::udp::socket fixed(io, address_family::ipv6);
     const auto handle = fixed.native_handle();
     fixed.bind({"::1", 0});
     require(fixed.native_handle() == handle, "explicit UDP family changed native handle");
-    co_await fixed.send_to("fixed", destination);
-    require((co_await receiver.receive_from(bytes)).size == 5, "explicit IPv6 UDP socket");
+    co_await fixed.send_to(pace::as_bytes("fixed"), destination);
+    require((co_await receiver.receive_from(pace::as_writable_bytes(bytes))).size == 5, "explicit IPv6 UDP socket");
     io.stop();
 }
 
@@ -234,35 +237,41 @@ pace::task<void> ipv6_wildcards(pace::io_context& io)
         "UDP IPv6-only default"
     );
     pace::udp::socket v4(io, {"0.0.0.0", local.port}), sender6(io, {"::1", 0}), sender4(io, {"127.0.0.1", 0});
-    co_await sender6.send_to("v6", {"::1", local.port});
-    co_await sender4.send_to("v4", {"127.0.0.1", local.port});
+    co_await sender6.send_to(pace::as_bytes("v6"), {"::1", local.port});
+    co_await sender4.send_to(pace::as_bytes("v4"), {"127.0.0.1", local.port});
     std::array<char, 16> bytes{};
     require(
-        (co_await only_v6.receive_from(bytes)).sender.family == address_family::ipv6,
+        (co_await only_v6.receive_from(pace::as_writable_bytes(bytes))).sender.family == address_family::ipv6,
         "IPv6-only UDP receives IPv6"
     );
     require(
-        (co_await v4.receive_from(bytes)).sender.family == address_family::ipv4,
+        (co_await v4.receive_from(pace::as_writable_bytes(bytes))).sender.family == address_family::ipv4,
         "separate IPv4 UDP port receives IPv4"
     );
 
     pace::udp::socket dual(io, {"::", 0}, {.ipv6_only = false});
     const auto port = dual.local_endpoint().port;
-    co_await sender6.send_to("ipv6", {"::1", port});
-    require((co_await dual.receive_from(bytes)).sender.address == "::1", "dual-stack UDP receives IPv6");
-    co_await sender4.send_to("ipv4", {"127.0.0.1", port});
-    auto packet = co_await dual.receive_from(bytes);
+    co_await sender6.send_to(pace::as_bytes("ipv6"), {"::1", port});
+    require(
+        (co_await dual.receive_from(pace::as_writable_bytes(bytes))).sender.address == "::1",
+        "dual-stack UDP receives IPv6"
+    );
+    co_await sender4.send_to(pace::as_bytes("ipv4"), {"127.0.0.1", port});
+    auto packet = co_await dual.receive_from(pace::as_writable_bytes(bytes));
     require(
         packet.sender.family == address_family::ipv6 && packet.sender.address == "::ffff:127.0.0.1",
         "dual-stack UDP preserves mapped peer"
     );
-    co_await dual.send_to("reply", packet.sender);
+    co_await dual.send_to(pace::as_bytes("reply"), packet.sender);
     require(
-        (co_await sender4.receive_from(bytes)).sender.family == address_family::ipv4,
+        (co_await sender4.receive_from(pace::as_writable_bytes(bytes))).sender.family == address_family::ipv4,
         "dual-stack UDP mapped reply"
     );
-    co_await dual.send_to("mapped", sender4.local_endpoint());
-    require((co_await sender4.receive_from(bytes)).size == 6, "dual-stack UDP converts IPv4 destination");
+    co_await dual.send_to(pace::as_bytes("mapped"), sender4.local_endpoint());
+    require(
+        (co_await sender4.receive_from(pace::as_writable_bytes(bytes))).size == 6,
+        "dual-stack UDP converts IPv4 destination"
+    );
     io.stop();
 }
 
@@ -293,7 +302,7 @@ pace::task<void> ipv6_validation(pace::io_context& io)
         rejected = false;
         try
         {
-            co_await sender.send_to("invalid", endpoint);
+            co_await sender.send_to(pace::as_bytes("invalid"), endpoint);
         }
         catch (const std::invalid_argument&)
         {
@@ -305,7 +314,7 @@ pace::task<void> ipv6_validation(pace::io_context& io)
     bool rejected = false;
     try
     {
-        co_await fixed.send_to("wrong family", {"::1", 1});
+        co_await fixed.send_to(pace::as_bytes("wrong family"), {"::1", 1});
     }
     catch (const std::system_error& error)
     {
@@ -330,7 +339,7 @@ pace::task<void> receive_wait(pace::udp::socket& socket, bool& canceled)
     std::array<char, 1> buffer{};
     try
     {
-        co_await socket.receive_from(buffer);
+        co_await socket.receive_from(pace::as_writable_bytes(buffer));
     }
     catch (const std::system_error& e)
     {
@@ -345,7 +354,7 @@ pace::task<void> cancel_wait(pace::udp::socket& socket, bool close, bool& duplic
     std::array<char, 1> buffer{};
     try
     {
-        co_await socket.receive_from(buffer);
+        co_await socket.receive_from(pace::as_writable_bytes(buffer));
     }
     catch (const std::logic_error&)
     {

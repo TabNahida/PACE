@@ -27,7 +27,7 @@ pace::task<void> server(pace::quic::listener& listener, completion& done)
     auto stream = co_await connection.accept_stream();
     std::array<char, 64> bytes{};
     std::string request;
-    while (auto count = co_await stream.read_some(bytes))
+    while (auto count = co_await stream.read_some(pace::as_writable_bytes(bytes)))
     {
         request.append(bytes.data(), count);
     }
@@ -35,7 +35,7 @@ pace::task<void> server(pace::quic::listener& listener, completion& done)
     {
         throw std::runtime_error("unexpected QUIC request");
     }
-    co_await stream.write_all("Hello over verified QUIC!\n");
+    co_await stream.write_all(pace::as_bytes("Hello over verified QUIC!\n"));
     stream.finish_write();
     while (stream.pending_write_bytes())
     {
@@ -56,7 +56,7 @@ pace::task<void> client(pace::quic::context config, pace::udp::endpoint endpoint
     stream.finish_write(); // Half-close this stream; the response still arrives.
     auto response = co_await pace::read_exact(stream, std::string_view("Hello over verified QUIC!\n").size());
     std::array<char, 1> trailing{};
-    if (response != "Hello over verified QUIC!\n" || co_await stream.read_some(trailing))
+    if (response != "Hello over verified QUIC!\n" || co_await stream.read_some(pace::as_writable_bytes(trailing)))
     {
         throw std::runtime_error("QUIC response mismatch or missing FIN");
     }

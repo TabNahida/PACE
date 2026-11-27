@@ -506,7 +506,7 @@ struct basic_stream<Transport>::implementation
             }
             else if (bytes.size() >= input.size())
             {
-                const auto count = co_await transport.read_some(bytes);
+                const auto count = co_await transport.read_some(as_writable_bytes(bytes));
                 if (!count)
                 {
                     invalid("WebSocket EOF without a complete closing frame");
@@ -516,7 +516,7 @@ struct basic_stream<Transport>::implementation
             else
             {
                 input_begin = 0;
-                input_end = co_await transport.read_some(input);
+                input_end = co_await transport.read_some(as_writable_bytes(std::span<char>(input)));
                 if (!input_end)
                 {
                     invalid("WebSocket EOF without a complete closing frame");
@@ -545,9 +545,9 @@ struct basic_stream<Transport>::implementation
                 invalid("WebSocket upgrade head limit exceeded");
             }
             std::array<char, 2048> bytes{};
-            const auto count = co_await transport.read_some(
+            const auto count = co_await transport.read_some(as_writable_bytes(
                 std::span<char>(bytes).first(std::min(bytes.size(), bounds.max_header_bytes - pending.size()))
-            );
+            ));
             if (!count)
             {
                 invalid("EOF during WebSocket upgrade");
@@ -592,7 +592,7 @@ struct basic_stream<Transport>::implementation
         {
             apply_mask(std::span<char>(output.data() + start, data.size()), reinterpret_cast<const char*>(key.data()));
         }
-        co_await transport.write_all(output);
+        co_await transport.write_all(as_bytes(output));
     }
 
     task<std::optional<message>> receive_message()
@@ -837,7 +837,7 @@ task<void> basic_stream<T>::handshake(std::string host, std::string target, std:
         {
             throw std::invalid_argument("WebSocket upgrade request exceeds header limit");
         }
-        co_await p.transport.write_all(request);
+        co_await p.transport.write_all(as_bytes(request));
         const auto response = co_await p.read_head();
         if (!clean(response.first, true)
             || !(response.first == "HTTP/1.1 101" || response.first.starts_with("HTTP/1.1 101 "))
@@ -963,7 +963,7 @@ task<upgrade_request> basic_stream<T>::accept(
                 response += "Sec-WebSocket-Version: 13\r\n";
             }
             response += "\r\n";
-            co_await p.transport.write_all(response);
+            co_await p.transport.write_all(as_bytes(response));
         }
         catch (...) // NOLINT(bugprone-empty-catch): best-effort rejection; the original error is rethrown
         {
@@ -982,7 +982,7 @@ task<upgrade_request> basic_stream<T>::accept(
             response += "Sec-WebSocket-Protocol: " + p.protocol + "\r\n";
         }
         response += "\r\n";
-        co_await p.transport.write_all(response);
+        co_await p.transport.write_all(as_bytes(response));
         p.upgraded = true;
         co_return request;
     }

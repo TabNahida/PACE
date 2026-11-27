@@ -1,5 +1,6 @@
 #pragma once
 #ifdef PACE_HAS_QUIC
+#include <pace/net/buffer.hpp>
 #include <pace/net/stream_io.hpp>
 #include <pace/net/udp.hpp>
 
@@ -86,30 +87,22 @@ public:
     /// Reads at least one byte into `buffer`; returns 0 at the peer's FIN (or for an empty buffer).
     /// Throws std::logic_error on an overlapping read or on the sending-only side of a unidirectional stream,
     /// std::system_error on cancellation, reset or connection failure.
-    task<std::size_t> read_some(std::span<char> buffer);
+    task<std::size_t> read_some(std::span<std::byte> buffer);
     /// Completes when the transport has accepted every byte of `bytes`; does not wait for acknowledgement.
     /// Throws std::logic_error on an overlapping write, after finish_write() or on a receive-only stream.
-    task<void> write_all(std::string_view bytes);
-
-    /// Byte-span form of read_some(std::span<char>).
-    task<std::size_t> read_some(std::span<std::byte> buffer)
-    {
-        return read_some(std::span<char>(reinterpret_cast<char*>(buffer.data()), buffer.size()));
-    }
-
-    /// Byte-span form of write_all(std::string_view).
-    task<void> write_all(std::span<const std::byte> bytes)
-    {
-        return write_all(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
-    }
+    task<void> write_all(std::span<const std::byte> bytes);
+    /// finish_write() as a byte_stream operation: queues FIN and completes at once.
+    task<void> shutdown_write();
+    /// reset() as a byte_stream operation: abandons both directions at once.
+    void close() noexcept;
 
     /// Waits for transport progress on the connection; spurious wakeups are permitted. Recheck state after it.
     task<void> wait_events();
     /// Reads without suspending, for multiplexed protocol drivers: nullopt means no data yet, 0 means FIN,
     /// otherwise the number of bytes copied.
-    std::optional<std::size_t> try_read(std::span<char> buffer);
+    std::optional<std::size_t> try_read(std::span<std::byte> buffer);
     /// Queues as many bytes as the flow-control windows allow without suspending; 0 means would-block.
-    std::size_t try_write(std::string_view bytes);
+    std::size_t try_write(std::span<const std::byte> bytes);
     /// Bytes written but not yet acknowledged by the peer. Does not cover the FIN itself.
     std::uint64_t pending_write_bytes() const;
     /// Queues FIN on the sending direction; the receive direction stays usable.

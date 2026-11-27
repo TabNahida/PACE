@@ -83,10 +83,10 @@ pace::task<void> echo_server(
     std::size_t received = 0;
     while (received < size)
     {
-        const auto count = co_await socket.read_some(bytes);
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(bytes));
         require(count > 0, "TLS echo received early EOF");
         received += count;
-        co_await socket.write_all(std::string_view(bytes.data(), count));
+        co_await socket.write_all(pace::as_bytes(std::string_view(bytes.data(), count)));
     }
     require(received == size, "TLS echo received too many bytes");
     co_await socket.shutdown();
@@ -124,7 +124,10 @@ pace::task<void> echo_client(
     }
     require(message == received, "TLS record binary payload mismatch");
     char byte;
-    require(co_await socket.read_some(std::span<char>(&byte, 1)) == 0, "close_notify was not EOF");
+    require(
+        co_await socket.read_some(pace::as_writable_bytes(std::span<char>(&byte, 1))) == 0,
+        "close_notify was not EOF"
+    );
     co_await socket.shutdown();
     done.arrive();
 }
@@ -272,7 +275,7 @@ pace::task<void> truncated_server(pace::tcp::listener& listener, const pace::tls
 {
     pace::tls::stream socket(co_await listener.accept(), config);
     co_await socket.handshake();
-    co_await socket.write_all("authenticated data");
+    co_await socket.write_all(pace::as_bytes("authenticated data"));
     socket.close(); // Deliberately omit close_notify.
     done.arrive();
 }
@@ -293,7 +296,7 @@ pace::task<void> truncated_client(
         std::array<char, 128> bytes{};
         for (;;)
         {
-            const auto count = co_await socket.read_some(bytes);
+            const auto count = co_await socket.read_some(pace::as_writable_bytes(bytes));
             require(count != 0, "unclean TLS EOF must not be accepted as authenticated EOF");
             received.append(bytes.data(), count);
         }
@@ -325,7 +328,7 @@ pace::task<void> conflicting_reader(pace::tls::stream& socket, bool& rejected)
     std::array<char, 1> bytes{};
     try
     {
-        co_await socket.read_some(bytes);
+        co_await socket.read_some(pace::as_writable_bytes(bytes));
     }
     catch (const std::logic_error&)
     {
@@ -342,7 +345,7 @@ pace::task<void> waiting_tls_server(pace::tcp::listener& listener, const pace::t
     {
         co_await socket.handshake();
         char byte;
-        co_await socket.read_some(std::span<char>(&byte, 1));
+        co_await socket.read_some(pace::as_writable_bytes(std::span<char>(&byte, 1)));
     }
     catch (const std::system_error& error)
     {
@@ -365,7 +368,7 @@ pace::task<void> waiting_tls_client(
     try
     {
         char byte;
-        co_await socket.read_some(std::span<char>(&byte, 1));
+        co_await socket.read_some(pace::as_writable_bytes(std::span<char>(&byte, 1)));
     }
     catch (const std::system_error& error)
     {
@@ -399,7 +402,7 @@ pace::task<void> shutdown_peer(
     pace::tls::stream socket(co_await listener.accept(), config);
     co_await socket.handshake();
     // Send a record so the client knows both handshakes have completed.
-    co_await socket.write_all("ready");
+    co_await socket.write_all(pace::as_bytes("ready"));
     if (cancel_shutdown)
     {
         while (!shutdown_started)
@@ -435,7 +438,7 @@ pace::task<void> bounded_shutdown_client(
     std::size_t offset = 0;
     while (offset < ready.size())
     {
-        const auto count = co_await socket.read_some(std::span<char>(ready).subspan(offset));
+        const auto count = co_await socket.read_some(pace::as_writable_bytes(std::span<char>(ready).subspan(offset)));
         require(count > 0, "shutdown peer closed before synchronization");
         offset += count;
     }
@@ -606,9 +609,9 @@ pace::task<void> selected_server(
     if (starttls)
     {
         std::array<char, 10> command{};
-        co_await pace::read_exact(transport, std::span<char>(command));
+        co_await pace::read_exact(transport, pace::as_writable_bytes(command));
         require(std::string_view(command.data(), command.size()) == "STARTTLS\r\n", "STARTTLS command mismatch");
-        co_await transport.write_all("220 ready\r\n");
+        co_await transport.write_all(pace::as_bytes("220 ready\r\n"));
     }
     // This path also proves that the root mapping (not only its targets) can be
     // destroyed before ClientHello arrives while the stream retains everything.
@@ -638,8 +641,8 @@ pace::task<void> selected_server(
     {
         ++done.server_success;
         std::array<char, 1> byte{};
-        co_await pace::read_exact(socket, std::span<char>(byte));
-        co_await socket.write_all(std::string_view(byte.data(), byte.size()));
+        co_await pace::read_exact(socket, pace::as_writable_bytes(byte));
+        co_await socket.write_all(pace::as_bytes(std::string_view(byte.data(), byte.size())));
         co_await socket.shutdown();
     }
     else
@@ -680,9 +683,9 @@ pace::task<void> selected_client(
     if (starttls)
     {
         co_await transport.connect(endpoint);
-        co_await transport.write_all("STARTTLS\r\n");
+        co_await transport.write_all(pace::as_bytes("STARTTLS\r\n"));
         std::array<char, 11> ready{};
-        co_await pace::read_exact(transport, std::span<char>(ready));
+        co_await pace::read_exact(transport, pace::as_writable_bytes(ready));
         require(std::string_view(ready.data(), ready.size()) == "220 ready\r\n", "STARTTLS reply mismatch");
     }
     pace::tls::stream socket(std::move(transport), config);
@@ -724,9 +727,9 @@ pace::task<void> selected_client(
     if (accepted)
     {
         require(socket.selected_protocol() == test.protocol, "SNI selected the wrong context/ALPN");
-        co_await socket.write_all("x");
+        co_await socket.write_all(pace::as_bytes("x"));
         std::array<char, 1> reply{};
-        co_await pace::read_exact(socket, std::span<char>(reply));
+        co_await pace::read_exact(socket, pace::as_writable_bytes(reply));
         require(reply[0] == 'x', "SNI data exchange mismatch");
         co_await socket.shutdown();
     }
@@ -1282,7 +1285,13 @@ public:
         co_return;
     }
 
-    pace::task<std::size_t> read_some(std::span<char> buffer)
+    // A byte_stream: the pipe has no half-close, so shutdown_write does nothing.
+    pace::task<void> shutdown_write()
+    {
+        co_return;
+    }
+
+    pace::task<std::size_t> read_some(std::span<std::byte> buffer)
     {
         auto& queue = state_->inbound[side_];
         while (is_open() && queue.empty() && !state_->closed[1 - side_])
@@ -1292,14 +1301,15 @@ public:
         check_open();
         // Split record headers and payloads even when more bytes are available.
         const auto count = std::min({queue.size(), buffer.size(), std::size_t(131)});
-        std::copy_n(queue.data(), count, buffer.data());
+        std::copy_n(pace::as_bytes(queue).data(), count, buffer.data());
         queue.erase(0, count);
         state_->changed.notify();
         co_return count;
     }
 
-    pace::task<void> write_all(std::string_view bytes)
+    pace::task<void> write_all(std::span<const std::byte> data)
     {
+        auto bytes = pace::as_text(data);
         auto& queue = state_->inbound[1 - side_];
         const auto capacity = state_->capacity;
         while (!bytes.empty())
@@ -1354,7 +1364,7 @@ pace::task<void> check_handoff(
     );
     pre_read += co_await pace::read_exact(socket, wire.size() - pre_read.size());
     require(pre_read == wire, "handoff dropped or duplicated wire bytes");
-    co_await socket.write_all("routed");
+    co_await socket.write_all(pace::as_bytes("routed"));
     socket.close();
     done.arrive();
 }
@@ -1362,7 +1372,7 @@ pace::task<void> check_handoff(
 template <class Transport>
 pace::task<void> handoff_peer(Transport socket, std::string_view wire, finished& done)
 {
-    co_await socket.write_all(wire);
+    co_await socket.write_all(pace::as_bytes(wire));
     require((co_await pace::read_exact(socket, 6)) == "routed", "TLS wrote bytes before handing off the connection");
     socket.close();
     done.arrive();
@@ -1450,7 +1460,7 @@ pace::task<void> transport_echo_exchange(pace::tls::stream& stream, finished& do
 {
     require(stream.selected_protocol() == "test-echo", "server generic TLS ALPN mismatch");
     const auto bytes = co_await pace::read_exact(stream, transport_payload_size);
-    co_await stream.write_all(bytes);
+    co_await stream.write_all(pace::as_bytes(bytes));
     co_await stream.shutdown(2s);
     require(!stream.is_open(), "generic TLS server shutdown did not close the stream");
     done.arrive();
@@ -1471,10 +1481,13 @@ pace::task<void> transport_echo_client(pace::tls::stream stream, finished& done)
     {
         bytes[i] = static_cast<char>(i * 31 % 251);
     }
-    co_await stream.write_all(bytes);
+    co_await stream.write_all(pace::as_bytes(bytes));
     require((co_await pace::read_exact(stream, bytes.size())) == bytes, "generic TLS echo changed the payload");
     std::array<char, 1> tail{};
-    require((co_await stream.read_some(tail)) == 0, "generic TLS peer did not send close_notify");
+    require(
+        (co_await stream.read_some(pace::as_writable_bytes(tail))) == 0,
+        "generic TLS peer did not send close_notify"
+    );
     co_await stream.shutdown(2s);
     require(!stream.is_open(), "generic TLS client shutdown did not close the stream");
     done.arrive();
@@ -1519,7 +1532,7 @@ pace::task<void> pipe_echo_server(pipe_stream<HasShutdown> transport, const pace
 {
     // Read a record header and part of its body before wrapping the byte stream.
     std::array<char, 7> prefix{};
-    co_await pace::read_exact(transport, std::span<char>(prefix));
+    co_await pace::read_exact(transport, pace::as_writable_bytes(prefix));
     co_await transport_echo_server(
         pace::tls::stream(std::move(transport), config, std::string_view(prefix.data(), prefix.size())),
         done
@@ -1545,7 +1558,7 @@ void memory_transport(const transport_contexts& contexts, std::size_t capacity)
 pace::task<void> withhold_transport_shutdown(pace::tls::stream stream)
 {
     co_await stream.handshake();
-    co_await stream.write_all("ready");
+    co_await stream.write_all(pace::as_bytes("ready"));
     try
     {
         co_await stream.context().sleep_for(1h);
@@ -1620,7 +1633,7 @@ void memory_transport_truncation(const transport_contexts& contexts)
     {
         pace::tls::stream stream(pipe_stream(pipe, 0), contexts.server);
         co_await stream.handshake();
-        co_await stream.write_all("record");
+        co_await stream.write_all(pace::as_bytes("record"));
         stream.close();
         done.arrive();
     };
@@ -1633,7 +1646,7 @@ void memory_transport_truncation(const transport_contexts& contexts)
         bool rejected = false;
         try
         {
-            (void)co_await stream.read_some(byte);
+            (void)co_await stream.read_some(pace::as_writable_bytes(byte));
         }
         catch (const std::system_error& error)
         {

@@ -14,6 +14,17 @@
   functions (`run_entry`, `scoped_operation`, `run_group_child`, `drain_group`, `invoke_shared_handler`,
   `invoke_copied_handler`, `immediate_response`) because GCC 16 cannot read class-scope coroutines back from a
   named-module interface. None of them is part of the API.
+- **Breaking:** byte streams have one interface, in bytes. TCP, TLS and QUIC streams take
+  `read_some(std::span<std::byte>)` and `write_all(std::span<const std::byte>)` only (UDP:
+  `send_to(std::span<const std::byte>, …)`, `receive_from(std::span<std::byte>)`; QUIC `try_read`/`try_write`
+  likewise); the `char` / `std::string_view` overloads are removed. `<pace/net/buffer.hpp>` converts without
+  copying: `pace::as_bytes(text)`, `pace::as_writable_bytes(buffer)`, `pace::as_text(bytes)`. Measured against the
+  previous build with paired runs, TCP echo, WebSocket frames, HTTP/1 and HTTP/1 over TLS stay within 1%.
+- `pace::byte_stream`, a concept for streams with `read_some`, `write_all`, `shutdown_write`, `close` and
+  `context`; TCP, TLS and QUIC streams satisfy it, `pace::write` and `pace::read_exact` take any byte stream, and
+  `tls::stream` runs over any byte stream (replacing `tls::tls_byte_stream`, `tls_closeable` and `tls_resettable`).
+- `shutdown_write()` on TCP (FIN), TLS (close_notify, reading continues until the peer's) and QUIC streams (FIN);
+  `quic::stream::close()` aborts both directions like `reset()`.
 - **Breaking:** the 0.x names `pace::tcp_stream`, `pace::tcp_listener`, `pace::ipv4_endpoint`,
   `pace::listen_options` and `<pace/net/aliases.hpp>` are removed; use the `pace::tcp` names.
 - A second TCP read, write or accept started while one in the same direction is suspended throws

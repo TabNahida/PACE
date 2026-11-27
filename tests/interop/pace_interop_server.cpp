@@ -90,9 +90,9 @@ pace::task<void> tls_echo(pace::tcp::listener& listener, const pace::tls::contex
             {
                 auto stream = co_await pace::tls::accept(std::move(transport), configuration);
                 char buffer[16 * 1024];
-                while (const auto read = co_await stream.read_some(std::span<char>(buffer)))
+                while (const auto read = co_await stream.read_some(pace::as_writable_bytes(std::span<char>(buffer))))
                 {
-                    co_await stream.write_all(std::string_view(buffer, read));
+                    co_await stream.write_all(pace::as_bytes(std::string_view(buffer, read)));
                 }
                 co_await stream.shutdown();
             }

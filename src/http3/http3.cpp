@@ -675,7 +675,7 @@ struct session
             // A busy stream must not starve control/QPACK or other requests.
             for (unsigned batch = 0; batch < 16; ++batch)
             {
-                const auto size = wire.stream.try_read(bytes);
+                const auto size = wire.stream.try_read(pace::as_writable_bytes(bytes));
                 if (!size)
                 {
                     break;
@@ -731,7 +731,8 @@ struct session
                 {
                     continue;
                 }
-                const auto n = wire.stream.try_write({reinterpret_cast<char*>(vectors[i].base), vectors[i].len});
+                const auto n =
+                    wire.stream.try_write({reinterpret_cast<const std::byte*>(vectors[i].base), vectors[i].len});
                 written += n;
                 if (n < vectors[i].len)
                 {
