@@ -12,9 +12,6 @@
 
 namespace pace
 {
-
-namespace detail
-{
 struct task_access;
 
 struct promise_base
@@ -65,14 +62,13 @@ struct promise_base
         return {};
     }
 };
-} // namespace detail
 
 // Lazy, move-only, single-consumer coroutine. An rvalue co_await transfers ownership.
 template <class T = void>
 class [[nodiscard]] task
 {
 public:
-    struct promise_type : detail::promise_base
+    struct promise_type : pace::promise_base
     {
         std::optional<T> value;
 
@@ -188,7 +184,7 @@ public:
     }
 
 private:
-    friend struct detail::task_access;
+    friend struct pace::task_access;
 
     explicit task(handle_type handle) noexcept
         : handle_(handle)
@@ -202,7 +198,7 @@ template <>
 class [[nodiscard]] task<void>
 {
 public:
-    struct promise_type : detail::promise_base
+    struct promise_type : pace::promise_base
     {
         std::size_t root_index; // Used only while owned by io_context::spawn.
 
@@ -315,7 +311,7 @@ public:
     }
 
 private:
-    friend struct detail::task_access;
+    friend struct pace::task_access;
 
     explicit task(handle_type handle) noexcept
         : handle_(handle)
@@ -325,8 +321,6 @@ private:
     handle_type handle_{};
 };
 
-namespace detail
-{
 struct task_access
 {
     template <class T>
@@ -340,7 +334,6 @@ struct task_access
         return work;
     }
 };
-} // namespace detail
 
 namespace this_task
 {

@@ -7,7 +7,7 @@
 #include <thread>
 #include <vector>
 
-namespace pace::detail
+namespace pace
 {
 struct cancellation_registration::implementation
 {
@@ -129,7 +129,7 @@ cancellation_registration::~cancellation_registration()
     }
     impl_->disable();
 }
-} // namespace pace::detail
+} // namespace pace
 
 namespace pace
 {
@@ -152,7 +152,7 @@ deadline cancellation_token::expires() const noexcept
 }
 
 cancellation_source::cancellation_source(pace::deadline expires)
-    : state_(std::make_shared<detail::cancellation_state>(expires))
+    : state_(std::make_shared<pace::cancellation_state>(expires))
 {
 }
 
@@ -176,8 +176,8 @@ void cancellation_source::link(cancellation_token parent)
     {
         throw std::invalid_argument("cannot link a cancellation source to itself");
     }
-    std::weak_ptr<detail::cancellation_state> child = state_;
-    auto forward = [child, parent = std::weak_ptr<detail::cancellation_state>(parent.state_)]
+    std::weak_ptr<pace::cancellation_state> child = state_;
+    auto forward = [child, parent = std::weak_ptr<pace::cancellation_state>(parent.state_)]
     {
         auto owner = parent.lock();
         if (auto state = child.lock())
@@ -188,7 +188,7 @@ void cancellation_source::link(cancellation_token parent)
             );
         }
     };
-    state_->parents.push_back(std::make_unique<detail::cancellation_registration>(parent, std::move(forward)));
+    state_->parents.push_back(std::make_unique<pace::cancellation_registration>(parent, std::move(forward)));
     if (auto error = parent.error())
     {
         state_->request(error == std::errc::timed_out ? std::errc::timed_out : std::errc::operation_canceled);

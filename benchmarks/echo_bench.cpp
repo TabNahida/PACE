@@ -62,7 +62,7 @@
 namespace
 {
 using clock_type = std::chrono::steady_clock;
-namespace profiling = pace::detail::profiling;
+namespace profiling = pace::profiling;
 constexpr std::size_t server_buffer_size = 64 * 1024;
 
 // Only read high-water marks belonging to the current executable image. POSIX

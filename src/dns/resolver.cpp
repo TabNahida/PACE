@@ -42,7 +42,7 @@ void check_status(int status)
 
 void initialize()
 {
-    detail::initialize_sockets();
+    pace::initialize_sockets();
 
     struct library
     {

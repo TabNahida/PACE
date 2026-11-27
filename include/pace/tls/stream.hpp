@@ -20,7 +20,7 @@ namespace pace::tls
 class stream;
 } // namespace pace::tls
 
-namespace pace::detail
+namespace pace::tls
 {
 class tls_driver;
 
@@ -178,11 +178,10 @@ private:
     Transport transport_;
     bool open_ = true;
 };
-} // namespace pace::detail
+} // namespace pace::tls
 
 namespace pace::tls
 {
-
 enum class role
 {
     client,
@@ -351,11 +350,11 @@ public:
     // Its close/reset must cancel pending operations on its owning reactor.
     // Shutdown may overlap a transport read and write. Adapters with serialized
     // I/O can declare supports_concurrent_io() const noexcept returning false.
-    template <pace::detail::tls_byte_stream Transport>
+    template <pace::tls::tls_byte_stream Transport>
     requires(!std::same_as<Transport, tcp::stream>)
     stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {})
         : stream(
-              std::make_unique<pace::detail::tls_transport_model<Transport>>(std::move(transport)),
+              std::make_unique<pace::tls::tls_transport_model<Transport>>(std::move(transport)),
               configuration,
               pre_read
           )
@@ -379,10 +378,10 @@ public:
     // Server only. Empty on a completed TLS handshake. On handoff this stream
     // becomes moved-from and the caller owns the original, still-open transport
     // and its pre-read bytes. Transport must match the type passed at construction.
-    template <pace::detail::tls_byte_stream Transport = tcp::stream>
+    template <pace::tls::tls_byte_stream Transport = tcp::stream>
     task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff()
     {
-        using model_type = pace::detail::tls_transport_model<Transport>;
+        using model_type = pace::tls::tls_transport_model<Transport>;
         if constexpr (std::same_as<Transport, tcp::stream>)
         {
             require_tcp_handoff();
@@ -440,20 +439,20 @@ private:
     struct implementation;
     std::unique_ptr<implementation> impl_;
     stream(
-        std::unique_ptr<pace::detail::tls_transport> transport,
+        std::unique_ptr<pace::tls::tls_transport> transport,
         const tls::context& configuration,
         std::string_view pre_read
     );
-    friend class pace::detail::tls_driver;
+    friend class pace::tls::tls_driver;
     friend struct tls::context::implementation;
     task<void> connect_impl(tcp::endpoint endpoint, std::string peer_name, std::optional<std::string> server_name);
     task<void> handshake_impl(std::string peer_name, std::optional<std::string> server_name, bool allow_handoff);
     task<bool> perform_handshake();
     bool handoff_requested() const noexcept;
     void require_tcp_handoff() const;
-    pace::detail::tls_transport* generic_transport() const noexcept;
+    pace::tls::tls_transport* generic_transport() const noexcept;
     client_hello_handoff<tcp::stream> release_tcp();
-    client_hello_handoff<std::unique_ptr<pace::detail::tls_transport>> release_generic();
+    client_hello_handoff<std::unique_ptr<pace::tls::tls_transport>> release_generic();
 };
 
 // Complete a handshake using the supplied verification policy. Custom

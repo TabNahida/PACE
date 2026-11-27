@@ -199,7 +199,7 @@ pace::task<void> endpoint_exchange(
         require(client.native_handle() == original_handle, "explicit family changed native handle");
     }
     int no_delay = 0;
-    pace::detail::socket_address_length option_length = sizeof(no_delay);
+    pace::net::socket_address_length option_length = sizeof(no_delay);
     require(
         ::getsockopt(
             client.native_handle(),
@@ -298,7 +298,7 @@ pace::task<void> ipv6_wildcards(pace::io_context& io)
     auto local = only_v6.local_endpoint();
     require(local.address == "::" && local.family == pace::address_family::ipv6, "IPv6 wildcard inspection");
     int only = 0;
-    pace::detail::socket_address_length length = sizeof(only);
+    pace::net::socket_address_length length = sizeof(only);
     require(
         ::getsockopt(only_v6.native_handle(), IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<char*>(&only), &length) == 0
             && only == 1,
@@ -365,8 +365,8 @@ pace::task<void> ipv6_address_validation(pace::io_context& io)
     require(rejected, "dual-stack option on IPv4 must be rejected");
     // Link-local reachability depends on host interfaces. The shared conversion
     // must preserve its interface index without a DNS/interface-name lookup.
-    const auto native = pace::detail::parse_socket_address("fe80::1234", 321, address_family::ipv6, 42);
-    const auto scoped = pace::detail::socket_endpoint<pace::tcp::endpoint>(native.data(), native.length);
+    const auto native = pace::net::parse_socket_address("fe80::1234", 321, address_family::ipv6, 42);
+    const auto scoped = pace::net::socket_endpoint<pace::tcp::endpoint>(native.data(), native.length);
     require(
         scoped.address == "fe80::1234" && scoped.port == 321 && scoped.scope_id == 42
             && scoped.family == address_family::ipv6,

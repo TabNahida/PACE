@@ -10,8 +10,6 @@ struct blocking_options
     pace::deadline deadline{};
 };
 
-namespace detail
-{
 template <class Factory>
 auto blocking_call(Factory&& factory, blocking_options options)
 {
@@ -29,5 +27,4 @@ auto blocking_call(Factory&& factory, blocking_options options)
          .deadline = earlier(options.deadline, pace::deadline::after(options.timeout))}
     ));
 }
-} // namespace detail
 } // namespace pace

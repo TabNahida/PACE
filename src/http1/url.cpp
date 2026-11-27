@@ -12,8 +12,8 @@ namespace pace::http
 {
 namespace
 {
-using pace::detail::http_url::connect_url;
-using pace::detail::http_url::parse_url;
+using pace::http::http_url::connect_url;
+using pace::http::http_url::parse_url;
 task<response> send_url(
     io_context& io,
     std::string url,

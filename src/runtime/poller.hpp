@@ -8,9 +8,8 @@
 #include <memory>
 #include <span>
 
-namespace pace::detail
+namespace pace
 {
-
 struct poll_event
 {
     std::uint64_t token;
@@ -50,5 +49,4 @@ private:
     struct implementation;
     std::unique_ptr<implementation> impl_;
 };
-
-} // namespace pace::detail
+} // namespace pace

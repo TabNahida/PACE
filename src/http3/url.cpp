@@ -14,12 +14,12 @@ task<http::response> send_url(
     const quic::context* trust = nullptr
 )
 {
-    const auto destination = pace::detail::http_url::parse_url(url);
+    const auto destination = pace::http::http_url::parse_url(url);
     if (!destination.secure)
     {
         throw std::invalid_argument("HTTP/3 requires an https URL");
     }
-    pace::detail::http_url::prepare_url_request(destination, request);
+    pace::http::http_url::prepare_url_request(destination, request);
     std::optional<quic::context> defaults;
     if (!trust)
     {
@@ -27,7 +27,7 @@ task<http::response> send_url(
         defaults->set_alpn_protocols({"h3"});
         trust = &*defaults;
     }
-    const auto addresses = co_await pace::detail::http_url::resolve_url(io, destination);
+    const auto addresses = co_await pace::http::http_url::resolve_url(io, destination);
     // QUIC connects to the first resolved address; no implicit request retry.
     const auto& peer = addresses.front();
     auto transport =

@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-namespace pace::detail
+namespace pace::http
 {
 // One reactor owns this queue. Handler tasks never access a protocol session or
 // transport; connection exit cancels handlers and drains them before returning.
@@ -245,4 +245,4 @@ struct close_http_dispatch
         state.close();
     }
 };
-} // namespace pace::detail
+} // namespace pace::http

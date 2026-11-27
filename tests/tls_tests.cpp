@@ -1235,7 +1235,7 @@ struct pipe_state
     }
 
     pace::io_context& io;
-    pace::detail::reactor_signal changed;
+    pace::reactor_signal changed;
     const std::size_t capacity;
     std::array<std::string, 2> inbound;
     std::array<bool, 2> closed{};

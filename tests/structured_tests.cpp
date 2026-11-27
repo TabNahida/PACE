@@ -553,8 +553,7 @@ void subscription_races()
     {
         pace::cancellation_source source;
         std::atomic<unsigned> invoked{0};
-        auto registration =
-            std::make_unique<pace::detail::cancellation_registration>(source.token(), [&] { ++invoked; });
+        auto registration = std::make_unique<pace::cancellation_registration>(source.token(), [&] { ++invoked; });
         std::thread request([source] { source.request_cancellation(); });
         registration.reset(); // Must synchronize with or suppress the concurrent notification.
         const auto after_removal = invoked.load();
@@ -562,9 +561,8 @@ void subscription_races()
         require(invoked.load() == after_removal && invoked <= 1, "notification outlived subscription");
     }
     pace::cancellation_source source;
-    std::unique_ptr<pace::detail::cancellation_registration> registration;
-    registration =
-        std::make_unique<pace::detail::cancellation_registration>(source.token(), [&] { registration.reset(); });
+    std::unique_ptr<pace::cancellation_registration> registration;
+    registration = std::make_unique<pace::cancellation_registration>(source.token(), [&] { registration.reset(); });
     source.request_cancellation();
     require(!registration, "self-unregistration failed");
     pace::cancellation_source a, b;

@@ -9,8 +9,6 @@
 
 namespace pace::http
 {
-namespace detail
-{
 template <class Function>
 auto call_handler(Function& function, request incoming)
 {
@@ -59,7 +57,6 @@ inline task<response> immediate_response(response outgoing)
 {
     co_return outgoing;
 }
-} // namespace detail
 
 // Adapt a synchronous response or task<response> callable to the shared HTTP
 // handler type. The callable (including move-only captures) is owned through
@@ -68,7 +65,7 @@ template <class Function>
 handler make_handler(Function&& function)
 {
     using owned_type = std::decay_t<Function>;
-    using result = decltype(detail::call_handler(std::declval<owned_type&>(), std::declval<request>()));
+    using result = decltype(pace::http::call_handler(std::declval<owned_type&>(), std::declval<request>()));
     static_assert(
         std::is_same_v<result, response> || std::is_same_v<result, task<response>>,
         "an HTTP handler must return response or task<response>"
@@ -80,13 +77,13 @@ handler make_handler(Function&& function)
     )
     {
         return [owned = owned_type(std::forward<Function>(function))](request incoming)
-        { return detail::invoke_function(owned, std::move(incoming)); };
+        { return pace::http::invoke_function(owned, std::move(incoming)); };
     }
     else
     {
         auto owned = std::make_shared<owned_type>(std::forward<Function>(function));
         return [owned = std::move(owned)](request incoming)
-        { return detail::invoke_handler(owned, std::move(incoming)); };
+        { return pace::http::invoke_handler(owned, std::move(incoming)); };
     }
 }
 
@@ -233,7 +230,7 @@ public:
     {
         if (!routes_)
         {
-            return detail::immediate_response({.status = 404, .body = "Not Found\n"});
+            return pace::http::immediate_response({.status = 404, .body = "Not Found\n"});
         }
         const auto path = std::string_view(incoming.target).substr(0, incoming.target.find('?'));
         const handler* get_fallback = nullptr;
@@ -279,7 +276,7 @@ public:
         }
         if (first == last)
         {
-            return detail::immediate_response({.status = 404, .body = "Not Found\n"});
+            return pace::http::immediate_response({.status = 404, .body = "Not Found\n"});
         }
         std::string allow;
         for (auto it = first; it != last; ++it)
@@ -295,7 +292,7 @@ public:
                 allow += ", HEAD";
             }
         }
-        return detail::immediate_response(
+        return pace::http::immediate_response(
             {.status = 405, .body = "Method Not Allowed\n", .headers = {{"Allow", std::move(allow)}}}
         );
     }

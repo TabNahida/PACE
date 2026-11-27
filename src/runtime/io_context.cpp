@@ -15,8 +15,6 @@
 
 namespace pace
 {
-namespace profiling = detail::profiling;
-
 namespace
 {
 thread_local io_context* active_context = nullptr;
@@ -62,10 +60,10 @@ struct io_context::cancellation_records
         record* previous = nullptr;
         record* next = nullptr;
         bool queued = false;
-        std::optional<detail::cancellation_registration> wake;
+        std::optional<pace::cancellation_registration> wake;
     };
 
-    detail::poller& poller;
+    pace::poller& poller;
     std::mutex pending_mutex;
     record* first = nullptr;
     record* last = nullptr;
@@ -73,7 +71,7 @@ struct io_context::cancellation_records
     std::map<std::uint64_t, record> entries;
     std::uint64_t next_id = 0;
 
-    explicit cancellation_records(detail::poller& wake_poller)
+    explicit cancellation_records(pace::poller& wake_poller)
         : poller(wake_poller)
     {
     }
@@ -221,11 +219,11 @@ struct io_context::cancellation_records
 
 struct io_context::implementation
 {
-    detail::poller poller;
+    pace::poller poller;
     const bool persistent_interests;
 
     explicit implementation(io_backend backend)
-        : poller(detail::poller::supports_persistent, backend)
+        : poller(pace::poller::supports_persistent, backend)
         , persistent_interests(poller.persistent())
     {
     }
@@ -1131,7 +1129,7 @@ void io_context::run()
             stop();
         }
     };
-    std::array<detail::poll_event, 256> events{};
+    std::array<pace::poll_event, 256> events{};
     // Reuse the empty batches between drains. Reconstructing two deques on
     // every producer wake allocates their maps/blocks even for a single post.
     std::deque<task<void>> new_tasks;
@@ -1348,5 +1346,4 @@ void io_context::run()
         std::rethrow_exception(p.first_error);
     }
 }
-
 } // namespace pace

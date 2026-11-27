@@ -1,7 +1,7 @@
 #pragma once
 #include <pace/runtime/task_group.hpp>
 
-namespace pace::detail
+namespace pace::http
 {
 // All accepted connections belong to this serve invocation. Listener shutdown
 // cancels them; the invocation returns only after their handlers have unwound.
@@ -26,4 +26,4 @@ task<void> serve_group(Function accept_loop)
         }
     }
 }
-} // namespace pace::detail
+} // namespace pace::http

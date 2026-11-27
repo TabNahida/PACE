@@ -1,7 +1,7 @@
 #include <pace/http3/protocol.hpp>
 #include "http/dispatch.hpp"
 #include "http/serve_group.hpp"
-#include "tls/protocol_driver.hpp"
+#include "quic/driver.hpp"
 #ifdef PACE_HAS_HTTP3
 #include <algorithm>
 #include <array>
@@ -866,14 +866,14 @@ task<void> serve_connection(quic::connection transport, http::handler handle, li
 {
     require_h3(transport);
     session state(true, bounds);
-    auto dispatch = std::make_shared<detail::http_dispatch>(
+    auto dispatch = std::make_shared<pace::http::http_dispatch>(
         transport.context(),
         std::move(handle),
         co_await this_task::cancellation()
     );
     std::exception_ptr failure;
-    dispatch->wake = [&] { detail::quic_driver::wake(transport); };
-    detail::close_http_dispatch close{*dispatch};
+    dispatch->wake = [&] { pace::quic::quic_driver::wake(transport); };
+    pace::http::close_http_dispatch close{*dispatch};
     try
     {
         co_await state.initialize(transport);
@@ -948,7 +948,7 @@ task<void> serve_connection(quic::connection transport, http::handler handle, li
 
 task<void> serve(quic::listener& listener, http::handler handle, limits bounds)
 {
-    co_await pace::detail::serve_group(
+    co_await pace::http::serve_group(
         [&](task_group& group) -> task<void>
         {
             for (;;)

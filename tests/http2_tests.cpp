@@ -1047,7 +1047,7 @@ pace::task<void> tls_driver_client(
     pace::tls::stream stream(std::move(tcp), config);
     co_await stream.handshake("localhost");
     {
-        pace::detail::tls_driver driver(stream);
+        pace::tls::tls_driver driver(stream);
         std::array<char, 16> input{};
         require(!driver.read(input), "TLS nonblocking read should want input");
         bool guarded = false;
@@ -1191,7 +1191,7 @@ pace::task<void> tls_abort_client(
 
     try
     {
-        pace::detail::tls_driver driver(stream);
+        pace::tls::tls_driver driver(stream);
         const std::string bytes(16384, 'x');
         unsigned count = 0;
         while (driver.drained() && count++ < 1024)

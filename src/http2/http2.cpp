@@ -181,9 +181,9 @@ tcp_driver driver_for(tcp::stream& stream)
     return tcp_driver(stream);
 }
 #ifdef PACE_HAS_TLS
-detail::tls_driver driver_for(tls::stream& stream)
+pace::tls::tls_driver driver_for(tls::stream& stream)
 {
-    return detail::tls_driver(stream);
+    return pace::tls::tls_driver(stream);
 }
 #endif
 
@@ -961,7 +961,7 @@ template <class Stream>
 task<void> serve_impl(Stream transport, http::handler handle, limits bounds)
 {
     session state(true, bounds);
-    auto dispatch = std::make_shared<detail::http_dispatch>(
+    auto dispatch = std::make_shared<pace::http::http_dispatch>(
         transport.context(),
         std::move(handle),
         co_await this_task::cancellation()
@@ -981,7 +981,7 @@ task<void> serve_impl(Stream transport, http::handler handle, limits bounds)
                     transport.context().cancel(driver.native_handle());
                 }
             };
-            detail::close_http_dispatch close{*dispatch};
+            pace::http::close_http_dispatch close{*dispatch};
             for (;;)
             {
                 wake = false;
@@ -1118,7 +1118,7 @@ task<void> serve_connection(tcp::stream transport, http::handler handle, limits 
 
 task<void> serve(tcp::listener& listener, http::handler handle, limits bounds)
 {
-    co_await pace::detail::serve_group(
+    co_await pace::http::serve_group(
         [&](task_group& group) -> task<void>
         {
             try
@@ -1179,7 +1179,7 @@ task<void> secure_connection(tls::stream transport, http::handler handle, limits
 
 task<void> serve(tcp::listener& listener, const tls::context& configuration, http::handler handle, limits bounds)
 {
-    co_await pace::detail::serve_group(
+    co_await pace::http::serve_group(
         [&](task_group& group) -> task<void>
         {
             try

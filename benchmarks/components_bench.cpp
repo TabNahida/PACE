@@ -91,8 +91,8 @@ measurement measure_lazy(std::uint64_t iterations)
 
 measurement measure_empty_poll(std::uint64_t iterations)
 {
-    pace::detail::poller poller;
-    std::array<pace::detail::poll_event, 256> events{};
+    pace::poller poller;
+    std::array<pace::poll_event, 256> events{};
     measurement result;
     result.begin = bench_clock::now();
     for (std::uint64_t i = 0; i < iterations; ++i)

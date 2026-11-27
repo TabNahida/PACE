@@ -27,22 +27,22 @@ void require(bool condition, const char* message)
 
 double poll_time(pace::io_context& io, std::size_t iterations, std::size_t batch)
 {
-    pace::detail::poller poller(false, io.backend());
+    pace::poller poller(false, io.backend());
     auto sender = pace::udp::open(io);
     std::vector<pace::udp::socket> sockets;
-    std::vector<pace::detail::socket_address> targets;
+    std::vector<pace::net::socket_address> targets;
     constexpr std::size_t registrations = 192;
     for (std::size_t i = 0; i < registrations; ++i)
     {
         auto& socket = sockets.emplace_back(io, pace::udp::endpoint{"127.0.0.1", 0});
         if (i < batch)
         {
-            targets.push_back(pace::detail::parse_socket_address("127.0.0.1", socket.local_endpoint().port));
+            targets.push_back(pace::net::parse_socket_address("127.0.0.1", socket.local_endpoint().port));
         }
         poller.update(socket.native_handle(), true, false, i + 1);
     }
 
-    std::array<pace::detail::poll_event, 256> events;
+    std::array<pace::poll_event, 256> events;
     std::vector<bool> seen(batch);
     std::vector<clock_type::duration> samples;
     samples.reserve(iterations);

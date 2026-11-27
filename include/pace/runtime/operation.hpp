@@ -3,8 +3,6 @@
 
 namespace pace
 {
-namespace detail
-{
 template <class Factory>
 using operation_result =
     typename entry_result<decltype(invoke_entry(std::declval<Factory&>(), std::declval<io_context&>()))>::type;
@@ -35,14 +33,13 @@ task<operation_result<Factory>> scoped_operation(Factory factory, operation_opti
         co_return result;
     }
 }
-} // namespace detail
 
 // Factory is owned until completion. Prefer a factory over an immediately invoked
 // capturing coroutine lambda. Nested boundaries inherit the earliest deadline.
 template <class Factory>
 auto with_options(Factory factory, operation_options options)
 {
-    return detail::scoped_operation(std::move(factory), std::move(options));
+    return pace::scoped_operation(std::move(factory), std::move(options));
 }
 
 template <class T>
@@ -68,6 +65,6 @@ auto with_cancellation(cancellation_token token, Work work)
 template <class Work>
 auto shield(Work work)
 {
-    return detail::task_access::bind(with_options(std::move(work), {}), {});
+    return pace::task_access::bind(with_options(std::move(work), {}), {});
 }
 } // namespace pace

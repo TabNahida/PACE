@@ -15,9 +15,8 @@
 #include <string>
 #include <system_error>
 
-namespace pace::detail
+namespace pace::net
 {
-
 #if defined(_WIN32)
 using socket_address_length = int;
 #else
@@ -196,5 +195,4 @@ inline socket_address map_ipv4_address(const socket_address& address)
     std::memcpy(&result.storage, &v6, sizeof(v6));
     return result;
 }
-
-} // namespace pace::detail
+} // namespace pace::net

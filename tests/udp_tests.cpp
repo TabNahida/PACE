@@ -227,7 +227,7 @@ pace::task<void> ipv6_wildcards(pace::io_context& io)
     const auto local = only_v6.local_endpoint();
     require(local.address == "::" && local.family == address_family::ipv6, "IPv6 UDP wildcard");
     int only = 0;
-    pace::detail::socket_address_length length = sizeof(only);
+    pace::net::socket_address_length length = sizeof(only);
     require(
         ::getsockopt(only_v6.native_handle(), IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<char*>(&only), &length) == 0
             && only == 1,

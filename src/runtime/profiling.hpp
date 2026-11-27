@@ -11,7 +11,7 @@
 // Diagnostic wall-clock accounting. All state belongs to the calling thread.
 // Scopes must be closed before a coroutine suspends; nested synchronous scopes
 // subtract child time so exclusive totals do not double count.
-namespace pace::detail::profiling
+namespace pace::profiling
 {
 enum class stage
 {
@@ -164,4 +164,4 @@ decltype(auto) measure(stage value, F&& operation)
     scope timing(value);
     return std::forward<F>(operation)();
 }
-} // namespace pace::detail::profiling
+} // namespace pace::profiling

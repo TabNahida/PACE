@@ -42,7 +42,7 @@
 #include <initializer_list>
 #include <string_view>
 
-namespace pace::detail
+namespace pace::http
 {
 inline std::uint64_t content_hash(std::string_view input) noexcept
 {
@@ -125,4 +125,4 @@ inline std::uint64_t content_hash(std::string_view input) noexcept
     hash *= p3;
     return hash ^ (hash >> 32);
 }
-} // namespace pace::detail
+} // namespace pace::http

@@ -915,7 +915,7 @@ struct static_files::implementation
             }
             offset += static_cast<std::size_t>(n);
         }
-        const auto hash = pace::detail::content_hash(result.body);
+        const auto hash = pace::http::content_hash(result.body);
         std::array<char, 32> buffer{};
         auto [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), hash, 16);
         (void)error;
@@ -1160,7 +1160,7 @@ std::chrono::seconds cache_ttl(const response& result, std::chrono::seconds conf
 
 struct reverse_proxy::implementation
 {
-    using destination = pace::detail::http_url::destination;
+    using destination = pace::http::http_url::destination;
 
     struct connection
     {
@@ -1234,7 +1234,7 @@ struct reverse_proxy::implementation
             {
                 throw std::invalid_argument("upstream base must not contain query/fragment");
             }
-            auto target = pace::detail::http_url::parse_url(url);
+            auto target = pace::http::http_url::parse_url(url);
 #ifndef PACE_HAS_TLS
             if (target.secure)
             {
@@ -1270,7 +1270,7 @@ struct reverse_proxy::implementation
         {
             transport = std::make_unique<connection>();
             const auto& dest = upstreams[index];
-            auto stream = co_await pace::detail::http_url::connect_url(this_context(), dest);
+            auto stream = co_await pace::http::http_url::connect_url(this_context(), dest);
             stream.set_no_delay();
             limits bounds;
             bounds.max_body_bytes = options.max_response_bytes;

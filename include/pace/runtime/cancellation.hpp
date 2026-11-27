@@ -54,11 +54,8 @@ private:
     clock::time_point when_ = clock::time_point::max();
 };
 
-namespace detail
-{
 struct cancellation_state;
 class cancellation_registration;
-} // namespace detail
 
 class cancellation_token
 {
@@ -92,18 +89,16 @@ public:
 
 private:
     friend class cancellation_source;
-    friend class detail::cancellation_registration;
+    friend class pace::cancellation_registration;
 
-    explicit cancellation_token(std::shared_ptr<detail::cancellation_state> state)
+    explicit cancellation_token(std::shared_ptr<pace::cancellation_state> state)
         : state_(std::move(state))
     {
     }
 
-    std::shared_ptr<detail::cancellation_state> state_;
+    std::shared_ptr<pace::cancellation_state> state_;
 };
 
-namespace detail
-{
 // Internal subscription. Destruction synchronizes with an in-flight notification
 // on another thread; self-unregistration is supported. No libc++ experimental
 // stop-token dependency is needed on older Apple/Android toolchains.
@@ -119,7 +114,6 @@ private:
     std::shared_ptr<implementation> impl_;
     friend struct cancellation_state;
 };
-} // namespace detail
 
 // Copyable source; requests may come from any thread. First reason wins.
 class cancellation_source
@@ -139,7 +133,7 @@ public:
     void link(cancellation_token parent);
 
 private:
-    std::shared_ptr<detail::cancellation_state> state_;
+    std::shared_ptr<pace::cancellation_state> state_;
 };
 
 struct operation_options

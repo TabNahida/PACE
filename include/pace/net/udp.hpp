@@ -17,7 +17,6 @@
 
 namespace pace::udp
 {
-
 struct endpoint
 {
     std::string address = "127.0.0.1";
@@ -164,7 +163,7 @@ inline task<packet> async_exchange(endpoint peer, std::string request, std::size
 
 inline packet exchange(endpoint peer, std::string request, blocking_options options = {}, std::size_t capacity = 65536)
 {
-    return detail::blocking_call(
+    return pace::blocking_call(
         [&](io_context& io) { return async_exchange(io, std::move(peer), std::move(request), capacity); },
         options
     );

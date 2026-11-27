@@ -17,7 +17,6 @@
 
 namespace pace::tcp
 {
-
 // Numeric, unbracketed IPv4/IPv6. Resolve hostnames through pace::dns.
 // Use scope_id for an IPv6 interface index; textual %zone suffixes are rejected.
 struct endpoint
@@ -204,7 +203,7 @@ inline std::string exchange(
     std::size_t maximum = 1024 * 1024
 )
 {
-    return detail::blocking_call(
+    return pace::blocking_call(
         [&](io_context& io) { return async_exchange(io, std::move(peer), std::move(request), reply_size, maximum); },
         options
     );

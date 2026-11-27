@@ -4,7 +4,7 @@
 #include <string_view>
 #include <system_error>
 
-namespace pace::detail
+namespace pace
 {
 struct poller::implementation
 {
@@ -118,4 +118,4 @@ io_backend poller::backend() const noexcept
 {
     return impl_->backend->backend();
 }
-} // namespace pace::detail
+} // namespace pace

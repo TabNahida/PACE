@@ -11,7 +11,7 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 
-namespace pace::detail
+namespace pace
 {
 namespace
 {
@@ -263,9 +263,9 @@ std::unique_ptr<poller_backend> make_uring_poller()
 {
     return std::make_unique<uring_poller>();
 }
-} // namespace pace::detail
+} // namespace pace
 #else
-namespace pace::detail
+namespace pace
 {
 std::unique_ptr<poller_backend> make_uring_poller()
 {
@@ -274,5 +274,5 @@ std::unique_ptr<poller_backend> make_uring_poller()
         "io_uring requires a Linux build with --uring=y"
     );
 }
-} // namespace pace::detail
+} // namespace pace
 #endif

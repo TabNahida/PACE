@@ -178,13 +178,13 @@ int set_option(native_socket_type fd, int level, int name, int value)
 
 native_socket_type create_socket(address_family family)
 {
-    detail::initialize_sockets();
+    pace::initialize_sockets();
 #if defined(_WIN32)
-    const auto fd = detail::create_windows_socket(detail::native_address_family(family), SOCK_STREAM, IPPROTO_TCP);
+    const auto fd = pace::create_windows_socket(pace::net::native_address_family(family), SOCK_STREAM, IPPROTO_TCP);
 #elif defined(__linux__)
-    const auto fd = ::socket(detail::native_address_family(family), SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    const auto fd = ::socket(pace::net::native_address_family(family), SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 #else
-    const auto fd = ::socket(detail::native_address_family(family), SOCK_STREAM, 0);
+    const auto fd = ::socket(pace::net::native_address_family(family), SOCK_STREAM, 0);
 #endif
     if (fd == invalid_socket)
     {
@@ -285,7 +285,7 @@ task<void> stream::connect(endpoint endpoint)
 {
     check_operation(*context_, fd_);
     const auto address =
-        detail::parse_socket_address(endpoint.address, endpoint.port, endpoint.family, endpoint.scope_id);
+        pace::net::parse_socket_address(endpoint.address, endpoint.port, endpoint.family, endpoint.scope_id);
     if (connect_started_)
     {
         throw std::logic_error("TCP connect may only be started once per stream");
@@ -365,8 +365,8 @@ task<std::size_t> stream::read_some(std::span<char> buffer)
         {
             co_return 0;
         }
-        const auto count = detail::profiling::measure(
-            detail::profiling::stage::recv,
+        const auto count = pace::profiling::measure(
+            pace::profiling::stage::recv,
             [&]
             { return ::recv(fd_, buffer.data(), static_cast<int>(std::min<std::size_t>(buffer.size(), INT_MAX)), 0); }
         );
@@ -405,8 +405,8 @@ task<void> stream::write_all(std::string_view bytes)
         constexpr int flags = 0;
 #endif
         const auto size = static_cast<int>(std::min(bytes.size(), budget));
-        const auto count = detail::profiling::measure(
-            detail::profiling::stage::send,
+        const auto count = pace::profiling::measure(
+            pace::profiling::stage::send,
             [&] { return ::send(fd_, bytes.data(), size, flags); }
         );
         if (count > 0)
@@ -461,23 +461,23 @@ void stream::set_no_delay(bool enabled)
 endpoint stream::local_endpoint() const
 {
     check_operation(*context_, fd_);
-    detail::socket_address address;
+    pace::net::socket_address address;
     if (::getsockname(fd_, address.data(), &address.length) < 0)
     {
         socket_error("getsockname");
     }
-    return detail::socket_endpoint<endpoint>(address.data(), address.length);
+    return pace::net::socket_endpoint<endpoint>(address.data(), address.length);
 }
 
 endpoint stream::remote_endpoint() const
 {
     check_operation(*context_, fd_);
-    detail::socket_address address;
+    pace::net::socket_address address;
     if (::getpeername(fd_, address.data(), &address.length) < 0)
     {
         socket_error("getpeername");
     }
-    return detail::socket_endpoint<endpoint>(address.data(), address.length);
+    return pace::net::socket_endpoint<endpoint>(address.data(), address.length);
 }
 
 task<void> stream::close_gracefully(std::chrono::milliseconds timeout, std::size_t discard_limit)
@@ -523,8 +523,8 @@ task<void> stream::close_gracefully(std::chrono::milliseconds timeout, std::size
         {
             check_operation(*context_, fd_);
             const auto wanted = static_cast<int>(std::min(discarded.size(), discard_limit - total));
-            const auto count = detail::profiling::measure(
-                detail::profiling::stage::recv,
+            const auto count = pace::profiling::measure(
+                pace::profiling::stage::recv,
                 [&] { return ::recv(fd_, discarded.data(), wanted, 0); }
             );
             if (count == 0)
@@ -587,7 +587,7 @@ listener::listener(io_context& context, endpoint endpoint, listen_options option
     : context_(&context)
 {
     const auto address =
-        detail::parse_socket_address(endpoint.address, endpoint.port, endpoint.family, endpoint.scope_id);
+        pace::net::parse_socket_address(endpoint.address, endpoint.port, endpoint.family, endpoint.scope_id);
     if (options.backlog <= 0)
     {
         throw std::invalid_argument("listen backlog must be positive");
@@ -697,7 +697,7 @@ task<stream> listener::accept()
         }
         ++accept_attempts_;
         const native_socket_type accepted =
-            detail::profiling::measure(detail::profiling::stage::accept, [&] { return accept_socket(fd_); });
+            pace::profiling::measure(pace::profiling::stage::accept, [&] { return accept_socket(fd_); });
         if (accepted != invalid_socket)
         {
             co_return stream(*context_, accepted, family_);
@@ -742,12 +742,12 @@ task<stream> listener::accept()
 endpoint listener::local_endpoint() const
 {
     check_operation(*context_, fd_);
-    detail::socket_address address;
+    pace::net::socket_address address;
     if (::getsockname(fd_, address.data(), &address.length) < 0)
     {
         socket_error("getsockname");
     }
-    return detail::socket_endpoint<endpoint>(address.data(), address.length);
+    return pace::net::socket_endpoint<endpoint>(address.data(), address.length);
 }
 
 void listener::close() noexcept

@@ -16,16 +16,12 @@
 
 namespace pace
 {
-
 #ifdef _WIN32
 using native_socket_type = std::uintptr_t;
 #else
 using native_socket_type = int;
 #endif
 inline constexpr native_socket_type invalid_socket = static_cast<native_socket_type>(-1);
-
-namespace detail
-{
 
 #ifdef _WIN32
 inline SOCKET create_windows_socket(int family, int type, int protocol) noexcept
@@ -65,6 +61,4 @@ inline void initialize_winsock()
 {
     initialize_sockets();
 }
-
-} // namespace detail
 } // namespace pace

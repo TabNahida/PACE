@@ -5,7 +5,7 @@
 #include <coroutine>
 #include <utility>
 
-namespace pace::detail
+namespace pace
 {
 // Context-affine broadcast for protocol progress. Waiters live in coroutine
 // frames; no list-node allocation and no ownership cycle. The enclosing
@@ -161,4 +161,4 @@ private:
     io_context& io_;
     awaiter* first_ = nullptr;
 };
-} // namespace pace::detail
+} // namespace pace

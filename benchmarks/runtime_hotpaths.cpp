@@ -99,8 +99,8 @@ samples ready_batch(std::size_t count, std::size_t iterations)
         address.sin_port = htons(receiver.local_endpoint().port);
         addresses.push_back(address);
     }
-    pace::detail::poller poller(false, io.backend());
-    std::array<pace::detail::poll_event, 256> events;
+    pace::poller poller(false, io.backend());
+    std::array<pace::poll_event, 256> events;
     std::vector<bool> seen(count);
     samples times;
     times.reserve(iterations);

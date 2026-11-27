@@ -119,14 +119,14 @@ struct pending_operation
 
 native_socket_type create_socket(address_family family)
 {
-    detail::initialize_sockets();
+    pace::initialize_sockets();
 #if defined(_WIN32)
-    const auto fd = detail::create_windows_socket(detail::native_address_family(family), SOCK_DGRAM, IPPROTO_UDP);
+    const auto fd = pace::create_windows_socket(pace::net::native_address_family(family), SOCK_DGRAM, IPPROTO_UDP);
 #elif defined(__linux__)
     const auto fd =
-        ::socket(detail::native_address_family(family), SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_UDP);
+        ::socket(pace::net::native_address_family(family), SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_UDP);
 #else
-    const auto fd = ::socket(detail::native_address_family(family), SOCK_DGRAM, IPPROTO_UDP);
+    const auto fd = ::socket(pace::net::native_address_family(family), SOCK_DGRAM, IPPROTO_UDP);
 #endif
     if (fd == invalid_socket)
     {
@@ -237,7 +237,7 @@ void socket::bind(endpoint local, bind_options options)
     {
         throw std::logic_error("UDP bind requires an idle socket");
     }
-    const auto value = detail::parse_socket_address(local.address, local.port, local.family, local.scope_id);
+    const auto value = pace::net::parse_socket_address(local.address, local.port, local.family, local.scope_id);
     if (value.family() == address_family::ipv4 && !options.ipv6_only)
     {
         throw std::invalid_argument("dual-stack UDP bind requires an IPv6 endpoint");
@@ -262,12 +262,12 @@ void socket::bind(endpoint local, bind_options options)
 endpoint socket::local_endpoint() const
 {
     check(*context_, fd_);
-    detail::socket_address local;
+    pace::net::socket_address local;
     if (::getsockname(fd_, local.data(), &local.length) != 0)
     {
         fail("UDP getsockname");
     }
-    return detail::socket_endpoint<endpoint>(local.data(), local.length);
+    return pace::net::socket_endpoint<endpoint>(local.data(), local.length);
 }
 
 void socket::set_broadcast(bool enabled)
@@ -295,11 +295,15 @@ task<std::size_t> socket::send_to(std::string_view bytes, endpoint destination)
     {
         throw std::system_error(std::make_error_code(std::errc::message_size));
     }
-    auto target =
-        detail::parse_socket_address(destination.address, destination.port, destination.family, destination.scope_id);
+    auto target = pace::net::parse_socket_address(
+        destination.address,
+        destination.port,
+        destination.family,
+        destination.scope_id
+    );
     if (family_ == address_family::ipv6 && !ipv6_only_ && target.family() == address_family::ipv4)
     {
-        target = detail::map_ipv4_address(target);
+        target = pace::net::map_ipv4_address(target);
     }
     select_family(target.family());
     pending_operation guard(sending_);
@@ -348,7 +352,7 @@ task<datagram> socket::receive_from(std::span<char> buffer)
     for (;;)
     {
         check(*context_, fd_, true);
-        detail::socket_address sender;
+        pace::net::socket_address sender;
         bool truncated = false;
         const auto capacity = std::min<std::size_t>(buffer.size(), INT_MAX);
 #if defined(_WIN32)
@@ -373,7 +377,7 @@ task<datagram> socket::receive_from(std::span<char> buffer)
         {
             co_return datagram{
                 std::min(static_cast<std::size_t>(count), capacity),
-                detail::socket_endpoint<endpoint>(sender.data(), sender.length),
+                pace::net::socket_endpoint<endpoint>(sender.data(), sender.length),
                 truncated
             };
         }
@@ -413,8 +417,8 @@ task<packet> async_exchange(io_context& io, endpoint peer, std::string request, 
     {
         throw std::invalid_argument("UDP peer port must be nonzero");
     }
-    const auto native = detail::parse_socket_address(peer.address, peer.port, peer.family, peer.scope_id);
-    const auto expected = detail::socket_endpoint<endpoint>(native.data(), native.length);
+    const auto native = pace::net::parse_socket_address(peer.address, peer.port, peer.family, peer.scope_id);
+    const auto expected = pace::net::socket_endpoint<endpoint>(native.data(), native.length);
     socket connection(io, native.family());
     co_await connection.send(std::move(request), std::move(peer));
     std::string data(capacity, '\0');
@@ -438,7 +442,7 @@ task<packet> async_exchange(io_context& io, endpoint peer, std::string request, 
 
 std::size_t send(endpoint peer, std::string message, blocking_options options)
 {
-    return detail::blocking_call(
+    return pace::blocking_call(
         [&](io_context& io) -> task<std::size_t>
         {
             auto socket = open(io);

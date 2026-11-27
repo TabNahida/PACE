@@ -17,8 +17,8 @@ task<http::response> send_url(
 #endif
 )
 {
-    const auto destination = pace::detail::http_url::parse_url(url);
-    pace::detail::http_url::prepare_url_request(destination, request);
+    const auto destination = pace::http::http_url::parse_url(url);
+    pace::http::http_url::prepare_url_request(destination, request);
     std::vector<http::request> requests;
     requests.push_back(std::move(request));
 #ifdef PACE_HAS_TLS
@@ -35,7 +35,7 @@ task<http::response> send_url(
             defaults->set_alpn_protocols({"h2"});
             trust = &*defaults;
         }
-        tls::stream transport(co_await pace::detail::http_url::connect_url(io, destination), *trust);
+        tls::stream transport(co_await pace::http::http_url::connect_url(io, destination), *trust);
         co_await transport.handshake(destination.host);
         auto replies =
             co_await async_exchange(std::move(transport), destination.authority, std::move(requests), bounds);
@@ -48,7 +48,7 @@ task<http::response> send_url(
     }
 #endif
     auto replies = co_await async_exchange(
-        co_await pace::detail::http_url::connect_url(io, destination),
+        co_await pace::http::http_url::connect_url(io, destination),
         destination.authority,
         std::move(requests),
         bounds

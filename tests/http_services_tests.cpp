@@ -58,14 +58,11 @@ TEST_CASE("portable content hash matches xxHash XXH64 vectors")
     {
         input[i + 1] = static_cast<char>(i * 37 + 11);
     }
-    require(pace::detail::content_hash({}) == vectors[0].second, "null empty hash");
+    require(pace::http::content_hash({}) == vectors[0].second, "null empty hash");
     for (auto [size, expected] : vectors)
     {
         CAPTURE(size);
-        require(
-            pace::detail::content_hash(std::string_view(input).substr(1, size)) == expected,
-            "portable content hash"
-        );
+        require(pace::http::content_hash(std::string_view(input).substr(1, size)) == expected, "portable content hash");
     }
 }
 

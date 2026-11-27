@@ -14,10 +14,7 @@
 
 namespace pace
 {
-namespace detail
-{
 struct scheduler_access;
-} // namespace detail
 
 // One reactor, one running thread. spawn/post/stop are thread-safe; I/O is affine.
 class io_context
@@ -233,7 +230,7 @@ public:
     }
 
 private:
-    friend struct detail::scheduler_access;
+    friend struct pace::scheduler_access;
     void cancel_wait(io_awaiter&, std::error_code);
     void cancel_wait(timer_awaiter&, std::error_code);
     struct implementation;
@@ -244,8 +241,6 @@ private:
     static void completed(void*, std::coroutine_handle<>) noexcept;
 };
 
-namespace detail
-{
 struct scheduler_access
 {
     static void schedule(io_context& io, std::coroutine_handle<> handle)
@@ -253,5 +248,4 @@ struct scheduler_access
         io.schedule(handle);
     }
 };
-} // namespace detail
 } // namespace pace

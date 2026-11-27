@@ -49,10 +49,10 @@ TEST_CASE("an explicitly requested backend is not silently substituted")
 TEST_CASE("poller survives queue pressure, cancellation and descriptor reuse")
 {
     pace::io_context io;
-    pace::detail::poller poller(false);
+    pace::poller poller(false);
     MESSAGE("backend=" << std::string(pace::backend_name(poller.backend())));
     pace::udp::socket sender(io, {"127.0.0.1", 0});
-    std::array<pace::detail::poll_event, 256> events{};
+    std::array<pace::poll_event, 256> events{};
     // More subscriptions/cancellations than the 256-entry io_uring SQ.
     std::vector<pace::udp::socket> sockets;
     sockets.reserve(512);

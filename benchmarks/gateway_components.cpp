@@ -85,7 +85,7 @@ int main(int argc, char** argv)
                                     std::uint64_t hash = 14695981039346656037ULL;
                                     if (mode == "xxh")
                                     {
-                                        hash = pace::detail::content_hash(input);
+                                        hash = pace::http::content_hash(input);
                                     }
                                     else
                                     {

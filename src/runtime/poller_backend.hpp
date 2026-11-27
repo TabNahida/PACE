@@ -1,7 +1,7 @@
 #pragma once
 #include "runtime/poller.hpp"
 
-namespace pace::detail
+namespace pace
 {
 struct poller_backend
 {
@@ -23,4 +23,4 @@ struct poller_backend
 std::unique_ptr<poller_backend> make_native_poller(bool persistent);
 std::unique_ptr<poller_backend> make_uring_poller();
 std::unique_ptr<poller_backend> make_iocp_poller();
-} // namespace pace::detail
+} // namespace pace

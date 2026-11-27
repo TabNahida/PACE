@@ -7,7 +7,7 @@
 #endif
 #include <charconv>
 
-namespace pace::detail::http_url
+namespace pace::http::http_url
 {
 struct destination
 {
@@ -93,7 +93,7 @@ inline destination parse_url(std::string_view url)
     result.host = host;
     try
     {
-        const auto address = pace::detail::parse_socket_address(result.host, result.port);
+        const auto address = pace::net::parse_socket_address(result.host, result.port);
         if (bracketed != (address.family() == address_family::ipv6))
         {
             throw std::invalid_argument("IPv6 URL hosts require brackets");
@@ -203,4 +203,4 @@ inline void prepare_url_request(const destination& url, http::request& request)
         }
     }
 }
-} // namespace pace::detail::http_url
+} // namespace pace::http::http_url

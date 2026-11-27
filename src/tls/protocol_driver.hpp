@@ -1,10 +1,9 @@
 #pragma once
-#include <pace/quic/connection.hpp>
 #include <pace/tls/stream.hpp>
 
 #include <optional>
 
-namespace pace::detail
+namespace pace::tls
 {
 #ifdef PACE_HAS_TLS
 // Internal single-owner adapter. It holds TLS's normal operation guard while a
@@ -38,10 +37,4 @@ private:
     bool write_retry_ = false, write_wants_write_ = false, read_wants_write_ = false;
 };
 #endif
-#ifdef PACE_HAS_QUIC
-struct quic_driver
-{
-    static void wake(quic::connection& connection);
-};
-#endif
-} // namespace pace::detail
+} // namespace pace::tls

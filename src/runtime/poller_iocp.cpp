@@ -11,7 +11,7 @@
 
 #include <windows.h>
 
-namespace pace::detail
+namespace pace
 {
 namespace
 {
@@ -284,13 +284,13 @@ std::unique_ptr<poller_backend> make_iocp_poller()
 {
     return std::make_unique<iocp_poller>();
 }
-} // namespace pace::detail
+} // namespace pace
 #else
-namespace pace::detail
+namespace pace
 {
 std::unique_ptr<poller_backend> make_iocp_poller()
 {
     throw std::system_error(std::make_error_code(std::errc::not_supported), "IOCP requires Windows");
 }
-} // namespace pace::detail
+} // namespace pace
 #endif

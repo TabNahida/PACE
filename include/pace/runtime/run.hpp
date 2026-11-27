@@ -9,8 +9,6 @@
 
 namespace pace
 {
-namespace detail
-{
 template <class Factory>
 auto invoke_entry(Factory& factory, io_context& io)
 {
@@ -80,7 +78,6 @@ task<void> run_entry(io_context& io, Factory& factory, entry_state<T>& state)
         throw;
     }
 }
-} // namespace detail
 
 // Run one entry task on a fresh context on this thread. Own the factory until
 // shutdown finishes, including a temporary capturing coroutine lambda. Entry
@@ -93,16 +90,16 @@ requires(std::is_invocable_v<std::decay_t<Factory>&, io_context&> || std::is_inv
 auto run(Factory&& factory)
 {
     using function = std::decay_t<Factory>;
-    using result = typename detail::entry_result<
-        decltype(detail::invoke_entry(std::declval<function&>(), std::declval<io_context&>()))>::type;
+    using result = typename pace::entry_result<
+        decltype(pace::invoke_entry(std::declval<function&>(), std::declval<io_context&>()))>::type;
     if (io_context::current())
     {
         throw std::logic_error("nested pace::run is not supported");
     }
     function owned(std::forward<Factory>(factory));
-    detail::entry_state<result> state;
+    pace::entry_state<result> state;
     io_context io; // Destroy roots before their borrowed factory/state on error.
-    io.spawn(detail::run_entry<result>(io, owned, state));
+    io.spawn(pace::run_entry<result>(io, owned, state));
     io.run();
     if (state.failure)
     {

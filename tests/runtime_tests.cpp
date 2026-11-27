@@ -275,14 +275,14 @@ void timer_fairness_with_ready_work()
     );
 }
 
-pace::task<void> signal_wait(pace::detail::reactor_signal& signal, int& resumed, bool& notifying)
+pace::task<void> signal_wait(pace::reactor_signal& signal, int& resumed, bool& notifying)
 {
     co_await signal.wait();
     require(!notifying, "protocol signal resumed inline inside a callback");
     ++resumed;
 }
 
-pace::task<void> signal_deadline(pace::io_context& io, pace::detail::reactor_signal& signal, int& resumed)
+pace::task<void> signal_deadline(pace::io_context& io, pace::reactor_signal& signal, int& resumed)
 {
     co_await signal.wait(std::chrono::steady_clock::now() + 2ms);
     ++resumed;
@@ -290,12 +290,7 @@ pace::task<void> signal_deadline(pace::io_context& io, pace::detail::reactor_sig
     io.stop();
 }
 
-pace::task<void> signal_notify(
-    pace::io_context& io,
-    pace::detail::reactor_signal& signal,
-    int& resumed,
-    bool& notifying
-)
+pace::task<void> signal_notify(pace::io_context& io, pace::reactor_signal& signal, int& resumed, bool& notifying)
 {
     co_await io.yield();
     notifying = true;
@@ -311,7 +306,7 @@ void protocol_signals()
 {
     {
         pace::io_context io;
-        pace::detail::reactor_signal signal(io);
+        pace::reactor_signal signal(io);
         int resumed = 0;
         bool notifying = false;
         io.spawn(signal_wait(signal, resumed, notifying));
@@ -322,7 +317,7 @@ void protocol_signals()
     }
     {
         pace::io_context io;
-        pace::detail::reactor_signal signal(io);
+        pace::reactor_signal signal(io);
         int resumed = 0;
         io.spawn(signal_deadline(io, signal, resumed));
         io.run();
@@ -364,7 +359,7 @@ void cancel_sleepers_out_of_order()
         auto work = sleeper(rank);
         if (rank % 3)
         {
-            work = pace::detail::task_access::bind(std::move(work), source.token());
+            work = pace::task_access::bind(std::move(work), source.token());
         }
         io.spawn(std::move(work));
     }
@@ -651,7 +646,7 @@ struct datagram_pair
 
     datagram_pair()
     {
-        pace::detail::initialize_sockets();
+        pace::initialize_sockets();
         try
         {
 #if !defined(_WIN32)
@@ -739,8 +734,8 @@ struct datagram_pair
 
 void poller_output_contract()
 {
-    using pace::detail::poll_event;
-    pace::detail::poller poller;
+    using pace::poll_event;
+    pace::poller poller;
     constexpr poll_event sentinel{9000, false, true, true};
     std::array<poll_event, 4> output;
     output.fill(sentinel);
@@ -1013,10 +1008,10 @@ void invalid_socket_is_rejected()
 void profiling_contract()
 {
 #ifdef PACE_ENABLE_PROFILING
-    namespace profile = pace::detail::profiling;
+    namespace profile = pace::profiling;
     profile::reset();
 #ifdef _WIN32
-    pace::detail::initialize_sockets();
+    pace::initialize_sockets();
 #endif
     errno = EAGAIN;
 #ifdef _WIN32
@@ -1544,8 +1539,8 @@ void persistent_poller_contract()
 {
     pace::io_context owner;
     owned_eventfd descriptor(owner);
-    pace::detail::poller poller(true, pace::io_backend::epoll);
-    std::array<pace::detail::poll_event, 1> events{};
+    pace::poller poller(true, pace::io_backend::epoll);
+    std::array<pace::poll_event, 1> events{};
     const std::uint64_t value = 1;
     require(::write(descriptor.fd, &value, sizeof(value)) == sizeof(value), "persistent eventfd write");
     poller.update(descriptor.fd, true, false, 41);

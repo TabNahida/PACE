@@ -24,7 +24,7 @@
 #error "PACE supports Linux, macOS, Windows, and FreeBSD"
 #endif
 
-namespace pace::detail
+namespace pace
 {
 class native_poller final : public poller_backend
 {
@@ -677,4 +677,4 @@ std::unique_ptr<poller_backend> make_native_poller(bool persistent)
 {
     return std::make_unique<native_poller>(persistent);
 }
-} // namespace pace::detail
+} // namespace pace

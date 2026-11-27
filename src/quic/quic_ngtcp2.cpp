@@ -1,8 +1,8 @@
 #include <pace/quic/connection.hpp>
 #ifdef PACE_HAS_QUIC
 #include "net/socket_address.hpp"
+#include "quic/driver.hpp"
 #include "runtime/reactor_signal.hpp"
-#include "tls/protocol_driver.hpp"
 
 #include <algorithm>
 #include <array>
@@ -24,7 +24,7 @@ namespace pace::quic
 namespace
 {
 using clock = std::chrono::steady_clock;
-using address = pace::detail::socket_address;
+using address = pace::net::socket_address;
 constexpr std::size_t stream_window = 256 * 1024, connection_window = 4 * 1024 * 1024;
 constexpr std::size_t cid_size = 18, packet_size = 1200, batch_size = 64;
 
@@ -114,8 +114,6 @@ ngtcp2_cid random_cid()
 }
 } // namespace
 
-namespace detail
-{
 struct configuration
 {
     SSL_CTX* ssl = nullptr;
@@ -212,7 +210,7 @@ struct engine : std::enable_shared_from_this<engine>
     io_context& io;
     udp::socket socket;
     std::shared_ptr<configuration> config;
-    pace::detail::reactor_signal events;
+    pace::reactor_signal events;
     // Reactor-affine borrowed pointers: state destruction removes every CID,
     // and packet processing never suspends or resumes application code inline.
     std::unordered_map<std::string, connection_state*> routes;
@@ -264,7 +262,7 @@ struct engine : std::enable_shared_from_this<engine>
 struct connection_state : std::enable_shared_from_this<connection_state>
 {
     std::shared_ptr<engine> owner;
-    pace::detail::reactor_signal events;
+    pace::reactor_signal events;
     ngtcp2_conn* conn = nullptr;
     ngtcp2_crypto_ossl_ctx* crypto = nullptr;
     ngtcp2_crypto_conn_ref reference{};
@@ -631,7 +629,7 @@ void connection_state::init(
 {
     remote = peer;
     const auto endpoint = owner->socket.local_endpoint();
-    local = pace::detail::parse_socket_address(endpoint.address, endpoint.port, endpoint.family, endpoint.scope_id);
+    local = pace::net::parse_socket_address(endpoint.address, endpoint.port, endpoint.family, endpoint.scope_id);
     auto scid = random_cid();
     auto dcid = initial ? initial->scid : random_cid();
     ngtcp2_path path{{local.data(), local.length}, {remote.data(), remote.length}, nullptr};
@@ -1256,10 +1254,9 @@ task<void> engine::write_pump(std::weak_ptr<engine> weak)
         }
     }
 }
-} // namespace detail
 
 context::context(role mode)
-    : state_(std::make_shared<detail::configuration>(mode))
+    : state_(std::make_shared<pace::quic::configuration>(mode))
 {
     set_alpn_protocols({"pace-quic"});
 }
@@ -1302,7 +1299,7 @@ void context::set_alpn_protocols(const std::vector<std::string>& protocols)
 
 namespace
 {
-task<void> handshake(const std::shared_ptr<detail::connection_state>& state, std::chrono::milliseconds timeout)
+task<void> handshake(const std::shared_ptr<pace::quic::connection_state>& state, std::chrono::milliseconds timeout)
 {
     const auto deadline = deadline_after(timeout);
     while (!state->connected)
@@ -1317,8 +1314,8 @@ task<void> handshake(const std::shared_ptr<detail::connection_state>& state, std
     state->check();
 }
 
-std::shared_ptr<detail::stream_state> new_stream(
-    const std::shared_ptr<detail::connection_state>& state,
+std::shared_ptr<pace::quic::stream_state> new_stream(
+    const std::shared_ptr<pace::quic::connection_state>& state,
     stream_type type
 )
 {
@@ -1339,10 +1336,10 @@ std::shared_ptr<detail::stream_state> new_stream(
         state->error(result);
         state->check();
     }
-    return std::make_shared<detail::stream_state>(state, state->get_stream(id));
+    return std::make_shared<pace::quic::stream_state>(state, state->get_stream(id));
 }
 
-std::shared_ptr<detail::stream_state> accept_stream(const std::shared_ptr<detail::connection_state>& state)
+std::shared_ptr<pace::quic::stream_state> accept_stream(const std::shared_ptr<pace::quic::connection_state>& state)
 {
     state->check();
     if (state->incoming.empty())
@@ -1351,13 +1348,13 @@ std::shared_ptr<detail::stream_state> accept_stream(const std::shared_ptr<detail
     }
     const auto id = state->incoming.front();
     auto& buffer = state->get_stream(id);
-    auto result = std::make_shared<detail::stream_state>(state, buffer);
+    auto result = std::make_shared<pace::quic::stream_state>(state, buffer);
     state->incoming.pop_front();
     buffer.queued = false;
     return result;
 }
 
-std::optional<std::size_t> read(detail::stream_state& state, std::span<char> bytes)
+std::optional<std::size_t> read(pace::quic::stream_state& state, std::span<char> bytes)
 {
     state.check();
     auto& stream = state.buffer;
@@ -1389,7 +1386,7 @@ std::optional<std::size_t> read(detail::stream_state& state, std::span<char> byt
     return count;
 }
 
-std::size_t write(detail::stream_state& state, std::string_view bytes)
+std::size_t write(pace::quic::stream_state& state, std::string_view bytes)
 {
     state.check();
     auto& stream = state.buffer;
@@ -1425,12 +1422,12 @@ connection::connection(io_context& io, const quic::context& config)
     {
         throw std::invalid_argument("QUIC client requires client configuration");
     }
-    state_ = std::make_shared<detail::connection_state>(
-        std::make_shared<detail::engine>(io, udp::endpoint{"0.0.0.0", 0}, config.state_)
+    state_ = std::make_shared<pace::quic::connection_state>(
+        std::make_shared<pace::quic::engine>(io, udp::endpoint{"0.0.0.0", 0}, config.state_)
     );
 }
 
-connection::connection(std::shared_ptr<detail::connection_state> state)
+connection::connection(std::shared_ptr<pace::quic::connection_state> state)
     : state_(std::move(state))
 {
 }
@@ -1494,7 +1491,7 @@ task<void> connection::connect(udp::endpoint peer, std::string name, std::chrono
         {
             throw std::invalid_argument("QUIC client requires certificate identity");
         }
-        const auto remote = pace::detail::parse_socket_address(peer.address, peer.port, peer.family, peer.scope_id);
+        const auto remote = pace::net::parse_socket_address(peer.address, peer.port, peer.family, peer.scope_id);
         if (!peer.port)
         {
             throw std::invalid_argument("QUIC remote port must be nonzero");
@@ -1563,7 +1560,7 @@ task<stream> connection::accept_stream()
     }
 }
 
-stream::stream(std::shared_ptr<detail::stream_state> state)
+stream::stream(std::shared_ptr<pace::quic::stream_state> state)
     : state_(std::move(state))
 {
 }
@@ -1697,7 +1694,7 @@ listener::listener(io_context& io, udp::endpoint local, const quic::context& con
     {
         throw std::invalid_argument("QUIC listener requires server configuration");
     }
-    state_ = std::make_shared<detail::engine>(io, std::move(local), config.state_);
+    state_ = std::make_shared<pace::quic::engine>(io, std::move(local), config.state_);
     state_->start();
 }
 
@@ -1758,7 +1755,7 @@ task<connection> listener::accept(std::chrono::milliseconds timeout)
 }
 } // namespace pace::quic
 
-namespace pace::detail
+namespace pace::quic
 {
 void quic_driver::wake(quic::connection& connection)
 {
@@ -1767,5 +1764,5 @@ void quic_driver::wake(quic::connection& connection)
         connection.state_->schedule();
     }
 }
-} // namespace pace::detail
+} // namespace pace::quic
 #endif
