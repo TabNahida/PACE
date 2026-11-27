@@ -1,4 +1,4 @@
-<!-- source-hash: 671b4f0bdfa7 -->
+<!-- source-hash: 3c8a961a4e77 -->
 # `pace::run` 与当前 context
 
 [English](run.md) · [运行时](README.zh.md)
@@ -70,27 +70,22 @@ struct blocking_options
 ### 入口支持
 
 ```cpp
-template <class Factory>
-auto invoke_entry(Factory& factory, io_context& io);
-
-template <class T>
-struct entry_result;               // entry_result<task<T>>::type is T
-
-template <class T>
-struct entry_state
+struct entry_access
 {
-    std::optional<T> value;        // absent in entry_state<void>
-    std::exception_ptr failure;
-    bool completed = false;
+    template <class Factory>
+    static auto invoke(Factory& factory, io_context& io);
+    template <class Task>
+    using result = /* T for task<T> */;
+    template <class T>
+    struct state;                  // value (absent for void), failure, completed
+    template <class T, class Factory>
+    static task<void> run(io_context& io, Factory& factory, state<T>& outcome);
 };
-
-template <class T, class Factory>
-task<void> run_entry(io_context& io, Factory& factory, entry_state<T>& state);
 ```
 
-`run`、操作边界和任务组共用的实现支持。`factory(io)` 合法时 `invoke_entry` 调用它，否则调用 `factory()`。
-`entry_result` 给出工厂所返回 task 的结果类型。`run_entry` 是 `run` spawn 的根任务：它 await 工厂的 task，
-把值或异常记录到 `state`，结束时停止 `io`。应用代码请使用 `run`。
+`run`、操作边界和任务组共用的实现支持，集中在一个结构体里，只在 `pace` 中占用一个名字。`factory(io)` 合法时
+`invoke` 调用它，否则调用 `factory()`。`result` 给出工厂所返回 task 的结果类型。`run` 是 `pace::run` spawn 的
+根任务：它 await 工厂的 task，把值或异常记录到 `outcome`，结束时停止 `io`。不属于 API；应用代码请使用 `pace::run`。
 
 ## 函数
 

@@ -1,4 +1,4 @@
-<!-- source-hash: 2ead4a2f96d3 -->
+<!-- source-hash: 213b0a14d616 -->
 # `pace::task`
 
 [English](task.md) · [运行时](README.zh.md)
@@ -163,10 +163,16 @@ struct task_access
 {
     template <class T>
     static task<T> bind(task<T> work, cancellation_token token);
+    template <class T>
+    struct settled;                // an awaiter
+    template <class T>
+    static settled<T> settle(task<T> work);
 };
 ```
 
 供操作边界和任务组使用的实现支持：`bind` 给尚未开始的 task 指定自己的令牌，此后它保留这个令牌，不再继承父任务的。
+`settle` 像 `co_await` 一样等待 task，但即使 task 的令牌在完成时已被取消，也保留它已经产生的结果；任务组用它来保证
+自己的 `cancel()` 不会丢弃主体的值。
 应用代码请使用 [`with_cancellation`](structured-concurrency.zh.md) 或 [`shield`](structured-concurrency.zh.md)。
 
 ## 函数

@@ -10,61 +10,63 @@
 
 namespace pace::http
 {
-/// Implementation of make_handler: calls `function` with the request when it accepts one, else with no arguments.
-/// Not exported by the pace.http module; not part of the API.
-template <class Function>
-auto call_handler(Function& function, request incoming)
+/// Implementation support for make_handler and router: invoking a handler callable and an already-built
+/// response as a task. Not part of the API.
+struct handler_access
 {
-    if constexpr (std::is_invocable_v<Function&, request>)
+    /// Calls `function` with the request when it accepts one, else with no arguments.
+    template <class Function>
+    static auto call(Function& function, request incoming)
     {
-        return std::invoke(function, std::move(incoming));
+        if constexpr (std::is_invocable_v<Function&, request>)
+        {
+            return std::invoke(function, std::move(incoming));
+        }
+        else
+        {
+            return std::invoke(function);
+        }
     }
-    else
-    {
-        return std::invoke(function);
-    }
-}
 
-/// Implementation of make_handler for stateful callables, kept alive by `function` until the task completes.
-/// Not exported by the pace.http module; not part of the API.
-template <class Function>
-task<response> invoke_handler(std::shared_ptr<Function> function, request incoming)
-{
-    using result = decltype(call_handler(*function, std::move(incoming)));
-    if constexpr (std::is_same_v<result, response>)
+    /// For stateful callables, kept alive by `function` until the task completes.
+    template <class Function>
+    static task<response> invoke_shared(std::shared_ptr<Function> function, request incoming)
     {
-        co_return call_handler(*function, std::move(incoming));
+        using result = decltype(call(*function, std::move(incoming)));
+        if constexpr (std::is_same_v<result, response>)
+        {
+            co_return call(*function, std::move(incoming));
+        }
+        else
+        {
+            co_return co_await call(*function, std::move(incoming));
+        }
     }
-    else
-    {
-        co_return co_await call_handler(*function, std::move(incoming));
-    }
-}
 
-/// Implementation of make_handler for function pointers and stateless callables, copied into the task.
-/// Not exported by the pace.http module; not part of the API.
-// Stateless trivial callables and function pointers need no shared owner.
-// The coroutine frame owns its copy, including across a nested coroutine call.
-// Keep invocation lazy and exceptions inside the returned task.
-template <class Function>
-task<response> invoke_function(Function function, request incoming)
-{
-    using result = decltype(call_handler(function, std::move(incoming)));
-    if constexpr (std::is_same_v<result, response>)
+    /// For function pointers and stateless callables, copied into the task.
+    // Stateless trivial callables and function pointers need no shared owner.
+    // The coroutine frame owns its copy, including across a nested coroutine call.
+    // Keep invocation lazy and exceptions inside the returned task.
+    template <class Function>
+    static task<response> invoke_copied(Function function, request incoming)
     {
-        co_return call_handler(function, std::move(incoming));
+        using result = decltype(call(function, std::move(incoming)));
+        if constexpr (std::is_same_v<result, response>)
+        {
+            co_return call(function, std::move(incoming));
+        }
+        else
+        {
+            co_return co_await call(function, std::move(incoming));
+        }
     }
-    else
-    {
-        co_return co_await call_handler(function, std::move(incoming));
-    }
-}
 
-/// Implementation of router: a task that returns `outgoing`. Not exported by the pace.http module.
-inline task<response> immediate_response(response outgoing)
-{
-    co_return outgoing;
-}
+    /// A task that returns `outgoing`.
+    static task<response> immediate(response outgoing)
+    {
+        co_return outgoing;
+    }
+};
 
 /// Adapts a callable taking `request` (or nothing) and returning `response` or `task<response>` to `handler`.
 /// The callable, move-only captures included, stays alive through every started invocation, even if the
@@ -73,7 +75,7 @@ template <class Function>
 handler make_handler(Function&& function)
 {
     using owned_type = std::decay_t<Function>;
-    using result = decltype(call_handler(std::declval<owned_type&>(), std::declval<request>()));
+    using result = decltype(handler_access::call(std::declval<owned_type&>(), std::declval<request>()));
     static_assert(
         std::is_same_v<result, response> || std::is_same_v<result, task<response>>,
         "an HTTP handler must return response or task<response>"
@@ -85,12 +87,13 @@ handler make_handler(Function&& function)
     )
     {
         return [owned = owned_type(std::forward<Function>(function))](request incoming)
-        { return invoke_function(owned, std::move(incoming)); };
+        { return handler_access::invoke_copied(owned, std::move(incoming)); };
     }
     else
     {
         auto owned = std::make_shared<owned_type>(std::forward<Function>(function));
-        return [owned = std::move(owned)](request incoming) { return invoke_handler(owned, std::move(incoming)); };
+        return [owned = std::move(owned)](request incoming)
+        { return handler_access::invoke_shared(owned, std::move(incoming)); };
     }
 }
 
@@ -246,7 +249,7 @@ public:
     {
         if (!routes_)
         {
-            return immediate_response({.status = 404, .body = "Not Found\n"});
+            return handler_access::immediate({.status = 404, .body = "Not Found\n"});
         }
         const auto path = std::string_view(incoming.target).substr(0, incoming.target.find('?'));
         const handler* get_fallback = nullptr;
@@ -292,7 +295,7 @@ public:
         }
         if (first == last)
         {
-            return immediate_response({.status = 404, .body = "Not Found\n"});
+            return handler_access::immediate({.status = 404, .body = "Not Found\n"});
         }
         std::string allow;
         for (auto it = first; it != last; ++it)
@@ -308,7 +311,7 @@ public:
                 allow += ", HEAD";
             }
         }
-        return immediate_response(
+        return handler_access::immediate(
             {.status = 405, .body = "Method Not Allowed\n", .headers = {{"Allow", std::move(allow)}}}
         );
     }

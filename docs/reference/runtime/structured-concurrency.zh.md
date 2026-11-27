@@ -1,4 +1,4 @@
-<!-- source-hash: 81a34b89a62b -->
+<!-- source-hash: 1657d77e4a5b -->
 # 结构化并发、取消与截止时间
 
 [English](structured-concurrency.md) · [运行时](README.zh.md)
@@ -196,7 +196,7 @@ public:
     cancellation_token token() const noexcept;
     task<void> join();
     template <class Factory>
-    static auto run(Factory factory) -> task<typename entry_result<std::invoke_result_t<Factory&, task_group&>>::type>;
+    static auto run(Factory factory) -> task<entry_access::result<std::invoke_result_t<Factory&, task_group&>>>;
 };
 ```
 
@@ -208,9 +208,9 @@ public:
 | `spawn(factory)` | 接管 `factory`（接受 `io_context&` 或无参数、返回 `task<T>` 的可调用对象），在之后的某一轮于本 context 上启动子任务，并返回 `join_handle<T>`。子任务的令牌就是任务组的令牌。 |
 | `spawn(work)` | 对已创建的 task 做同样的事。任务组持有该 task；task 借用的东西仍是借用。 |
 | `own(value)` | 把 `value` 移入任务组的存储，保留到所有子任务结束，并返回其引用。用它存放子任务借用的数据。 |
-| `cancel()` | 取消任务组的令牌：主体和每个子任务在下一次等待时看到 `operation_canceled`。作用域仍会 join 它们。 |
+| `cancel()` | 取消任务组的令牌：主体和每个子任务在下一次等待时看到 `operation_canceled`。作用域仍会 join 它们，然后正常结束：由此产生的 `operation_canceled` 是所请求的结果，不算失败。某个子任务拿到答案后，用它停止其余子任务。 |
 | `token()` | 任务组的令牌。 |
-| `join()` | 封闭任务组（不再允许 `spawn` 或 `own`），等待所有子任务结束。等待会观察任务组的令牌，因此任务组被取消时 `join()` 抛出异常而不是继续等待。它不会重新抛出子任务的异常。 |
+| `join()` | 一经调用就封闭任务组（不再允许 `spawn` 或 `own`），然后等待所有子任务结束。等待会观察任务组的令牌，因此任务组被取消时 `join()` 抛出异常而不是继续等待；无论哪种情况任务组都已封闭。它不会重新抛出子任务的异常。 |
 | `run(factory)` | 作用域本身，一个惰性 task；见 `with_task_group`。 |
 
 ### `join_handle<T>`
@@ -241,17 +241,26 @@ await 会移出结果并清空句柄。丢弃句柄既不会 detach 也不会取
 template <class Factory>
 using operation_result = /* T of the task<T> that Factory returns */;
 
-struct group_state;
-template <class T> struct child_state;
-template <class Factory> struct owned_child;
-template <class Factory>
-task<void> run_child(std::shared_ptr<group_state> group, std::shared_ptr<owned_child<Factory>> child);
-struct group_wait;
-inline task<void> drain_group(std::shared_ptr<group_state> state, bool boundary = false);
+struct group_access
+{
+    struct state;                                  // the group's shared state
+    template <class T> struct child;               // one child's shared state
+    template <class Factory> struct owned_child;   // child state plus its owned factory
+    template <class Factory>
+    static task<void> run_child(std::shared_ptr<state> group, std::shared_ptr<owned_child<Factory>> owned);
+    struct wait;                                   // waits until no child is running
+    static task<void> drain(std::shared_ptr<state> group, bool boundary = false);
+};
+
+struct operation_access
+{
+    template <class Factory>
+    static task<operation_result<Factory>> scoped(Factory factory, operation_options options);  // with_options
+};
 ```
 
-因为上面的模板要用到它们，所以声明在公开头文件中：任务组和每个子任务的共享状态、运行子任务的根任务，
-以及等待任务组排空的 awaiter 和 task。它们不是应用 API。`operation_result<Factory>` 是边界或 `spawn` 针对
+因为上面的模板要用到它们，所以声明在公开头文件中，集中在两个结构体里，只在 `pace` 中占用两个名字：任务组和
+每个子任务的共享状态、运行子任务的根任务、等待任务组排空的操作，以及 `with_options` 背后的协程。它们不属于 API。`operation_result<Factory>` 是边界或 `spawn` 针对
 `Factory` 返回的结果类型。
 
 ## 函数
@@ -319,19 +328,43 @@ join 所有子任务，并返回主体的结果。`options` 非空时，作用�
    后续异常被丢弃；错误不会聚合。
 3. 主体返回或抛出后，作用域等待每个子任务，这次等待忽略取消。
 4. 然后销毁 `own` 创建的存储。
-5. 重新抛出记录的异常；否则若任务组已被取消（通过 `cancel()`、继承的令牌或截止时间），以该原因抛出
-   `std::system_error`；否则返回主体的值。
+5. 重新抛出记录的异常；否则若外层操作已被取消（继承的令牌或截止时间），以该原因抛出 `std::system_error`；
+   否则返回主体的值。
 
-由于子任务的异常会传播到作用域之外，嵌套任务组的失败会让运行它的子任务失败；要隔离错误，请在子任务内部捕获。
-
-### `scoped_operation`
+任务组自己的 `cancel()` 不算错误。主体或子任务因它而抛出的 `operation_canceled` 不会被记录，作用域正常返回：
+`void` 主体的作用域直接返回，有返回值的主体的作用域返回主体产生的值。如果主体没有产生值就结束了（它自己也被取消），
+作用域抛出 `operation_canceled`。主体或子任务抛出的其他异常仍会被记录并重新抛出。于是“谁先完成谁赢”就是一个由
+胜出的子任务取消的任务组：
 
 ```cpp
-template <class Factory>
-task<operation_result<Factory>> scoped_operation(Factory factory, operation_options options);
+auto winner = co_await pace::task_group::run(
+    [&](pace::task_group& group) -> pace::task<std::string>
+    {
+        auto& answer = group.own(std::string{});
+        for (auto& mirror : mirrors)
+        {
+            (void)group.spawn(
+                [&group, &answer, &mirror]() -> pace::task<void>
+                {
+                    answer = (co_await pace::http::async_get(mirror)).body;
+                    group.cancel();
+                }
+            );
+        }
+        try
+        {
+            co_await group.join();
+        }
+        catch (const std::system_error&)
+        {
+            // join 报告结束这场竞速的取消
+        }
+        co_return answer;
+    }
+);
 ```
 
-`with_options` 背后的协程。请调用 `with_options`。
+由于子任务的异常会传播到作用域之外，嵌套任务组的失败会让运行它的子任务失败；要隔离错误，请在子任务内部捕获。
 
 ## 错误
 

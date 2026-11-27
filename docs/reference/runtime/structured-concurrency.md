@@ -199,7 +199,7 @@ public:
     cancellation_token token() const noexcept;
     task<void> join();
     template <class Factory>
-    static auto run(Factory factory) -> task<typename entry_result<std::invoke_result_t<Factory&, task_group&>>::type>;
+    static auto run(Factory factory) -> task<entry_access::result<std::invoke_result_t<Factory&, task_group&>>>;
 };
 ```
 
@@ -211,9 +211,9 @@ to the body by reference; it cannot be copied or moved, so it cannot outlive the
 | `spawn(factory)` | Takes ownership of `factory` (callable with `io_context&` or nothing, returning `task<T>`), starts the child on this context on a later turn, and returns a `join_handle<T>`. The child's token is the group's. |
 | `spawn(work)` | The same for an already-created task. The group owns the task; what the task borrowed stays borrowed. |
 | `own(value)` | Moves `value` into storage the group keeps until all children have finished, and returns a reference to it. Use it for data that children borrow. |
-| `cancel()` | Cancels the group's token: the body and every child see `operation_canceled` at their next wait. The scope still joins them. |
+| `cancel()` | Cancels the group's token: the body and every child see `operation_canceled` at their next wait. The scope still joins them, then ends normally: the `operation_canceled` this causes is the requested outcome, not a failure. Use it to stop the remaining children once one has the answer. |
 | `token()` | The group's token. |
-| `join()` | Closes the group (no more `spawn` or `own`) and waits until every child has finished. The wait observes the group's token, so a cancelled group makes `join()` throw instead of waiting. It does not rethrow children's exceptions. |
+| `join()` | Closes the group (no more `spawn` or `own`) as soon as it is called and waits until every child has finished. The wait observes the group's token, so a cancelled group makes `join()` throw instead of waiting; the group is closed either way. It does not rethrow children's exceptions. |
 | `run(factory)` | The scope itself, a lazy task; see `with_task_group`. |
 
 ### `join_handle<T>`
@@ -246,18 +246,27 @@ is opaque.
 template <class Factory>
 using operation_result = /* T of the task<T> that Factory returns */;
 
-struct group_state;
-template <class T> struct child_state;
-template <class Factory> struct owned_child;
-template <class Factory>
-task<void> run_child(std::shared_ptr<group_state> group, std::shared_ptr<owned_child<Factory>> child);
-struct group_wait;
-inline task<void> drain_group(std::shared_ptr<group_state> state, bool boundary = false);
+struct group_access
+{
+    struct state;                                  // the group's shared state
+    template <class T> struct child;               // one child's shared state
+    template <class Factory> struct owned_child;   // child state plus its owned factory
+    template <class Factory>
+    static task<void> run_child(std::shared_ptr<state> group, std::shared_ptr<owned_child<Factory>> owned);
+    struct wait;                                   // waits until no child is running
+    static task<void> drain(std::shared_ptr<state> group, bool boundary = false);
+};
+
+struct operation_access
+{
+    template <class Factory>
+    static task<operation_result<Factory>> scoped(Factory factory, operation_options options);  // with_options
+};
 ```
 
-Declared in the public headers because the templates above use them: the shared state of a group and of each child,
-the root task that runs a child, and the awaiter and task that wait for a group to drain. They are not an
-application API. `operation_result<Factory>` is the result type a boundary or `spawn` returns for `Factory`.
+Declared in the public headers because the templates above use them, gathered in two structs so that they add two
+names to `pace`: the shared state of a group and of each child, the root task that runs a child, the wait for a
+group to drain, and the coroutine behind `with_options`. They are not part of the API. `operation_result<Factory>` is the result type a boundary or `spawn` returns for `Factory`.
 
 ## Functions
 
@@ -328,20 +337,45 @@ How the scope ends:
    body see `operation_canceled`. Later exceptions are dropped; errors are not aggregated.
 3. When the body returns or throws, the scope waits for every child, ignoring cancellation for that wait.
 4. It then destroys the storage made by `own`.
-5. It rethrows the recorded exception; otherwise, if the group was cancelled (by `cancel()`, the inherited token or
+5. It rethrows the recorded exception; otherwise, if the enclosing operation was cancelled (the inherited token or
    the deadline), it throws `std::system_error` with that reason; otherwise it returns the body's value.
+
+The group's own `cancel()` is not an error. `operation_canceled` raised by the body or a child because of it is not
+recorded, and the scope returns normally: a `void` body's scope returns, and a value-returning body's scope returns
+the value the body produced. If the body ended without a value (it was itself cancelled), the scope throws
+`operation_canceled`. Another exception from the body or a child is still recorded and rethrown. This makes
+"first to finish wins" a group that the winning child cancels:
+
+```cpp
+auto winner = co_await pace::task_group::run(
+    [&](pace::task_group& group) -> pace::task<std::string>
+    {
+        auto& answer = group.own(std::string{});
+        for (auto& mirror : mirrors)
+        {
+            (void)group.spawn(
+                [&group, &answer, &mirror]() -> pace::task<void>
+                {
+                    answer = (co_await pace::http::async_get(mirror)).body;
+                    group.cancel();
+                }
+            );
+        }
+        try
+        {
+            co_await group.join();
+        }
+        catch (const std::system_error&)
+        {
+            // join reports the cancellation that ended the race
+        }
+        co_return answer;
+    }
+);
+```
 
 Because a child's exception propagates out of the scope, a failure in a nested group fails the child that ran it;
 catch errors inside a child to contain them.
-
-### `scoped_operation`
-
-```cpp
-template <class Factory>
-task<operation_result<Factory>> scoped_operation(Factory factory, operation_options options);
-```
-
-The coroutine behind `with_options`. Call `with_options` instead.
 
 ## Errors
 

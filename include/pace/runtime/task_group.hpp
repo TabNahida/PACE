@@ -6,247 +6,266 @@
 
 namespace pace
 {
-struct group_wait;
-
-/// Implementation support: the shared state of a task group.
-struct group_state
+/// Implementation support for task_group and join_handle: the group's and children's shared state, the coroutine
+/// that runs a child, and the wait for a group to drain. Not part of the API.
+struct group_access
 {
-    io_context& io;
-    cancellation_source source;
-    std::size_t pending = 0;
-    bool accepting = true;
-    bool joining = false;
-    std::exception_ptr failure;
-    std::vector<std::shared_ptr<void>> resources;
-    std::list<group_wait*> waiters;
-    void child_finished();
+    struct wait;
 
-    group_state(io_context& owner, cancellation_token parent)
-        : io(owner)
-        , source(parent.expires())
+    /// The shared state of a task group.
+    struct state
     {
-        source.link(std::move(parent));
-    }
+        io_context& io;
+        cancellation_source source;
+        std::size_t pending = 0;
+        bool accepting = true;
+        bool joining = false;
+        bool cancelled_locally = false;
+        std::exception_ptr failure;
+        std::vector<std::shared_ptr<void>> resources;
+        std::list<wait*> waiters;
 
-    void check() const
-    {
-        if (io_context::current() != &io)
+        state(io_context& owner, cancellation_token parent)
+            : io(owner)
+            , source(parent.expires())
         {
-            throw std::logic_error("task group is context-affine");
+            source.link(std::move(parent));
         }
-    }
 
-    void failed(std::exception_ptr error)
-    {
-        if (!failure)
+        void check() const
         {
-            failure = std::move(error);
+            if (io_context::current() != &io)
+            {
+                throw std::logic_error("task group is context-affine");
+            }
         }
-        source.request_cancellation();
-    }
-};
 
-/// Implementation support: the shared state of one child and its join_handle.
-template <class T>
-struct child_state
-{
-    io_context& io;
-    std::optional<T> value;
-    std::exception_ptr failure;
-    std::coroutine_handle<> waiter;
-    bool done = false, consumed = false;
+        /// Records the first failure and cancels the group. operation_canceled caused by the group's own cancel()
+        /// is the expected outcome of that request, not a failure.
+        void failed(std::exception_ptr error)
+        {
+            if (!failure && !(cancelled_locally && is_cancellation(error)))
+            {
+                failure = std::move(error);
+            }
+            source.request_cancellation();
+        }
 
-    explicit child_state(io_context& owner)
-        : io(owner)
+        void child_finished()
+        {
+            if (--pending != 0)
+            {
+                return;
+            }
+            while (!waiters.empty())
+            {
+                auto* waiting = waiters.front();
+                waiters.pop_front();
+                waiting->registered = false;
+                scheduler_access::schedule(io, waiting->continuation);
+            }
+        }
+
+        static bool is_cancellation(const std::exception_ptr& error)
+        {
+            try
+            {
+                std::rethrow_exception(error);
+            }
+            catch (const std::system_error& failure)
+            {
+                return failure.code() == std::errc::operation_canceled;
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
+    };
+
+    /// The shared state of one child and its join_handle.
+    template <class T>
+    struct child
     {
+        io_context& io;
+        std::optional<T> value;
+        std::exception_ptr failure;
+        std::coroutine_handle<> waiter;
+        bool done = false, consumed = false;
+
+        explicit child(io_context& owner)
+            : io(owner)
+        {
+        }
+    };
+
+    /// A child's state together with its owned factory.
+    template <class Factory>
+    struct owned_child : child<operation_result<Factory>>
+    {
+        std::optional<Factory> factory;
+
+        owned_child(io_context& io, Factory work)
+            : child<operation_result<Factory>>(io)
+            , factory(std::move(work))
+        {
+        }
+    };
+
+    /// The root task that runs one child and records its outcome.
+    template <class Factory>
+    static task<void> run_child(std::shared_ptr<state> group, std::shared_ptr<owned_child<Factory>> owned)
+    {
+        try
+        {
+            // spawn() constructs the child with its factory; only this coroutine resets it, below.
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged until the reset after this block
+            auto work = task_access::bind(entry_access::invoke(*owned->factory, group->io), group->source.token());
+            if constexpr (std::is_void_v<operation_result<Factory>>)
+            {
+                co_await std::move(work);
+            }
+            else
+            {
+                owned->value.emplace(co_await std::move(work));
+            }
+        }
+        catch (...)
+        {
+            owned->failure = std::current_exception();
+            group->failed(owned->failure);
+        }
+        owned->factory.reset(); // Destroy owned captures before a join can finish.
+        owned->done = true;
+        if (auto waiter = std::exchange(owned->waiter, {}))
+        {
+            scheduler_access::schedule(group->io, waiter);
+        }
+        group->child_finished();
+    }
+
+    /// Waits until a group has no running children.
+    struct wait
+    {
+        state& group; // drain's frame owns the state throughout this wait.
+        bool cancellable = false;
+        bool registered = false;
+        std::list<wait*>::iterator position;
+        std::coroutine_handle<> continuation;
+        io_context::cancellation_handle cancellation;
+        std::error_code error;
+
+        wait(state& owner, bool can_cancel)
+            : group(owner)
+            , cancellable(can_cancel)
+        {
+        }
+
+        wait(const wait&) = delete;
+        wait& operator=(const wait&) = delete;
+
+        ~wait()
+        {
+            if (registered)
+            {
+                group.waiters.erase(position);
+            }
+        }
+
+        bool await_ready() const noexcept
+        {
+            return group.pending == 0;
+        }
+
+        void await_suspend(std::coroutine_handle<> h)
+        {
+            if (cancellable)
+            {
+                cancellation = group.io.on_cancel(
+                    group.source.token(),
+                    [this](std::error_code reason)
+                    {
+                        error = reason;
+                        if (registered)
+                        {
+                            group.waiters.erase(position);
+                            registered = false;
+                            scheduler_access::schedule(group.io, continuation);
+                        }
+                    }
+                );
+            }
+            continuation = h;
+            position = group.waiters.insert(group.waiters.end(), this);
+            registered = true;
+        }
+
+        void await_resume()
+        {
+            cancellation.cancel();
+            if (error)
+            {
+                throw std::system_error(error);
+            }
+        }
+    };
+
+    /// Waits for a closed group's children (uncancellable at the scope boundary).
+    static task<void> drain(std::shared_ptr<state> group, bool boundary = false)
+    {
+        struct reset
+        {
+            state& group;
+            bool boundary;
+
+            reset(state& owner, bool at_boundary) noexcept
+                : group(owner)
+                , boundary(at_boundary)
+            {
+            }
+
+            reset(const reset&) = delete;
+            reset& operator=(const reset&) = delete;
+
+            ~reset()
+            {
+                if (!boundary)
+                {
+                    group.joining = false;
+                }
+            }
+        } guard{*group, boundary};
+
+        if (!boundary)
+        {
+            group->joining = true;
+        }
+        co_await wait(*group, !boundary);
     }
 };
 
 template <>
-struct child_state<void>
+struct group_access::child<void>
 {
     io_context& io;
     std::exception_ptr failure;
     std::coroutine_handle<> waiter;
     bool done = false, consumed = false;
 
-    explicit child_state(io_context& owner)
+    explicit child(io_context& owner)
         : io(owner)
     {
     }
 };
-
-/// Implementation support: a child's state together with its owned factory.
-template <class Factory>
-struct owned_child : child_state<operation_result<Factory>>
-{
-    std::optional<Factory> factory;
-
-    owned_child(io_context& io, Factory work)
-        : child_state<operation_result<Factory>>(io)
-        , factory(std::move(work))
-    {
-    }
-};
-
-/// Implementation support: the root task that runs one child and records its outcome.
-template <class Factory>
-task<void> run_child(std::shared_ptr<group_state> group, std::shared_ptr<owned_child<Factory>> child)
-{
-    try
-    {
-        // spawn() constructs the child with its factory; only this coroutine resets it, below.
-        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged until the reset after this block
-        auto work = task_access::bind(invoke_entry(*child->factory, group->io), group->source.token());
-        if constexpr (std::is_void_v<operation_result<Factory>>)
-        {
-            co_await std::move(work);
-        }
-        else
-        {
-            child->value.emplace(co_await std::move(work));
-        }
-    }
-    catch (...)
-    {
-        child->failure = std::current_exception();
-        group->failed(child->failure);
-    }
-    child->factory.reset(); // Destroy owned captures before a join can finish.
-    child->done = true;
-    if (auto waiter = std::exchange(child->waiter, {}))
-    {
-        scheduler_access::schedule(group->io, waiter);
-    }
-    group->child_finished();
-}
-
-/// Implementation support: waits until a group has no running children.
-struct group_wait
-{
-    group_state& state; // drain_group's frame owns the state throughout this wait.
-    bool cancellable = false;
-    bool registered = false;
-    std::list<group_wait*>::iterator position;
-    std::coroutine_handle<> continuation;
-    io_context::cancellation_handle cancellation;
-    std::error_code error;
-
-    group_wait(group_state& owner, bool can_cancel)
-        : state(owner)
-        , cancellable(can_cancel)
-    {
-    }
-
-    ~group_wait()
-    {
-        if (registered)
-        {
-            state.waiters.erase(position);
-        }
-    }
-
-    bool await_ready() const noexcept
-    {
-        return state.pending == 0;
-    }
-
-    void await_suspend(std::coroutine_handle<> h)
-    {
-        if (cancellable)
-        {
-            cancellation = state.io.on_cancel(
-                state.source.token(),
-                [this](std::error_code reason)
-                {
-                    error = reason;
-                    if (registered)
-                    {
-                        state.waiters.erase(position);
-                        registered = false;
-                        scheduler_access::schedule(state.io, continuation);
-                    }
-                }
-            );
-        }
-        continuation = h;
-        position = state.waiters.insert(state.waiters.end(), this);
-        registered = true;
-    }
-
-    void await_resume()
-    {
-        cancellation.cancel();
-        if (error)
-        {
-            throw std::system_error(error);
-        }
-    }
-};
-
-inline void group_state::child_finished()
-{
-    if (--pending != 0)
-    {
-        return;
-    }
-    while (!waiters.empty())
-    {
-        auto* waiting = waiters.front();
-        waiters.pop_front();
-        waiting->registered = false;
-        scheduler_access::schedule(io, waiting->continuation);
-    }
-}
-
-/// Implementation support: closes a group and waits for its children (uncancellable at the scope boundary).
-inline task<void> drain_group(std::shared_ptr<group_state> state, bool boundary = false)
-{
-    state->check();
-    if (!boundary && state->joining)
-    {
-        throw std::logic_error("task group already joining");
-    }
-    state->accepting = false;
-    if (!boundary)
-    {
-        state->joining = true;
-    }
-
-    struct reset
-    {
-        group_state& state;
-        bool boundary;
-
-        reset(group_state& owner, bool at_boundary) noexcept
-            : state(owner)
-            , boundary(at_boundary)
-        {
-        }
-
-        reset(const reset&) = delete;
-        reset& operator=(const reset&) = delete;
-
-        ~reset()
-        {
-            if (!boundary)
-            {
-                state.joining = false;
-            }
-        }
-    } guard{*state, boundary};
-
-    co_await group_wait(*state, !boundary);
-}
 
 /// The move-only result of one child. co_await returns its value or rethrows its exception. Await at most once, on
 /// the group's context (std::logic_error otherwise). Destroying it neither detaches nor cancels the child.
 template <class T>
 class [[nodiscard]] join_handle
 {
-    std::shared_ptr<child_state<T>> state_;
+    std::shared_ptr<group_access::child<T>> state_;
 
-    explicit join_handle(std::shared_ptr<child_state<T>> state)
+    explicit join_handle(std::shared_ptr<group_access::child<T>> state)
         : state_(std::move(state))
     {
     }
@@ -262,7 +281,7 @@ public:
     /// Awaits the child's completion; opaque.
     struct awaiter
     {
-        std::shared_ptr<child_state<T>> state;
+        std::shared_ptr<group_access::child<T>> state;
 
         bool await_ready() const
         {
@@ -315,9 +334,9 @@ public:
 /// Every member must be used on the group's context (std::logic_error otherwise).
 class task_group
 {
-    std::shared_ptr<group_state> state_;
+    std::shared_ptr<group_access::state> state_;
 
-    explicit task_group(std::shared_ptr<group_state> state)
+    explicit task_group(std::shared_ptr<group_access::state> state)
         : state_(std::move(state))
     {
     }
@@ -341,11 +360,11 @@ public:
         }
         state_->source.token().throw_if_cancelled();
         using result = operation_result<Factory>;
-        auto child = std::make_shared<owned_child<Factory>>(state_->io, std::move(factory));
+        auto child = std::make_shared<group_access::owned_child<Factory>>(state_->io, std::move(factory));
         ++state_->pending;
         try
         {
-            state_->io.spawn(run_child(state_, child));
+            state_->io.spawn(group_access::run_child(state_, child));
         }
         catch (...)
         {
@@ -378,11 +397,14 @@ public:
         return result;
     }
 
-    /// Cancels the group's token: the body and children see operation_canceled. The scope still joins them, then
-    /// throws operation_canceled unless an exception was recorded first.
+    /// Cancels the group's token: the body and children see operation_canceled. The scope still joins them. Their
+    /// operation_canceled is the expected result of this request, so the scope then returns normally: the body's
+    /// value if it produced one (a value-returning body that did not throws operation_canceled), unless the body or
+    /// a child failed with another exception, or the enclosing operation was cancelled too.
     void cancel()
     {
         state_->check();
+        state_->cancelled_locally = true;
         state_->source.request_cancellation();
     }
 
@@ -392,34 +414,43 @@ public:
         return state_->source.token();
     }
 
-    /// Closes the group and waits for every child; does not rethrow their exceptions. Throws the group token's error
-    /// if it is cancelled, std::logic_error for a second concurrent join. Never join from one of the group's own
-    /// children. The scope always drains the children again, uncancellably.
+    /// Closes the group at once and waits for every child; does not rethrow their exceptions. Throws the group
+    /// token's error if it is cancelled, std::logic_error for a second concurrent join. Never join from one of the
+    /// group's own children. The scope always drains the children again, uncancellably.
     task<void> join()
     {
-        return task_access::bind(drain_group(state_), state_->source.token());
+        state_->check();
+        if (state_->joining)
+        {
+            throw std::logic_error("task group already joining");
+        }
+        // Close the group here, not in the task: awaiting a task bound to an already-cancelled token throws before
+        // its body runs, and the group must be closed either way.
+        state_->accepting = false;
+        return task_access::bind(group_access::drain(state_), state_->source.token());
     }
 
     /// The scope: runs factory(group) as the body, joins every child, destroys own() storage, then rethrows the
     /// first exception of the body or a child, throws if the group was cancelled, or returns the body's value.
     template <class Factory>
-    static auto run(Factory factory) -> task<typename entry_result<std::invoke_result_t<Factory&, task_group&>>::type>
+    static auto run(Factory factory) -> task<entry_access::result<std::invoke_result_t<Factory&, task_group&>>>
     {
-        using result = entry_result<std::invoke_result_t<Factory&, task_group&>>::type;
-        auto token = co_await this_task::cancellation();
-        task_group group(std::make_shared<group_state>(this_context(), token));
+        using result = entry_access::result<std::invoke_result_t<Factory&, task_group&>>;
+        auto parent = co_await this_task::cancellation();
+        task_group group(std::make_shared<group_access::state>(this_context(), parent));
         const auto& state = group.state_;
-        entry_state<result> value;
+        entry_access::state<result> value;
         try
         {
             auto body = task_access::bind(std::invoke(factory, group), state->source.token());
+            // settle: a value the body returned after the group's own cancel() is still the scope's result.
             if constexpr (std::is_void_v<result>)
             {
-                co_await std::move(body);
+                co_await task_access::settle(std::move(body));
             }
             else
             {
-                value.value.emplace(co_await std::move(body));
+                value.value.emplace(co_await task_access::settle(std::move(body)));
             }
         }
         catch (...)
@@ -432,15 +463,26 @@ public:
                 std::make_exception_ptr(std::logic_error("task group body exited with another join pending"))
             );
         }
-        co_await task_access::bind(drain_group(state, true), {});
+        state->accepting = false;
+        co_await task_access::bind(group_access::drain(state, true), {});
         state->resources.clear();
         if (state->failure)
         {
             std::rethrow_exception(state->failure);
         }
-        state->source.token().throw_if_cancelled();
+        // Cancellation of the enclosing operation propagates. The group's own cancel() does not: it ends the scope
+        // early with whatever the body produced.
+        parent.throw_if_cancelled();
+        if (!state->cancelled_locally)
+        {
+            state->source.token().throw_if_cancelled();
+        }
         if constexpr (!std::is_void_v<result>)
         {
+            if (!value.value)
+            {
+                throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+            }
             co_return std::move(*value.value);
         }
     }

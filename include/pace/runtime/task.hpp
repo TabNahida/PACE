@@ -385,6 +385,37 @@ struct task_access
         }
         return work;
     }
+
+    /// Awaits like co_await, but keeps a result the task produced even if its token was cancelled by then: only
+    /// the task's own exception is rethrown. For a scope whose own cancellation must not discard its body's value.
+    template <class T>
+    struct settled : task<T>::awaiter
+    {
+        using task<T>::awaiter::awaiter;
+
+        T await_resume()
+        {
+            if (!this->handle)
+            {
+                throw std::logic_error("cannot await an empty task");
+            }
+            if (this->handle.promise().exception)
+            {
+                std::rethrow_exception(this->handle.promise().exception);
+            }
+            if constexpr (!std::is_void_v<T>)
+            {
+                // NOLINTNEXTLINE(bugprone-unchecked-optional-access): a task<T> without an exception has a value
+                return std::move(*this->handle.promise().value);
+            }
+        }
+    };
+
+    template <class T>
+    static settled<T> settle(task<T> work)
+    {
+        return settled<T>(work.release());
+    }
 };
 
 namespace this_task

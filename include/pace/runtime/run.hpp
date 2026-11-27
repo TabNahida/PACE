@@ -9,87 +9,96 @@
 
 namespace pace
 {
-/// Calls `factory(io)` if that is valid, otherwise `factory()`.
-template <class Factory>
-auto invoke_entry(Factory& factory, io_context& io)
+/// Implementation support for pace::run, operation boundaries and task groups: invoking an entry factory, its
+/// result type, where its outcome is recorded, and the root task of pace::run. Not part of the API.
+struct entry_access
 {
-    if constexpr (std::is_invocable_v<Factory&, io_context&>)
+    /// Calls `factory(io)` if that is valid, otherwise `factory()`.
+    template <class Factory>
+    static auto invoke(Factory& factory, io_context& io)
     {
-        return std::invoke(factory, io);
-    }
-    else
-    {
-        return std::invoke(factory);
-    }
-}
-/// entry_result<task<T>>::type is T: the result type of an entry factory's task.
-template <class T>
-struct entry_result;
-
-template <class T>
-struct entry_result<task<T>>
-{
-    using type = T;
-};
-
-/// Where run_entry records the entry's value or exception.
-template <class T>
-struct entry_state
-{
-    std::optional<T> value;
-    std::exception_ptr failure;
-    bool completed = false;
-};
-
-template <>
-struct entry_state<void>
-{
-    std::exception_ptr failure;
-    bool completed = false;
-};
-
-/// The root task of pace::run: awaits the factory's task, records the outcome in `state` and stops `io`.
-template <class T, class Factory>
-task<void> run_entry(io_context& io, Factory& factory, entry_state<T>& state)
-{
-    struct stop_on_exit
-    {
-        io_context& io;
-
-        explicit stop_on_exit(io_context& context) noexcept
-            : io(context)
+        if constexpr (std::is_invocable_v<Factory&, io_context&>)
         {
-        }
-
-        stop_on_exit(const stop_on_exit&) = delete;
-        stop_on_exit& operator=(const stop_on_exit&) = delete;
-
-        ~stop_on_exit()
-        {
-            io.stop();
-        }
-    } stop{io};
-
-    try
-    {
-        if constexpr (std::is_void_v<T>)
-        {
-            co_await invoke_entry(factory, io);
+            return std::invoke(factory, io);
         }
         else
         {
-            state.value.emplace(co_await invoke_entry(factory, io));
+            return std::invoke(factory);
         }
-        state.completed = true;
     }
-    catch (...)
+
+    template <class Task>
+    struct task_result;
+
+    template <class T>
+    struct task_result<task<T>>
     {
-        // io_context suppresses shutdown cancellation; run must still report
-        // cancellation of its entry task to the synchronous caller.
-        state.failure = std::current_exception();
-        throw;
+        using type = T;
+    };
+
+    /// result<task<T>> is T.
+    template <class Task>
+    using result = task_result<Task>::type;
+
+    /// Where an entry's value or exception is recorded.
+    template <class T>
+    struct state
+    {
+        std::optional<T> value;
+        std::exception_ptr failure;
+        bool completed = false;
+    };
+
+    /// The root task of pace::run: awaits the factory's task, records the outcome in `outcome` and stops `io`.
+    template <class T, class Factory>
+    static task<void> run(io_context& io, Factory& factory, state<T>& outcome)
+    {
+        struct stop_on_exit
+        {
+            io_context& io;
+
+            explicit stop_on_exit(io_context& context) noexcept
+                : io(context)
+            {
+            }
+
+            stop_on_exit(const stop_on_exit&) = delete;
+            stop_on_exit& operator=(const stop_on_exit&) = delete;
+
+            ~stop_on_exit()
+            {
+                io.stop();
+            }
+        } stop{io};
+
+        try
+        {
+            if constexpr (std::is_void_v<T>)
+            {
+                co_await invoke(factory, io);
+            }
+            else
+            {
+                outcome.value.emplace(co_await invoke(factory, io));
+            }
+            outcome.completed = true;
+        }
+        catch (...)
+        {
+            // io_context suppresses shutdown cancellation; run must still report
+            // cancellation of its entry task to the synchronous caller.
+            outcome.failure = std::current_exception();
+            throw;
+        }
     }
-}
+};
+
+template <>
+struct entry_access::state<void>
+{
+    std::exception_ptr failure;
+    bool completed = false;
+};
 
 /// Runs the factory's task on a fresh io_context on this thread and returns its result. The factory (taking
 /// io_context& or nothing) is owned until shutdown finishes, so a capturing coroutine lambda may be passed directly.
@@ -101,15 +110,16 @@ requires(std::is_invocable_v<std::decay_t<Factory>&, io_context&> || std::is_inv
 auto run(Factory&& factory)
 {
     using function = std::decay_t<Factory>;
-    using result = entry_result<decltype(invoke_entry(std::declval<function&>(), std::declval<io_context&>()))>::type;
+    using result =
+        entry_access::result<decltype(entry_access::invoke(std::declval<function&>(), std::declval<io_context&>()))>;
     if (io_context::current())
     {
         throw std::logic_error("nested pace::run is not supported");
     }
     function owned(std::forward<Factory>(factory));
-    entry_state<result> state;
+    entry_access::state<result> state;
     io_context io; // Destroy roots before their borrowed factory/state on error.
-    io.spawn(run_entry<result>(io, owned, state));
+    io.spawn(entry_access::run<result>(io, owned, state));
     io.run();
     if (state.failure)
     {

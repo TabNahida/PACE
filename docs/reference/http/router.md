@@ -120,9 +120,8 @@ The call is lazy: `function` runs when the returned task is first resumed, and a
 in the task and rethrown at `co_await`. A function that returns `response` runs synchronously on the server's
 event loop and must not block.
 
-`<pace/http/router.hpp>` also declares `call_handler`, `invoke_handler`, `invoke_function` and
-`immediate_response`. They are the implementation of `make_handler` and `router`, are not exported by the
-`pace.http` module, and are not part of the API.
+`<pace/http/router.hpp>` also declares `handler_access`, which holds the implementation of `make_handler` and
+`router`. It is not exported by the `pace.http` module and is not part of the API.
 
 ## Errors
 

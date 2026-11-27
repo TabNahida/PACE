@@ -70,28 +70,24 @@ inherit the caller's token and deadline, and [`with_options`](structured-concurr
 ### Entry support
 
 ```cpp
-template <class Factory>
-auto invoke_entry(Factory& factory, io_context& io);
-
-template <class T>
-struct entry_result;               // entry_result<task<T>>::type is T
-
-template <class T>
-struct entry_state
+struct entry_access
 {
-    std::optional<T> value;        // absent in entry_state<void>
-    std::exception_ptr failure;
-    bool completed = false;
+    template <class Factory>
+    static auto invoke(Factory& factory, io_context& io);
+    template <class Task>
+    using result = /* T for task<T> */;
+    template <class T>
+    struct state;                  // value (absent for void), failure, completed
+    template <class T, class Factory>
+    static task<void> run(io_context& io, Factory& factory, state<T>& outcome);
 };
-
-template <class T, class Factory>
-task<void> run_entry(io_context& io, Factory& factory, entry_state<T>& state);
 ```
 
-Implementation support shared by `run`, operation boundaries and task groups. `invoke_entry` calls
-`factory(io)` if that is well-formed and `factory()` otherwise. `entry_result` names the result type of a factory's
-task. `run_entry` is the root task `run` spawns: it awaits the factory's task, records the value or exception in
-`state`, and stops `io` when it finishes. Applications use `run` instead.
+Implementation support shared by `run`, operation boundaries and task groups, gathered in one struct so that it
+adds a single name to `pace`. `invoke` calls `factory(io)` if that is well-formed and `factory()` otherwise.
+`result` names the result type of a factory's task. `run` is the root task `pace::run` spawns: it awaits the
+factory's task, records the value or exception in `outcome`, and stops `io` when it finishes. Not part of the API;
+applications use `pace::run`.
 
 ## Functions
 

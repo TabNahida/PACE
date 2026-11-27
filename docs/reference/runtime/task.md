@@ -167,11 +167,17 @@ struct task_access
 {
     template <class T>
     static task<T> bind(task<T> work, cancellation_token token);
+    template <class T>
+    struct settled;                // an awaiter
+    template <class T>
+    static settled<T> settle(task<T> work);
 };
 ```
 
 Implementation support for operation boundaries and task groups: `bind` gives an unstarted task its own token,
-which it then keeps instead of inheriting its parent's. Use [`with_cancellation`](structured-concurrency.md) or
+which it then keeps instead of inheriting its parent's. `settle` awaits a task like `co_await` but keeps the result
+it produced even if its token was cancelled by then; a task group uses it so that its own `cancel()` does not
+discard the body's value. Use [`with_cancellation`](structured-concurrency.md) or
 [`shield`](structured-concurrency.md) instead.
 
 ## Functions

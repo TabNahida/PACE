@@ -367,6 +367,170 @@ pace::task<void> tests()
     require(!started, "pre-cancelled task ran");
 }
 
+bool canceled(const std::system_error& error)
+{
+    return error.code() == std::errc::operation_canceled;
+}
+
+pace::task<void> local_cancel_tests()
+{
+    // First child to finish cancels the rest: the scope returns the body's value instead of throwing.
+    auto winner = co_await pace::task_group::run(
+        [](pace::task_group& group) -> pace::task<int>
+        {
+            auto& result = group.own(0);
+            auto racer = [&group, &result](int id, std::chrono::milliseconds delay) -> pace::task<void>
+            {
+                co_await pace::sleep_for(delay);
+                result = id;
+                group.cancel();
+            };
+            (void)group.spawn([racer] { return racer(1, 1ms); });
+            (void)group.spawn([racer] { return racer(2, 1h); });
+            try
+            {
+                co_await group.join();
+            }
+            catch (const std::system_error& error)
+            {
+                require(canceled(error), "join reports the group's cancellation");
+            }
+            co_return result;
+        }
+    );
+    require(winner == 1, "the group's own cancellation hid the body's value");
+
+    // A void body that left its children running: they are cancelled and the scope returns normally.
+    bool slow_canceled = false;
+    co_await pace::task_group::run(
+        [&](pace::task_group& group) -> pace::task<void>
+        {
+            (void)group.spawn(
+                [&group]() -> pace::task<void>
+                {
+                    co_await pace::sleep_for(1ms);
+                    group.cancel();
+                }
+            );
+            (void)group.spawn(
+                [&]() -> pace::task<void>
+                {
+                    try
+                    {
+                        co_await pace::sleep_for(1h);
+                    }
+                    catch (const std::system_error& error)
+                    {
+                        slow_canceled = canceled(error);
+                        throw;
+                    }
+                }
+            );
+            co_return;
+        }
+    );
+    require(slow_canceled, "the group's cancellation did not reach a running child");
+
+    // A value-returning body that produced nothing still reports the cancellation.
+    bool no_value = false;
+    try
+    {
+        (void)co_await pace::task_group::run(
+            [](pace::task_group& group) -> pace::task<int>
+            {
+                group.cancel();
+                co_await pace::sleep_for(1h);
+                co_return 1;
+            }
+        );
+    }
+    catch (const std::system_error& error)
+    {
+        no_value = canceled(error);
+    }
+    require(no_value, "a cancelled body without a value returned one");
+
+    // Another exception from a child still wins over the group's own cancellation.
+    bool real_failure = false;
+    try
+    {
+        co_await pace::task_group::run(
+            [](pace::task_group& group) -> pace::task<void>
+            {
+                (void)group.spawn(
+                    []() -> pace::task<void>
+                    {
+                        try
+                        {
+                            co_await pace::sleep_for(1h);
+                        }
+                        catch (const std::system_error&)
+                        {
+                            throw std::runtime_error("cleanup failure");
+                        }
+                    }
+                );
+                co_await pace::sleep_for(1ms);
+                group.cancel();
+            }
+        );
+    }
+    catch (const std::runtime_error& error)
+    {
+        real_failure = std::string(error.what()) == "cleanup failure";
+    }
+    require(real_failure, "a failure was hidden by the group's own cancellation");
+
+    // Cancellation of the enclosing operation still propagates out of the scope.
+    pace::cancellation_source outer;
+    bool outer_propagated = false;
+    try
+    {
+        co_await pace::with_cancellation(
+            outer.token(),
+            pace::task_group::run(
+                [&](pace::task_group& group) -> pace::task<void>
+                {
+                    group.cancel();
+                    outer.request_cancellation();
+                    co_return;
+                }
+            )
+        );
+    }
+    catch (const std::system_error& error)
+    {
+        outer_propagated = canceled(error);
+    }
+    require(outer_propagated, "enclosing cancellation was swallowed by the group");
+
+    // join() on an already-cancelled group throws but still closes the group.
+    co_await pace::task_group::run(
+        [](pace::task_group& group) -> pace::task<void>
+        {
+            group.cancel();
+            try
+            {
+                co_await group.join();
+            }
+            catch (const std::system_error& error)
+            {
+                require(canceled(error), "join on a cancelled group reports the cancellation");
+            }
+            bool closed = false;
+            try
+            {
+                (void)group.spawn(delayed(1));
+            }
+            catch (const std::logic_error&)
+            {
+                closed = true;
+            }
+            require(closed, "join on a cancelled group left it open");
+        }
+    );
+}
+
 void shutdown_tests()
 {
     pace::io_context io;
@@ -580,6 +744,11 @@ TEST_CASE("cancellation subscriptions handle concurrent removal, self-unregistra
 TEST_CASE("task groups, deadlines and local cancellation join and drain their children")
 {
     pace::run(tests);
+}
+
+TEST_CASE("a group's own cancel() ends the scope early without an error")
+{
+    pace::run(local_cancel_tests);
 }
 
 TEST_CASE("context stop drains structured children before leaving the boundary")

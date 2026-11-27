@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0-alpha.2 — unreleased
+
+- **Behavior change:** `task_group::cancel()` no longer makes the scope throw. The `operation_canceled` it causes in
+  the body and the children is the requested outcome: the scope joins them and returns the body's value (or
+  returns, for a `void` body), so "first to finish wins" works as a group the winner cancels. Cancellation of the
+  enclosing operation and other exceptions still propagate; a value-returning body cancelled before producing a
+  value still throws `operation_canceled`.
+- `task_group::join()` closes the group as soon as it is called, even when it then throws because the group is
+  already cancelled.
+- Implementation helpers that were left in public namespaces when `detail` was removed are gathered into
+  `entry_access`, `operation_access`, `group_access` and `pace::http::handler_access`. They were never part of the
+  API; code that named `invoke_entry`, `scoped_operation`, `call_handler` or similar must stop doing so.
+
 ## 1.0.0-alpha.1 — 2026-11-27
 
 First pre-release on the way to 1.0: the library is reorganized by module, and the documentation is rewritten.
