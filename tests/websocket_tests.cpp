@@ -1,50 +1,16 @@
+#include "support/pace_test.hpp"
 #include <pace/websocket.hpp>
 
 #include <array>
 #include <chrono>
-#include <condition_variable>
 #include <filesystem>
-#include <iostream>
-#include <mutex>
-#include <thread>
 
 using namespace std::chrono_literals;
 namespace ws = pace::websocket;
 
 namespace
 {
-void require(bool value, const char* text)
-{
-    if (!value)
-    {
-        throw std::runtime_error(text);
-    }
-}
-
-struct watchdog
-{
-    std::mutex mutex;
-    std::condition_variable changed;
-    bool done = false;
-    std::thread thread{[this]
-                       {
-                           std::unique_lock lock(mutex);
-                           if (!changed.wait_for(lock, 30s, [&] { return done; }))
-                           {
-                               std::abort();
-                           }
-                       }};
-
-    ~watchdog()
-    {
-        {
-            std::lock_guard lock(mutex);
-            done = true;
-        }
-        changed.notify_one();
-        thread.join();
-    }
-};
+using pace::test::require;
 
 struct completion
 {
@@ -619,64 +585,111 @@ void close_deadline_lifetime()
 }
 } // namespace
 
-int main(int argc, char** argv)
+TEST_CASE("WebSocket echo roundtrip over TCP with subprotocol, fragments and close")
 {
-    watchdog guard;
-    try
+    roundtrip();
+}
+
+TEST_CASE("control frames interleave with fragmented text")
+{
+    control_interleaving();
+}
+
+TEST_CASE("read-ahead preserves bytes across frame and buffer boundaries")
+{
+    buffered_boundaries();
+}
+
+TEST_CASE("close timeout bounds a silent peer")
+{
+    bounded_close();
+}
+
+TEST_CASE("pending receive cancels safely and overlapping send is rejected")
+{
+    cancellation_and_overlap();
+}
+
+TEST_CASE("close deadline does not outlive its transport")
+{
+    close_deadline_lifetime();
+}
+
+TEST_CASE("invalid frames fail with the expected close code")
+{
+    struct invalid_frame
     {
-        roundtrip();
-        control_interleaving();
-        buffered_boundaries();
-        bounded_close();
-        cancellation_and_overlap();
-        close_deadline_lifetime();
-        bad_frame(frame(1, "unmasked", true, false));
-        auto reserved = frame(1, "reserved");
-        reserved[0] |= 0x40;
-        bad_frame(reserved);
-        bad_frame(frame(3, "reserved opcode"));
-        bad_frame(frame(0, "orphan continuation"));
-        bad_frame(frame(1, "start", false) + frame(1, "new"));
-        bad_frame(frame(9, "fragmented ping", false));
-        bad_frame(frame(9, std::string(126, 'x')));
-        bad_frame(frame(8, "x"));
-        bad_frame(frame(8, std::string("\x03\xED", 2)));           // Forbidden 1005.
-        bad_frame(frame(1, std::string("\xC0\xAF", 2)), 1007);     // Overlong UTF-8.
-        bad_frame(frame(1, std::string("\xED\xA0\x80", 3)), 1007); // Surrogate.
-        bad_frame(frame(8, std::string("\x03\xE8\xFF", 3)), 1007);
-        bad_frame(std::string("\x81\xFE\0\1", 4)); // Nonminimal length; no allocation/body read.
-        bad_frame(std::string("\x81\xFF\x80\0\0\0\0\0\0\0", 10));
-        bad_frame(frame(2, std::string(129, 'x')), 1009, {.max_frame_bytes = 128, .max_message_bytes = 128});
-        bad_frame(
-            frame(2, std::string(100, 'x'), false) + frame(0, std::string(100, 'x')),
-            1009,
-            {.max_frame_bytes = 128, .max_message_bytes = 128}
-        );
-        bad_frame(frame(1, "", false) + frame(0, "", false) + frame(0, ""), 1009, {.max_fragments = 2});
-        bad_frame(frame(10, "") + frame(10, "") + frame(10, ""), 1008, {.max_control_frames = 2});
+        std::string name;
+        std::string wire;
+        unsigned expected = 1002;
+        ws::limits bounds{};
+    };
+
+    auto reserved = frame(1, "reserved");
+    reserved[0] |= 0x40;
+    const std::vector<invalid_frame> cases{
+        {"unmasked client frame", frame(1, "unmasked", true, false)},
+        {"reserved bit", std::move(reserved)},
+        {"reserved opcode", frame(3, "reserved opcode")},
+        {"orphan continuation", frame(0, "orphan continuation")},
+        {"new data frame inside a fragmented message", frame(1, "start", false) + frame(1, "new")},
+        {"fragmented ping", frame(9, "fragmented ping", false)},
+        {"oversized control frame", frame(9, std::string(126, 'x'))},
+        {"one-byte close payload", frame(8, "x")},
+        {"forbidden close code 1005", frame(8, std::string("\x03\xED", 2))},
+        {"overlong UTF-8", frame(1, std::string("\xC0\xAF", 2)), 1007},
+        {"UTF-8 surrogate", frame(1, std::string("\xED\xA0\x80", 3)), 1007},
+        {"invalid UTF-8 close reason", frame(8, std::string("\x03\xE8\xFF", 3)), 1007},
+        // Nonminimal length; no allocation/body read.
+        {"nonminimal 16-bit length", std::string("\x81\xFE\0\1", 4)},
+        {"64-bit length with the high bit set", std::string("\x81\xFF\x80\0\0\0\0\0\0\0", 10)},
+        {"frame over max_frame_bytes",
+         frame(2, std::string(129, 'x')),
+         1009,
+         {.max_frame_bytes = 128, .max_message_bytes = 128}},
+        {"message over max_message_bytes",
+         frame(2, std::string(100, 'x'), false) + frame(0, std::string(100, 'x')),
+         1009,
+         {.max_frame_bytes = 128, .max_message_bytes = 128}},
+        {"too many fragments", frame(1, "", false) + frame(0, "", false) + frame(0, ""), 1009, {.max_fragments = 2}},
+        {"too many control frames", frame(10, "") + frame(10, "") + frame(10, ""), 1008, {.max_control_frames = 2}},
+    };
+    for (const auto& test : cases)
+    {
+        CAPTURE(test.name);
+        bad_frame(test.wire, test.expected, test.bounds);
+    }
+}
+
+TEST_CASE("invalid upgrade requests fail with the expected HTTP status")
+{
+    {
+        INFO("unsupported WebSocket version");
         auto wrong_version = std::string(request);
         wrong_version.replace(wrong_version.find("Version: 13"), 11, "Version: 12");
         bad_upgrade(std::move(wrong_version), 426);
+    }
+    {
+        INFO("duplicate Sec-WebSocket-Key");
         auto duplicate = std::string(request);
         duplicate.insert(duplicate.size() - 2, "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n");
         bad_upgrade(std::move(duplicate));
+    }
+    {
+        INFO("malformed Sec-WebSocket-Key");
         auto bad_key = std::string(request);
         bad_key.replace(bad_key.find("dGhlIHNhbXBsZSBub25jZQ=="), 24, "invalid");
         bad_upgrade(std::move(bad_key));
-        bad_upgrade(std::string(request), 403, true);
-#ifdef PACE_HAS_TLS
-        const auto fixtures =
-            argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path() / "certs";
-        secure_roundtrip(fixtures);
-#else
-        (void)argc;
-        (void)argv;
-#endif
-        std::cout << "WebSocket tests passed\n";
     }
-    catch (const std::exception& error)
     {
-        std::cerr << error.what() << '\n';
-        return 1;
+        INFO("upgrade denied by the application");
+        bad_upgrade(std::string(request), 403, true);
     }
 }
+
+#ifdef PACE_HAS_TLS
+TEST_CASE("WebSocket echo roundtrip over TLS")
+{
+    secure_roundtrip(std::filesystem::path(__FILE__).parent_path() / "certs");
+}
+#endif

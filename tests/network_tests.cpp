@@ -1,3 +1,4 @@
+#include "support/pace_test.hpp"
 #include <pace/pace.hpp>
 #include <pace/tcp.hpp>
 #include <pace/detail/socket_address.hpp>
@@ -13,7 +14,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -31,13 +31,7 @@ namespace
 {
 using namespace std::chrono_literals;
 
-void require(bool condition, const char* message)
-{
-    if (!condition)
-    {
-        throw std::runtime_error(message);
-    }
-}
+using pace::test::require;
 
 pace::task<void> echo_connection(pace::tcp::stream stream)
 {
@@ -893,7 +887,7 @@ pace::task<void> run_body(pace::io_context& context, test_body body, bool& compl
     context.stop();
 }
 
-void run_test(const char* name, test_body body)
+void run_test(test_body body)
 {
     pace::io_context context;
     bool completed = false;
@@ -933,39 +927,94 @@ void run_test(const char* name, test_body body)
     }
     finish();
     require(!timed_out && completed, "network test timed out or did not complete");
-    std::cout << "PASS " << name << '\n';
 }
 } // namespace
 
-int main()
+#ifndef PACE_CORE_ONLY_TESTS
+TEST_CASE("HTTP response framing helper accepts only complete frames")
 {
-    try
-    {
-#ifndef PACE_CORE_ONLY_TESTS
-        verify_response_framing();
+    verify_response_framing();
+}
 #endif
-        run_test("TCP binary roundtrip and ownership", tcp_roundtrip);
-        run_test("queued accepts yield to the reactor", accept_burst);
-        run_test("large TCP write preserves payload across yields", large_write);
-        run_test("easy connect, bounded exact reads, EOF and cancellation", exact_reads);
-        run_test("connect and endpoint errors", connect_errors);
-        run_test("IPv6 loopback, endpoint inspection and family selection", ipv6_loopback);
-        run_test("IPv6 wildcard, IPv6-only and dual-stack listeners", ipv6_wildcards);
-        run_test("IPv6 family, scope and malformed endpoint validation", ipv6_address_validation);
-        run_test("short-read rearm, queued bytes, move, empty buffer and EOF", short_read_rearm);
+
+TEST_CASE("TCP binary roundtrip and ownership")
+{
+    run_test(tcp_roundtrip);
+}
+
+TEST_CASE("queued accepts yield to the reactor")
+{
+    run_test(accept_burst);
+}
+
+TEST_CASE("large TCP write preserves payload across yields")
+{
+    run_test(large_write);
+}
+
+TEST_CASE("easy connect, bounded exact reads, EOF and cancellation")
+{
+    run_test(exact_reads);
+}
+
+TEST_CASE("connect and endpoint errors")
+{
+    run_test(connect_errors);
+}
+
+TEST_CASE("IPv6 loopback, endpoint inspection and family selection")
+{
+    run_test(ipv6_loopback);
+}
+
+TEST_CASE("IPv6 wildcard, IPv6-only and dual-stack listeners")
+{
+    run_test(ipv6_wildcards);
+}
+
+TEST_CASE("IPv6 family, scope and malformed endpoint validation")
+{
+    run_test(ipv6_address_validation);
+}
+
+TEST_CASE("short-read rearm, queued bytes, move, empty buffer and EOF")
+{
+    run_test(short_read_rearm);
+}
+
 #ifndef PACE_CORE_ONLY_TESTS
-        run_test("HTTP framing, fragmentation, limits and keep-alive", http_protocol);
+TEST_CASE("HTTP framing, fragmentation, limits and keep-alive")
+{
+    run_test(http_protocol);
+}
 #endif
-        run_test("stop cancels pending accept", stop_pending_accept);
-        run_test("stop cancels pending read", stop_pending_read);
-        run_test("socket close cancels pending read", close_pending_read);
-        run_test("graceful close drains input and bounds peer wait", graceful_close_bounds);
-        run_test("completed IPv6 graceful close removes its deadline", graceful_close_timer_cleanup);
-        run_test("stop cancels graceful close", graceful_close_cancellation);
-    }
-    catch (const std::exception& error)
-    {
-        std::cerr << "FAIL: " << error.what() << '\n';
-        return 1;
-    }
+
+TEST_CASE("stop cancels pending accept")
+{
+    run_test(stop_pending_accept);
+}
+
+TEST_CASE("stop cancels pending read")
+{
+    run_test(stop_pending_read);
+}
+
+TEST_CASE("socket close cancels pending read")
+{
+    run_test(close_pending_read);
+}
+
+TEST_CASE("graceful close drains input and bounds peer wait")
+{
+    run_test(graceful_close_bounds);
+}
+
+TEST_CASE("completed IPv6 graceful close removes its deadline")
+{
+    run_test(graceful_close_timer_cleanup);
+}
+
+TEST_CASE("stop cancels graceful close")
+{
+    run_test(graceful_close_cancellation);
 }
