@@ -92,7 +92,7 @@ the platform does not have throws `std::system_error` with `std::errc::not_suppo
 ## Native socket handles
 
 `<pace/runtime/platform.hpp>` (included by `<pace/runtime.hpp>`) declares the portable handle type; the
-declarations are on the [runtime](runtime/README.md) page. The platform facts:
+declarations are on the [`io_context`](runtime/io-context.md) page. The platform facts:
 
 | | POSIX | Windows |
 |:--|:--|:--|

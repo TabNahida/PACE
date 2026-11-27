@@ -1,4 +1,4 @@
-<!-- source-hash: 7e6b160c5479 -->
+<!-- source-hash: d28710fc4be9 -->
 # 平台支持
 
 [English](platform-support.md) · [参考](README.zh.md)
@@ -88,7 +88,7 @@ C++ 命名模块（`--modules=y`）还需要 Clang 或 GCC 16；见[构建选项
 
 ## 原生套接字句柄
 
-`<pace/runtime/platform.hpp>`（由 `<pace/runtime.hpp>` 包含）声明了可移植的句柄类型；声明见[运行时](runtime/README.zh.md)
+`<pace/runtime/platform.hpp>`（由 `<pace/runtime.hpp>` 包含）声明了可移植的句柄类型；声明见 [`io_context`](runtime/io-context.zh.md)
 页面。平台相关的事实：
 
 | | POSIX | Windows |

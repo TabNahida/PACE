@@ -1,4 +1,4 @@
-<!-- source-hash: fe977b308c09 -->
+<!-- source-hash: 6c18b8d2be2e -->
 # QUIC
 
 [English](README.md) · [参考](../README.zh.md)
@@ -270,7 +270,7 @@ task<connection> connect(quic::context configuration, udp::endpoint peer, std::s
 的对象无需比它活得更久。超时只限制握手，不限制之后的流操作。第二种形式使用当前 context。ALPN 和证书身份仍需
 显式给出，库不会替你选择。
 
-[`<pace/net/stream_io.hpp>`](../net/tcp.zh.md) 中的流辅助函数（`pace::write`、`pace::read_exact`）同样接受
+[`<pace/net/stream_io.hpp>`](../net/README.zh.md#函数) 中的流辅助函数（`pace::write`、`pace::read_exact`）同样接受
 `quic::stream`。
 
 ## 错误

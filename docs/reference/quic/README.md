@@ -287,7 +287,7 @@ Create a client `connection` and complete `connection::connect()`. The task hold
 only, not later stream operations. The second form uses the current context. ALPN and the certificate identity
 stay explicit: nothing is chosen for you.
 
-The stream helpers of [`<pace/net/stream_io.hpp>`](../net/tcp.md) (`pace::write`, `pace::read_exact`) also accept a
+The stream helpers of [`<pace/net/stream_io.hpp>`](../net/README.md#functions) (`pace::write`, `pace::read_exact`) also accept a
 `quic::stream`.
 
 ## Errors
