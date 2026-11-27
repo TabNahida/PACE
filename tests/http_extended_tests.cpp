@@ -1,3 +1,4 @@
+#include "support/pace_test.hpp"
 #include <pace/http.hpp>
 
 #include <algorithm>
@@ -7,7 +8,6 @@
 #include <condition_variable>
 #include <cstdio>
 #include <filesystem>
-#include <iostream>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -17,18 +17,12 @@
 
 namespace
 {
-std::filesystem::path certificate_directory = std::filesystem::path(__FILE__).parent_path() / "certs";
+const std::filesystem::path certificate_directory = std::filesystem::path(__FILE__).parent_path() / "certs";
 using namespace std::chrono_literals;
 using pace::http::request;
 using pace::http::response;
 
-void require(bool result, const char* message)
-{
-    if (!result)
-    {
-        throw std::runtime_error(message);
-    }
-}
+using pace::test::require;
 
 request message(std::string method = "GET", std::string target = "/")
 {
@@ -1853,7 +1847,7 @@ pace::task<void> run_body(pace::io_context& io, test_body body, bool& completed)
     io.stop();
 }
 
-void run_test(const char* name, test_body body)
+void run_test(test_body body)
 {
     pace::io_context io;
     bool completed = false, finished = false;
@@ -1892,89 +1886,142 @@ void run_test(const char* name, test_body body)
     }
     join();
     require(completed && !timed_out, "HTTP test timed out or did not finish");
-    std::cout << "PASS " << name << '\n';
 }
 } // namespace
 
-int main(int argc, char** argv)
+TEST_CASE("owned handlers, exact routes and owned listener")
 {
-    try
-    {
-        if (argc > 1)
-        {
-            certificate_directory = argv[1];
-        }
-        run_test("owned handlers, exact routes and owned listener", router_contracts);
-        run_test("HTTP app, URL client, response helpers and feature bounds", easy_http);
-        run_test("HTTP client/server, binary chunks, trailers and HEAD reuse", normal_client);
-        run_test("HTTP IPv6 endpoint and bracketed Host authority", ipv6_http_authority);
-        run_test("chunk extensions, fragmentation and pipeline preservation", chunk_pipeline);
-        run_test("fixed-length buffered/fragmented bodies preserve pipeline and limits", fixed_body_pipeline);
-        run_test("request smuggling and resource-limit rejection", rejected_requests);
-        run_test("client informational, EOF framing and malformed responses", response_framing);
-        run_test("client validation and overlapping exchange protection", client_state);
-        run_test("cancellation closes pending HTTP exchange", client_cancellation);
-        run_test(
-            "TCP validated admission, early rejection and per-route body limits",
-            admission_scenarios<pace::tcp::stream>
-        );
-        run_test(
-            "TCP framed completion, EOF and configurable client close policy",
-            client_close_policies<pace::tcp::stream>
-        );
-        run_test("TCP context stop cancels graceful client cleanup", client_graceful_cancellation<pace::tcp::stream>);
-        run_test(
-            "TCP bounded generated/file response and bodyless producer handling",
-            streaming_scenarios<pace::tcp::stream>
-        );
-        run_test("TCP disconnect cancels and releases response producer", disconnect_scenarios<pace::tcp::stream>);
-        run_test(
-            "TCP request/write deadlines and keep-alive timer cancellation",
-            deadline_scenarios<pace::tcp::stream>
-        );
-        auto stopped = std::make_shared<producer_state>();
-        run_test(
-            "TCP context stop cancels streamed response",
-            [stopped](pace::io_context& io) { return context_stop_scenario<pace::tcp::stream>(io, stopped); }
-        );
-        require(
-            stopped->destroyed == 1 && stopped->produced < stalled_response_bytes,
-            "TCP context stop retained producer"
-        );
-#ifdef PACE_HAS_TLS
-        run_test("HTTPS verified HTTP/1.1 with chunked trailers", https_exchange);
-        run_test(
-            "TLS validated admission, early rejection and per-route body limits",
-            admission_scenarios<pace::tls::stream>
-        );
-        run_test(
-            "TLS framed completion, authenticated EOF and configurable client close policy",
-            client_close_policies<pace::tls::stream>
-        );
-        run_test("TLS context stop cancels graceful client cleanup", client_graceful_cancellation<pace::tls::stream>);
-        run_test(
-            "TLS bounded generated/file response and bodyless producer handling",
-            streaming_scenarios<pace::tls::stream>
-        );
-        run_test("TLS disconnect cancels and releases response producer", disconnect_scenarios<pace::tls::stream>);
-        run_test(
-            "TLS request/write deadlines and keep-alive timer cancellation",
-            deadline_scenarios<pace::tls::stream>
-        );
-        stopped = std::make_shared<producer_state>();
-        run_test(
-            "TLS context stop cancels streamed response",
-            [stopped](pace::io_context& io) { return context_stop_scenario<pace::tls::stream>(io, stopped); }
-        );
-        require(
-            stopped->destroyed == 1 && stopped->produced < stalled_response_bytes,
-            "TLS context stop retained producer"
-        );
-#endif
-    }
-    catch (const std::exception& error)
-    {
-        std::cerr << "FAIL: " << error.what() << '\n';
-        return 1;
-    }
+    run_test(router_contracts);
 }
+
+TEST_CASE("HTTP app, URL client, response helpers and feature bounds")
+{
+    run_test(easy_http);
+}
+
+TEST_CASE("HTTP client/server, binary chunks, trailers and HEAD reuse")
+{
+    run_test(normal_client);
+}
+
+TEST_CASE("HTTP IPv6 endpoint and bracketed Host authority")
+{
+    run_test(ipv6_http_authority);
+}
+
+TEST_CASE("chunk extensions, fragmentation and pipeline preservation")
+{
+    run_test(chunk_pipeline);
+}
+
+TEST_CASE("fixed-length buffered/fragmented bodies preserve pipeline and limits")
+{
+    run_test(fixed_body_pipeline);
+}
+
+TEST_CASE("request smuggling and resource-limit rejection")
+{
+    run_test(rejected_requests);
+}
+
+TEST_CASE("client informational, EOF framing and malformed responses")
+{
+    run_test(response_framing);
+}
+
+TEST_CASE("client validation and overlapping exchange protection")
+{
+    run_test(client_state);
+}
+
+TEST_CASE("cancellation closes pending HTTP exchange")
+{
+    run_test(client_cancellation);
+}
+
+TEST_CASE("TCP validated admission, early rejection and per-route body limits")
+{
+    run_test(admission_scenarios<pace::tcp::stream>);
+}
+
+TEST_CASE("TCP framed completion, EOF and configurable client close policy")
+{
+    run_test(client_close_policies<pace::tcp::stream>);
+}
+
+TEST_CASE("TCP context stop cancels graceful client cleanup")
+{
+    run_test(client_graceful_cancellation<pace::tcp::stream>);
+}
+
+TEST_CASE("TCP bounded generated/file response and bodyless producer handling")
+{
+    run_test(streaming_scenarios<pace::tcp::stream>);
+}
+
+TEST_CASE("TCP disconnect cancels and releases response producer")
+{
+    run_test(disconnect_scenarios<pace::tcp::stream>);
+}
+
+TEST_CASE("TCP request/write deadlines and keep-alive timer cancellation")
+{
+    run_test(deadline_scenarios<pace::tcp::stream>);
+}
+
+TEST_CASE("TCP context stop cancels streamed response")
+{
+    auto stopped = std::make_shared<producer_state>();
+    run_test([stopped](pace::io_context& io) { return context_stop_scenario<pace::tcp::stream>(io, stopped); });
+    require(
+        stopped->destroyed == 1 && stopped->produced < stalled_response_bytes,
+        "TCP context stop retained producer"
+    );
+}
+
+#ifdef PACE_HAS_TLS
+TEST_CASE("HTTPS verified HTTP/1.1 with chunked trailers")
+{
+    run_test(https_exchange);
+}
+
+TEST_CASE("TLS validated admission, early rejection and per-route body limits")
+{
+    run_test(admission_scenarios<pace::tls::stream>);
+}
+
+TEST_CASE("TLS framed completion, authenticated EOF and configurable client close policy")
+{
+    run_test(client_close_policies<pace::tls::stream>);
+}
+
+TEST_CASE("TLS context stop cancels graceful client cleanup")
+{
+    run_test(client_graceful_cancellation<pace::tls::stream>);
+}
+
+TEST_CASE("TLS bounded generated/file response and bodyless producer handling")
+{
+    run_test(streaming_scenarios<pace::tls::stream>);
+}
+
+TEST_CASE("TLS disconnect cancels and releases response producer")
+{
+    run_test(disconnect_scenarios<pace::tls::stream>);
+}
+
+TEST_CASE("TLS request/write deadlines and keep-alive timer cancellation")
+{
+    run_test(deadline_scenarios<pace::tls::stream>);
+}
+
+TEST_CASE("TLS context stop cancels streamed response")
+{
+    auto stopped = std::make_shared<producer_state>();
+    run_test([stopped](pace::io_context& io) { return context_stop_scenario<pace::tls::stream>(io, stopped); });
+    require(
+        stopped->destroyed == 1 && stopped->produced < stalled_response_bytes,
+        "TLS context stop retained producer"
+    );
+}
+#endif

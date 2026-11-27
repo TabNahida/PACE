@@ -1,3 +1,4 @@
+#include "support/pace_test.hpp"
 #include <pace/http.hpp>
 #include <pace/operation.hpp>
 #include <pace/task_group.hpp>
@@ -5,10 +6,7 @@
 
 #include <atomic>
 #include <barrier>
-#include <condition_variable>
 #include <fstream>
-#include <iostream>
-#include <mutex>
 #include <thread>
 using namespace std::chrono_literals;
 namespace h = pace::http;
@@ -16,38 +14,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-void require(bool value, const char* message)
-{
-    if (!value)
-    {
-        throw std::runtime_error(message);
-    }
-}
-
-struct watchdog
-{
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool done = false;
-    std::thread thread{[this]
-                       {
-                           std::unique_lock lock(mutex);
-                           if (!cv.wait_for(lock, 30s, [&] { return done; }))
-                           {
-                               std::abort();
-                           }
-                       }};
-
-    ~watchdog()
-    {
-        {
-            std::lock_guard lock(mutex);
-            done = true;
-        }
-        cv.notify_one();
-        thread.join();
-    }
-};
+using pace::test::require;
 
 h::request request(std::string target, std::string method = "GET")
 {
@@ -60,7 +27,49 @@ h::request request(std::string target, std::string method = "GET")
     };
 }
 
-void cache_test()
+} // namespace
+
+TEST_CASE("portable content hash matches xxHash XXH64 vectors")
+{
+    // Generated independently using upstream xxHash v0.8.3 XXH64(input, n, 0).
+    // Exercise all tail lengths, block boundaries, unaligned and empty views.
+    const std::pair<std::size_t, std::uint64_t> vectors[] = {
+        {0, 0xef46db3751d8e999ULL},
+        {1, 0xf592c0c7639c4cb6ULL},
+        {3, 0x22c08528601d4f27ULL},
+        {4, 0xfb1e5cf2f1ae4d95ULL},
+        {7, 0x5613ac510496c04eULL},
+        {8, 0x57cb2b7521f3e21aULL},
+        {15, 0x90a9714eb00e8d29ULL},
+        {16, 0xc6843cef99721174ULL},
+        {31, 0xe4a0e629e519a4aeULL},
+        {32, 0xcc6b8aaada790b2dULL},
+        {33, 0x35ec49850475a832ULL},
+        {63, 0xbf9f0ba3cf95b28aULL},
+        {64, 0x155ccce4bf32befcULL},
+        {65, 0xda5ee441a595cfb8ULL},
+        {127, 0xf648961449461a69ULL},
+        {255, 0x178ea4a7d2319abeULL},
+        {4096, 0xdb2d21dfb1db5e57ULL},
+        {8193, 0x9e399978dc9b16a7ULL}
+    };
+    std::string input(8194, '\0');
+    for (std::size_t i = 0; i < 8193; ++i)
+    {
+        input[i + 1] = static_cast<char>(i * 37 + 11);
+    }
+    require(pace::detail::content_hash({}) == vectors[0].second, "null empty hash");
+    for (auto [size, expected] : vectors)
+    {
+        CAPTURE(size);
+        require(
+            pace::detail::content_hash(std::string_view(input).substr(1, size)) == expected,
+            "portable content hash"
+        );
+    }
+}
+
+TEST_CASE("shared response cache bounds, eviction, snapshots and TTL")
 {
     h::response_cache cache({.max_bytes = 16384, .max_entries = 8, .max_object_bytes = 2048, .ttl = 1s, .shards = 2});
     cache.put("one", h::text("snapshot"), 1s);
@@ -96,46 +105,7 @@ void cache_test()
     require(!cache.get("large"), "object size bound");
 }
 
-void content_hash_test()
-{
-    // Generated independently using upstream xxHash v0.8.3 XXH64(input, n, 0).
-    // Exercise all tail lengths, block boundaries, unaligned and empty views.
-    const std::pair<std::size_t, std::uint64_t> vectors[] = {
-        {0, 0xef46db3751d8e999ULL},
-        {1, 0xf592c0c7639c4cb6ULL},
-        {3, 0x22c08528601d4f27ULL},
-        {4, 0xfb1e5cf2f1ae4d95ULL},
-        {7, 0x5613ac510496c04eULL},
-        {8, 0x57cb2b7521f3e21aULL},
-        {15, 0x90a9714eb00e8d29ULL},
-        {16, 0xc6843cef99721174ULL},
-        {31, 0xe4a0e629e519a4aeULL},
-        {32, 0xcc6b8aaada790b2dULL},
-        {33, 0x35ec49850475a832ULL},
-        {63, 0xbf9f0ba3cf95b28aULL},
-        {64, 0x155ccce4bf32befcULL},
-        {65, 0xda5ee441a595cfb8ULL},
-        {127, 0xf648961449461a69ULL},
-        {255, 0x178ea4a7d2319abeULL},
-        {4096, 0xdb2d21dfb1db5e57ULL},
-        {8193, 0x9e399978dc9b16a7ULL}
-    };
-    std::string input(8194, '\0');
-    for (std::size_t i = 0; i < 8193; ++i)
-    {
-        input[i + 1] = static_cast<char>(i * 37 + 11);
-    }
-    require(pace::detail::content_hash({}) == vectors[0].second, "null empty hash");
-    for (auto [size, expected] : vectors)
-    {
-        require(
-            pace::detail::content_hash(std::string_view(input).substr(1, size)) == expected,
-            "portable content hash"
-        );
-    }
-}
-
-void local_cache_test()
+TEST_CASE("reactor-local cache copies follow replacement, clear, TTL and eviction")
 {
     h::response_cache cache({.max_bytes = 16384, .max_entries = 8, .max_object_bytes = 2048, .ttl = 1s, .shards = 1});
     cache.put("hot", h::text("old"), 1s);
@@ -256,6 +226,8 @@ void local_cache_test()
     );
 }
 
+namespace
+{
 struct directory
 {
     fs::path path = fs::temp_directory_path()
@@ -572,48 +544,39 @@ pace::task<void> proxy_test(
 }
 } // namespace
 
-int main()
+TEST_CASE("static files, mounts and service lifetime")
 {
-    try
-    {
-        watchdog guard;
-        content_hash_test();
-        cache_test();
-        local_cache_test();
-        directory dir;
-        dir.write("hello.txt", "hello world");
-        dir.write("sub/index.html", "index");
-        dir.write(".env", "private");
+    directory dir;
+    dir.write("hello.txt", "hello world");
+    dir.write("sub/index.html", "index");
+    dir.write(".env", "private");
 #ifndef _WIN32
-        fs::create_symlink("/etc/passwd", dir.path / "link");
-        fs::create_directory_symlink(dir.path, dir.path / "directory-link");
+    fs::create_symlink("/etc/passwd", dir.path / "link");
+    fs::create_directory_symlink(dir.path, dir.path / "directory-link");
 #endif
-        pace::run([&] { return static_test(dir); });
-        pace::task<h::response> retained;
-        pace::run(
-            [&]() -> pace::task<void>
-            {
-                h::static_files temporary("/", dir.path);
-                retained = temporary(request("/hello.txt"));
-                co_return;
-            }
-        );
-        require(
-            pace::run(std::move(retained)).body == "updated",
-            "local task ownership survives service/context destruction"
-        );
-        pace::io_context io;
-        pace::tcp::listener a(io, {"127.0.0.1", 0}), b(io, {"127.0.0.1", 0});
-        upstream first{"a"}, second{"b"};
-        io.spawn(accept_upstream(a, first));
-        io.spawn(accept_upstream(b, second));
-        io.spawn(proxy_test(io, a, b, first, second));
-        io.run();
-        std::cout << "Static mounts, cache isolation/eviction, pooled proxy and balancing passed\n";
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-        return 1;
-    }
+    pace::run([&] { return static_test(dir); });
+    pace::task<h::response> retained;
+    pace::run(
+        [&]() -> pace::task<void>
+        {
+            h::static_files temporary("/", dir.path);
+            retained = temporary(request("/hello.txt"));
+            co_return;
+        }
+    );
+    require(
+        pace::run(std::move(retained)).body == "updated",
+        "local task ownership survives service/context destruction"
+    );
+}
+
+TEST_CASE("reverse proxy pooling, caching, balancing and deadlines")
+{
+    pace::io_context io;
+    pace::tcp::listener a(io, {"127.0.0.1", 0}), b(io, {"127.0.0.1", 0});
+    upstream first{"a"}, second{"b"};
+    io.spawn(accept_upstream(a, first));
+    io.spawn(accept_upstream(b, second));
+    io.spawn(proxy_test(io, a, b, first, second));
+    io.run();
 }
