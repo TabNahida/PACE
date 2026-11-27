@@ -1,0 +1,177 @@
+site_name: PACE
+site_description: C++20 coroutine networking — runtime, TCP/UDP, TLS, DNS, QUIC, HTTP/1-2-3 and WebSocket.
+site_url: https://tabnahida.github.io/PACE/
+repo_url: https://github.com/TabNahida/PACE
+repo_name: TabNahida/PACE
+edit_uri: edit/main/docs/
+copyright: MIT License · © 2026 Tab Nahida
+
+docs_dir: docs
+exclude_docs: |
+  plan_v1.md
+  requirements.txt
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: false
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          name: English
+          default: true
+          build: true
+        - locale: zh
+          name: 简体中文
+          build: true
+          site_name: PACE
+          nav_translations:
+            Home: 首页
+            Tutorial: 教程
+            Guides: 指南
+            Reference: 参考
+            Explanation: 设计说明
+            Performance: 性能
+            Migration: 迁移
+            Contributing: 参与开发
+            Runtime: 运行时
+            Networking: 网络
+            History: 历史测量
+
+hooks:
+  - scripts/mkdocs_hooks.py
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+
+nav:
+  - Home: README.md
+  - Tutorial:
+      - tutorial/README.md
+      - tutorial/01-install-and-first-program.md
+      - tutorial/02-http-client.md
+      - tutorial/03-http-server.md
+      - tutorial/04-tasks-and-timers.md
+      - tutorial/05-tcp.md
+      - tutorial/06-udp.md
+      - tutorial/07-structured-concurrency.md
+      - tutorial/08-workers-and-threads.md
+      - tutorial/09-graceful-shutdown.md
+      - tutorial/10-tls-and-dns.md
+      - tutorial/11-websocket.md
+      - tutorial/12-http2.md
+      - tutorial/13-quic-and-http3.md
+      - tutorial/14-gateway.md
+  - Guides:
+      - guides/README.md
+      - guides/http-recipes.md
+      - guides/protocol-tuning.md
+  - Reference:
+      - reference/README.md
+      - Runtime:
+          - reference/runtime/README.md
+          - reference/runtime/task.md
+          - reference/runtime/io-context.md
+          - reference/runtime/runtime.md
+          - reference/runtime/run.md
+          - reference/runtime/structured-concurrency.md
+          - reference/runtime/io-backends.md
+      - Networking:
+          - reference/net/README.md
+          - reference/net/tcp.md
+          - reference/net/udp.md
+      - reference/tls/README.md
+      - reference/dns/README.md
+      - reference/quic/README.md
+      - HTTP:
+          - reference/http/README.md
+          - reference/http/router.md
+          - reference/http/clients.md
+      - reference/http1/README.md
+      - reference/http2/README.md
+      - reference/http3/README.md
+      - reference/websocket/README.md
+      - reference/gateway/README.md
+      - reference/errors.md
+      - reference/build-options.md
+      - reference/platform-support.md
+  - Explanation:
+      - explanation/README.md
+      - explanation/architecture.md
+      - explanation/execution-model.md
+      - explanation/ownership.md
+      - explanation/api-design.md
+  - Performance:
+      - performance/README.md
+      - performance/runtime.md
+      - performance/tcp.md
+      - performance/http-gateway.md
+      - performance/protocols.md
+      - History:
+          - performance/history/README.md
+          - performance/history/gateway-optimization-2026-11-03.md
+          - performance/history/ownership-review-2026-11.md
+          - performance/history/2026-10-22.md
+          - performance/history/2026-10-20-21.md
+  - Migration:
+      - migration/README.md
+      - migration/0.6-to-1.0.md
+  - Contributing:
+      - contributing/README.md
+      - contributing/documentation.md
+      - contributing/ci.md
+      - contributing/windows-arm64-openssl.md

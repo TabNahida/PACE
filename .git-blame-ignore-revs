@@ -6,3 +6,6 @@
 
 # Move headers and sources into module directories (paths and include lines only)
 4f4ed21c24bb5315f09c1dbbafbcd16fc9f10cc5
+
+# Docs moved into the 1.0 layout (renames only)
+ab32b0d83d48756497d35dea60df4d5b91ac9fcb
