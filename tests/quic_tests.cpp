@@ -1,3 +1,4 @@
+#include "support/pace_test.hpp"
 #include <pace/operation.hpp>
 #include <pace/quic.hpp>
 
@@ -9,20 +10,22 @@
 #include <iostream>
 #include <mutex>
 #include <stdexcept>
+#include <string_view>
 #include <thread>
 
 using namespace std::chrono_literals;
 
 namespace
 {
-void require(bool value, const char* message)
+using pace::test::require;
+
+std::filesystem::path certificates()
 {
-    if (!value)
-    {
-        throw std::runtime_error(message);
-    }
+    return std::filesystem::path(__FILE__).parent_path() / "certs";
 }
 
+// Interop peer mode runs outside doctest and its per-test-case watchdog, so the
+// peer keeps its own bound: abort when one exchange takes longer than 60 s.
 struct watchdog
 {
     const char* scenario;
@@ -239,7 +242,6 @@ void roundtrip(
     bool loss = false
 )
 {
-    watchdog guard{loss ? "lossy roundtrip" : "roundtrip"};
     pace::io_context io;
     configurations config(fixtures);
     if (name == "::1")
@@ -312,7 +314,6 @@ void rejects(
     const char* bind = "127.0.0.1"
 )
 {
-    watchdog guard{__func__};
     pace::io_context io;
     pace::quic::context server(pace::quic::role::server), client;
     server.use_certificate_chain(
@@ -359,7 +360,6 @@ pace::task<void> no_reply(pace::io_context& io, pace::udp::endpoint endpoint, bo
 
 void deadlines(bool cancel)
 {
-    watchdog guard{__func__};
     pace::io_context io;
     pace::udp::socket blackhole(io, {"127.0.0.1", 0});
     bool done = false;
@@ -426,7 +426,6 @@ pace::task<void> closed_client(
 
 void closure(const std::filesystem::path& fixtures, bool listener_closed)
 {
-    watchdog guard{__func__};
     pace::io_context io;
     configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
@@ -493,7 +492,6 @@ pace::task<void> waiting_server(pace::quic::listener& listener)
 
 void serialization_and_reset(const std::filesystem::path& fixtures)
 {
-    watchdog guard{__func__};
     pace::io_context io;
     configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
@@ -568,7 +566,6 @@ pace::task<void> isolated_client(
 
 void connection_isolation(const std::filesystem::path& fixtures)
 {
-    watchdog guard{__func__};
     pace::io_context io;
     configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
@@ -617,7 +614,6 @@ pace::task<void> local_accept_deadline(pace::quic::listener& listener)
 
 void local_cancellation(const std::filesystem::path& fixtures)
 {
-    watchdog guard{__func__};
     pace::io_context io;
     configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
@@ -627,7 +623,6 @@ void local_cancellation(const std::filesystem::path& fixtures)
 
 void accept_cancellation(const std::filesystem::path& fixtures)
 {
-    watchdog guard{__func__};
     pace::io_context io;
     configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
@@ -675,7 +670,6 @@ pace::task<void> recycle_client(pace::quic::connection& connection, pace::udp::e
 
 void recycle_streams(const std::filesystem::path& fixtures)
 {
-    watchdog guard{__func__};
     pace::io_context io;
     configurations config(fixtures);
     pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
@@ -737,49 +731,125 @@ void interop(const std::filesystem::path& fixtures, bool server, uint16_t port)
         io.run();
     }
 }
-} // namespace
 
-int main(int argc, char** argv)
+// Cross-backend interop peer for tests/quic_backend_interop.py; main() calls it instead of doctest:
+//   --interop-server       listen on 127.0.0.1, print the port and a newline to stdout, serve one exchange
+//   --interop-client PORT  connect to 127.0.0.1:PORT and run one exchange
+// Returns 0 on success; prints the error to stderr and returns 1 on failure.
+int run_interop_peer(int argc, char** argv)
 {
     try
     {
-        const bool cross_backend = argc > 1 && std::string_view(argv[1]).starts_with("--interop-");
-        const auto fixtures = argc > 1 && !cross_backend ? std::filesystem::path(argv[1])
-                                                         : std::filesystem::path(__FILE__).parent_path() / "certs";
-        if (cross_backend)
+        const bool server = std::string_view(argv[1]) == "--interop-server";
+        if (!server && argc != 3)
         {
-            const bool server = std::string_view(argv[1]) == "--interop-server";
-            if (!server && argc != 3)
-            {
-                throw std::invalid_argument("interop client requires port");
-            }
-            interop(fixtures, server, server ? 0 : static_cast<uint16_t>(std::stoul(argv[2])));
-            return 0;
+            throw std::invalid_argument("interop client requires port");
         }
-        roundtrip(fixtures, "localhost");
-        roundtrip(fixtures, "127.0.0.1");
-        roundtrip(fixtures, "localhost", "127.0.0.1", true);
-        roundtrip(fixtures, "localhost", "::1");
-        roundtrip(fixtures, "::1", "::1");
-        rejects(fixtures, "::1", true, false, false, "::1");
-        rejects(fixtures, "wrong.example", true, false, false);
-        rejects(fixtures, "localhost", false, false, false);
-        rejects(fixtures, "localhost", true, true, false);
-        rejects(fixtures, "localhost", true, false, true);
-        deadlines(false);
-        deadlines(true);
-        closure(fixtures, false);
-        closure(fixtures, true);
-        serialization_and_reset(fixtures);
-        recycle_streams(fixtures);
-        connection_isolation(fixtures);
-        accept_cancellation(fixtures);
-        local_cancellation(fixtures);
-        std::cout << "QUIC tests passed\n";
+        interop(certificates(), server, server ? 0 : static_cast<uint16_t>(std::stoul(argv[2])));
+        return 0;
     }
     catch (const std::exception& error)
     {
         std::cerr << error.what() << '\n';
         return 1;
     }
+}
+
+const pace::test::command interop_server_command{"--interop-server", run_interop_peer};
+const pace::test::command interop_client_command{"--interop-client", run_interop_peer};
+} // namespace
+
+TEST_CASE("QUIC concurrent streams round trip with a DNS name")
+{
+    roundtrip(certificates(), "localhost");
+}
+
+TEST_CASE("QUIC concurrent streams round trip with an IPv4 address name")
+{
+    roundtrip(certificates(), "127.0.0.1");
+}
+
+TEST_CASE("QUIC round trip recovers from packet loss in both directions")
+{
+    roundtrip(certificates(), "localhost", "127.0.0.1", true);
+}
+
+TEST_CASE("QUIC concurrent streams round trip over IPv6 with a DNS name")
+{
+    roundtrip(certificates(), "localhost", "::1");
+}
+
+TEST_CASE("QUIC concurrent streams round trip over IPv6 with an IPv6 address name")
+{
+    roundtrip(certificates(), "::1", "::1");
+}
+
+TEST_CASE("QUIC rejects a certificate that does not cover the IPv6 address name")
+{
+    rejects(certificates(), "::1", true, false, false, "::1");
+}
+
+TEST_CASE("QUIC rejects a certificate for the wrong name")
+{
+    rejects(certificates(), "wrong.example", true, false, false);
+}
+
+TEST_CASE("QUIC rejects an untrusted certificate")
+{
+    rejects(certificates(), "localhost", false, false, false);
+}
+
+TEST_CASE("QUIC rejects an expired certificate")
+{
+    rejects(certificates(), "localhost", true, true, false);
+}
+
+TEST_CASE("QUIC rejects a peer without a common ALPN protocol")
+{
+    rejects(certificates(), "localhost", true, false, true);
+}
+
+TEST_CASE("QUIC handshake times out against a silent peer")
+{
+    deadlines(false);
+}
+
+TEST_CASE("QUIC handshake is canceled when the io_context stops")
+{
+    deadlines(true);
+}
+
+TEST_CASE("QUIC connection close aborts the peer's pending read")
+{
+    closure(certificates(), false);
+}
+
+TEST_CASE("QUIC listener close cancels accepted streams and the peer's pending read")
+{
+    closure(certificates(), true);
+}
+
+TEST_CASE("QUIC rejects overlapping stream reads and a stream reset unwinds the pending read")
+{
+    serialization_and_reset(certificates());
+}
+
+TEST_CASE("QUIC recycles stream and connection flow-control credit")
+{
+    recycle_streams(certificates());
+}
+
+TEST_CASE("closing one QUIC connection leaves its sibling and the shared listener open")
+{
+    connection_isolation(certificates());
+}
+
+TEST_CASE("QUIC listener close cancels a pending accept")
+{
+    accept_cancellation(certificates());
+}
+
+TEST_CASE("a local deadline unwinds only the pending QUIC accept")
+{
+    local_cancellation(certificates());
 }

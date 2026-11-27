@@ -1,4 +1,5 @@
 #include "http2_diagnostics.hpp"
+#include "support/pace_test.hpp"
 #include <pace/http2.hpp>
 #include <pace/run.hpp>
 #include <pace/detail/protocol_driver.hpp>
@@ -6,12 +7,9 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <condition_variable>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
-#include <mutex>
-#include <thread>
 #if !defined(_WIN32)
 #include <sys/socket.h>
 #endif
@@ -19,56 +17,7 @@
 namespace
 {
 using namespace std::chrono_literals;
-const auto suite_started = std::chrono::steady_clock::now();
-
-void stage(std::string_view label)
-{
-    const auto elapsed =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - suite_started).count();
-    std::cerr << "HTTP2 stage: " << label << " elapsed_ms=" << elapsed << '\n';
-}
-
-void require(bool value, const char* text)
-{
-    if (!value)
-    {
-        throw std::runtime_error(text);
-    }
-}
-
-struct watchdog
-{
-    std::mutex mutex;
-    std::condition_variable changed;
-    bool done = false;
-    std::thread thread{[this]
-                       {
-                           std::unique_lock lock(mutex);
-                           if (!changed.wait_for(lock, 30s, [&] { return done; }))
-                           {
-                               std::abort();
-                           }
-                       }};
-
-    ~watchdog()
-    {
-        {
-            std::lock_guard lock(mutex);
-            done = true;
-        }
-        changed.notify_one();
-        thread.join();
-    }
-};
-
-void run_scenario(pace::io_context& io)
-{
-    // Each independent connection scenario retains the same deadlock bound.
-    // Tiny socket buffers can incur delayed ACKs: successful earlier scenarios
-    // must not consume the time available to later ones on another platform.
-    watchdog deadline;
-    io.run();
-}
+using pace::test::require;
 
 struct completion
 {
@@ -189,12 +138,13 @@ void roundtrip()
 {
     for (bool single : {false, true})
     {
+        CAPTURE(single);
         pace::io_context io;
         pace::tcp::listener listener(io, {"127.0.0.1", 0});
         completion done{io};
         io.spawn(server(listener, done));
         io.spawn(single ? single_get(listener.local_endpoint(), done) : client(io, listener.local_endpoint(), done));
-        run_scenario(io);
+        io.run();
         require(done.count == 2, "roundtrip incomplete");
     }
 }
@@ -381,34 +331,37 @@ pace::task<void> simple_client(pace::io_context& io, pace::tcp::endpoint endpoin
     done.arrive();
 }
 
-void interop()
+void interop_client()
 {
-    {
-        pace::io_context io;
-        pace::tcp::listener listener(io, {"127.0.0.1", 0});
-        completion done{io};
-        io.spawn(server(listener, done));
-        io.spawn(raw_client(io, listener.local_endpoint(), done));
-        run_scenario(io);
-        require(done.count == 2, "raw client incomplete");
-    }
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    completion done{io};
+    io.spawn(server(listener, done));
+    io.spawn(raw_client(io, listener.local_endpoint(), done));
+    io.run();
+    require(done.count == 2, "raw client incomplete");
+}
+
+void interop_server()
+{
     for (unsigned variant = 0; variant < 9; ++variant)
     {
+        CAPTURE(variant);
         pace::io_context io;
         pace::tcp::listener listener(io, {"127.0.0.1", 0});
         completion done{io};
         io.spawn(raw_server(listener, done, variant));
         io.spawn(simple_client(io, listener.local_endpoint(), done, variant));
-        run_scenario(io);
+        io.run();
         require(done.count == 2, "raw server incomplete");
     }
 }
 
 void validation()
 {
-    watchdog deadline;
     for (unsigned variant = 0; variant < 8; ++variant)
     {
+        CAPTURE(variant);
         std::vector<pace::http::request> batch(1);
         batch[0].method = "GET";
         batch[0].target = "/";
@@ -518,37 +471,38 @@ pace::task<void> close_listener(pace::tcp::listener& listener, bool& resumed)
     io.stop();
 }
 
-void errors()
+void exchange_cancellation()
 {
-    validation();
-    {
-        pace::io_context io;
-        pace::tcp::listener listener(io, {"127.0.0.1", 0});
-        bool canceled = false;
-        io.spawn(stalled_server(listener));
-        io.spawn(canceled_client(io, listener.local_endpoint(), canceled));
-        run_scenario(io);
-        require(canceled, "cancellation incomplete");
-    }
-    {
-        pace::io_context io;
-        pace::tcp::listener listener(io, {"127.0.0.1", 0});
-        bool resumed = false;
-        io.spawn(pace::http2::serve(listener, echo));
-        io.spawn(close_listener(listener, resumed));
-        run_scenario(io);
-        require(resumed, "listener cancellation stopped unrelated task");
-    }
-    {
-        pace::io_context io;
-        pace::tcp::listener listener(io, {"127.0.0.1", 0});
-        bool completed = false;
-        listener.close();
-        io.spawn(pace::http2::serve(listener, echo));
-        io.spawn(unaffected_task(io, completed));
-        run_scenario(io);
-        require(completed, "already-closed listener stopped unrelated task");
-    }
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    bool canceled = false;
+    io.spawn(stalled_server(listener));
+    io.spawn(canceled_client(io, listener.local_endpoint(), canceled));
+    io.run();
+    require(canceled, "cancellation incomplete");
+}
+
+void listener_cancellation()
+{
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    bool resumed = false;
+    io.spawn(pace::http2::serve(listener, echo));
+    io.spawn(close_listener(listener, resumed));
+    io.run();
+    require(resumed, "listener cancellation stopped unrelated task");
+}
+
+void closed_listener()
+{
+    pace::io_context io;
+    pace::tcp::listener listener(io, {"127.0.0.1", 0});
+    bool completed = false;
+    listener.close();
+    io.spawn(pace::http2::serve(listener, echo));
+    io.spawn(unaffected_task(io, completed));
+    io.run();
+    require(completed, "already-closed listener stopped unrelated task");
 }
 
 // Handler completion order is independent from stream and batch order. A
@@ -686,13 +640,14 @@ void concurrency()
 {
     for (unsigned cap : {1u, 2u})
     {
+        CAPTURE(cap);
         pace::io_context io;
         pace::tcp::listener listener(io, {"127.0.0.1", 0});
         completion done{io};
         concurrent_handlers handler{io, cap};
         io.spawn(concurrent_tcp_server(listener, handler, cap, done));
         io.spawn(concurrent_tcp_client(io, listener.local_endpoint(), done));
-        run_scenario(io);
+        io.run();
         require(done.count == 2 && handler.active == 0 && handler.peak == cap, "HTTP2 handler concurrency bound");
         require(handler.completed.front() == (cap == 1 ? 0u : 1u), "slow handler blocked another stream");
     }
@@ -804,13 +759,14 @@ void delayed_streams()
 {
     for (unsigned mode : {0u, 1u, 2u, 3u})
     {
+        CAPTURE(mode);
         pace::io_context io;
         pace::tcp::listener listener(io, {"127.0.0.1", 0});
         delayed_handler handler{io};
         bool ended = false;
         io.spawn(delayed_server(listener, handler, ended));
         io.spawn(delayed_peer(io, listener.local_endpoint(), handler, ended, mode));
-        run_scenario(io);
+        io.run();
         require(
             ended && (mode == 2 ? handler.canceled && !handler.finished : (handler.finished != handler.canceled)),
             "delayed stream incomplete"
@@ -924,13 +880,14 @@ void half_close()
 {
     for (unsigned variant : {0u, 1u, 2u, 3u})
     {
+        CAPTURE(variant);
         pace::io_context io;
         pace::tcp::listener listener(io, {"127.0.0.1", 0});
         eof_case test{io, {io}, variant};
         auto deadline = io.call_after(2s, [&] { io.stop(); });
         io.spawn(eof_server(listener, test));
         io.spawn(eof_peer(listener.local_endpoint(), test));
-        run_scenario(io);
+        io.run();
         require(test.done.count == 2, "HTTP2 EOF stalled on handler/flow control");
         require(test.error == (variant != 0), "HTTP2 EOF error classification");
         if (variant == 3)
@@ -1251,23 +1208,37 @@ pace::task<void> tls_abort_client(
     done.arrive();
 }
 
-void secure_roundtrip(const std::filesystem::path& certs)
+struct tls_configs
+{
+    pace::tls::context server_config{pace::tls::role::server}, client_config;
+
+    explicit tls_configs(const std::filesystem::path& certs)
+    {
+        server_config.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
+        client_config.load_verify_file((certs / "ca.pem").string());
+        server_config.set_alpn_protocols({"h2"});
+        client_config.set_alpn_protocols({"h2"});
+    }
+};
+
+void secure_roundtrip(const tls_configs& configs)
 {
     pace::io_context io;
     pace::tcp::listener listener(io, {"127.0.0.1", 0});
     completion done{io};
-    pace::tls::context server_config(pace::tls::role::server), client_config;
-    server_config.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
-    client_config.load_verify_file((certs / "ca.pem").string());
-    server_config.set_alpn_protocols({"h2"});
-    client_config.set_alpn_protocols({"h2"});
-    io.spawn(secure_server(listener, server_config, done));
-    io.spawn(secure_client(io, listener.local_endpoint(), client_config, done));
-    stage("TLS roundtrip");
-    run_scenario(io);
+    io.spawn(secure_server(listener, configs.server_config, done));
+    io.spawn(secure_client(io, listener.local_endpoint(), configs.client_config, done));
+    io.run();
     require(done.count == 2, "secure roundtrip incomplete");
+}
+
+void secure_concurrency(const tls_configs& configs)
+{
+    const auto& server_config = configs.server_config;
+    const auto& client_config = configs.client_config;
     for (const bool small_receive : {false, true})
     {
+        CAPTURE(small_receive);
         pace::io_context concurrent_io;
         pace::tcp::listener concurrent_listener(concurrent_io, {"127.0.0.1", 0});
         completion concurrent_done{concurrent_io};
@@ -1305,8 +1276,7 @@ void secure_roundtrip(const std::filesystem::path& certs)
             }
         }
 #endif
-        stage(small_receive ? "TLS small receive-window duplex" : "TLS concurrent duplex/backpressure");
-        run_scenario(concurrent_io);
+        concurrent_io.run();
         for (auto& timer : diagnostic_timers)
         {
             timer.cancel();
@@ -1322,8 +1292,15 @@ void secure_roundtrip(const std::filesystem::path& certs)
             require(handler.peak == 2 && handler.completed.front() == 1, "TLS HTTP2 concurrent handlers");
         }
     }
+}
+
+void tls_driver_backpressure(const tls_configs& configs)
+{
+    const auto& server_config = configs.server_config;
+    const auto& client_config = configs.client_config;
     for (const bool withhold_close : {false, true})
     {
+        CAPTURE(withhold_close);
         pace::io_context driver_io;
         pace::tcp::listener driver_listener(driver_io, {"127.0.0.1", 0});
         completion driver_done{driver_io};
@@ -1331,51 +1308,99 @@ void secure_roundtrip(const std::filesystem::path& certs)
         driver_io.spawn(
             tls_driver_client(driver_io, driver_listener.local_endpoint(), client_config, driver_done, withhold_close)
         );
-        stage(withhold_close ? "TLS driver close deadline" : "TLS driver ciphertext backpressure");
-        run_scenario(driver_io);
+        driver_io.run();
         require(driver_done.count == 2, "TLS protocol driver backpressure test incomplete");
     }
+}
+
+void tls_driver_abandonment(const tls_configs& configs)
+{
+    const auto& server_config = configs.server_config;
+    const auto& client_config = configs.client_config;
     pace::io_context abort_io;
     pace::tcp::listener abort_listener(abort_io, {"127.0.0.1", 0});
     completion abort_done{abort_io};
     abort_io.spawn(tls_abort_server(abort_listener, server_config, abort_done));
     abort_io.spawn(tls_abort_client(abort_io, abort_listener.local_endpoint(), client_config, abort_done));
-    stage("TLS driver abandoned ciphertext");
-    run_scenario(abort_io);
+    abort_io.run();
     require(abort_done.count == 2, "TLS protocol driver abandonment test incomplete");
+}
+
+std::filesystem::path certificates()
+{
+    return std::filesystem::path(__FILE__).parent_path() / "certs";
 }
 #endif
 } // namespace
 
-int main(int argc, char** argv)
+TEST_CASE("HTTP/2 batch exchange and single GET round trip")
 {
-    try
-    {
-        stage("roundtrip");
-        roundtrip();
-        stage("raw interoperability");
-        interop();
-        stage("errors");
-        errors();
-        stage("TCP concurrency/backpressure");
-        concurrency();
-        stage("delayed/reset/cancel");
-        delayed_streams();
-        stage("TCP half close");
-        half_close();
-#ifdef PACE_HAS_TLS
-        secure_roundtrip(
-            argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path() / "certs"
-        );
-#else
-        (void)argc;
-        (void)argv;
-#endif
-        std::cout << "HTTP/2 multiplexing, flow control, trailers, raw interoperability and limits passed\n";
-    }
-    catch (const std::exception& error)
-    {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
+    roundtrip();
 }
+
+TEST_CASE("HTTP/2 server answers a byte-fragmented independent raw client")
+{
+    interop_client();
+}
+
+TEST_CASE("HTTP/2 client handles independent raw server responses and failures")
+{
+    interop_server();
+}
+
+TEST_CASE("HTTP/2 rejects invalid requests and limits before any I/O")
+{
+    validation();
+}
+
+TEST_CASE("HTTP/2 exchange is canceled when the io_context stops")
+{
+    exchange_cancellation();
+}
+
+TEST_CASE("closing an HTTP/2 listener leaves unrelated work running")
+{
+    listener_cancellation();
+}
+
+TEST_CASE("serving an already-closed HTTP/2 listener leaves unrelated work running")
+{
+    closed_listener();
+}
+
+TEST_CASE("HTTP/2 bounds handler concurrency over TCP with small send buffers")
+{
+    concurrency();
+}
+
+TEST_CASE("HTTP/2 keeps reading during delayed handlers and joins them on reset and cancellation")
+{
+    delayed_streams();
+}
+
+TEST_CASE("HTTP/2 handles TCP half close with complete, oversized and truncated requests")
+{
+    half_close();
+}
+
+#ifdef PACE_HAS_TLS
+TEST_CASE("HTTP/2 batch exchange over TLS")
+{
+    secure_roundtrip(tls_configs(certificates()));
+}
+
+TEST_CASE("HTTP/2 over TLS bounds concurrent duplex handlers under backpressure")
+{
+    secure_concurrency(tls_configs(certificates()));
+}
+
+TEST_CASE("TLS protocol driver stages ciphertext under backpressure and honors the close deadline")
+{
+    tls_driver_backpressure(tls_configs(certificates()));
+}
+
+TEST_CASE("TLS protocol driver closes the stream when it abandons queued ciphertext")
+{
+    tls_driver_abandonment(tls_configs(certificates()));
+}
+#endif

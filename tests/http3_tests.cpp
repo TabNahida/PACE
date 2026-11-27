@@ -1,49 +1,15 @@
+#include "support/pace_test.hpp"
 #include <pace/http3.hpp>
 
 #include <algorithm>
 #include <array>
-#include <condition_variable>
 #include <filesystem>
-#include <iostream>
-#include <mutex>
-#include <thread>
 
 namespace
 {
 using namespace std::chrono_literals;
 
-void require(bool value, const char* text)
-{
-    if (!value)
-    {
-        throw std::runtime_error(text);
-    }
-}
-
-struct watchdog
-{
-    std::mutex mutex;
-    std::condition_variable changed;
-    bool done = false;
-    std::thread thread{[this]
-                       {
-                           std::unique_lock lock(mutex);
-                           if (!changed.wait_for(lock, 45s, [&] { return done; }))
-                           {
-                               std::abort();
-                           }
-                       }};
-
-    ~watchdog()
-    {
-        {
-            std::lock_guard lock(mutex);
-            done = true;
-        }
-        changed.notify_one();
-        thread.join();
-    }
-};
+using pace::test::require;
 
 struct fixture
 {
@@ -365,10 +331,11 @@ pace::task<void> raw_client(fixture& test, bool& complete)
     test.io.stop();
 }
 
-void interop(const std::filesystem::path& certs)
+void interop_server(const std::filesystem::path& certs)
 {
     for (bool malformed : {false, true})
     {
+        CAPTURE(malformed);
         fixture test(certs);
         bool complete = false;
         test.io.spawn(raw_server(test, malformed));
@@ -376,6 +343,10 @@ void interop(const std::filesystem::path& certs)
         test.io.run();
         require(complete, "independent server incomplete");
     }
+}
+
+void interop_client(const std::filesystem::path& certs)
+{
     fixture test(certs);
     bool complete = false;
     test.io.spawn(pace::http3::serve(*test.listener, echo));
@@ -462,6 +433,7 @@ void concurrency(const std::filesystem::path& certs)
 {
     for (unsigned cap : {1u, 2u})
     {
+        CAPTURE(cap);
         fixture test(certs);
         concurrent_handlers handler{test.io, cap};
         bool complete = false;
@@ -633,6 +605,7 @@ void delayed_streams(const std::filesystem::path& certs)
 {
     for (unsigned mode : {0u, 1u, 2u})
     {
+        CAPTURE(mode);
         fixture test(certs);
         delayed_handler handler{test.io};
         test_signal ended{test.io};
@@ -767,33 +740,40 @@ pace::task<void> rejected_peer_then_valid(fixture& test, const std::filesystem::
     test.io.stop();
 }
 
-void errors(const std::filesystem::path& certs)
+void request_validation(const std::filesystem::path& certs)
 {
-    {
-        fixture test(certs);
-        bool complete = false;
-        test.io.spawn(validation(test, complete));
-        test.io.run();
-        require(complete, "validation incomplete");
-    }
-    {
-        fixture test(certs);
-        bool complete = false;
-        test.io.spawn(raw_server(test, false));
-        test.io.spawn(bounded_client(test, complete));
-        test.io.run();
-        require(complete, "incoming limit check incomplete");
-    }
-    {
-        fixture test(certs);
-        bool complete = false;
-        test.io.spawn(pace::http3::serve(*test.listener, echo));
-        test.io.spawn(rejected_peer_then_valid(test, certs, complete));
-        test.io.run();
-        require(complete, "failed handshake isolation incomplete");
-    }
+    fixture test(certs);
+    bool complete = false;
+    test.io.spawn(validation(test, complete));
+    test.io.run();
+    require(complete, "validation incomplete");
+}
+
+void incoming_limit(const std::filesystem::path& certs)
+{
+    fixture test(certs);
+    bool complete = false;
+    test.io.spawn(raw_server(test, false));
+    test.io.spawn(bounded_client(test, complete));
+    test.io.run();
+    require(complete, "incoming limit check incomplete");
+}
+
+void handshake_isolation(const std::filesystem::path& certs)
+{
+    fixture test(certs);
+    bool complete = false;
+    test.io.spawn(pace::http3::serve(*test.listener, echo));
+    test.io.spawn(rejected_peer_then_valid(test, certs, complete));
+    test.io.run();
+    require(complete, "failed handshake isolation incomplete");
+}
+
+void rejection(const std::filesystem::path& certs)
+{
     for (bool cancellation : {false, true})
     {
+        CAPTURE(cancellation);
         fixture test(certs, cancellation ? "h3" : "other");
         bool complete = false;
         test.io.spawn(silent_server(test, cancellation));
@@ -802,28 +782,64 @@ void errors(const std::filesystem::path& certs)
         require(complete, "rejection incomplete");
     }
 }
+
+std::filesystem::path certificates()
+{
+    return std::filesystem::path(__FILE__).parent_path() / "certs";
+}
 } // namespace
 
-int main(int argc, char** argv)
+TEST_CASE("HTTP/3 batch exchange and single GET over IPv4")
 {
-    watchdog deadline;
-    try
-    {
-        const auto certs =
-            argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path(__FILE__).parent_path() / "certs";
-        roundtrip(certs);
-        roundtrip(certs, "::1");
-        stream_credit(certs);
-        interop(certs);
-        errors(certs);
-        concurrency(certs);
-        delayed_streams(certs);
-        std::cout << "HTTP/3 encrypted multiplexing, flow control, trailers, independent wire peers, limits, ALPN and "
-                     "cancellation passed\n";
-    }
-    catch (const std::exception& error)
-    {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
+    roundtrip(certificates());
+}
+
+TEST_CASE("HTTP/3 batch exchange and single GET over IPv6")
+{
+    roundtrip(certificates(), "::1");
+}
+
+TEST_CASE("HTTP/3 stream credit admits 130 concurrent requests")
+{
+    stream_credit(certificates());
+}
+
+TEST_CASE("HTTP/3 client handles an independent raw server and rejects a malformed content-length")
+{
+    interop_server(certificates());
+}
+
+TEST_CASE("HTTP/3 server answers an independent raw client")
+{
+    interop_client(certificates());
+}
+
+TEST_CASE("HTTP/3 rejects invalid requests and limits before reaching the transport")
+{
+    request_validation(certificates());
+}
+
+TEST_CASE("HTTP/3 enforces the incoming response body limit")
+{
+    incoming_limit(certificates());
+}
+
+TEST_CASE("a failed HTTP/3 handshake does not stop the listener")
+{
+    handshake_isolation(certificates());
+}
+
+TEST_CASE("HTTP/3 rejects a non-h3 ALPN and unwinds on cancellation")
+{
+    rejection(certificates());
+}
+
+TEST_CASE("HTTP/3 bounds handler concurrency without blocking other streams")
+{
+    concurrency(certificates());
+}
+
+TEST_CASE("HTTP/3 connection teardown cancels and joins a delayed handler")
+{
+    delayed_streams(certificates());
 }
