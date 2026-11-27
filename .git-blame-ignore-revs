@@ -3,3 +3,6 @@
 
 # Format all C++ sources with clang-format
 53ef3f12de55321e5631627d495c5086857447e1
+
+# Move headers and sources into module directories (paths and include lines only)
+4f4ed21c24bb5315f09c1dbbafbcd16fc9f10cc5
