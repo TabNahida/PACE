@@ -38,6 +38,10 @@
           "requires": null
         },
         {
+          "name": "pace::deliver_signal",
+          "requires": null
+        },
+        {
           "name": "pace::invalid_socket",
           "requires": null
         },
@@ -66,6 +70,10 @@
           "requires": null
         },
         {
+          "name": "pace::process_signal",
+          "requires": null
+        },
+        {
           "name": "pace::run",
           "requires": null
         },
@@ -75,6 +83,14 @@
         },
         {
           "name": "pace::shield",
+          "requires": null
+        },
+        {
+          "name": "pace::signal_name",
+          "requires": null
+        },
+        {
+          "name": "pace::signal_set",
           "requires": null
         },
         {
@@ -95,6 +111,10 @@
         },
         {
           "name": "pace::this_task::cancellation",
+          "requires": null
+        },
+        {
+          "name": "pace::wait_for_signal",
           "requires": null
         },
         {

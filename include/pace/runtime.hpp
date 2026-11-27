@@ -10,6 +10,7 @@
 #include <pace/runtime/platform.hpp>
 #include <pace/runtime/run.hpp>
 #include <pace/runtime/runtime.hpp>
+#include <pace/runtime/signal.hpp>
 #include <pace/runtime/task.hpp>
 #include <pace/runtime/task_group.hpp>
 #include <pace/runtime/this_context.hpp>

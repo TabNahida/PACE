@@ -24,6 +24,7 @@ using ::pace::blocking_options;
 using ::pace::cancellation_source;
 using ::pace::cancellation_token;
 using ::pace::deadline;
+using ::pace::deliver_signal;
 using ::pace::invalid_socket;
 using ::pace::io_backend;
 using ::pace::io_context;
@@ -31,9 +32,12 @@ using ::pace::join_handle;
 using ::pace::native_socket_type;
 using ::pace::operation_options;
 using ::pace::operation_result;
+using ::pace::process_signal;
 using ::pace::run;
 using ::pace::runtime;
 using ::pace::shield;
+using ::pace::signal_name;
+using ::pace::signal_set;
 using ::pace::sleep_for;
 using ::pace::task;
 using ::pace::task_group;
@@ -47,6 +51,7 @@ using ::pace::this_task::cancellation;
 
 export namespace pace
 {
+using ::pace::wait_for_signal;
 using ::pace::with_cancellation;
 using ::pace::with_deadline;
 using ::pace::with_options;

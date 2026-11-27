@@ -1,26 +1,16 @@
+#include <pace/runtime/signal.hpp>
 #include <pace/websocket.hpp>
 
-#include <atomic>
 #include <charconv>
 #include <chrono>
-#include <csignal>
 #include <iostream>
 
 namespace
 {
-std::atomic_flag interrupted = ATOMIC_FLAG_INIT;
-
-void on_signal(int)
-{
-    interrupted.test_and_set(std::memory_order_relaxed);
-}
-
+// Ctrl-C or SIGTERM (on Windows also the console's close event) stops the context.
 pace::task<void> stop_on_signal(pace::io_context& io)
 {
-    while (!interrupted.test(std::memory_order_relaxed))
-    {
-        co_await io.sleep_for(std::chrono::milliseconds(20));
-    }
+    co_await pace::wait_for_signal(io, {pace::process_signal::interrupt, pace::process_signal::terminate});
     io.stop();
 }
 
@@ -134,8 +124,6 @@ int main(int argc, char** argv)
             }
             else
             {
-                std::signal(SIGINT, on_signal);
-                std::signal(SIGTERM, on_signal);
                 std::cout << "WebSocket echo at ws://127.0.0.1:" << listener.local_endpoint().port
                           << "/echo (Ctrl-C to stop)" << std::endl;
                 io.spawn(stop_on_signal(io));
