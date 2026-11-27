@@ -50,6 +50,10 @@ inline task<void> drain(tcp::stream& stream, std::size_t limit = max_reply_bytes
     }
 }
 
+// The spawned server coroutines below take everything they use by value. pace::run returns once the
+// entry coroutine finishes, but the reactor still resumes a server that is closing its connection, so a
+// server must never refer to the entry coroutine's locals.
+
 // The input is what a client sends to a server-side handler: `serve(stream)` owns the accepted
 // connection. The client writes the input, half-closes, and drains whatever the server answers.
 template <class Serve>
@@ -59,7 +63,8 @@ void feed_server(std::string_view input, Serve serve)
         [&](io_context& io) -> task<void>
         {
             tcp::listener listener(io, {"127.0.0.1", 0});
-            auto server = [&]() -> task<void>
+            const auto endpoint = listener.local_endpoint();
+            auto server = [](tcp::listener listener, Serve serve) -> task<void>
             {
                 try
                 {
@@ -69,8 +74,8 @@ void feed_server(std::string_view input, Serve serve)
                 {
                 }
             };
-            io.spawn(server());
-            auto client = co_await tcp::connect(io, listener.local_endpoint());
+            io.spawn(server(std::move(listener), serve));
+            auto client = co_await tcp::connect(io, endpoint);
             try
             {
                 co_await client.write_all(input);
@@ -79,7 +84,6 @@ void feed_server(std::string_view input, Serve serve)
             catch (const std::exception&)
             {
             }
-            listener.close();
         }
     );
 }
@@ -93,7 +97,8 @@ void feed_client(std::string_view input, Talk talk)
         [&](io_context& io) -> task<void>
         {
             tcp::listener listener(io, {"127.0.0.1", 0});
-            auto server = [&]() -> task<void>
+            const auto endpoint = listener.local_endpoint();
+            auto server = [](tcp::listener listener, std::string answer) -> task<void>
             {
                 try
                 {
@@ -109,22 +114,21 @@ void feed_client(std::string_view input, Talk talk)
                         }
                         request.append(buffer, read);
                     }
-                    co_await peer.write_all(input);
+                    co_await peer.write_all(answer);
                     co_await peer.close_gracefully(std::chrono::milliseconds(200), max_reply_bytes);
                 }
                 catch (const std::exception&)
                 {
                 }
             };
-            io.spawn(server());
+            io.spawn(server(std::move(listener), std::string(input)));
             try
             {
-                co_await talk(io, listener.local_endpoint());
+                co_await talk(io, endpoint);
             }
             catch (const std::exception&)
             {
             }
-            listener.close();
         }
     );
 }

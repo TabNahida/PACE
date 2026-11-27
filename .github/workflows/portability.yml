@@ -128,6 +128,7 @@ jobs:
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-xmake
             mingw-w64-ucrt-x86_64-python
+            git
       - name: Build core, HTTP1, WebSocket, tests and tutorials with MinGW
         run: |
           xmake --version
