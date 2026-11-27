@@ -50,8 +50,12 @@ def tracked_sources():
     for name in result.stdout.decode().split("\0"):
         if not name or name.startswith(EXCLUDED_PREFIXES):
             continue
-        if Path(name).suffix in SOURCE_SUFFIXES:
+        # A tracked file deleted in the working tree has nothing left to format.
+        if Path(name).suffix in SOURCE_SUFFIXES and (ROOT / name).is_file():
             yield name
+
+
+VIOLATION_MARKER = ": error: code should be clang-formatted"
 
 
 def unformatted_files(clang_format, files):
@@ -63,8 +67,11 @@ def unformatted_files(clang_format, files):
             text=True,
             capture_output=True,
         )
-        if result.returncode:
-            unformatted.update(line.split(":", 1)[0] for line in result.stderr.splitlines() if ": error:" in line)
+        violations = {line.split(":", 1)[0] for line in result.stderr.splitlines() if VIOLATION_MARKER in line}
+        if result.returncode and not violations:
+            # Not a formatting difference: clang-format could not check these files.
+            sys.exit(f"clang-format failed (exit {result.returncode}):\n{result.stderr.strip()}")
+        unformatted.update(violations)
     return sorted(unformatted)
 
 
@@ -78,6 +85,9 @@ def main():
     files = arguments.files or sorted(tracked_sources())
     if not files:
         return 0
+    missing = [name for name in files if not (ROOT / name).is_file()]
+    if missing:
+        sys.exit("cannot format missing files:\n" + "\n".join(f"  {name}" for name in missing))
 
     if not arguments.check:
         # Inserting braces can change indentation that only a later pass settles.
