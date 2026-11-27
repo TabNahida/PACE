@@ -1,8 +1,9 @@
-// Importing one module gives that module and the modules it depends on, nothing else.
+// Importing single modules: each exports only its own names.
 #include <type_traits>
+import pace.runtime;
 import pace.net;
 
-static_assert(!std::is_copy_constructible_v<pace::task<int>>, "pace.net re-exports pace.runtime");
+static_assert(!std::is_copy_constructible_v<pace::task<int>>, "pace.runtime exports task");
 
 pace::tcp::endpoint single_module_endpoint()
 {
