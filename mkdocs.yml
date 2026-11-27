@@ -141,7 +141,11 @@ nav:
           - reference/http/README.md
           - reference/http/router.md
           - reference/http/clients.md
-      - reference/http1/README.md
+      - HTTP/1.1:
+          - reference/http1/README.md
+          - reference/http1/server.md
+          - reference/http1/client.md
+          - reference/http1/app.md
       - reference/http2/README.md
       - reference/http3/README.md
       - reference/websocket/README.md

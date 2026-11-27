@@ -14,7 +14,7 @@ defaults. Headers under `src/` are internal and not documented here.
 | DNS | `<pace/dns.hpp>` | `pace_dns` | [DNS](dns/README.md) |
 | QUIC | `<pace/quic.hpp>` | `pace_quic` | [QUIC](quic/README.md) |
 | HTTP | `<pace/http.hpp>` | `pace_http` | [overview](http/README.md) · [routing](http/router.md) · [URL clients](http/clients.md) |
-| HTTP/1.1 | `<pace/http1.hpp>` | `pace_http1` | [HTTP/1.1](http1/README.md) |
+| HTTP/1.1 | `<pace/http1.hpp>` | `pace_http1` | [overview](http1/README.md) · [server](http1/server.md) · [client](http1/client.md) · [`http::app`](http1/app.md) |
 | HTTP/2 | `<pace/http2.hpp>` | `pace_http2` | [HTTP/2](http2/README.md) |
 | HTTP/3 | `<pace/http3.hpp>` | `pace_http3` | [HTTP/3](http3/README.md) |
 | WebSocket | `<pace/websocket.hpp>` | `pace_websocket` | [WebSocket](websocket/README.md) |
