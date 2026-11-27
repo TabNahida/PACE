@@ -34,6 +34,7 @@ public:
         }
 
         awaiter(const awaiter&) = delete;
+        awaiter& operator=(const awaiter&) = delete;
 
         ~awaiter()
         {
@@ -143,6 +144,8 @@ public:
     }
 
     reactor_signal(const reactor_signal&) = delete;
+    reactor_signal& operator=(const reactor_signal&) = delete;
+    ~reactor_signal() = default;
 
     awaiter wait(clock::time_point deadline = clock::time_point::max())
     {

@@ -54,6 +54,7 @@ public:
     stream& operator=(stream&&) noexcept;
     ~stream();
     stream(const stream&) = delete;
+    stream& operator=(const stream&) = delete;
     std::uint64_t id() const noexcept;
     bool is_unidirectional() const noexcept;
     bool is_local() const noexcept;
@@ -94,6 +95,7 @@ public:
     connection& operator=(connection&&) noexcept;
     ~connection();
     connection(const connection&) = delete;
+    connection& operator=(const connection&) = delete;
     task<void> connect(
         udp::endpoint peer,
         std::string expected_name,
@@ -123,6 +125,7 @@ public:
     listener(io_context& io, udp::endpoint local, const quic::context& config);
     ~listener();
     listener(const listener&) = delete;
+    listener& operator=(const listener&) = delete;
     task<connection> accept(std::chrono::milliseconds handshake_timeout = std::chrono::seconds(10));
     udp::endpoint local_endpoint() const;
     io_context& context() const noexcept;

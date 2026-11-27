@@ -189,6 +189,14 @@ void io_context::run()
     {
         implementation& p;
 
+        explicit reset_guard(implementation& owner) noexcept
+            : p(owner)
+        {
+        }
+
+        reset_guard(const reset_guard&) = delete;
+        reset_guard& operator=(const reset_guard&) = delete;
+
         ~reset_guard()
         {
             active_context = nullptr;

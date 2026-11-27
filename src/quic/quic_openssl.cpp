@@ -81,6 +81,9 @@ struct guard
         flag = true;
     }
 
+    guard(const guard&) = delete;
+    guard& operator=(const guard&) = delete;
+
     ~guard()
     {
         flag = false;
@@ -155,6 +158,9 @@ struct configuration
             );
         }
     }
+
+    configuration(const configuration&) = delete;
+    configuration& operator=(const configuration&) = delete;
 
     ~configuration()
     {
@@ -414,6 +420,10 @@ struct connection_state
     SSL* ssl = nullptr;
     bool owned_ssl = false, connected = false, open = true, connecting = false, accepting = false, opening = false;
 
+    connection_state() = default;
+    connection_state(const connection_state&) = delete;
+    connection_state& operator=(const connection_state&) = delete;
+
     ~connection_state()
     {
         if (owned_ssl)
@@ -452,6 +462,9 @@ struct stream_state
         , ssl(value)
     {
     }
+
+    stream_state(const stream_state&) = delete;
+    stream_state& operator=(const stream_state&) = delete;
 
     ~stream_state()
     {

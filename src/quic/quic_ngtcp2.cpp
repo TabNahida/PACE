@@ -80,6 +80,9 @@ struct guard
         flag = true;
     }
 
+    guard(const guard&) = delete;
+    guard& operator=(const guard&) = delete;
+
     ~guard()
     {
         flag = false;
@@ -172,6 +175,9 @@ struct configuration
             );
         }
     }
+
+    configuration(const configuration&) = delete;
+    configuration& operator=(const configuration&) = delete;
 
     ~configuration()
     {
@@ -461,6 +467,9 @@ struct stream_state
     {
         buffer.retained = true;
     }
+
+    stream_state(const stream_state&) = delete;
+    stream_state& operator=(const stream_state&) = delete;
 
     ~stream_state()
     {

@@ -33,6 +33,7 @@ public:
     explicit response_cache(cache_options options = {});
     ~response_cache();
     response_cache(const response_cache&) = delete;
+    response_cache& operator=(const response_cache&) = delete;
     std::shared_ptr<const response> get(std::string_view key, std::chrono::seconds* resident_age = nullptr);
     // Owned copy. On a running reactor, memoizes one immutable snapshot per
     // cache/context: repeated hits avoid the shared mutex and refcount writes.

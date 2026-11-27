@@ -1032,6 +1032,8 @@ public:
     }
 
     phase_deadline(const phase_deadline&) = delete;
+    phase_deadline& operator=(const phase_deadline&) = delete;
+    ~phase_deadline() = default;
 
     void check()
     {
@@ -1376,6 +1378,14 @@ task<response> basic_client<Transport>::send(request outgoing)
     struct reset
     {
         bool& value;
+
+        explicit reset(bool& flag) noexcept
+            : value(flag)
+        {
+        }
+
+        reset(const reset&) = delete;
+        reset& operator=(const reset&) = delete;
 
         ~reset()
         {

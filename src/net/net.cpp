@@ -667,6 +667,14 @@ task<stream> listener::accept()
             {
                 cancellation_source*& active;
 
+                explicit clear_backoff(cancellation_source*& slot) noexcept
+                    : active(slot)
+                {
+                }
+
+                clear_backoff(const clear_backoff&) = delete;
+                clear_backoff& operator=(const clear_backoff&) = delete;
+
                 ~clear_backoff()
                 {
                     active = nullptr;

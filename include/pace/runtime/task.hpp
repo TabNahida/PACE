@@ -106,6 +106,7 @@ public:
     }
 
     task(const task&) = delete;
+    task& operator=(const task&) = delete;
 
     ~task()
     {
@@ -133,6 +134,10 @@ public:
             : handle(std::exchange(other.handle, {}))
         {
         }
+
+        awaiter(const awaiter&) = delete;
+        awaiter& operator=(const awaiter&) = delete;
+        awaiter& operator=(awaiter&&) = delete;
 
         ~awaiter()
         {
@@ -234,6 +239,7 @@ public:
     }
 
     task(const task&) = delete;
+    task& operator=(const task&) = delete;
 
     ~task()
     {
@@ -261,6 +267,10 @@ public:
             : handle(std::exchange(other.handle, {}))
         {
         }
+
+        awaiter(const awaiter&) = delete;
+        awaiter& operator=(const awaiter&) = delete;
+        awaiter& operator=(awaiter&&) = delete;
 
         ~awaiter()
         {

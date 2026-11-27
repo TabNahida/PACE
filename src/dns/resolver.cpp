@@ -51,6 +51,9 @@ void initialize()
             check_status(ares_library_init(ARES_LIB_INIT_ALL));
         }
 
+        library(const library&) = delete;
+        library& operator=(const library&) = delete;
+
         ~library()
         {
             ares_library_cleanup();
@@ -84,6 +87,9 @@ struct lookup : std::enable_shared_from_this<lookup>
         : io(context)
     {
     }
+
+    lookup(const lookup&) = delete;
+    lookup& operator=(const lookup&) = delete;
 
     ~lookup()
     {
@@ -317,6 +323,14 @@ struct lookup : std::enable_shared_from_this<lookup>
         {
             bool& value;
 
+            explicit reset(bool& flag) noexcept
+                : value(flag)
+            {
+            }
+
+            reset(const reset&) = delete;
+            reset& operator=(const reset&) = delete;
+
             ~reset()
             {
                 value = false;
@@ -532,6 +546,14 @@ task<result> resolver::resolve_impl(std::shared_ptr<implementation> state, std::
     struct reset
     {
         implementation& state;
+
+        explicit reset(implementation& owner) noexcept
+            : state(owner)
+        {
+        }
+
+        reset(const reset&) = delete;
+        reset& operator=(const reset&) = delete;
 
         ~reset()
         {

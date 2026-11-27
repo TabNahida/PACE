@@ -108,6 +108,7 @@ public:
     cancellation_registration(const cancellation_token&, std::function<void()>);
     ~cancellation_registration();
     cancellation_registration(const cancellation_registration&) = delete;
+    cancellation_registration& operator=(const cancellation_registration&) = delete;
 
 private:
     struct implementation;

@@ -52,6 +52,14 @@ task<void> run_entry(io_context& io, Factory& factory, entry_state<T>& state)
     {
         io_context& io;
 
+        explicit stop_on_exit(io_context& context) noexcept
+            : io(context)
+        {
+        }
+
+        stop_on_exit(const stop_on_exit&) = delete;
+        stop_on_exit& operator=(const stop_on_exit&) = delete;
+
         ~stop_on_exit()
         {
             io.stop();

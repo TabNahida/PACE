@@ -241,6 +241,9 @@ struct native_poller::implementation
         }
     }
 
+    implementation(const implementation&) = delete;
+    implementation& operator=(const implementation&) = delete;
+
     ~implementation()
     {
         ::close(queue);

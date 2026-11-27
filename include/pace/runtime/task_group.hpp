@@ -210,6 +210,15 @@ inline task<void> drain_group(std::shared_ptr<group_state> state, bool boundary 
         group_state& state;
         bool boundary;
 
+        reset(group_state& owner, bool at_boundary) noexcept
+            : state(owner)
+            , boundary(at_boundary)
+        {
+        }
+
+        reset(const reset&) = delete;
+        reset& operator=(const reset&) = delete;
+
         ~reset()
         {
             if (!boundary)
@@ -239,6 +248,8 @@ public:
     join_handle(join_handle&&) noexcept = default;
     join_handle& operator=(join_handle&&) noexcept = default;
     join_handle(const join_handle&) = delete;
+    join_handle& operator=(const join_handle&) = delete;
+    ~join_handle() = default;
 
     struct awaiter
     {
@@ -304,6 +315,7 @@ class task_group
 public:
     task_group(const task_group&) = delete;
     task_group& operator=(const task_group&) = delete;
+    ~task_group() = default;
 
     template <class Factory>
     auto spawn(Factory factory)

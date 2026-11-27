@@ -153,6 +153,7 @@ public:
     explicit basic_client(Transport stream, limits bounds = {}, client_options options = {});
     basic_client(const basic_client&) = delete;
     basic_client& operator=(const basic_client&) = delete;
+    ~basic_client() = default;
     task<response> send(request outgoing);
 
     [[nodiscard]] Transport& transport() noexcept

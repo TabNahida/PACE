@@ -1398,6 +1398,9 @@ struct stream::implementation
             state.active = true;
         }
 
+        operation(const operation&) = delete;
+        operation& operator=(const operation&) = delete;
+
         ~operation()
         {
             state.active = false;

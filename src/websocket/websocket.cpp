@@ -484,6 +484,9 @@ struct basic_stream<Transport>::implementation
             state.busy = true;
         }
 
+        operation(const operation&) = delete;
+        operation& operator=(const operation&) = delete;
+
         ~operation()
         {
             state.busy = false;

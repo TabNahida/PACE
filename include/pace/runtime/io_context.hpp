@@ -88,6 +88,7 @@ public:
         cancellation_handle(cancellation_handle&&) noexcept;
         cancellation_handle& operator=(cancellation_handle&&) noexcept;
         cancellation_handle(const cancellation_handle&) = delete;
+        cancellation_handle& operator=(const cancellation_handle&) = delete;
         void cancel() noexcept;
 
     private:

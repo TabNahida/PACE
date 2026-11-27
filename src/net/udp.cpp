@@ -64,6 +64,9 @@ struct pending_operation
         active = true;
     }
 
+    pending_operation(const pending_operation&) = delete;
+    pending_operation& operator=(const pending_operation&) = delete;
+
     ~pending_operation()
     {
         active = false;

@@ -378,6 +378,7 @@ struct session
     }
 
     session(const session&) = delete;
+    session& operator=(const session&) = delete;
 
     template <class F>
     static int callback(void* pointer, F&& action) noexcept

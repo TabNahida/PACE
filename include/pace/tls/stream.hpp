@@ -67,6 +67,9 @@ public:
     {
     }
 
+    tls_transport_model(const tls_transport_model&) = delete;
+    tls_transport_model& operator=(const tls_transport_model&) = delete;
+
     ~tls_transport_model() override
     {
         close();

@@ -240,6 +240,14 @@ struct close_http_dispatch
     // This guard is nested inside the protocol owner's shared_ptr lifetime.
     http_dispatch& state;
 
+    explicit close_http_dispatch(http_dispatch& owner) noexcept
+        : state(owner)
+    {
+    }
+
+    close_http_dispatch(const close_http_dispatch&) = delete;
+    close_http_dispatch& operator=(const close_http_dispatch&) = delete;
+
     ~close_http_dispatch()
     {
         state.close();

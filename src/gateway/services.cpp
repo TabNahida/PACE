@@ -568,6 +568,10 @@ struct file_handle
 {
     int value = -1;
 
+    file_handle() = default;
+    file_handle(const file_handle&) = delete;
+    file_handle& operator=(const file_handle&) = delete;
+
     ~file_handle()
     {
         if (value >= 0)
@@ -1357,6 +1361,14 @@ struct reverse_proxy::implementation
         struct release
         {
             upstream_state& state;
+
+            explicit release(upstream_state& owner) noexcept
+                : state(owner)
+            {
+            }
+
+            release(const release&) = delete;
+            release& operator=(const release&) = delete;
 
             ~release()
             {

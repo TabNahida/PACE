@@ -15,6 +15,7 @@ public:
     explicit tls_driver(tls::stream& stream);
     ~tls_driver();
     tls_driver(const tls_driver&) = delete;
+    tls_driver& operator=(const tls_driver&) = delete;
     std::optional<std::size_t> read(std::span<char> bytes);
     std::size_t write(std::string_view bytes);
     bool progress();
