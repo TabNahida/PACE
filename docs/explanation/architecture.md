@@ -1,6 +1,11 @@
 # Architecture and execution contract
 
-PACE separates its coroutine runtime, sockets, base protocol extensions and application protocols into four layers. It is under active development; API and scheduling decisions may change as tests and measurements improve.
+[简体中文](architecture.zh.md) · [Explanation](README.md)
+
+PACE separates its coroutine runtime, sockets, base protocol extensions and application protocols into four
+layers of independently linkable modules. This page explains how the modules fit together, how a reactor runs
+work, and which ownership and threading rules follow from that design. The
+[execution model](execution-model.md) and [ownership](ownership.md) pages go deeper into the last two.
 
 ## Four independently linkable layers
 
@@ -16,38 +21,55 @@ flowchart BT
     E --> A
 ```
 
-| Layer | xmake targets | Implementation |
-|---|---|---|
-| 0, core | `pace_runtime` | `src/runtime/`: reactor, poller, execution, timers and worker runtime |
-| 1, core | `pace_net` | `src/net/`: TCP and UDP; depends only on runtime |
-| 2, optional | `pace_tls`, `pace_dns`, `pace_quic` | `src/tls/`, `src/dns/`, `src/quic/` |
-| 3, optional | `pace_http` (header-only), `pace_http1` (includes the gateway services), `pace_http2`, `pace_http3`, `pace_websocket` | `src/http/`, `src/http1/`, `src/http2/`, `src/http3/`, `src/websocket/`, `src/gateway/` |
+| Layer | Module | Umbrella header | xmake target | Build option |
+|---|---|---|---|---|
+| 0, core | runtime | `<pace/runtime.hpp>` | `pace_runtime` | always built |
+| 1, core | net | `<pace/net.hpp>` | `pace_net` | always built |
+| 2, optional | tls, dns, quic | `<pace/tls.hpp>`, `<pace/dns.hpp>`, `<pace/quic.hpp>` | `pace_tls`, `pace_dns`, `pace_quic` | `--tls=y`, `--dns=y`, `--quic=y` |
+| 3 | http | `<pace/http.hpp>` | `pace_http` (header-only) | always built |
+| 3, default on | http1, gateway | `<pace/http1.hpp>`, `<pace/gateway.hpp>` | `pace_http1` | `--http1=y` |
+| 3, optional | http2, http3 | `<pace/http2.hpp>`, `<pace/http3.hpp>` | `pace_http2`, `pace_http3` | `--http2=y`, `--http3=y` |
+| 3, default on | websocket | `<pace/websocket.hpp>` | `pace_websocket` | `--websocket=y` |
 
-`pace` is an aggregate target exporting the enabled modules. It does not
-produce one monolithic `libpace.a`: applications link the individual static
-libraries through xmake's dependency graph. Each module compiles only
-`src/<module>/`, installs its headers under `include/pace/<module>/` and has an
-umbrella header `<pace/<module>.hpp>`; `<pace/pace.hpp>` includes every enabled
-module. Narrow consumers can use `add_deps("pace_net")` with `<pace/net.hpp>`,
-or select an individual protocol module. Internal headers live in
-`src/<module>/` and are not installed.
+Every module follows the same layout. Its public headers are under `include/pace/<module>/`, with one
+umbrella header `<pace/<module>.hpp>` that includes them all; its implementation is compiled only from
+`src/<module>/`; its xmake target installs only its own headers and links only the modules it depends on, so
+`xmake build pace_tls` builds the runtime, networking and TLS and nothing else. Headers used only by the
+implementation live next to it in `src/<module>/`; they are not installed and not part of the API, and there is
+no `detail` namespace or directory in the public headers. `<pace/pace.hpp>` includes every module enabled in the
+build, and the phony target `pace` links all of them. It does not produce one monolithic `libpace.a`:
+applications link the individual static libraries through xmake's dependency graph. Narrow consumers use, for
+example, `add_deps("pace_net")` with `<pace/net.hpp>`.
 
-HTTP/1 and WebSocket default on for source compatibility and can be disabled;
-all third-party protocols default off. QUIC uses ngtcp2 and OpenSSL by default.
-Both QUIC backends are independent of the TCP TLS module. HTTP/3 enables QUIC plus nghttp3, without depending on
-HTTP/1 or HTTP/2. TLS uses OpenSSL, DNS uses c-ares, and HTTP/2 uses nghttp2.
-QUIC/HTTP3 require POSIX; Windows builds reject these options until a native
-transport adapter is implemented. See the [platform matrix](../reference/platform-support.md).
-`http_types.hpp` holds transport-independent HTTP messages and handlers, so
-HTTP/2 and HTTP/3 do not depend on the HTTP/1 parser. Core networking has no
-upward protocol dependencies. Buffer ownership remains explicit through spans,
-views and owning message bodies; there is no separate buffer allocator module.
+`pace_http` holds what HTTP/1, HTTP/2 and HTTP/3 share: the messages in `<pace/http/types.hpp>` and the router
+and handler adapters in `<pace/http/router.hpp>`. HTTP/2 and HTTP/3 therefore do not depend on the HTTP/1
+parser. The HTTP/1 module (`<pace/http1/protocol.hpp>`) holds the HTTP/1 clients and servers, the URL client
+calls `fetch`/`get`/`post` and their `async_*` forms, and the small `http::app`. The gateway services
+(`<pace/gateway.hpp>`: static files, reverse proxy, response cache) are compiled into `pace_http1` for now,
+because `http::app`'s `mount()` and `proxy()` call them and the proxy uses the HTTP/1 client.
+
+HTTP/1 and WebSocket are on by default and can be disabled; all modules that need third-party libraries are
+off by default. TLS uses OpenSSL, DNS uses c-ares, HTTP/2 uses nghttp2, and HTTP/3 uses nghttp3 over the QUIC
+module. QUIC uses ngtcp2 with OpenSSL by default; `--quic_backend=openssl` selects OpenSSL's native QUIC
+instead. Both QUIC backends are independent of the TCP TLS module, and HTTP/3 depends on neither HTTP/1 nor
+HTTP/2. QUIC and HTTP/3 require POSIX; Windows builds reject these options. See the
+[platform matrix](../reference/platform-support.md) and the [build options](../reference/build-options.md).
+Core networking has no upward protocol dependencies. Buffer ownership stays explicit through spans, views and
+owning message bodies; there is no separate buffer allocator module.
+
+With `--modules=y`, every module is also a C++20 named module (`import pace.runtime;`, `import pace.net;`,
+`import pace.http;`, `import pace.http1;`, `import pace.gateway;`, `import pace.tls;`, and so on), built into the
+`pace_module` target. Each named module exports only its own names, so code that imports `pace.net` also imports
+`pace.runtime`; `import pace;` imports everything. The module interfaces are generated from
+`modules/exports.json` and re-export the same declarations the headers make, so header and module consumers
+share one ABI and can be mixed in one program. A module whose library is disabled still exists and exports
+nothing.
 
 ## One reactor per worker
 
 `pace::io_context` owns a readiness poller, a ready queue, a timer heap, active coroutine roots, and socket wait registrations. Only one thread may execute a context's `run()` method. Coroutines submitted to that context resume on its running thread and do not migrate between contexts.
 
-`pace::runtime` owns a fixed vector of contexts. `run()` creates one worker thread per context and joins all workers before returning. `run_on_current_thread()` instead runs context zero on the calling thread and creates N−1 workers; with one context it creates no worker. Both modes block, drain and join before returning, and share a single-use guard. The default count is the reported hardware concurrency, with a minimum of one; an explicit positive count overrides it. Access `runtime.context(index)` to choose where work is submitted. The runtime does not currently provide work stealing, automatic task balancing, or CPU affinity.
+`pace::runtime` owns a fixed vector of contexts. `run()` creates one worker thread per context and joins all workers before returning. `run_on_current_thread()` instead runs context zero on the calling thread and creates N−1 workers; with one context it creates no worker. Both modes block, drain and join before returning, and share a single-use guard. The default count is the reported hardware concurrency, with a minimum of one; an explicit positive count overrides it. Access `runtime.context(index)` to choose where work is submitted. The runtime does not provide work stealing, automatic task balancing, or CPU affinity.
 
 For applications with their own threading model, create independent contexts and run them on application-owned threads. A runtime is optional.
 
@@ -67,7 +89,7 @@ Cross-thread submissions enter a mutex-protected inbox. The first submission aft
 
 Ready coroutine and posted-function batches are bounded at 256 items so continuously ready application work still gives the loop opportunities to inspect timers, I/O, and shutdown. A task-only loop skips a zero-timeout native poll when it has no registered descriptors. It still checks inbox submissions and timers on every turn. Once a socket has a registration, normal readiness polling continues.
 
-Optional [stage profiling](../../benchmarks/profiling.md) and [component microbenchmarks](../../benchmarks/components.md) separate operation cost from kernel waiting. Profiling is disabled by default and must remain disabled for comparative performance measurements.
+Optional [stage profiling](../../benchmarks/profiling.md) (`--profiling=y`) and [component microbenchmarks](../../benchmarks/components.md) separate operation cost from kernel waiting. Profiling is disabled by default and must remain disabled for comparative performance measurements.
 
 ## Readiness backends
 
@@ -90,7 +112,7 @@ are merged and any undelivered counterpart is disarmed. Wakeups are internal.
 
 Socket registrations have tokens independent of the native socket handle, allowing the reactor to discard stale deliveries after cancellation and handle reuse. `UINT64_MAX` is reserved for the internal wakeup token. Windows handles retain their native pointer width.
 
-[Selectable backends](../reference/runtime/io-backends.md) include IOCP socket notifications and optional io_uring polling. Reads/writes still use nonblocking socket calls; these paths do not yet submit overlapped or direct io_uring data transfers. WSAPoll remains the Windows compatibility path. Performance remains workload-dependent.
+[Selectable backends](../reference/runtime/io-backends.md) (`pace::io_backend`, chosen per context or per runtime) include IOCP socket notifications and optional io_uring polling. Reads and writes still use nonblocking socket calls; these paths do not submit overlapped or direct io_uring data transfers. WSAPoll remains the Windows compatibility path. Performance remains workload-dependent.
 
 ## Tasks and object ownership
 
@@ -110,7 +132,7 @@ The coroutine frame does not automatically own every object referenced by the co
 - Keep a socket or listener alive until every operation using it has finished. Moving a socket while an operation on that object is suspended is not supported.
 - Keep memory referenced by `std::span` and `std::string_view` valid throughout the awaited operation. A string literal is safe; a temporary owning string whose lifetime ends before the lazy task runs is not.
 - Keep the context alive until all sockets and listeners using it have been destroyed.
-- A coroutine lambda accesses captures through its closure object. That closure must outlive the coroutine; immediately invoking a temporary capturing coroutine lambda is unsafe. Prefer named coroutine functions with owned values passed as parameters, or explicitly maintain the callable's lifetime.
+- A coroutine lambda accesses captures through its closure object. That closure must outlive the coroutine; immediately invoking a temporary capturing coroutine lambda is unsafe. Prefer named coroutine functions with owned values passed as parameters, or explicitly maintain the callable's lifetime. `pace::run(factory)` owns the factory it is given until shutdown, which makes a capturing coroutine lambda safe there.
 
 HTTP handler functions are stored by value in the serving tasks. Shared state reachable from handlers still belongs to the application and requires synchronization if used from different worker contexts.
 
@@ -120,7 +142,7 @@ HTTP handler functions are stored by value in the serving tasks. Shared state re
 
 One read waiter and one write waiter can be outstanding per socket simultaneously. A second waiter in the same direction is rejected. Accepting a connection is a read-side operation on its listener. Use `post()` to request socket manipulation from a different thread; do not close a live socket concurrently with its reactor.
 
-Cooperative scheduling means a coroutine runs until it suspends or finishes. `co_await io.yield()` schedules another turn, and `co_await io.sleep_for(duration)` uses a steady-clock timer. An expired or zero-duration sleep still yields. Blocking calls and long CPU computations delay every coroutine assigned to that worker. There is no built-in blocking-work executor yet.
+Cooperative scheduling means a coroutine runs until it suspends or finishes. `co_await io.yield()` schedules another turn, and `co_await io.sleep_for(duration)` uses a steady-clock timer. An expired or zero-duration sleep still yields. Blocking calls and long CPU computations delay every coroutine assigned to that worker. There is no built-in executor for blocking work; run it on threads the application owns.
 
 ## Stopping a context
 
@@ -135,7 +157,7 @@ Stop is cooperative, not a forced thread interruption. An application coroutine 
 
 ## TCP and HTTP
 
-The canonical TCP header is `<pace/net.hpp>`. It declares `pace::tcp::listener`, `pace::tcp::stream`, `pace::tcp::endpoint`, and `pace::tcp::listen_options`; `endpoint` represents a numeric IPv4/IPv6 address, port, address family and optional numeric IPv6 scope. `<pace/net.hpp>` forwards to this header and retains the original top-level names as source compatibility aliases. The umbrella `<pace/pace.hpp>` also retains those aliases.
+The TCP header is `<pace/net/tcp.hpp>`, included by `<pace/net.hpp>`. It declares `pace::tcp::listener`, `pace::tcp::stream`, `pace::tcp::endpoint`, and `pace::tcp::listen_options`; `endpoint` represents a numeric IPv4/IPv6 address, port, address family and optional numeric IPv6 scope. `<pace/net/aliases.hpp>`, also included by `<pace/net.hpp>`, keeps the older top-level names (`pace::tcp_stream`, `pace::tcp_listener`, …) as aliases.
 
 TCP uses nonblocking numeric IPv4/IPv6 sockets. IPv6 listeners default to IPv6-only; applications explicitly opt into dual-stack binding. Operations first attempt the native call; when it would block, they await the relevant readiness event and retry. `write_all()` retains its input view until the complete buffer has been sent. Socket errors use `std::system_error`. Linux sends suppress `SIGPIPE` per operation; platforms with `SO_NOSIGPIPE` configure it on the socket.
 After a short TCP read, the next nonempty read waits for level readiness before
@@ -146,20 +168,20 @@ immediate-read path; the hint follows move operations.
 
 `co_await stream.close_gracefully()` half-closes the send side, then drains peer input until EOF, a 100 ms deadline, or 64 KiB of discarded data. Both bounds are configurable. A cancellable timer avoids blocking the reactor while waiting for the peer. The operation always releases the socket, including on cancellation or error, and requires that no other socket operation is outstanding. HTTP uses this bounded close after its final response so unread rejected-request bytes do not immediately reset the connection. Reaching either bound can still terminate a noncooperating peer before an orderly close; this is a shutdown bound, not a request timeout.
 
-The multithreaded echo and HTTP examples create one listener per worker on the same port using `SO_REUSEPORT` where available. This lets the operating system distribute incoming connections. The current Windows implementation does not provide this listener-sharing strategy; those examples require one worker on Windows. Separate ports and outbound connections can still use multiple Windows contexts.
+The multithreaded echo and HTTP examples create one listener per worker on the same port using `SO_REUSEPORT` where available. This lets the operating system distribute incoming connections. The Windows implementation does not provide this listener-sharing strategy; those examples require one worker on Windows. Separate ports and outbound connections can still use multiple Windows contexts.
 
-The HTTP/1 layer supports clients and servers, Content-Length and chunked framing, trailers, and sequential persistent connections. Default limits are 16 KiB of request headers, 1 MiB of request body, and 1,000 requests per connection; field counts, trailers and chunk metadata have separate bounds. Framing headers are generated by the library. The existing API buffers bodies; opt-in request-head admission chooses per-request body limits before upload, and owned response sources stream through bounded buffers with backpressure. See the [HTTP reference](../reference/http1/README.md) for validation and response semantics.
+The HTTP/1 module supports clients and servers, Content-Length and chunked framing, trailers, and sequential persistent connections. Default limits are 16 KiB of request headers, 1 MiB of request body, and 1,000 requests per connection; field counts, trailers and chunk metadata have separate bounds. Framing headers are generated by the library. The basic API buffers bodies; opt-in request-head admission chooses per-request body limits before upload, and owned response sources stream through bounded buffers with backpressure. See the [HTTP/1 reference](../reference/http1/README.md) for validation and response semantics.
 
-[UDP](../reference/net/udp.md) preserves datagram boundaries and reports source addresses and truncation. [TLS](../reference/tls/README.md) uses optional OpenSSL with certificate-chain and hostname verification, SNI and ALPN. Its initial stream API permits one outstanding async operation total, including read versus write. It uses a custom socket BIO to preserve Windows handle width and suppress SIGPIPE on supported platforms.
+[UDP](../reference/net/udp.md) preserves datagram boundaries and reports source addresses and truncation. [TLS](../reference/tls/README.md) uses optional OpenSSL with certificate-chain and hostname verification, SNI and ALPN. A TLS stream permits one outstanding asynchronous operation in total, including read versus write. OpenSSL reads and writes through a custom BIO over PACE's own transport, so it never touches the socket directly; this keeps Windows handle width intact and suppresses SIGPIPE on supported platforms.
 
-[HTTP/2](../reference/http2/README.md) uses optional nghttp2 for framing, HPACK and flow control. The client owns one connection for a batch of multiplexed requests; the server buffers bounded stream bodies and invokes completed handlers sequentially per connection. [WebSocket](../reference/websocket/README.md) handles HTTP upgrades on its own owned transport, then validates masking, fragmentation, UTF-8 and control frames. The HTTP/1 parser does not transfer its buffered transport into another protocol.
+[HTTP/2](../reference/http2/README.md) uses optional nghttp2 for framing, HPACK and flow control. The client owns one connection for a batch of multiplexed requests. The server buffers bounded stream bodies; one driver owns the session and transport, and completed requests are dispatched to handlers that run concurrently up to `max_concurrent_handlers`. [WebSocket](../reference/websocket/README.md) handles HTTP upgrades on its own owned transport, then validates masking, fragmentation, UTF-8 and control frames. The HTTP/1 parser does not transfer its buffered transport into another protocol.
 
 [DNS](../reference/dns/README.md) integrates c-ares with readiness and timers. It resolves
 A/AAAA and CNAME records without a blocking network lookup thread.
 [QUIC](../reference/quic/README.md) exposes bidirectional and unidirectional streams over UDP.
 Its default transport is ngtcp2 with OpenSSL for TLS 1.3. Native OpenSSL QUIC is also available. [HTTP/3](../reference/http3/README.md)
-uses nghttp3 for HTTP framing and QPACK over those streams. These protocols are
-optional and are tested against local peers.
+uses nghttp3 for HTTP framing and QPACK over those streams, with the same handler concurrency model as HTTP/2.
+These protocols are optional and are tested against local peers.
 
 CONNECT tunneling, streaming incoming HTTP bodies and asynchronous file operations
 are not exposed. HTTP/2 and HTTP/3 retain buffered bodies; HTTP/1 offers known-length
@@ -171,7 +193,7 @@ its deadlines, ownership and concurrency limits.
 
 The first benchmark measures one server reactor under a closed-loop localhost TCP echo workload. PACE and Asio use coroutines; libuv uses callbacks. Payloads and completed-request counts are validated, runs are repeated in rotating backend order, and every raw result is preserved. See the [benchmark methodology](../../benchmarks/README.md) for timing boundaries, limitations, and reproducible commands.
 
-This workload does not establish HTTP performance, multiworker scalability, open-loop tail latency, or general superiority over another library. CI runs functional builds on Linux, macOS, and Windows, plus a FreeBSD VM, and preserves correctness-check artifacts. Published performance measurements come from local Linux. Current [workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml), tests, and evidence files determine what has actually been validated.
+This workload does not establish HTTP performance, multiworker scalability, open-loop tail latency, or general superiority over another library. CI runs functional builds on Linux, macOS, and Windows, plus a FreeBSD VM, emulated architectures and mobile SDK compilation, and preserves correctness-check artifacts; see [CI coverage](../contributing/ci.md). Published performance measurements come from local Linux. Current [workflow results](https://github.com/TabNahida/PACE/actions/workflows/ci.yml), tests, and evidence files determine what has actually been validated.
 
 The separate [worker/execution scaling study](../../benchmarks/scaling.md) keeps total clients fixed, balances them across one listening port per context, and compares runtime-managed threads, caller participation and application-owned threads. Startup, warmup, steady state and shutdown have separate timing windows. [Complete performance results](../performance/README.md) include the README chart's unselected comparisons and negative findings.
 

@@ -1,27 +1,41 @@
-# Shorter application code, explicit ownership
+# API design: short calls, explicit ownership
 
-Current client entry points: direct `http::get/post/fetch` return responses; their
-coroutine forms are `async_get/async_post/async_fetch`. TCP/UDP offer `exchange` and
-`async_exchange`. See [direct clients and migration](../reference/direct-clients.md).
+[简体中文](api-design.zh.md) · [Explanation](README.md)
 
-The convenience layer removes repeated entry/shutdown and routing code while
-retaining the reactor, task and transport APIs. It adds no framework dependency,
-implicit worker pool, hidden global context or macro DSL.
+PACE offers two levels of API over the same machinery. Short calls cover the common cases in one line: fetch a
+URL, serve a few routes, run one task to completion. The explicit API underneath (`io_context`, `task`,
+sockets, listeners, protocol clients and servers) stays public and fully usable, and the short calls are written
+on top of it rather than beside it. Neither level adds a framework dependency, an implicit worker pool, a hidden
+global context or a macro DSL. This page explains the choices behind the short calls and what each one costs.
 
-## 0.3.0 application entry
+## Direct calls and their coroutine forms
 
-`http::app` combines route registration and a caller-thread `run(port)`. URL GET,
-POST and fetch own request data and select optional DNS/TLS explicitly at build
-time. `pace::run(task)` and nullary factories, current-context waits, and TCP
-connect/read_exact remove common setup and short-read loops. See the
-[quick start](../tutorial/02-http-client.md) and [contracts](../reference/convenience.md).
-These helpers retain protocol limits. URL clients do not add retries or redirects;
-only direct calls add a default total deadline. DNS is linked into HTTP/1 only when enabled.
+Every client operation has a blocking form and a coroutine form with the same name and an `async_` prefix:
+
+| Blocking, on a plain thread | Coroutine, inside a context | Module |
+|---|---|---|
+| `http::get`, `http::post`, `http::fetch` | `http::async_get`, `http::async_post`, `http::async_fetch` | HTTP/1 |
+| `http2::get`, `post`, `fetch`; the same in `http3` | `http2::async_get`, `async_post`, `async_fetch`; the same in `http3` | HTTP/2, HTTP/3 |
+| `tcp::exchange`, `udp::exchange` | `tcp::async_exchange`, `udp::async_exchange` | net |
+
+The blocking form creates a context on the calling thread, runs the coroutine form to completion and returns an
+owned result, so a program that only needs a response does not see the reactor at all. It takes
+`blocking_options` (`<pace/runtime/blocking.hpp>`) with a cancellation token and a total deadline of 30 seconds
+by default, because a blocking call without a deadline can hang a thread that has no other way out. It throws
+`std::logic_error` when called on a thread that is already running a PACE context: blocking there would stall
+every coroutine on that reactor, so the coroutine form is the only correct choice. The coroutine forms take
+no implicit deadline; they inherit cancellation and deadlines from the operation boundary they run in.
+
+The URL calls own their arguments, parse the URL lazily and choose DNS and TLS according to the build: a hostname
+needs `--dns=y` and `https` needs `--tls=y`, numeric `http` URLs work with the default build. They keep the
+protocol limits of the explicit API and add no retries, redirects, cookies or decompression, so their behavior is
+exactly that of one exchange. See the [tutorial](../tutorial/02-http-client.md) and the
+[client reference](../reference/http/clients.md).
 
 ## One-shot entry
 
-Previously a task had to stop its context, and main had to construct, spawn and
-run it. `pace::run(factory)` now creates that scope and returns `task<T>`'s value:
+`pace::run(factory)` (`<pace/runtime/run.hpp>`) creates a context on the calling thread, runs the task the factory
+returns, stops the context when that task finishes and returns its value:
 
 ```cpp
 const auto response = pace::run([](pace::io_context& io) {
@@ -29,36 +43,42 @@ const auto response = pace::run([](pace::io_context& io) {
 });
 ```
 
-The context is still passed explicitly. The factory is owned through shutdown,
-including captured coroutine lambdas. This costs one wrapper coroutine for the
-entry, not another thread. Existing manual run semantics do not change. Entry
-completion cancels background roots; it is not structured join-all. Use explicit
-context/listener ownership when application lifetimes require it.
+Without it, every program repeats the same scaffolding: construct a context, spawn a task that stores its result
+somewhere and stops the context, run the context, then rethrow any stored exception. `run` does exactly that and
+nothing more. The context is still passed explicitly, so the code inside the factory is the same code that would
+run on a runtime worker. The factory is owned until shutdown finishes, which makes a capturing coroutine lambda
+safe here, where invoking it directly would leave its captures dangling. The cost is one wrapper coroutine for the
+entry, not another thread. Entry completion cancels background roots; it is not a structured join of everything
+spawned. Use [task groups](../reference/runtime/structured-concurrency.md) to join concurrent work, and explicit
+contexts and listeners when application lifetimes require them.
 
 ## Ordinary handlers and asynchronous handlers
 
-A response that needs no wait should be an ordinary function. `http::make_handler`
-and `http::router` adapt both `response(request)` and `task<response>(request)`.
-The adapter owns each callable via shared storage so pending invocations survive
-router destruction, including move-only captures. This adds a shared allocation
-per registration and one wrapper task per invocation; direct coroutine handlers
-remain available for applications that do not want the convenience layer.
-Router copies share their read-only table and detach it on registration, avoiding
-whole-table copies when a server copies its handler for each accepted connection.
+A handler that needs no wait should be an ordinary function. `http::make_handler` and `http::router`
+(`<pace/http/router.hpp>`) adapt both `response(request)` and `task<response>(request)` callables, with or without
+the `request` parameter, to the one handler type shared by HTTP/1, HTTP/2 and HTTP/3. Function pointers and
+trivially copyable empty callables are stored by value, so the common stateless lambda costs nothing beyond the
+`std::function`. Stateful callables are held through shared storage: pending invocations survive destruction of
+the router, including move-only captures, and copies of a handler observe the same state. That state is shared
+across worker contexts, so the application synchronizes it. Router copies share their read-only route table and
+detach it on registration, so a server can copy its handler for each accepted connection without copying routes.
 
-The router deliberately matches exact method/path pairs with 404/405 and HEAD
-fallback. Its search is linear; there is no unmeasured claim that it accelerates
-routing. Applications needing large tables, parameters, middleware or custom URL
-normalization can keep their own handler. It works with all three HTTP adapters
-because they share message and handler types.
+The router deliberately matches exact, case-sensitive method and path pairs, answers 404 and 405 (with `Allow`)
+itself and falls back from HEAD to GET; `mount()` adds segment prefixes with longest-prefix selection. Routes are
+kept sorted by path, so a lookup is one binary search plus a scan of the methods on that path. There are no path
+parameters, middleware or URL normalization: applications that need them keep their own handler, which works with
+all three HTTP servers because they share the message and handler types.
 
 ## Fewer listener declarations when control is unnecessary
 
-`http::serve(io, endpoint, handler)` owns the HTTP/1 listener. Binding happens
-when its task starts, so errors propagate through the coroutine. Keep the
-`serve(listener, ...)` overload for immediate bind results, port-zero lookup,
-TLS, streaming/admission options or independently stopping acceptance. A shorter
-entry does not claim to provide signal handling or graceful connection draining.
+`http::serve(io, endpoint, handler)` owns its HTTP/1 listener. Binding happens when the task starts, so a bind
+error propagates through the coroutine like any other failure. `http::app` (`<pace/http1.hpp>`) goes one step
+further: it collects routes, mounts and proxies, and `run(port)` serves them on the calling thread, binding
+loopback when only a port is given. It snapshots its routes when serving starts and installs no signal handlers
+and no worker threads; `run_workers` is the explicit opt-in to one listener per worker.
 
-The tutorials teach both forms progressively, including their lifetime limits:
-[English learning path](../tutorial/README.md) · [中文学习路线](../tutorial/README.zh.md).
+Keep the `serve(listener, …)` overload for immediate bind results, port-zero lookup, TLS, admission and streaming
+options, or stopping acceptance independently. A shorter entry does not provide signal handling or graceful
+connection draining; [graceful shutdown](../tutorial/09-graceful-shutdown.md) shows how to build both from the
+explicit API. The tutorials teach both forms step by step, including their lifetime limits:
+[learning path](../tutorial/README.md).
