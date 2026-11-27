@@ -1,0 +1,721 @@
+{
+  "modules": {
+    "runtime": {
+      "header": "runtime.hpp",
+      "deps": [],
+      "feature": null,
+      "exports": [
+        {
+          "name": "pace::backend_name",
+          "requires": null
+        },
+        {
+          "name": "pace::blocking_options",
+          "requires": null
+        },
+        {
+          "name": "pace::cancellation_source",
+          "requires": null
+        },
+        {
+          "name": "pace::cancellation_token",
+          "requires": null
+        },
+        {
+          "name": "pace::deadline",
+          "requires": null
+        },
+        {
+          "name": "pace::invalid_socket",
+          "requires": null
+        },
+        {
+          "name": "pace::io_backend",
+          "requires": null
+        },
+        {
+          "name": "pace::io_context",
+          "requires": null
+        },
+        {
+          "name": "pace::join_handle",
+          "requires": null
+        },
+        {
+          "name": "pace::native_socket_type",
+          "requires": null
+        },
+        {
+          "name": "pace::operation_options",
+          "requires": null
+        },
+        {
+          "name": "pace::run",
+          "requires": null
+        },
+        {
+          "name": "pace::runtime",
+          "requires": null
+        },
+        {
+          "name": "pace::shield",
+          "requires": null
+        },
+        {
+          "name": "pace::sleep_for",
+          "requires": null
+        },
+        {
+          "name": "pace::task",
+          "requires": null
+        },
+        {
+          "name": "pace::task_group",
+          "requires": null
+        },
+        {
+          "name": "pace::this_context",
+          "requires": null
+        },
+        {
+          "name": "pace::with_cancellation",
+          "requires": null
+        },
+        {
+          "name": "pace::with_deadline",
+          "requires": null
+        },
+        {
+          "name": "pace::with_options",
+          "requires": null
+        },
+        {
+          "name": "pace::with_task_group",
+          "requires": null
+        },
+        {
+          "name": "pace::yield",
+          "requires": null
+        },
+        {
+          "name": "pace::this_task::cancellation",
+          "requires": null
+        },
+        {
+          "name": "pace::ascii::iequals",
+          "requires": null
+        },
+        {
+          "name": "pace::ascii::to_lower",
+          "requires": null
+        }
+      ]
+    },
+    "net": {
+      "header": "net.hpp",
+      "deps": [
+        "runtime"
+      ],
+      "feature": null,
+      "exports": [
+        {
+          "name": "pace::address_family",
+          "requires": null
+        },
+        {
+          "name": "pace::ipv4_endpoint",
+          "requires": null
+        },
+        {
+          "name": "pace::listen_options",
+          "requires": null
+        },
+        {
+          "name": "pace::read_exact",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp_listener",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp_stream",
+          "requires": null
+        },
+        {
+          "name": "pace::write",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp::async_exchange",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp::connect",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp::endpoint",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp::exchange",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp::listen",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp::listen_options",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp::listener",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp::stream",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::async_exchange",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::bind",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::bind_options",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::datagram",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::endpoint",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::exchange",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::open",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::packet",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::send",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::socket",
+          "requires": null
+        }
+      ]
+    },
+    "http": {
+      "header": "http.hpp",
+      "deps": [
+        "runtime"
+      ],
+      "feature": null,
+      "exports": [
+        {
+          "name": "pace::http::handler",
+          "requires": null
+        },
+        {
+          "name": "pace::http::header_field",
+          "requires": null
+        },
+        {
+          "name": "pace::http::html",
+          "requires": null
+        },
+        {
+          "name": "pace::http::json",
+          "requires": null
+        },
+        {
+          "name": "pace::http::make_handler",
+          "requires": null
+        },
+        {
+          "name": "pace::http::protocol_error",
+          "requires": null
+        },
+        {
+          "name": "pace::http::request",
+          "requires": null
+        },
+        {
+          "name": "pace::http::response",
+          "requires": null
+        },
+        {
+          "name": "pace::http::router",
+          "requires": null
+        },
+        {
+          "name": "pace::http::text",
+          "requires": null
+        },
+        {
+          "alias": "pace::http1",
+          "target": "http",
+          "requires": null
+        }
+      ]
+    },
+    "http1": {
+      "header": "http1.hpp",
+      "deps": [
+        "net",
+        "http"
+      ],
+      "feature": "PACE_HAS_HTTP1",
+      "exports": [
+        {
+          "name": "pace::http::admission",
+          "requires": null
+        },
+        {
+          "name": "pace::http::app",
+          "requires": null
+        },
+        {
+          "name": "pace::http::async_fetch",
+          "requires": null
+        },
+        {
+          "name": "pace::http::async_get",
+          "requires": null
+        },
+        {
+          "name": "pace::http::async_post",
+          "requires": null
+        },
+        {
+          "name": "pace::http::basic_client",
+          "requires": null
+        },
+        {
+          "name": "pace::http::body_source",
+          "requires": null
+        },
+        {
+          "name": "pace::http::client",
+          "requires": null
+        },
+        {
+          "name": "pace::http::client_close_policy",
+          "requires": null
+        },
+        {
+          "name": "pace::http::client_options",
+          "requires": null
+        },
+        {
+          "name": "pace::http::fetch",
+          "requires": null
+        },
+        {
+          "name": "pace::http::get",
+          "requires": null
+        },
+        {
+          "name": "pace::http::limits",
+          "requires": null
+        },
+        {
+          "name": "pace::http::post",
+          "requires": null
+        },
+        {
+          "name": "pace::http::request_head",
+          "requires": null
+        },
+        {
+          "name": "pace::http::serve",
+          "requires": null
+        },
+        {
+          "name": "pace::http::serve_connection",
+          "requires": null
+        },
+        {
+          "name": "pace::http::server_handler",
+          "requires": null
+        },
+        {
+          "name": "pace::http::server_options",
+          "requires": null
+        },
+        {
+          "name": "pace::http::server_response",
+          "requires": null
+        },
+        {
+          "name": "pace::http::streaming_response",
+          "requires": null
+        },
+        {
+          "name": "pace::http::secure_client",
+          "requires": "PACE_HAS_TLS"
+        }
+      ]
+    },
+    "gateway": {
+      "header": "gateway.hpp",
+      "deps": [
+        "http1"
+      ],
+      "feature": "PACE_HAS_HTTP1",
+      "exports": [
+        {
+          "name": "pace::http::cache_options",
+          "requires": null
+        },
+        {
+          "name": "pace::http::cache_statistics",
+          "requires": null
+        },
+        {
+          "name": "pace::http::load_balance",
+          "requires": null
+        },
+        {
+          "name": "pace::http::proxy_options",
+          "requires": null
+        },
+        {
+          "name": "pace::http::response_cache",
+          "requires": null
+        },
+        {
+          "name": "pace::http::reverse_proxy",
+          "requires": null
+        },
+        {
+          "name": "pace::http::static_files",
+          "requires": null
+        },
+        {
+          "name": "pace::http::static_options",
+          "requires": null
+        }
+      ]
+    },
+    "tls": {
+      "header": "tls.hpp",
+      "deps": [
+        "net"
+      ],
+      "feature": "PACE_HAS_TLS",
+      "exports": [
+        {
+          "name": "pace::tls::accept",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::client_hello",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::client_hello_action",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::client_hello_callback",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::client_hello_handoff",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::client_hello_key_share",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::connect",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::context",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::pin_type",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::role",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::sha256_digest",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::sni_policy",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::stream",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::trust_source",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::verification_callback",
+          "requires": null
+        }
+      ]
+    },
+    "dns": {
+      "header": "dns.hpp",
+      "deps": [
+        "net"
+      ],
+      "feature": "PACE_HAS_DNS",
+      "exports": [
+        {
+          "name": "pace::dns::address",
+          "requires": null
+        },
+        {
+          "name": "pace::dns::error_category",
+          "requires": null
+        },
+        {
+          "name": "pace::dns::family",
+          "requires": null
+        },
+        {
+          "name": "pace::dns::options",
+          "requires": null
+        },
+        {
+          "name": "pace::dns::resolve",
+          "requires": null
+        },
+        {
+          "name": "pace::dns::resolver",
+          "requires": null
+        },
+        {
+          "name": "pace::dns::result",
+          "requires": null
+        }
+      ]
+    },
+    "quic": {
+      "header": "quic.hpp",
+      "deps": [
+        "net"
+      ],
+      "feature": "PACE_HAS_QUIC",
+      "exports": [
+        {
+          "name": "pace::quic::connect",
+          "requires": null
+        },
+        {
+          "name": "pace::quic::connection",
+          "requires": null
+        },
+        {
+          "name": "pace::quic::context",
+          "requires": null
+        },
+        {
+          "name": "pace::quic::listen",
+          "requires": null
+        },
+        {
+          "name": "pace::quic::listener",
+          "requires": null
+        },
+        {
+          "name": "pace::quic::role",
+          "requires": null
+        },
+        {
+          "name": "pace::quic::stream",
+          "requires": null
+        },
+        {
+          "name": "pace::quic::stream_type",
+          "requires": null
+        }
+      ]
+    },
+    "http2": {
+      "header": "http2.hpp",
+      "deps": [
+        "net",
+        "http"
+      ],
+      "feature": "PACE_HAS_HTTP2",
+      "exports": [
+        {
+          "name": "pace::http2::async_exchange",
+          "requires": null
+        },
+        {
+          "name": "pace::http2::async_fetch",
+          "requires": null
+        },
+        {
+          "name": "pace::http2::async_get",
+          "requires": null
+        },
+        {
+          "name": "pace::http2::async_post",
+          "requires": null
+        },
+        {
+          "name": "pace::http2::fetch",
+          "requires": null
+        },
+        {
+          "name": "pace::http2::get",
+          "requires": null
+        },
+        {
+          "name": "pace::http2::limits",
+          "requires": null
+        },
+        {
+          "name": "pace::http2::post",
+          "requires": null
+        },
+        {
+          "name": "pace::http2::serve",
+          "requires": null
+        },
+        {
+          "name": "pace::http2::serve_connection",
+          "requires": null
+        }
+      ]
+    },
+    "http3": {
+      "header": "http3.hpp",
+      "deps": [
+        "net",
+        "http"
+      ],
+      "feature": "PACE_HAS_HTTP3",
+      "exports": [
+        {
+          "name": "pace::http3::async_exchange",
+          "requires": null
+        },
+        {
+          "name": "pace::http3::async_fetch",
+          "requires": null
+        },
+        {
+          "name": "pace::http3::async_get",
+          "requires": null
+        },
+        {
+          "name": "pace::http3::async_post",
+          "requires": null
+        },
+        {
+          "name": "pace::http3::fetch",
+          "requires": null
+        },
+        {
+          "name": "pace::http3::get",
+          "requires": null
+        },
+        {
+          "name": "pace::http3::limits",
+          "requires": null
+        },
+        {
+          "name": "pace::http3::post",
+          "requires": null
+        },
+        {
+          "name": "pace::http3::serve",
+          "requires": null
+        },
+        {
+          "name": "pace::http3::serve_connection",
+          "requires": null
+        }
+      ]
+    },
+    "websocket": {
+      "header": "websocket.hpp",
+      "deps": [
+        "net"
+      ],
+      "feature": "PACE_HAS_WEBSOCKET",
+      "exports": [
+        {
+          "name": "pace::websocket::accept",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::basic_stream",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::connect",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::limits",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::message",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::message_type",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::protocol_error",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::role",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::stream",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::upgrade",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::upgrade_request",
+          "requires": null
+        },
+        {
+          "name": "pace::websocket::secure_stream",
+          "requires": "PACE_HAS_TLS"
+        }
+      ]
+    }
+  }
+}
