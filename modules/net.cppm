@@ -42,3 +42,11 @@ using ::pace::udp::packet;
 using ::pace::udp::send;
 using ::pace::udp::socket;
 } // namespace pace::udp
+
+export namespace pace
+{
+using ::pace::byte_stream;
+using ::pace::as_bytes;
+using ::pace::as_writable_bytes;
+using ::pace::as_text;
+} // namespace pace

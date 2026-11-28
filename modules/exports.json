@@ -249,6 +249,22 @@
         {
           "name": "pace::udp::socket",
           "requires": null
+        },
+        {
+          "name": "pace::byte_stream",
+          "requires": null
+        },
+        {
+          "name": "pace::as_bytes",
+          "requires": null
+        },
+        {
+          "name": "pace::as_writable_bytes",
+          "requires": null
+        },
+        {
+          "name": "pace::as_text",
+          "requires": null
         }
       ]
     },
