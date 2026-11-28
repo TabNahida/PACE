@@ -23,7 +23,7 @@ TARGETS = {
     "s390x": ("s390", 64, "big"),
 }
 TESTS = ("pace_unified_client_tests", "pace_structured_tests", "pace_direct_client_tests", "pace_runtime_tests", "pace_network_tests", "pace_udp_tests",
-         "pace_http_extended_tests", "pace_websocket_tests")
+         "pace_file_watch_tests", "pace_http_extended_tests", "pace_websocket_tests")
 TUTORIALS = ("tutorial_structured", "tutorial_tasks", "tutorial_tcp", "tutorial_udp", "tutorial_workers",
              "tutorial_shutdown", "tutorial_http", "tutorial_http_client", "tutorial_websocket")
 
@@ -117,8 +117,13 @@ def validate(args, report):
         if not args.metadata_only:
             print(f"RUN ({args.mode}, {args.target}) {name}", flush=True)
             report["execution_performed"] = True
-            subprocess.run([*prefix, str(binary)], cwd=Path(__file__).resolve().parents[1],
-                           check=True, timeout=120)
+            command = [*prefix, str(binary)]
+            timeout = 120
+            if args.mode == "qemu-user" and args.target == "s390x" and name == "pace_udp_tests":
+                command = ["bash", "tests/net/udp_s390x.sh", str(binary), str(args.sysroot)]
+                report["artifacts"][-1]["execution_mode"] = "qemu-system"
+                timeout = 240
+            subprocess.run(command, cwd=Path(__file__).resolve().parents[1], check=True, timeout=timeout)
             report["checks_passed"].append(name)
 
 

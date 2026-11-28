@@ -1603,8 +1603,13 @@ pace::task<void> tcp_results(pace::io_context& io)
     const auto unavailable = unused.local_endpoint();
     unused.close();
     auto refused = co_await pace::tcp::connect(as_result, unavailable, {.context = &io});
+#if defined(_WIN32)
+    const std::error_code expected_refusal(WSAECONNREFUSED, std::system_category());
+#else
+    const std::error_code expected_refusal(ECONNREFUSED, std::generic_category());
+#endif
     require(
-        !refused && refused.error() == std::errc::connection_refused,
+        !refused && refused.error() == expected_refusal,
         "TCP connect refusal result: " + refused.error().message()
     );
     auto adapted = co_await as_result(pace::tcp::connect(unavailable, {.context = &io}));

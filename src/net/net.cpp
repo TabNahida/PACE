@@ -22,7 +22,7 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#if defined(__APPLE__)
+#if defined(__APPLE__) && __has_include(<netinet/tcp_fsm.h>)
 #include <netinet/tcp_fsm.h>
 #endif
 #include <sys/socket.h>
@@ -183,7 +183,13 @@ bool is_listener(native_socket_type fd)
     {
         socket_error("getsockopt(TCP_CONNECTION_INFO)");
     }
-    return info.tcpi_state == TCPS_LISTEN;
+    // XNU's TCP_CONNECTION_INFO ABI uses TCPS_LISTEN = 1. The iOS SDK exports
+    // the query and its structure but omits <netinet/tcp_fsm.h>.
+    constexpr unsigned listen_state = 1;
+#ifdef TCPS_LISTEN
+    static_assert(TCPS_LISTEN == listen_state);
+#endif
+    return info.tcpi_state == listen_state;
 #else
     return net::socket_option(fd, SOL_SOCKET, SO_ACCEPTCONN) != 0;
 #endif
