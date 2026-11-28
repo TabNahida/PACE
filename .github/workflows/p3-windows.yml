@@ -1,0 +1,23 @@
+name: P3 Windows native checks
+on:
+  push:
+    branches: [codex/p3-platform-acceptance]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.0.9'
+      - run: xmake f -c -m release --http1=n --websocket=n --tls=n --dns=n --http2=n --quic=n --http3=n --examples=n --tests=y -y
+      - run: xmake -y
+      - run: xmake test -v
+        env:
+          PACE_IO_BACKEND: iocp
+      - run: xmake test -v
+        env:
+          PACE_IO_BACKEND: wsapoll

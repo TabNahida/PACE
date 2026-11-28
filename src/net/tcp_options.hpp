@@ -164,7 +164,7 @@ inline void apply_tcp_options(native_socket_type fd, address_family family, cons
         const int df = *opts.dont_fragment ? 1 : 0;
         if (family == address_family::ipv4)
         {
-#if defined(IP_MTU_DISCOVER) && defined(IP_PMTUDISC_DO)
+#if defined(IP_MTU_DISCOVER) && (defined(IP_PMTUDISC_DO) || defined(_WIN32))
             set_native_option(
                 fd,
                 IPPROTO_IP,
@@ -189,6 +189,14 @@ inline void apply_tcp_options(native_socket_type fd, address_family family, cons
                 IPPROTO_IPV6,
                 IPV6_MTU_DISCOVER,
                 df ? IPV6_PMTUDISC_DO : IPV6_PMTUDISC_DONT,
+                "IPV6_MTU_DISCOVER"
+            );
+#elif defined(_WIN32) && defined(IPV6_MTU_DISCOVER)
+            set_native_option(
+                fd,
+                IPPROTO_IPV6,
+                IPV6_MTU_DISCOVER,
+                df ? IP_PMTUDISC_DO : IP_PMTUDISC_DONT,
                 "IPV6_MTU_DISCOVER"
             );
 #elif defined(IPV6_DONTFRAG)

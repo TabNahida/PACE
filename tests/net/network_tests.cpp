@@ -3,6 +3,7 @@
 #include "net/socket_address.hpp"
 #include "support/pace_test.hpp"
 #ifndef _WIN32
+#include <net/if.h>
 #include <netinet/tcp.h>
 #else
 #include <windows.h>
@@ -166,6 +167,14 @@ pace::task<void> connect_hook_failure(pace::io_context& io)
     require(accepted.remote_endpoint().port == next.local_endpoint().port, "failed hook still connected");
 }
 
+int read_socket_option(pace::native_socket_type fd, int level, int option)
+{
+    int value = 0;
+    pace::net::socket_address_length length = sizeof(value);
+    require(::getsockopt(fd, level, option, reinterpret_cast<char*>(&value), &length) == 0, "read socket option");
+    return value;
+}
+
 pace::task<void> verify_tcp_options(pace::io_context& io)
 {
     pace::socket_options options;
@@ -190,33 +199,26 @@ pace::task<void> verify_tcp_options(pace::io_context& io)
 #endif
     const auto verify = [](pace::native_socket_type fd)
     {
-        const auto read = [&](int level, int option)
-        {
-            int value = 0;
-            pace::net::socket_address_length length = sizeof(value);
-            require(::getsockopt(fd, level, option, reinterpret_cast<char*>(&value), &length) == 0, "read TCP option");
-            return value;
-        };
-        require(read(SOL_SOCKET, SO_KEEPALIVE) != 0, "keepalive enabled");
+        require(read_socket_option(fd, SOL_SOCKET, SO_KEEPALIVE) != 0, "keepalive enabled");
 #if defined(TCP_KEEPIDLE)
-        require(read(IPPROTO_TCP, TCP_KEEPIDLE) == 61, "keepalive idle duration");
+        require(read_socket_option(fd, IPPROTO_TCP, TCP_KEEPIDLE) == 61, "keepalive idle duration");
 #elif defined(__APPLE__) && defined(TCP_KEEPALIVE)
-        require(read(IPPROTO_TCP, TCP_KEEPALIVE) == 61, "keepalive idle duration");
+        require(read_socket_option(fd, IPPROTO_TCP, TCP_KEEPALIVE) == 61, "keepalive idle duration");
 #endif
 #if defined(SO_USER_COOKIE)
-        require(read(SOL_SOCKET, SO_USER_COOKIE) == 42, "socket user cookie");
+        require(read_socket_option(fd, SOL_SOCKET, SO_USER_COOKIE) == 42, "socket user cookie");
 #endif
 #if defined(TCP_KEEPINTVL)
-        require(read(IPPROTO_TCP, TCP_KEEPINTVL) == 17, "keepalive interval");
+        require(read_socket_option(fd, IPPROTO_TCP, TCP_KEEPINTVL) == 17, "keepalive interval");
 #endif
 #if defined(TCP_KEEPCNT)
-        require(read(IPPROTO_TCP, TCP_KEEPCNT) == 5, "keepalive probes");
+        require(read_socket_option(fd, IPPROTO_TCP, TCP_KEEPCNT) == 5, "keepalive probes");
 #endif
 #if defined(TCP_USER_TIMEOUT)
-        require(read(IPPROTO_TCP, TCP_USER_TIMEOUT) == 23100, "user timeout");
+        require(read_socket_option(fd, IPPROTO_TCP, TCP_USER_TIMEOUT) == 23100, "user timeout");
 #endif
 #if defined(SO_SETFIB)
-        require(read(SOL_SOCKET, SO_SETFIB) == 0, "routing table");
+        require(read_socket_option(fd, SOL_SOCKET, SO_SETFIB) == 0, "routing table");
 #endif
     };
     auto server = pace::tcp::listen(io, {"127.0.0.1", 0}, {.socket = options});
@@ -228,6 +230,92 @@ pace::task<void> verify_tcp_options(pace::io_context& io)
     co_await client.connect(server.local_endpoint(), std::move(client_options));
     auto peer = co_await server.accept();
     require(peer.remote_endpoint().port == client.local_endpoint().port, "connection with native options");
+}
+
+struct native_option
+{
+    int level, name, value;
+};
+
+native_option df_option(bool v6)
+{
+#if defined(IP_MTU_DISCOVER) && (defined(IP_PMTUDISC_DO) || defined(_WIN32))
+    return {v6 ? IPPROTO_IPV6 : IPPROTO_IP, v6 ? IPV6_MTU_DISCOVER : IP_MTU_DISCOVER, IP_PMTUDISC_DO};
+#elif defined(IP_DONTFRAG)
+    return {v6 ? IPPROTO_IPV6 : IPPROTO_IP, v6 ? IPV6_DONTFRAG : IP_DONTFRAG, 1};
+#else
+    return {v6 ? IPPROTO_IPV6 : IPPROTO_IP, v6 ? IPV6_DONTFRAG : IP_DONTFRAGMENT, 1};
+#endif
+}
+
+pace::task<void> verify_routing_options(pace::io_context& io)
+{
+    for (bool v6 : {false, true})
+    {
+        const char* address = v6 ? "::1" : "127.0.0.1";
+        pace::socket_options options;
+        const auto df = df_option(v6);
+        pace::tcp::stream probe(io, v6 ? pace::address_family::ipv6 : pace::address_family::ipv4);
+        if (::setsockopt(
+                probe.native_handle(),
+                df.level,
+                df.name,
+                reinterpret_cast<const char*>(&df.value),
+                sizeof(df.value)
+            )
+            == 0)
+        {
+            options.dont_fragment = true;
+        }
+        else
+        {
+            // Some stacks (including Darwin IPv6) expose DF only for datagram sockets.
+#ifdef _WIN32
+            const std::error_code expected(WSAGetLastError(), std::system_category());
+#else
+            const std::error_code expected(errno, std::generic_category());
+#endif
+            const auto result =
+                co_await probe.connect(pace::as_result, {address, 0}, {.socket = {.dont_fragment = true}});
+            require(result.error() == expected, "TCP DF preserves the native error");
+        }
+#if defined(IP_BOUND_IF) || defined(_WIN32)
+        // Observe the loopback interface selected by this host; indices are not portable.
+        pace::udp::socket receiver(io, {address, 0}, {.packet_info = true}), sender(io);
+        co_await sender.send("i", receiver.local_endpoint());
+        std::array<std::byte, 1> byte{};
+        pace::udp::packet_info info;
+        co_await receiver.receive_from(byte, info);
+        require(info.interface_index != 0, "loopback interface from packet information");
+        options.interface_index = info.interface_index;
+#endif
+        const auto verify = [&](pace::native_socket_type fd)
+        {
+            if (options.dont_fragment)
+            {
+                require(read_socket_option(fd, df.level, df.name) == df.value, "TCP socket DF/PMTU policy");
+            }
+#if defined(IP_BOUND_IF)
+            require(
+                unsigned(read_socket_option(fd, v6 ? IPPROTO_IPV6 : IPPROTO_IP, v6 ? IPV6_BOUND_IF : IP_BOUND_IF))
+                    == *options.interface_index,
+                "bound interface"
+            );
+#elif defined(_WIN32)
+            const auto index =
+                unsigned(read_socket_option(fd, v6 ? IPPROTO_IPV6 : IPPROTO_IP, v6 ? IPV6_UNICAST_IF : IP_UNICAST_IF));
+            require((v6 ? index : ntohl(index)) == *options.interface_index, "unicast interface");
+#endif
+        };
+        auto server = pace::tcp::listen(io, {address, 0}, {.socket = options});
+        verify(server.native_handle());
+        auto client = co_await pace::tcp::connect(
+            server.local_endpoint(),
+            {.transport = {.socket = options, .pre_connect = verify}}
+        );
+        auto peer = co_await server.accept();
+        require(client.local_endpoint().port == peer.remote_endpoint().port, "connection followed selected route");
+    }
 }
 
 #if defined(TCP_FASTOPEN)
@@ -319,6 +407,22 @@ pace::task<void> original_destinations(pace::io_context& io)
     co_await check_redirect(dual, {"::1", 29005, pace::address_family::ipv6});
 
 #if defined(__linux__)
+    const auto index = if_nametoindex("lo");
+    require(index != 0, "private network namespace loopback");
+    auto marked = pace::tcp::listen(
+        io,
+        {"127.0.0.1", 0},
+        {.socket = {.interface_index = index, .mark = 42, .transparent = true}}
+    );
+    require(read_socket_option(marked.native_handle(), SOL_SOCKET, SO_MARK) == 42, "SO_MARK");
+    require(read_socket_option(marked.native_handle(), IPPROTO_IP, IP_TRANSPARENT) != 0, "IP_TRANSPARENT");
+    char device[IF_NAMESIZE]{};
+    socklen_t length = sizeof(device);
+    require(
+        ::getsockopt(marked.native_handle(), SOL_SOCKET, SO_BINDTODEVICE, device, &length) == 0
+            && std::string_view(device) == "lo",
+        "SO_BINDTODEVICE"
+    );
     pace::udp::socket receiver(io, {"0.0.0.0", 29004}, {.transparent = true});
     pace::udp::socket sender(io);
     co_await sender.send("TPROXY", {"127.0.0.2", 29003});
@@ -1666,6 +1770,7 @@ TEST_CASE("TCP Fast Open listener and exchange preserve the first write")
 TEST_CASE("TCP listener and client apply native socket options")
 {
     run_test(verify_tcp_options);
+    run_test(verify_routing_options);
 }
 
 #if defined(__APPLE__) || defined(__FreeBSD__)

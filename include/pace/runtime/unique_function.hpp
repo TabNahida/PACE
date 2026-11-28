@@ -57,26 +57,33 @@ class unique_function<R(Args...)>
     };
 
     template <class F>
-    static constexpr operations table{
-        [](storage& s, Args&&... args) -> R
+    static R invoke_target(storage& s, Args&&... args)
+    {
+        if constexpr (std::is_void_v<R>)
         {
-            if constexpr (std::is_void_v<R>)
-            {
-                std::invoke(target<F>(s), std::forward<Args>(args)...);
-            }
-            else
-            {
-                return std::invoke(target<F>(s), std::forward<Args>(args)...);
-            }
-        },
-        [](storage& from, storage& to) noexcept
+            std::invoke(target<F>(s), std::forward<Args>(args)...);
+        }
+        else
         {
-            auto& value = get<F>(from);
-            ::new (static_cast<void*>(to.bytes)) stored<F>(std::move(value));
-            std::destroy_at(std::addressof(value));
-        },
-        [](storage& s) noexcept { std::destroy_at(std::addressof(get<F>(s))); }
-    };
+            return std::invoke(target<F>(s), std::forward<Args>(args)...);
+        }
+    }
+
+    template <class F>
+    static void destroy_target(storage& s) noexcept
+    {
+        std::destroy_at(std::addressof(get<F>(s)));
+    }
+
+    template <class F>
+    static void move_target(storage& from, storage& to) noexcept
+    {
+        ::new (static_cast<void*>(to.bytes)) stored<F>(std::move(get<F>(from)));
+        destroy_target<F>(from);
+    }
+
+    template <class F>
+    static constexpr operations table{invoke_target<F>, move_target<F>, destroy_target<F>};
 
     storage data_;
     const operations* ops_ = nullptr;
