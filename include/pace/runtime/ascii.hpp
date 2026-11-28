@@ -1,5 +1,7 @@
 #pragma once
 
+#include <pace/runtime/requirements.hpp>
+
 // Locale-independent ASCII case folding for protocol tokens: HTTP field names, WebSocket and HTTP
 // header tokens, DNS names. Bytes outside A-Z are left unchanged, so UTF-8 passes through.
 

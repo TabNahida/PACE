@@ -1,5 +1,7 @@
 #pragma once
 
+#include <pace/runtime/requirements.hpp>
+
 #include <cstdint>
 #include <system_error>
 

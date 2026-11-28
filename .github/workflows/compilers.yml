@@ -1,0 +1,92 @@
+name: Minimum compilers
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pace-compilers-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  # The oldest compilers PACE supports (include/pace/runtime/requirements.hpp). Newer ones are covered by the
+  # other workflows; these jobs keep the stated minimums true.
+  minimum:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 13 / Linux
+            os: ubuntu-24.04
+            compiler: gcc-13
+            protocols: --tls=y --dns=y --quic=y --http2=y --http3=y
+          - name: Clang 16 / Linux
+            os: ubuntu-24.04
+            compiler: clang-16
+            protocols: --tls=y --dns=y --quic=y --http2=y --http3=y
+          - name: Apple Clang 16 / macOS
+            os: macos-15
+            compiler: apple-clang-16
+            protocols: --tls=y --dns=y --quic=y --http2=y --http3=y
+          - name: MSVC 19.38 / Windows
+            os: windows-2022
+            compiler: msvc-19.38
+            protocols: --tls=y --dns=y --http2=y
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GCC 13
+        if: matrix.compiler == 'gcc-13'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-13
+          echo 'PACE_TOOLCHAIN=--toolchain=gcc --cc=gcc-13 --cxx=g++-13 --ld=g++-13' >> "$GITHUB_ENV"
+      - name: Install Clang 16
+        if: matrix.compiler == 'clang-16'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-16
+          echo 'PACE_TOOLCHAIN=--toolchain=clang --cc=clang-16 --cxx=clang++-16 --ld=clang++-16' >> "$GITHUB_ENV"
+      - name: Select Xcode 16.0 (Apple Clang 16)
+        if: matrix.compiler == 'apple-clang-16'
+        run: |
+          ls -d /Applications/Xcode*.app
+          xcode=$(ls -d /Applications/Xcode_16.0*.app 2>/dev/null | sort -V | head -1)
+          if [ -z "$xcode" ]; then echo "::error::no Xcode 16.0 on this runner image"; exit 1; fi
+          sudo xcode-select -s "$xcode"
+          clang++ --version
+          echo 'PACE_TOOLCHAIN=' >> "$GITHUB_ENV"
+      - name: Install the MSVC 14.38 toolset (compiler 19.38)
+        if: matrix.compiler == 'msvc-19.38'
+        shell: pwsh
+        run: |
+          $installer = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe"
+          $path = & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $arguments = 'modify', '--installPath', "`"$path`"", '--add', 'Microsoft.VisualStudio.Component.VC.14.38.17.8.x86.x64', '--quiet', '--norestart', '--nocache'
+          $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) { exit $process.ExitCode }
+          "PACE_TOOLCHAIN=--vs_toolset=14.38" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.1.1'
+          actions-cache-folder: '.xmake-cache'
+          package-cache: true
+          package-cache-key: compilers-${{ matrix.compiler }}
+      - name: Configure
+        if: runner.os != 'Windows'
+        shell: bash
+        run: xmake f -c -m release $PACE_TOOLCHAIN ${{ matrix.protocols }} --tests=y --examples=y -y
+      - name: Configure (PowerShell, so that OpenSSL's build finds a complete Perl)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: xmake f -c -m release $env:PACE_TOOLCHAIN ${{ matrix.protocols }} --tests=y --examples=y -y
+      - name: Record the compiler
+        shell: bash
+        run: xmake show -t pace_runtime 2>/dev/null | grep -iE "toolchain|cxx" | head -5 || true
+      - name: Build
+        run: xmake -y
+      - name: Test
+        run: xmake test -v

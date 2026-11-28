@@ -1,4 +1,7 @@
 #pragma once
+
+#include <pace/runtime/requirements.hpp>
+
 #include <chrono>
 #include <functional>
 #include <memory>

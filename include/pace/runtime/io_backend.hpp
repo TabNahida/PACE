@@ -1,5 +1,7 @@
 #pragma once
 
+#include <pace/runtime/requirements.hpp>
+
 namespace pace
 {
 /// The readiness poller of an io_context. An explicit choice that is unavailable makes construction throw

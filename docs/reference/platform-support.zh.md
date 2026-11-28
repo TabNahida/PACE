@@ -1,4 +1,4 @@
-<!-- source-hash: dc8322726117 -->
+<!-- source-hash: 9ca7ff09bbe1 -->
 # 平台支持
 
 [English](platform-support.md) · [参考](README.zh.md)
@@ -23,12 +23,17 @@ PACE 使用 C++20（可用 `--cxxstandard` 选择 C++23 及更新标准）。支
 
 | 编译器 | 最低版本 |
 |:--|:--|
-| GCC | 12 |
+| GCC | 13 |
 | Clang | 16 |
-| Apple Clang | 15 |
+| Apple Clang | 16（Xcode 16） |
 | MSVC | 19.38（Visual Studio 2022 17.8） |
 
-CI 不使用这些最低版本构建，而是使用各运行器自带的编译器构建和测试：
+每个 PACE 头文件都会包含 `<pace/runtime/requirements.hpp>`：编译器版本过低或语言模式低于 C++20 时，它用 `#error`
+指出具体要求。[最低编译器](../../.github/workflows/compilers.yml)工作流正是用这些版本构建全部支持的模块并运行测试。
+GCC 12 能编译 PACE，但异常穿过协程挂起点时会让程序终止；Apple Clang 15 已经没有 CI runner 可以测试；所以两者都不在
+支持范围内。
+
+其他工作流使用各运行器自带的编译器构建和测试：
 
 | CI 任务 | 编译器 |
 |:--|:--|

@@ -25,6 +25,9 @@
   functions (`run_entry`, `scoped_operation`, `run_group_child`, `drain_group`, `invoke_shared_handler`,
   `invoke_copied_handler`, `immediate_response`) because GCC 16 cannot read class-scope coroutines back from a
   named-module interface. None of them is part of the API.
+- **Breaking:** the minimum compilers are GCC 13, Clang 16, MSVC 19.38 and Apple Clang 16, each built and tested
+  by the new Minimum compilers workflow; `<pace/runtime/requirements.hpp>` rejects older compilers and pre-C++20
+  modes with a clear `#error`. GCC 12 miscompiles exceptions crossing coroutine suspension points.
 - **Breaking:** byte streams have one interface, in bytes. TCP, TLS and QUIC streams take
   `read_some(std::span<std::byte>)` and `write_all(std::span<const std::byte>)` only (UDP:
   `send_to(std::span<const std::byte>, …)`, `receive_from(std::span<std::byte>)`; QUIC `try_read`/`try_write`

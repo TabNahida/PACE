@@ -22,12 +22,18 @@ PACE is C++20 (C++23 and later can be selected with `--cxxstandard`). The suppor
 
 | Compiler | Minimum |
 |:--|:--|
-| GCC | 12 |
+| GCC | 13 |
 | Clang | 16 |
-| Apple Clang | 15 |
+| Apple Clang | 16 (Xcode 16) |
 | MSVC | 19.38 (Visual Studio 2022 17.8) |
 
-CI does not build with these minimum versions. It builds and tests with the compilers of its runners:
+`<pace/runtime/requirements.hpp>`, included by every PACE header, stops an older compiler or a pre-C++20 language
+mode with an `#error` naming the requirement. The [Minimum compilers](../../.github/workflows/compilers.yml)
+workflow builds every supported module with exactly these versions and runs the tests. GCC 12 compiles PACE but its
+coroutines terminate the program when an exception crosses a suspension point, and no CI runner offers Apple Clang
+15 any more, so neither is supported.
+
+The other workflows build and test with the compilers of their runners:
 
 | CI job | Compiler |
 |:--|:--|
