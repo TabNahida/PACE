@@ -756,6 +756,54 @@ TEST_CASE("context stop drains structured children before leaving the boundary")
     shutdown_tests();
 }
 
+namespace
+{
+// Not a coroutine: it throws before any task exists. Boundaries call it beside a cancellation token, the
+// path that crashed the 32-bit MSVC build (see entry_access::invoke_bound).
+pace::task<int> throw_before_starting()
+{
+    throw std::runtime_error("factory threw");
+}
+
+pace::task<void> synchronous_factory_tests()
+{
+    for (int round = 0; round < 3; ++round)
+    {
+        bool caught = false;
+        try
+        {
+            (void)co_await pace::with_options(throw_before_starting, {.deadline = pace::deadline::after(1h)});
+        }
+        catch (const std::runtime_error& error)
+        {
+            caught = std::string_view(error.what()) == "factory threw";
+        }
+        require(caught, "with_options rethrows a synchronous factory exception");
+        caught = false;
+        try
+        {
+            co_await pace::with_task_group(
+                [](pace::task_group& group) -> pace::task<void>
+                {
+                    (void)group.spawn(throw_before_starting);
+                    co_return;
+                }
+            );
+        }
+        catch (const std::runtime_error& error)
+        {
+            caught = std::string_view(error.what()) == "factory threw";
+        }
+        require(caught, "a task group rethrows a child factory's synchronous exception");
+    }
+}
+} // namespace
+
+TEST_CASE("boundaries rethrow a factory that throws before returning its task")
+{
+    pace::run(synchronous_factory_tests);
+}
+
 TEST_CASE("cancellation callbacks survive a failing callback and reject registration after stop")
 {
     cancellation_callback_tests();

@@ -27,6 +27,18 @@ struct entry_access
         }
     }
 
+    /// invoke(factory, io) bound to `token` (task_access::bind). The factory runs here, in the callee, not as an
+    /// argument beside the token: a factory may throw synchronously, and 32-bit MSVC evaluates the token first and
+    /// constructs it in the outgoing argument area, so a throw from `bind(invoke(...), token)` inside a coroutine
+    /// must destroy a half-built argument list. The windows-x86 build crashed in the first test to take that path.
+    /// Keep throwing calls out of argument lists that also hold non-trivial arguments in coroutine code.
+    template <class Factory>
+    static auto invoke_bound(Factory& factory, io_context& io, cancellation_token token)
+    {
+        auto work = invoke(factory, io);
+        return task_access::bind(std::move(work), std::move(token));
+    }
+
     template <class Task>
     struct task_result;
 

@@ -25,12 +25,12 @@ task<operation_result<Factory>> scoped_operation(Factory factory, operation_opti
     }
     if constexpr (std::is_void_v<operation_result<Factory>>)
     {
-        co_await task_access::bind(entry_access::invoke(factory, io), source.token());
+        co_await entry_access::invoke_bound(factory, io, source.token());
         source.token().throw_if_cancelled();
     }
     else
     {
-        auto result = co_await task_access::bind(entry_access::invoke(factory, io), source.token());
+        auto result = co_await entry_access::invoke_bound(factory, io, source.token());
         source.token().throw_if_cancelled();
         co_return result;
     }

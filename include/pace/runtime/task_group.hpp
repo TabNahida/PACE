@@ -208,7 +208,7 @@ task<void> run_group_child(
     {
         // spawn() constructs the child with its factory; only this coroutine resets it, below.
         // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged until the reset after this block
-        auto work = task_access::bind(entry_access::invoke(*owned->factory, group->io), group->source.token());
+        auto work = entry_access::invoke_bound(*owned->factory, group->io, group->source.token());
         if constexpr (std::is_void_v<operation_result<Factory>>)
         {
             co_await std::move(work);

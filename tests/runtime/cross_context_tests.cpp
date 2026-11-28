@@ -687,20 +687,76 @@ TEST_CASE("on runs work on the target and resumes the caller on its own context"
             }
         );
         require(value == 42 && pace::io_context::current() == &home, "result on the caller's context");
-        require(co_await pace::on(away, doubled(21)) == 42, "the task overload");
+        auto twice = co_await pace::on(away, doubled(21));
+        require(twice == 42, "the task overload");
         auto with_context =
             co_await pace::on(away, [&](pace::io_context& io) -> pace::task<bool> { co_return &io == &away; });
         require(with_context, "a factory taking io_context& gets the target");
-        bool rethrown = false;
-        try
+        workers.stop();
+    };
+    home.spawn(caller());
+    workers.run();
+}
+
+namespace
+{
+// Not a coroutine: the factory throws before any task exists.
+pace::task<void> throw_before_starting()
+{
+    throw std::runtime_error("factory threw");
+}
+} // namespace
+
+TEST_CASE("on rethrows the work's exception on the caller's context")
+{
+    pace::runtime workers(2);
+    auto& home = workers.context(0);
+    auto& away = workers.context(1);
+    auto caller = [&]() -> pace::task<void>
+    {
+        for (int round = 0; round < 3; ++round)
         {
-            co_await pace::on(away, []() -> pace::task<void> { throw std::runtime_error("work failed"); });
+            std::string message;
+            try
+            {
+                co_await pace::on(away, throw_before_starting);
+            }
+            catch (const std::runtime_error& error)
+            {
+                message = pace::io_context::current() == &home ? error.what() : "wrong context";
+            }
+            require(message == "factory threw", "a factory's synchronous exception reaches the caller");
+            message.clear();
+            try
+            {
+                co_await pace::on(
+                    away,
+                    []() -> pace::task<void>
+                    {
+                        co_await pace::yield();
+                        throw std::runtime_error("work failed");
+                    }
+                );
+            }
+            catch (const std::runtime_error& error)
+            {
+                message = pace::io_context::current() == &home ? error.what() : "wrong context";
+            }
+            require(message == "work failed", "a work's exception reaches the caller");
         }
-        catch (const std::runtime_error& error)
-        {
-            rethrown = std::string(error.what()) == "work failed" && pace::io_context::current() == &home;
-        }
-        require(rethrown, "exceptions propagate to the caller's context");
+        workers.stop();
+    };
+    home.spawn(caller());
+    workers.run();
+}
+
+TEST_CASE("on awaited on its own target runs the work inline, and nests across contexts")
+{
+    pace::runtime workers(2);
+    auto& home = workers.context(0);
+    auto& away = workers.context(1);
+    auto caller = [&]() -> pace::task<void>
+    {
         auto inline_value = co_await pace::on(
             home,
             [&]() -> pace::task<int>
@@ -765,7 +821,32 @@ TEST_CASE("on propagates the caller's cancellation and deadline to the work")
         );
         require(outcome == std::errc::operation_canceled && work_saw == 1, "cancellation reaches the work");
 
+        // A timeout reason, requested once the work runs, reaches the work as timed_out.
         started = false;
+        work_saw = 0;
+        pace::cancellation_source timeout;
+        outcome = {};
+        co_await pace::with_task_group(
+            [&](pace::task_group& group) -> pace::task<void>
+            {
+                auto call = group.spawn(record_failure(
+                    pace::with_cancellation(timeout.token(), [&] { return pace::on(away, long_work); }),
+                    outcome
+                ));
+                while (!started)
+                {
+                    co_await pace::yield();
+                }
+                timeout.request_timeout();
+                co_await std::move(call);
+            }
+        );
+        require(outcome == std::errc::timed_out && work_saw == 2, "a timeout reaches the work as timed_out");
+
+        // A real deadline: how far the work got before it passes depends on the machine, so either the work never
+        // started (the deadline had passed when on() began) or it saw timed_out.
+        started = false;
+        work_saw = 0;
         bool timed_out = false;
         try
         {
@@ -775,7 +856,7 @@ TEST_CASE("on propagates the caller's cancellation and deadline to the work")
         {
             timed_out = error.code() == std::errc::timed_out;
         }
-        require(timed_out && work_saw == 2, "the deadline reaches the work as timed_out");
+        require(timed_out && (work_saw == 0 || work_saw == 2), "the deadline ends the call with timed_out");
 
         away.stop();
         bool refused = false;

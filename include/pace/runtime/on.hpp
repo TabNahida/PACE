@@ -126,7 +126,7 @@ task<void> run_on_target(on_access::owned<T, Factory> work)
     try
     {
         // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged until ~owned
-        auto child = task_access::bind(entry_access::invoke(*work.factory, this_context()), op.source.token());
+        auto child = entry_access::invoke_bound(*work.factory, this_context(), op.source.token());
         if constexpr (std::is_void_v<T>)
         {
             co_await std::move(child);
