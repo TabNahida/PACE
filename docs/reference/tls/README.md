@@ -4,8 +4,8 @@
 
 ## Overview
 
-The TLS module runs TLS over a TCP stream or any other PACE byte stream with OpenSSL, for verified clients, servers
-with per-name certificates, STARTTLS and ClientHello routing.
+The TLS module runs TLS over a TCP stream or any other [`pace::byte_stream`](../net/README.md#byte_stream) with
+OpenSSL, for verified clients, servers with per-name certificates, STARTTLS and ClientHello routing.
 
 | Header | Target | Build option |
 |:--|:--|:--|
@@ -332,7 +332,7 @@ public:
     stream(io_context& io, const tls::context& configuration);
     stream(tcp::stream transport, const tls::context& configuration);
     stream(tcp::stream transport, const tls::context& configuration, std::string_view pre_read);
-    template <tls_byte_stream Transport>
+    template <byte_stream Transport>
     requires(!std::same_as<Transport, tcp::stream>)
     stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {});
     ~stream();
@@ -345,13 +345,12 @@ public:
     task<void> connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name);
     task<void> handshake(std::string peer_name = {});
     task<void> handshake(std::string peer_name, std::string server_name);
-    template <tls_byte_stream Transport = tcp::stream>
+    template <byte_stream Transport = tcp::stream>
     task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff();
 
-    task<std::size_t> read_some(std::span<char> buffer);
     task<std::size_t> read_some(std::span<std::byte> buffer);
-    task<void> write_all(std::string_view bytes);
     task<void> write_all(std::span<const std::byte> bytes);
+    task<void> shutdown_write();
 
     task<void> shutdown(std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
     task<void> close_gracefully(std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
@@ -363,7 +362,9 @@ public:
 };
 ```
 
-A move-only TLS session over a transport it owns. Construction freezes the configuration.
+A move-only TLS session over a transport it owns. Construction freezes the configuration. A `tls::stream` is itself a
+[`pace::byte_stream`](../net/README.md#byte_stream), so it can carry another TLS session or be passed to
+`pace::write` and `pace::read_exact`.
 
 #### Construction
 
@@ -372,7 +373,7 @@ A move-only TLS session over a transport it owns. Construction freezes the confi
 | `stream(io, configuration)` | A new, unconnected TCP socket on `io`; call `connect` |
 | `stream(tcp_stream, configuration)` | An accepted or connected TCP stream, moved in; call `handshake` |
 | `stream(tcp_stream, configuration, pre_read)` | As above, after TLS bytes were already read from the socket |
-| `stream(transport, configuration, pre_read = {})` | Any other connected byte stream satisfying [`tls_byte_stream`](#custom-transports), moved in |
+| `stream(transport, configuration, pre_read = {})` | Any other connected [`pace::byte_stream`](#custom-transports), moved in |
 
 Do not use a transport for plaintext I/O after moving it in. `pre_read` is for TLS bytes that protocol detection or
 STARTTLS negotiation already consumed: the stream copies them before the constructor returns and replays them, in
@@ -417,7 +418,7 @@ handshake timeout of its own; use a [deadline](../runtime/structured-concurrency
 #### `handshake_with_handoff`
 
 ```cpp
-template <tls_byte_stream Transport = tcp::stream>
+template <byte_stream Transport = tcp::stream>
 task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff();
 ```
 
@@ -444,18 +445,23 @@ else
 #### Reading and writing
 
 ```cpp
-task<std::size_t> read_some(std::span<char> buffer);
 task<std::size_t> read_some(std::span<std::byte> buffer);
-task<void> write_all(std::string_view bytes);
 task<void> write_all(std::span<const std::byte> bytes);
 ```
 
 Available after a successful handshake (`std::logic_error` before). `read_some` returns decrypted bytes, possibly
 fewer than requested. With a nonempty buffer, `0` means the peer sent a verified `close_notify`; a transport EOF
 without it is a protocol error, so truncated TLS traffic is never taken as a clean end. An empty buffer returns `0`
-without reading. `write_all` encrypts and sends the whole view, handling partial writes, and completes once the
-ciphertext has been handed to the transport. Buffers are borrowed until the operation completes. The generic
-[`pace::write` and `pace::read_exact`](../net/README.md#functions) helpers work on `tls::stream`.
+without reading. `write_all` encrypts and sends the whole span, handling partial writes, and completes once the
+ciphertext has been handed to the transport. Buffers are borrowed until the operation completes. Text goes through
+[`pace::as_bytes` and `pace::as_writable_bytes`](../net/README.md#as_bytes-as_writable_bytes-and-as_text), and the
+generic [`pace::write` and `pace::read_exact`](../net/README.md#functions) helpers work on `tls::stream`:
+
+```cpp
+co_await connection.write_all(pace::as_bytes("GET / HTTP/1.1\r\nHost: api.example.com\r\n\r\n"));
+std::array<char, 4096> buffer{};
+const auto count = co_await connection.read_some(pace::as_writable_bytes(buffer));
+```
 
 #### Shutdown and close
 
@@ -472,9 +478,33 @@ otherwise; use `close()` to abandon a connection that never completed one).
 - A cancellable reactor timer bounds the operation; reaching `timeout` closes normally without promising the peer
   received anything. A TLS error or cancellation closes the transport and propagates.
 - A non-positive `timeout` makes one attempt on a TCP transport and closes other transports immediately.
-- On a custom transport with `close()`, a `shutdown(std::chrono::milliseconds) -> task<void>` member, if present, runs
-  before `close()`. A QUIC-style transport sends FIN with `finish_write()` and waits for the peer's FIN.
+- On a custom transport, a `shutdown(std::chrono::milliseconds) -> task<void>` member, if present, runs before
+  `close()`. A QUIC-style transport (one with `finish_write()`) sends FIN with `shutdown_write()` and waits for the
+  peer's FIN. Any other transport is closed.
 - No other TLS operation may be active during shutdown. The timer is removed as soon as shutdown finishes.
+
+```cpp
+task<void> shutdown_write();
+```
+
+`shutdown_write` half-closes the TLS session: it sends `close_notify` and completes once the alert has been handed to
+the transport, without waiting for the peer's. The peer's `read_some` then returns `0`, while `read_some` on this side
+keeps returning the peer's data until the peer's own `close_notify` arrives (and then returns `0`). Writing afterwards
+fails with `std::system_error` and, like any failed operation, closes the transport. It requires a completed
+handshake and no other active operation; a TLS failure throws `std::system_error` with `protocol_error` and closes the
+transport. The transport stays open: after reading to the end, `close()` the stream (or let it be destroyed).
+
+```cpp
+co_await connection.write_all(pace::as_bytes(request));
+co_await connection.shutdown_write(); // close_notify: the request is complete
+std::string reply;
+std::array<char, 4096> buffer{};
+while (const auto count = co_await connection.read_some(pace::as_writable_bytes(buffer)))
+{
+    reply.append(buffer.data(), count);
+}
+connection.close();
+```
 
 `close()` closes or resets the transport immediately, cancelling waits; it sends no `close_notify` and does not wait.
 Suspended operations then finish with an error, so keep the `stream` alive until they have. The destructor also
@@ -495,36 +525,21 @@ After a move, the source supports only destruction, assignment, `close()` and `i
 ### Custom transports
 
 ```cpp
-template <class Transport>
-concept tls_closeable = requires(Transport& transport) {
-    { transport.close() } noexcept -> std::same_as<void>;
-};
-
-template <class Transport>
-concept tls_resettable = requires(Transport& transport) {
-    { transport.finish_write() } -> std::same_as<void>;
-    { transport.reset() } noexcept -> std::same_as<void>;
-};
-
-template <class Transport>
-concept tls_byte_stream =
-    (tls_closeable<Transport> || tls_resettable<Transport>)
-    && requires(Transport& transport, const Transport& owner, std::span<char> input, std::string_view output) {
-           { owner.context() } noexcept -> std::same_as<io_context&>;
-           { transport.read_some(input) } -> std::same_as<task<std::size_t>>;
-           { transport.write_all(output) } -> std::same_as<task<void>>;
-       };
+template <byte_stream Transport>
+requires(!std::same_as<Transport, tcp::stream>)
+stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {});
 ```
 
-`tls::stream` can run over any connected, ordered, bidirectional byte stream that satisfies `tls_byte_stream`:
-a bidirectional `quic::stream`, another `tls::stream` (nested TLS), or an application adapter. The stream owns the
-transport it is given. Requirements:
+`tls::stream` can run over any connected, ordered, bidirectional byte stream that satisfies
+[`pace::byte_stream`](../net/README.md#byte_stream): a bidirectional `quic::stream`, another `tls::stream` (nested
+TLS), or an application adapter. The stream owns the transport it is given. Beyond the concept's contract:
 
 - `context()` returns the reactor; the transport stays on it for its whole life.
 - `read_some` returns `0` only at EOF; `write_all` accepts every byte before completing.
-- Either `close() noexcept`, or the QUIC-style pair `finish_write()` and `reset() noexcept`. Closing or resetting
-  must cancel outstanding operations with `operation_canceled`.
+- `close()` must cancel outstanding operations with `operation_canceled`. TLS calls it to abandon the transport.
 - Optional: `is_open() const noexcept` lets TLS observe that the transport closed.
+- Optional: a `shutdown(std::chrono::milliseconds) -> task<void>` member runs before `close()` when the TLS session
+  shuts down; a transport with `finish_write()` (QUIC) gets `shutdown_write()` and a drain to the peer's FIN instead.
 - During shutdown TLS may run one transport read and one transport write at the same time to exchange alerts when
   buffers are full. An adapter that serializes I/O declares `bool supports_concurrent_io() const noexcept`
   returning `false`.
@@ -573,14 +588,14 @@ borrowed until the task completes.
 
 | Condition | Exception |
 |:--|:--|
-| Handshake failure, certificate or name mismatch, unclean EOF, OpenSSL error | `std::system_error` with `std::errc::protocol_error` and OpenSSL's diagnostic text |
+| Handshake failure, certificate or name mismatch, unclean EOF, OpenSSL error, a write after `shutdown_write` | `std::system_error` with `std::errc::protocol_error` and OpenSSL's diagnostic text |
 | Failure to load default trust paths, a trust file or a certificate | `std::system_error` (`protocol_error`) |
 | TCP connect failure in `connect` | The TCP `std::system_error`, unchanged |
 | Invalid argument: empty path, bad PEM, bad ALPN list, invalid SNI name, empty callback, CA client without a peer name, a peer name passed to a server handshake | `std::invalid_argument` |
 | Verification setter on a server context; SNI or ClientHello setter on a client context | `std::invalid_argument` |
 | Setter on a frozen or moved-from context | `std::logic_error` |
 | A second operation while one is active | `std::logic_error`; the active operation is not affected |
-| Read, write or shutdown before the handshake; a second handshake; `connect` on a non-TCP stream or with a server context; `set_no_delay` on a non-TCP stream; handoff misuse; moved-from stream | `std::logic_error` |
+| Read, write, `shutdown_write` or shutdown before the handshake; a second handshake; `connect` on a non-TCP stream or with a server context; `set_no_delay` on a non-TCP stream; handoff misuse; moved-from stream | `std::logic_error` |
 | Operation run on a context other than the transport's | `std::logic_error` |
 | Context stopped, stream closed, task canceled | `std::system_error` (`operation_canceled`) |
 | Deadline of the awaiting task expired | `std::system_error` (`timed_out`) |
@@ -593,7 +608,7 @@ the connection's task so one peer cannot end the server.
 
 - Run every stream operation on the reactor that owns the transport. `close()` and destruction must run there too,
   or while it is not running.
-- **One asynchronous operation at a time per stream**, counting reads, writes, handshakes and shutdown together.
+- **One asynchronous operation at a time per stream**, counting reads, writes, handshakes, `shutdown_write` and shutdown together.
   OpenSSL may need either direction for any operation, so the TCP rule of one read plus one write does not apply;
   independent reader and writer tasks must not share one TLS stream.
 - A `context` may be used by streams on several reactors at once. Its verification and ClientHello callbacks then

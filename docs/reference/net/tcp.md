@@ -11,9 +11,11 @@ request/reply helpers.
 |:--|:--|:--|
 | `<pace/net/tcp.hpp>` (included by `<pace/net.hpp>`) | `pace_net` | none (always built) |
 
-Endpoints are numeric IPv4 or IPv6 addresses; there is no implicit name lookup. The generic
-[`pace::write` and `pace::read_exact`](README.md#functions) helpers work on `tcp::stream`. With `--modules=y` the
-names are exported by `import pace.net;`.
+Endpoints are numeric IPv4 or IPv6 addresses; there is no implicit name lookup. `tcp::stream` is a
+[`pace::byte_stream`](README.md#byte_stream): it reads and writes `std::byte` spans, so text goes through
+[`pace::as_bytes` and `pace::as_writable_bytes`](README.md#as_bytes-as_writable_bytes-and-as_text), and the generic
+[`pace::write` and `pace::read_exact`](README.md#functions) helpers work on it. With `--modules=y` the names are
+exported by `import pace.net;`.
 
 ## Synopsis
 
@@ -22,14 +24,16 @@ names are exported by `import pace.net;`.
 #include <pace/runtime.hpp>
 
 #include <array>
+#include <cstddef>
 #include <iostream>
+#include <span>
 
 pace::task<void> echo(pace::tcp::stream peer)
 {
-    std::array<char, 4096> buffer{};
+    std::array<std::byte, 4096> buffer{};
     while (const auto count = co_await peer.read_some(buffer))
     {
-        co_await peer.write_all(std::string_view(buffer.data(), count));
+        co_await peer.write_all(std::span(buffer).first(count));
     }
 }
 
@@ -122,13 +126,11 @@ public:
     stream& operator=(const stream&) = delete;
 
     task<void> connect(endpoint endpoint);
-    task<std::size_t> read_some(std::span<char> buffer);
     task<std::size_t> read_some(std::span<std::byte> buffer);
-    task<void> read_exact(std::span<char> buffer);
     task<void> read_exact(std::span<std::byte> buffer);
     task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
-    task<void> write_all(std::string_view bytes);
     task<void> write_all(std::span<const std::byte> bytes);
+    task<void> shutdown_write();
 
     void set_no_delay(bool enabled = true);
     task<void> close_gracefully(
@@ -173,16 +175,21 @@ usable for a corrected endpoint. There is no connect timeout; use a
 #### Reading
 
 ```cpp
-task<std::size_t> read_some(std::span<char> buffer);
 task<std::size_t> read_some(std::span<std::byte> buffer);
 ```
 
 Waits until at least one byte is available and returns how many bytes were copied, possibly fewer than
 `buffer.size()`. With a nonempty buffer, `0` means the peer closed its sending side (orderly EOF). An empty buffer
-returns `0` without reading. The bytes are not NUL-terminated.
+returns `0` without reading. The bytes are not NUL-terminated. Read into a character buffer through
+`pace::as_writable_bytes`:
 
 ```cpp
-task<void> read_exact(std::span<char> buffer);
+std::array<char, 4096> buffer{};
+const auto count = co_await stream.read_some(pace::as_writable_bytes(buffer));
+std::string_view received(buffer.data(), count);
+```
+
+```cpp
 task<void> read_exact(std::span<std::byte> buffer);
 task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
 ```
@@ -195,15 +202,38 @@ A failed span read may have overwritten a prefix of the buffer.
 #### Writing
 
 ```cpp
-task<void> write_all(std::string_view bytes);
 task<void> write_all(std::span<const std::byte> bytes);
 ```
 
-Sends the whole view, looping over partial sends, and completes when the OS has accepted every byte. That does not
+Sends the whole span, looping over partial sends, and completes when the OS has accepted every byte. That does not
 mean the peer has received or processed them. The task borrows the bytes: keep them alive and unchanged until it
-completes, or use [`pace::write`](README.md#write), which owns a string. An empty view completes without sending.
-Large writes yield to the reactor after each MiB so other connections make progress. On POSIX, sends never raise
-`SIGPIPE`; a closed peer is reported as `std::system_error`.
+completes, or use [`pace::write`](README.md#write), which owns a string. Text is passed as
+`write_all(pace::as_bytes(text))`. An empty span completes without sending. Large writes yield to the reactor after
+each MiB so other connections make progress. On POSIX, sends never raise `SIGPIPE`; a closed peer is reported as
+`std::system_error`.
+
+#### `shutdown_write`
+
+```cpp
+task<void> shutdown_write();
+```
+
+Half-closes the connection: sends FIN (`shutdown` of the send side) so the peer reads EOF, while this side keeps
+reading until the peer's own EOF. It completes at once, without waiting for the peer, and throws
+`std::system_error` on an OS failure or a closed stream. Do not call it while a write is outstanding; a later
+`write_all` fails with the OS error. Unlike `close_gracefully`, it neither drains nor closes the socket: read the
+reply, then `close()` or destroy the stream.
+
+```cpp
+co_await stream.write_all(pace::as_bytes(request));
+co_await stream.shutdown_write(); // the peer reads EOF after the request
+std::string reply;
+std::array<char, 4096> buffer{};
+while (const auto count = co_await stream.read_some(pace::as_writable_bytes(buffer)))
+{
+    reply.append(buffer.data(), count);
+}
+```
 
 #### `set_no_delay`
 
@@ -396,15 +426,16 @@ the connection's task so one failing peer does not end the program.
   started while one in the same direction is suspended throws `std::logic_error` at once, before it touches the
   socket, so it can neither take the first read's data nor interleave its bytes with the first write.
 - A listener allows one outstanding `accept()`; a second one throws `std::logic_error` at once.
-- `close_gracefully()` requires that nothing else is outstanding.
+- `close_gracefully()` requires that nothing else is outstanding. `shutdown_write()` belongs to the write
+  direction: call it when no write is outstanding (this is not checked); a read may still be outstanding.
 
 ## Lifetime and ownership
 
 - The `io_context` must outlive every stream and listener created on it.
 - Keep a stream or listener alive, and at the same address, while any of its operations is suspended. Closing
   resumes them, but destroying the object before they have finished is undefined behaviour.
-- Buffers passed to `read_some`, `read_exact` (span overloads) and `write_all` are borrowed until the operation
-  completes. `connect` and the helpers taking `std::string` own their arguments.
+- Buffers passed to `read_some`, `read_exact` (span overload) and `write_all` are borrowed until the operation
+  completes, and so is the storage behind a `pace::as_bytes` or `pace::as_writable_bytes` view. `connect` and the helpers taking `std::string` own their arguments.
 - Move a stream or listener only when no operation is outstanding. A move leaves the source without a handle (but
   still bound to its context); move assignment closes the destination's previous socket first.
 - An accepted stream belongs to the listener's context; there is no way to rebind it to another context.

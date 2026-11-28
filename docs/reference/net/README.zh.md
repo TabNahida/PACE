@@ -1,11 +1,12 @@
-<!-- source-hash: 2318f65d63a5 -->
+<!-- source-hash: f622b1932a9c -->
 # 网络（`pace/net.hpp`）
 
 [English](README.md) · [参考手册](../README.zh.md)
 
 ## 概述
 
-net 模块在 PACE 反应器之上提供非阻塞的 TCP 与 UDP 套接字，以及适用于任何 PACE 字节流（TCP、TLS、QUIC 流）的通用辅助函数。
+net 模块在 PACE 反应器之上提供非阻塞的 TCP 与 UDP 套接字、TCP、TLS 与 QUIC 流共同满足的 `pace::byte_stream`
+概念、适用于任何字节流的通用辅助函数，以及文本与字节之间的零拷贝视图。
 
 | 头文件 | 目标 | 构建选项 |
 |:--|:--|:--|
@@ -16,7 +17,8 @@ net 模块在 PACE 反应器之上提供非阻塞的 TCP 与 UDP 套接字，以
 | 头文件 | 内容 | 页面 |
 |:--|:--|:--|
 | `<pace/net/ip.hpp>` | `pace::address_family` | 本页 |
-| `<pace/net/stream_io.hpp>` | 面向字节流的 `pace::write`、`pace::read_exact` | 本页 |
+| `<pace/net/buffer.hpp>` | `pace::as_bytes`、`pace::as_writable_bytes`、`pace::as_text` | 本页 |
+| `<pace/net/stream_io.hpp>` | `pace::byte_stream`；面向字节流的 `pace::write`、`pace::read_exact` | 本页 |
 | `<pace/net/tcp.hpp>` | `pace::tcp`：`endpoint`、`stream`、`listener`、`connect`、`listen`、`exchange` | [TCP](tcp.zh.md) |
 | `<pace/net/udp.hpp>` | `pace::udp`：`endpoint`、`socket`、`datagram`、`packet`、`open`、`bind`、`exchange`、`send` | [UDP](udp.zh.md) |
 
@@ -31,6 +33,9 @@ net 模块在 PACE 反应器之上提供非阻塞的 TCP 与 UDP 套接字，以
   它的异步操作在该上下文的线程上执行。
 - 操作返回惰性的 [`task`](../runtime/task.zh.md)：只有被 `co_await` 或 `spawn` 之后才会执行。
 - 套接字只能移动、不能复制，且只能在没有未完成操作时移动。
+- 流和套接字以 `std::byte` 读写：`read_some(std::span<std::byte>)` 与 `write_all(std::span<const std::byte>)`，
+  UDP 数据报也使用同样的 span 类型。文本通过 [`<pace/net/buffer.hpp>`](#as_bytesas_writable_bytes-与-as_text)
+  的视图跨过这道边界，不产生拷贝：`write_all(pace::as_bytes("text"))`、`read_some(pace::as_writable_bytes(buffer))`。
 - 错误以异常报告，大多是 `std::system_error`；参见各页的“错误”一节和[错误处理](../errors.zh.md)。
 
 ## 概要
@@ -39,7 +44,9 @@ net 模块在 PACE 反应器之上提供非阻塞的 TCP 与 UDP 套接字，以
 #include <pace/net.hpp>
 #include <pace/runtime.hpp>
 
+#include <array>
 #include <iostream>
+#include <string_view>
 
 pace::task<void> demo(pace::io_context& io)
 {
@@ -47,9 +54,13 @@ pace::task<void> demo(pace::io_context& io)
     auto client = co_await pace::tcp::connect(io, listener.local_endpoint());
     auto server = co_await listener.accept();
 
-    co_await pace::write(client, "ping");
-    auto received = co_await pace::read_exact(server, 4);
-    std::cout << received << '\n';
+    co_await pace::write(client, "ping"); // 拥有自己的字符串
+    std::cout << co_await pace::read_exact(server, 4) << '\n';
+
+    co_await server.write_all(pace::as_bytes("pong")); // 借用这些字节
+    std::array<char, 64> buffer{};
+    const auto count = co_await client.read_some(pace::as_writable_bytes(buffer));
+    std::cout << std::string_view(buffer.data(), count) << '\n';
 }
 
 int main()
@@ -86,16 +97,147 @@ TCP、UDP 端点或套接字的地址族。
 显式指定的地址族与地址不符时抛出 `std::invalid_argument`。`local_endpoint()`、`remote_endpoint()` 和收到的数据报
 发送方总是报告原生套接字地址的具体地址族。
 
+### `byte_stream`
+
+```cpp
+// <pace/net/stream_io.hpp>
+namespace pace
+{
+template <class Stream>
+concept byte_stream =
+    requires(Stream& stream, const Stream& owner, std::span<std::byte> input, std::span<const std::byte> output) {
+        { stream.read_some(input) } -> std::same_as<task<std::size_t>>;
+        { stream.write_all(output) } -> std::same_as<task<void>>;
+        { stream.shutdown_write() } -> std::same_as<task<void>>;
+        { stream.close() } noexcept;
+        { owner.context() } noexcept -> std::same_as<io_context&>;
+    };
+}
+```
+
+属于某个 `io_context` 的已连接、有序、双向字节流。[`tcp::stream`](tcp.zh.md#stream)、
+[`tls::stream`](../tls/README.zh.md#stream) 和 [`quic::stream`](../quic/README.zh.md#stream) 都满足它，应用自己的
+类型也可以满足。[`pace::write`](#write)、[`pace::read_exact`](#read_exact) 以及
+[`tls::stream` 的通用构造函数](../tls/README.zh.md#自定义传输层)接受任何 `byte_stream`。`udp::socket` 不是
+字节流：它传输的是数据报，而不是流。
+
+概念只检查签名。满足它的类型还要遵守以下契约：
+
+| 成员 | 契约 |
+|:--|:--|
+| `read_some(buffer)` | 以 1 到 `buffer.size()` 个字节完成；只有在流结束时（以及缓冲区为空时）才以 0 完成 |
+| `write_all(bytes)` | 在传输层接收了全部字节后完成，而不是在对端收到之后 |
+| `shutdown_write()` | 结束本方向：对端读到流结束，本端仍然可以读 |
+| `close()` | 立即释放流；挂起的操作以 `std::errc::operation_canceled` 恢复 |
+| `context()` | 执行该流全部操作的 `io_context` |
+
+同一时间可以有一个读和一个写未完成，除非该类型规定了更严格的限制：`tls::stream` 总共只允许一个操作。缓冲区在操作
+完成前一直被借用。
+
+| 类型 | `shutdown_write()` | `close()` |
+|:--|:--|:--|
+| `tcp::stream` | 发送 FIN | 关闭套接字 |
+| `tls::stream` | 发送 `close_notify`；读取持续到对端的 `close_notify` | 关闭传输层，不发送 `close_notify` |
+| `quic::stream` | 排队 FIN，与 `finish_write()` 相同 | 重置两个方向，与 `reset()` 相同 |
+
+应用类型只要转发给自己拥有的流即可满足该概念，例如统计收到的字节数：
+
+```cpp
+#include <pace/net.hpp>
+#include <pace/runtime.hpp>
+
+#include <cstddef>
+#include <span>
+#include <utility>
+
+class counting_stream
+{
+public:
+    explicit counting_stream(pace::tcp::stream inner)
+        : inner_(std::move(inner))
+    {
+    }
+
+    pace::task<std::size_t> read_some(std::span<std::byte> buffer)
+    {
+        const auto count = co_await inner_.read_some(buffer);
+        received_ += count;
+        co_return count;
+    }
+
+    pace::task<void> write_all(std::span<const std::byte> bytes)
+    {
+        return inner_.write_all(bytes);
+    }
+
+    pace::task<void> shutdown_write()
+    {
+        return inner_.shutdown_write();
+    }
+
+    void close() noexcept
+    {
+        inner_.close();
+    }
+
+    pace::io_context& context() const noexcept
+    {
+        return inner_.context();
+    }
+
+    std::size_t received() const noexcept
+    {
+        return received_;
+    }
+
+private:
+    pace::tcp::stream inner_;
+    std::size_t received_ = 0;
+};
+
+static_assert(pace::byte_stream<counting_stream>);
+```
+
 ## 函数
 
-`<pace/net/stream_io.hpp>` 中的辅助函数适用于任何具有 PACE 字节流成员
-`read_some(std::span<char>) -> task<std::size_t>` 和 `write_all(std::string_view) -> task<void>` 的类型：
-[`tcp::stream`](tcp.zh.md)、[`tls::stream`](../tls/README.zh.md) 和 [`quic::stream`](../quic/README.zh.md)。
+### `as_bytes`、`as_writable_bytes` 与 `as_text`
+
+```cpp
+// <pace/net/buffer.hpp>
+namespace pace
+{
+std::span<const std::byte> as_bytes(std::string_view text) noexcept;
+std::span<std::byte> as_writable_bytes(std::span<char> characters) noexcept;
+std::span<std::byte> as_writable_bytes(std::string& text) noexcept;
+std::string_view as_text(std::span<const std::byte> bytes) noexcept;
+}
+```
+
+文本与流读写的字节之间的视图。它们都不拷贝也不分配内存：结果指向实参的存储，只在该存储有效期间有效。
+
+| 函数 | 结果 |
+|:--|:--|
+| `as_bytes(text)` | 把 `text` 的字符看作字节，供 `write_all` 和 `send_to` 使用；接受字符串字面量、`std::string` 或 `std::string_view` |
+| `as_writable_bytes(characters)` | 把字符缓冲区（`std::array<char, N>`、`std::vector<char>`、`char` 数组）看作可写字节，供 `read_some` 和 `receive_from` 使用 |
+| `as_writable_bytes(text)` | 把已设好大小的 `std::string` 的字符看作可写字节，用于读入其中；字符串大小不变 |
+| `as_text(bytes)` | 把字节看作 `std::string_view`，用于解析读到的内容 |
+
+```cpp
+co_await stream.write_all(pace::as_bytes("GET / HTTP/1.0\r\n\r\n"));
+
+std::string reply(512, '\0');
+reply.resize(co_await stream.read_some(pace::as_writable_bytes(reply)));
+```
+
+传给 `as_bytes` 的临时 `std::string` 一直存活到完整表达式结束，因此
+`co_await stream.write_all(pace::as_bytes(prefix + body))` 是安全的；但保存在变量里的视图不能比它的字符串活得久。
+与 `std::as_bytes` 不同，`pace::as_bytes` 接受的是文本而不是 span。已经存放 `std::byte` 的缓冲区（例如
+`std::array<std::byte, N>`）直接传入即可。
 
 ### `write`
 
 ```cpp
-template <class Stream>
+template <byte_stream Stream>
 task<void> write(Stream& stream, std::string bytes);
 ```
 
@@ -106,18 +248,17 @@ task<void> write(Stream& stream, std::string bytes);
 ### `read_exact`
 
 ```cpp
-template <class Stream>
-task<void> read_exact(Stream& stream, std::span<char> bytes);
-template <class Stream>
+template <byte_stream Stream>
 task<void> read_exact(Stream& stream, std::span<std::byte> bytes);
-template <class Stream>
+template <byte_stream Stream>
 task<std::string> read_exact(Stream& stream, std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
 ```
 
 反复调用 `read_some`，直到读满所请求的字节数。它从不越过请求的长度读取，因此下一条消息的字节仍留在流中。请求长度
 为零时不读取，直接完成。
 
-- span 重载填充调用方的缓冲区，该缓冲区在任务完成前必须保持有效。操作失败时，缓冲区的某个前缀可能已被改写。
+- span 重载填充调用方的缓冲区，该缓冲区在任务完成前必须保持有效。操作失败时，缓冲区的某个前缀可能已被改写。字符
+  缓冲区请以 `pace::as_writable_bytes(buffer)` 传入。
 - `size` 重载返回一个恰好 `size` 字节、自有数据的字符串。当 `size > maximum` 时，它在分配内存和读取之前抛出
   `std::length_error`。`maximum` 限制的是分配大小而不是流；消息更大时请调高它。
 
@@ -132,16 +273,19 @@ task<std::string> read_exact(Stream& stream, std::size_t size, std::size_t maxim
 | `size > maximum`（`read_exact`） | `std::length_error`，发生在任何 I/O 之前 |
 | 传输错误、取消、流已关闭 | 由 `read_some` / `write_all` 原样传播 |
 
+`as_bytes`、`as_writable_bytes` 和 `as_text` 都是 `noexcept`，不会失败。
+
 ## 线程与并发
 
 这些辅助函数在流所属的上下文上执行，并沿用该流的并发规则。`read_exact` 在整个执行期间算作一个读操作：完成之前不要
 在同一个流上启动其他读操作。在 `tls::stream` 上则不要启动任何其他操作，因为 TLS 同一时间只允许一个操作。`write`
-算作一个写操作。
+算作一个写操作。`<pace/net/buffer.hpp>` 的视图不做 I/O，可以在任何线程上使用。
 
 ## 生命周期与所有权
 
 流是借用的：任务完成之前，流必须存活、地址不变，并留在其所属上下文上。`write` 拥有它的字节；`read_exact` 的
-span 重载借用调用方的缓冲区。
+span 重载借用调用方的缓冲区。`<pace/net/buffer.hpp>` 的视图借用它们所指向的存储：在所有使用该视图的操作完成之前，
+该存储必须存活且不被修改。
 
 ## 限制与默认值
 
@@ -156,3 +300,4 @@ span 重载借用调用方的缓冲区。
 - [任务](../runtime/task.zh.md)、[运行程序](../runtime/run.zh.md)、[结构化并发](../runtime/structured-concurrency.zh.md)
 - 教程：[TCP](../../tutorial/05-tcp.zh.md)、[UDP](../../tutorial/06-udp.zh.md)
 - 指南：[协议调优](../../guides/protocol-tuning.zh.md)
+- [迁移到字节接口](../../migration/0.6-to-1.0.zh.md#字节流只有一套字节接口)

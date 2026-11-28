@@ -123,9 +123,7 @@ public:
     void bind(endpoint local, bind_options options = {});
     endpoint local_endpoint() const;
     void set_broadcast(bool enabled = true);
-    task<std::size_t> send_to(std::string_view bytes, endpoint destination);
     task<std::size_t> send_to(std::span<const std::byte> bytes, endpoint destination);
-    task<datagram> receive_from(std::span<char> buffer);
     task<datagram> receive_from(std::span<std::byte> buffer);
     task<std::size_t> send(std::string bytes, endpoint destination);
     task<packet> receive(std::size_t capacity = 65536);
@@ -164,20 +162,18 @@ while a send or receive is outstanding throws `std::logic_error`. Synchronous; m
 #### Sending
 
 ```cpp
-task<std::size_t> send_to(std::string_view bytes, endpoint destination);
 task<std::size_t> send_to(std::span<const std::byte> bytes, endpoint destination);
 task<std::size_t> send(std::string bytes, endpoint destination);
 ```
 
-Sends one datagram and returns its size. `send_to` borrows the bytes until it completes; `send` owns its string. An
-empty payload sends an empty datagram. A payload larger than 65,507 bytes, or one the OS accepts only in part,
+Sends one datagram and returns its size. `send_to` borrows the bytes until it completes; pass text as
+`send_to(pace::as_bytes(text), destination)`. `send` owns its string. An empty payload sends an empty datagram. A payload larger than 65,507 bytes, or one the OS accepts only in part,
 throws `std::system_error` with `std::errc::message_size`; the path MTU may make the useful limit much smaller.
 Completion means the local socket accepted the datagram, not that it was delivered.
 
 #### Receiving
 
 ```cpp
-task<datagram> receive_from(std::span<char> buffer);
 task<datagram> receive_from(std::span<std::byte> buffer);
 task<packet> receive(std::size_t capacity = 65536);
 ```
@@ -186,7 +182,17 @@ Waits for one datagram. `receive_from` copies it into the borrowed `buffer`, whi
 (`std::invalid_argument`). `receive` allocates `capacity` bytes, returns a `packet` holding only the received
 bytes, and throws `std::invalid_argument` for `capacity == 0` and `std::length_error` for `capacity > 65536`, before
 any I/O. A small capacity can truncate a datagram; check `truncated`. Use `receive_from` to reuse a buffer across
-receives.
+receives; a character buffer goes through `pace::as_writable_bytes`:
+
+```cpp
+std::array<char, 1500> buffer{};
+for (;;)
+{
+    const auto received = co_await socket.receive_from(pace::as_writable_bytes(buffer));
+    const std::string_view payload(buffer.data(), received.size);
+    co_await socket.send_to(pace::as_bytes(payload), received.sender);
+}
+```
 
 #### `set_broadcast`
 
@@ -286,8 +292,8 @@ As with TCP, compare `error.code()` with `std::errc` conditions rather than nume
 
 - The `io_context` must outlive every socket created on it.
 - Keep the socket alive and at the same address while any operation is suspended, and keep `send_to` and
-  `receive_from` buffers valid until their operation completes. `send`, `receive` and the free functions own their
-  data.
+  `receive_from` buffers (including the storage behind a `pace::as_bytes` or `pace::as_writable_bytes` view) valid
+  until their operation completes. `send`, `receive` and the free functions own their data.
 - Move a socket only while it is idle. Move assignment closes the destination's previous socket first.
 
 ## Limits and defaults

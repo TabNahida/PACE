@@ -1,12 +1,12 @@
-<!-- source-hash: 0685e11d8875 -->
+<!-- source-hash: 9383233a293a -->
 # TLS（`pace/tls.hpp`）
 
 [English](README.md) · [参考手册](../README.zh.md)
 
 ## 概述
 
-TLS 模块借助 OpenSSL 在 TCP 流或任何其他 PACE 字节流上运行 TLS，支持带验证的客户端、按域名选择证书的服务器、
-STARTTLS 以及按 ClientHello 路由。
+TLS 模块借助 OpenSSL 在 TCP 流或任何其他 [`pace::byte_stream`](../net/README.zh.md#byte_stream) 上运行 TLS，支持
+带验证的客户端、按域名选择证书的服务器、STARTTLS 以及按 ClientHello 路由。
 
 | 头文件 | 目标 | 构建选项 |
 |:--|:--|:--|
@@ -314,7 +314,7 @@ public:
     stream(io_context& io, const tls::context& configuration);
     stream(tcp::stream transport, const tls::context& configuration);
     stream(tcp::stream transport, const tls::context& configuration, std::string_view pre_read);
-    template <tls_byte_stream Transport>
+    template <byte_stream Transport>
     requires(!std::same_as<Transport, tcp::stream>)
     stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {});
     ~stream();
@@ -327,13 +327,12 @@ public:
     task<void> connect(tcp::endpoint endpoint, std::string peer_name, std::string server_name);
     task<void> handshake(std::string peer_name = {});
     task<void> handshake(std::string peer_name, std::string server_name);
-    template <tls_byte_stream Transport = tcp::stream>
+    template <byte_stream Transport = tcp::stream>
     task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff();
 
-    task<std::size_t> read_some(std::span<char> buffer);
     task<std::size_t> read_some(std::span<std::byte> buffer);
-    task<void> write_all(std::string_view bytes);
     task<void> write_all(std::span<const std::byte> bytes);
+    task<void> shutdown_write();
 
     task<void> shutdown(std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
     task<void> close_gracefully(std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
@@ -345,7 +344,9 @@ public:
 };
 ```
 
-在其拥有的传输层之上运行的、只能移动的 TLS 会话。构造会冻结配置。
+在其拥有的传输层之上运行的、只能移动的 TLS 会话。构造会冻结配置。`tls::stream` 本身也是
+[`pace::byte_stream`](../net/README.zh.md#byte_stream)，因此可以承载另一个 TLS 会话，也可以传给 `pace::write` 和
+`pace::read_exact`。
 
 #### 构造
 
@@ -354,7 +355,7 @@ public:
 | `stream(io, configuration)` | `io` 上一个新的、未连接的 TCP 套接字；随后调用 `connect` |
 | `stream(tcp_stream, configuration)` | 移入一个已接受或已连接的 TCP 流；随后调用 `handshake` |
 | `stream(tcp_stream, configuration, pre_read)` | 同上，用于已从套接字读走部分 TLS 字节的情况 |
-| `stream(transport, configuration, pre_read = {})` | 移入任何其他满足 [`tls_byte_stream`](#自定义传输层) 的已连接字节流 |
+| `stream(transport, configuration, pre_read = {})` | 移入任何其他已连接的 [`pace::byte_stream`](#自定义传输层) |
 
 传输层移入之后，不要再用它做明文 I/O。`pre_read` 用于协议探测或 STARTTLS 协商时已经读走的 TLS 字节：流在构造函数
 返回前复制这些字节，并在从传输层读取之前按线上顺序重放它们。这段前缀可以包含完整的 ClientHello，也可以在某个记录
@@ -396,7 +397,7 @@ co_await connection.handshake();
 #### `handshake_with_handoff`
 
 ```cpp
-template <tls_byte_stream Transport = tcp::stream>
+template <byte_stream Transport = tcp::stream>
 task<std::optional<client_hello_handoff<Transport>>> handshake_with_handoff();
 ```
 
@@ -422,17 +423,22 @@ else
 #### 读取与写入
 
 ```cpp
-task<std::size_t> read_some(std::span<char> buffer);
 task<std::size_t> read_some(std::span<std::byte> buffer);
-task<void> write_all(std::string_view bytes);
 task<void> write_all(std::span<const std::byte> bytes);
 ```
 
 握手成功后才可使用（之前调用抛出 `std::logic_error`）。`read_some` 返回解密后的字节，可能少于请求的数量。缓冲区
 非空时，`0` 表示对端发送了经过验证的 `close_notify`；没有该告警的传输层 EOF 属于协议错误，因此被截断的 TLS 流量
-不会被当作正常结束。缓冲区为空时不读取，直接返回 `0`。`write_all` 加密并发送整个视图，处理部分写入，在密文交给
-传输层后完成。缓冲区在操作完成前一直被借用。通用的 [`pace::write` 和 `pace::read_exact`](../net/README.zh.md#函数)
-可用于 `tls::stream`。
+不会被当作正常结束。缓冲区为空时不读取，直接返回 `0`。`write_all` 加密并发送整个 span，处理部分写入，在密文交给
+传输层后完成。缓冲区在操作完成前一直被借用。文本经过
+[`pace::as_bytes` 和 `pace::as_writable_bytes`](../net/README.zh.md#as_bytesas_writable_bytes-与-as_text)，通用的
+[`pace::write` 和 `pace::read_exact`](../net/README.zh.md#函数) 也可用于 `tls::stream`：
+
+```cpp
+co_await connection.write_all(pace::as_bytes("GET / HTTP/1.1\r\nHost: api.example.com\r\n\r\n"));
+std::array<char, 4096> buffer{};
+const auto count = co_await connection.read_some(pace::as_writable_bytes(buffer));
+```
 
 #### 关闭
 
@@ -448,9 +454,31 @@ void close() noexcept;
 - 一个可取消的反应器定时器约束整个操作；达到 `timeout` 时正常关闭，但不保证对端收到任何内容。TLS 错误或取消会关闭
   传输层并传播。
 - `timeout` 不为正数时，在 TCP 传输层上尝试一次，其他传输层则立即关闭。
-- 对于带 `close()` 的自定义传输层，如果它有 `shutdown(std::chrono::milliseconds) -> task<void>` 成员，会在 `close()`
-  之前调用。QUIC 风格的传输层用 `finish_write()` 发送 FIN，并等待对端的 FIN。
+- 对于自定义传输层，如果它有 `shutdown(std::chrono::milliseconds) -> task<void>` 成员，会在 `close()` 之前调用。
+  QUIC 风格的传输层（带 `finish_write()` 的）用 `shutdown_write()` 发送 FIN，并等待对端的 FIN。其他传输层直接关闭。
 - 关闭期间不能有其他 TLS 操作。关闭结束后定时器立即移除。
+
+```cpp
+task<void> shutdown_write();
+```
+
+`shutdown_write` 半关闭 TLS 会话：它发送 `close_notify`，在告警交给传输层后完成，不等待对端的 `close_notify`。此后
+对端的 `read_some` 返回 `0`，而本端的 `read_some` 继续返回对端的数据，直到对端自己的 `close_notify` 到达（随后返回
+`0`）。之后再写会以 `std::system_error` 失败，并像任何失败的操作一样关闭传输层。它要求握手已完成且没有其他操作在
+进行；TLS 失败时抛出错误码为 `protocol_error` 的 `std::system_error` 并关闭传输层。传输层保持打开：读到结尾后，
+`close()` 该流（或让它析构）。
+
+```cpp
+co_await connection.write_all(pace::as_bytes(request));
+co_await connection.shutdown_write(); // close_notify：请求已经完整
+std::string reply;
+std::array<char, 4096> buffer{};
+while (const auto count = co_await connection.read_some(pace::as_writable_bytes(buffer)))
+{
+    reply.append(buffer.data(), count);
+}
+connection.close();
+```
 
 `close()` 立即关闭或复位传输层并取消等待；它不发送 `close_notify`，也不等待。挂起的操作随后以错误结束，因此在它们
 结束之前保持 `stream` 存活。析构函数也会立即关闭。
@@ -470,35 +498,21 @@ void close() noexcept;
 ### 自定义传输层
 
 ```cpp
-template <class Transport>
-concept tls_closeable = requires(Transport& transport) {
-    { transport.close() } noexcept -> std::same_as<void>;
-};
-
-template <class Transport>
-concept tls_resettable = requires(Transport& transport) {
-    { transport.finish_write() } -> std::same_as<void>;
-    { transport.reset() } noexcept -> std::same_as<void>;
-};
-
-template <class Transport>
-concept tls_byte_stream =
-    (tls_closeable<Transport> || tls_resettable<Transport>)
-    && requires(Transport& transport, const Transport& owner, std::span<char> input, std::string_view output) {
-           { owner.context() } noexcept -> std::same_as<io_context&>;
-           { transport.read_some(input) } -> std::same_as<task<std::size_t>>;
-           { transport.write_all(output) } -> std::same_as<task<void>>;
-       };
+template <byte_stream Transport>
+requires(!std::same_as<Transport, tcp::stream>)
+stream(Transport transport, const tls::context& configuration, std::string_view pre_read = {});
 ```
 
-`tls::stream` 可以运行在任何满足 `tls_byte_stream` 的已连接、有序、双向字节流之上：双向的 `quic::stream`、另一个
-`tls::stream`（嵌套 TLS），或应用自己的适配器。流拥有传给它的传输层。要求如下：
+`tls::stream` 可以运行在任何满足 [`pace::byte_stream`](../net/README.zh.md#byte_stream) 的已连接、有序、双向字节流
+之上：双向的 `quic::stream`、另一个 `tls::stream`（嵌套 TLS），或应用自己的适配器。流拥有传给它的传输层。在该概念的
+契约之外还要求：
 
 - `context()` 返回反应器；传输层在整个生命周期内都留在该反应器上。
 - `read_some` 只在 EOF 时返回 `0`；`write_all` 在接受全部字节后才完成。
-- 提供 `close() noexcept`，或者 QUIC 风格的一对 `finish_write()` 和 `reset() noexcept`。关闭或复位必须以
-  `operation_canceled` 取消未完成的操作。
+- `close()` 必须以 `operation_canceled` 取消未完成的操作。TLS 放弃传输层时调用它。
 - 可选：`is_open() const noexcept` 让 TLS 能感知传输层已关闭。
+- 可选：TLS 会话关闭时，`shutdown(std::chrono::milliseconds) -> task<void>` 成员会在 `close()` 之前执行；带
+  `finish_write()` 的传输层（QUIC）则改为调用 `shutdown_write()`，并一直读到对端的 FIN。
 - 关闭期间，TLS 可能同时进行一次传输层读和一次传输层写，以便在缓冲区已满时交换告警。串行化 I/O 的适配器可以声明
   返回 `false` 的 `bool supports_concurrent_io() const noexcept`。
 
@@ -543,14 +557,14 @@ task<stream> accept(tcp::stream transport, const context& configuration);
 
 | 情形 | 异常 |
 |:--|:--|
-| 握手失败、证书或名字不符、非正常 EOF、OpenSSL 错误 | `std::system_error`，错误码 `std::errc::protocol_error`，附 OpenSSL 诊断文本 |
+| 握手失败、证书或名字不符、非正常 EOF、OpenSSL 错误、`shutdown_write` 之后再写 | `std::system_error`，错误码 `std::errc::protocol_error`，附 OpenSSL 诊断文本 |
 | 加载默认信任路径、信任文件或证书失败 | `std::system_error`（`protocol_error`） |
 | `connect` 中的 TCP 连接失败 | TCP 的 `std::system_error`，原样传播 |
 | 参数无效：路径为空、PEM 错误、ALPN 列表错误、SNI 名无效、回调为空、CA 客户端没有对端名、服务器握手传入了对端名 | `std::invalid_argument` |
 | 在服务器 context 上设置验证模式；在客户端 context 上设置 SNI 或 ClientHello | `std::invalid_argument` |
 | 在已冻结或被移走的 context 上调用 setter | `std::logic_error` |
 | 已有操作进行时启动第二个操作 | `std::logic_error`；正在进行的操作不受影响 |
-| 握手前读、写或关闭；第二次握手；在非 TCP 流上或以服务器 context `connect`；在非 TCP 流上 `set_no_delay`；移交用法错误；被移走的流 | `std::logic_error` |
+| 握手前读、写、`shutdown_write` 或关闭；第二次握手；在非 TCP 流上或以服务器 context `connect`；在非 TCP 流上 `set_no_delay`；移交用法错误；被移走的流 | `std::logic_error` |
 | 在传输层所属上下文之外执行操作 | `std::logic_error` |
 | 上下文停止、流被关闭、任务被取消 | `std::system_error`（`operation_canceled`） |
 | 等待方任务的截止时间到期 | `std::system_error`（`timed_out`） |
@@ -561,7 +575,7 @@ task<stream> accept(tcp::stream transport, const context& configuration);
 ## 线程与并发
 
 - 所有流操作都在拥有传输层的反应器上执行。`close()` 和析构也必须在那里执行，或在它未运行时执行。
-- **每个流同一时间只能有一个异步操作**，读、写、握手和关闭都算在内。OpenSSL 的任何操作都可能需要另一个方向，因此
+- **每个流同一时间只能有一个异步操作**，读、写、握手、`shutdown_write` 和关闭都算在内。OpenSSL 的任何操作都可能需要另一个方向，因此
   TCP 那种“一读一写”的规则在这里不适用；独立的读任务和写任务不能共享一个 TLS 流。
 - 一个 `context` 可以同时被多个反应器上的流使用，此时其验证回调和 ClientHello 回调会并发执行，必须是线程安全的。
   请在第一个流创建之前，在一个线程上完成配置。

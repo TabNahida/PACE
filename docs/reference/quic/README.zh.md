@@ -1,4 +1,4 @@
-<!-- source-hash: 6c18b8d2be2e -->
+<!-- source-hash: 428abc5a28f9 -->
 # QUIC
 
 [English](README.md) · [参考](../README.zh.md)
@@ -37,7 +37,7 @@ pace::task<std::string> read_to_fin(pace::quic::stream& stream)
 {
     std::array<char, 4096> buffer{};
     std::string bytes;
-    while (auto count = co_await stream.read_some(buffer))
+    while (auto count = co_await stream.read_some(pace::as_writable_bytes(buffer)))
     {
         bytes.append(buffer.data(), count);
     }
@@ -48,7 +48,7 @@ pace::task<void> echo_once(pace::quic::listener& listener)
 {
     auto connection = co_await listener.accept();
     auto stream = co_await connection.accept_stream();
-    co_await stream.write_all("echo: " + co_await read_to_fin(stream));
+    co_await pace::write(stream, "echo: " + co_await read_to_fin(stream));
     stream.finish_write();
     while (stream.pending_write_bytes() != 0) // Keep the stream until the peer has acknowledged it.
     {
@@ -64,7 +64,7 @@ pace::task<void> ask(pace::quic::listener& listener, const pace::quic::context& 
             auto server = group.spawn(echo_once(listener));
             auto connection = co_await pace::quic::connect(client_config, listener.local_endpoint(), "localhost");
             auto stream = co_await connection.open_stream();
-            co_await stream.write_all("hello");
+            co_await stream.write_all(pace::as_bytes("hello"));
             stream.finish_write(); // FIN on our direction; the reply still arrives.
             std::cout << co_await read_to_fin(stream) << '\n';
             co_await server; // Keep the connection open until the server has its acknowledgement.
@@ -189,20 +189,23 @@ public:
     bool is_unidirectional() const noexcept;
     bool is_local() const noexcept;
     io_context& context() const noexcept;
-    task<std::size_t> read_some(std::span<char> buffer);
-    task<void> write_all(std::string_view bytes);
     task<std::size_t> read_some(std::span<std::byte> buffer);
     task<void> write_all(std::span<const std::byte> bytes);
+    task<void> shutdown_write();
+    void close() noexcept;
     task<void> wait_events();
-    std::optional<std::size_t> try_read(std::span<char> buffer);
-    std::size_t try_write(std::string_view bytes);
+    std::optional<std::size_t> try_read(std::span<std::byte> buffer);
+    std::size_t try_write(std::span<const std::byte> bytes);
     std::uint64_t pending_write_bytes() const;
     void finish_write();
     void reset(std::uint64_t application_error = 0) noexcept;
 };
 ```
 
-连接中的一个流。只能移动。流句柄会让其连接的状态保持存活。
+连接中的一个流。只能移动。流句柄会让其连接的状态保持存活。`quic::stream` 是一个
+[`pace::byte_stream`](../net/README.zh.md#byte_stream)：它以 `std::byte` span 读写（文本经过
+[`pace::as_bytes` 和 `pace::as_writable_bytes`](../net/README.zh.md#as_bytesas_writable_bytes-与-as_text)），
+`tls::stream` 也可以运行在双向的 `quic::stream` 之上。
 
 - `id()` 是 QUIC 流 ID；`is_unidirectional()` 和 `is_local()`（由本端打开）由它推导。`context()` 是所属的
   `io_context`。
@@ -210,7 +213,8 @@ public:
   重置或连接失败是错误，而不是返回 0。
 - `write_all(bytes)` 在传输层接受了全部字节后完成，必要时施加流量控制背压。这并不表示对端已收到或确认。字节
   是借用的：在任务完成前保持其有效。
-- `std::byte` 重载的行为相同。
+- `shutdown_write()` 是 `pace::byte_stream` 所要求形式的 `finish_write()`：排入 FIN 并立即完成。
+- `close()` 是 `pace::byte_stream` 所要求形式的 `reset()`（应用错误码为 0）：立即放弃两个方向，并唤醒挂起的操作。
 - `try_read(buffer)` 不挂起地读取：空 optional 表示暂无数据，0 表示 FIN，否则是复制的字节数。
 - `try_write(bytes)` 不挂起地按流量控制窗口所允许的量入队，并返回入队字节数；对非空输入返回 0 表示会阻塞。
   在有进展后重试剩余部分。

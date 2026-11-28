@@ -1,4 +1,4 @@
-<!-- source-hash: ae06a837ca7f -->
+<!-- source-hash: 77bab1c8e3a4 -->
 # UDP（`pace::udp`）
 
 [English](udp.md) · [网络](README.zh.md)
@@ -120,9 +120,7 @@ public:
     void bind(endpoint local, bind_options options = {});
     endpoint local_endpoint() const;
     void set_broadcast(bool enabled = true);
-    task<std::size_t> send_to(std::string_view bytes, endpoint destination);
     task<std::size_t> send_to(std::span<const std::byte> bytes, endpoint destination);
-    task<datagram> receive_from(std::span<char> buffer);
     task<datagram> receive_from(std::span<std::byte> buffer);
     task<std::size_t> send(std::string bytes, endpoint destination);
     task<packet> receive(std::size_t capacity = 65536);
@@ -161,19 +159,18 @@ void bind(endpoint local, bind_options options = {});
 #### 发送
 
 ```cpp
-task<std::size_t> send_to(std::string_view bytes, endpoint destination);
 task<std::size_t> send_to(std::span<const std::byte> bytes, endpoint destination);
 task<std::size_t> send(std::string bytes, endpoint destination);
 ```
 
-发送一个数据报并返回其大小。`send_to` 在完成前借用这些字节；`send` 拥有自己的字符串。空载荷会发送一个空数据报。
+发送一个数据报并返回其大小。`send_to` 在完成前借用这些字节；文本写作 `send_to(pace::as_bytes(text), destination)`。
+`send` 拥有自己的字符串。空载荷会发送一个空数据报。
 载荷超过 65,507 字节，或操作系统只接受了一部分时，抛出错误码为 `std::errc::message_size` 的 `std::system_error`；
 路径 MTU 可能使实际可用的上限小得多。完成表示本地套接字接受了该数据报，不表示已经送达。
 
 #### 接收
 
 ```cpp
-task<datagram> receive_from(std::span<char> buffer);
 task<datagram> receive_from(std::span<std::byte> buffer);
 task<packet> receive(std::size_t capacity = 65536);
 ```
@@ -181,7 +178,17 @@ task<packet> receive(std::size_t capacity = 65536);
 等待一个数据报。`receive_from` 把它复制到借用的 `buffer` 中，缓冲区不能为空（`std::invalid_argument`）。`receive`
 分配 `capacity` 字节，返回只含实际收到字节的 `packet`；`capacity == 0` 时抛出 `std::invalid_argument`，
 `capacity > 65536` 时抛出 `std::length_error`，都发生在任何 I/O 之前。容量太小会截断数据报，请检查 `truncated`。
-需要在多次接收间复用缓冲区时使用 `receive_from`。
+需要在多次接收间复用缓冲区时使用 `receive_from`；字符缓冲区经过 `pace::as_writable_bytes` 传入：
+
+```cpp
+std::array<char, 1500> buffer{};
+for (;;)
+{
+    const auto received = co_await socket.receive_from(pace::as_writable_bytes(buffer));
+    const std::string_view payload(buffer.data(), received.size);
+    co_await socket.send_to(pace::as_bytes(payload), received.sender);
+}
+```
 
 #### `set_broadcast`
 
@@ -275,8 +282,8 @@ std::size_t send(endpoint peer, std::string message, blocking_options options = 
 ## 生命周期与所有权
 
 - `io_context` 的寿命必须长于在其上创建的所有套接字。
-- 只要有挂起的操作，就保持套接字存活且地址不变；`send_to` 和 `receive_from` 的缓冲区在操作完成前必须有效。
-  `send`、`receive` 和各自由函数拥有自己的数据。
+- 只要有挂起的操作，就保持套接字存活且地址不变；`send_to` 和 `receive_from` 的缓冲区（包括 `pace::as_bytes` 或
+  `pace::as_writable_bytes` 视图背后的存储）在操作完成前必须有效。`send`、`receive` 和各自由函数拥有自己的数据。
 - 只在套接字空闲时移动它。移动赋值会先关闭目标原有的套接字。
 
 ## 限制与默认值

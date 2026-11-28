@@ -1,4 +1,4 @@
-<!-- source-hash: 831a0e188223 -->
+<!-- source-hash: 4a8447c4e7a0 -->
 # TCP（`pace::tcp`）
 
 [English](tcp.md) · [网络](README.zh.md)
@@ -11,8 +11,10 @@
 |:--|:--|:--|
 | `<pace/net/tcp.hpp>`（由 `<pace/net.hpp>` 包含） | `pace_net` | 无（始终构建） |
 
-端点是数字形式的 IPv4 或 IPv6 地址，不会隐式解析主机名。通用的
-[`pace::write` 和 `pace::read_exact`](README.zh.md#函数) 可用于 `tcp::stream`。启用 `--modules=y` 时，这些名字由
+端点是数字形式的 IPv4 或 IPv6 地址，不会隐式解析主机名。`tcp::stream` 是一个
+[`pace::byte_stream`](README.zh.md#byte_stream)：它以 `std::byte` span 读写，因此文本要经过
+[`pace::as_bytes` 和 `pace::as_writable_bytes`](README.zh.md#as_bytesas_writable_bytes-与-as_text)，通用的
+[`pace::write` 和 `pace::read_exact`](README.zh.md#函数) 也可用于它。启用 `--modules=y` 时，这些名字由
 `import pace.net;` 导出。
 
 ## 概要
@@ -22,14 +24,16 @@
 #include <pace/runtime.hpp>
 
 #include <array>
+#include <cstddef>
 #include <iostream>
+#include <span>
 
 pace::task<void> echo(pace::tcp::stream peer)
 {
-    std::array<char, 4096> buffer{};
+    std::array<std::byte, 4096> buffer{};
     while (const auto count = co_await peer.read_some(buffer))
     {
-        co_await peer.write_all(std::string_view(buffer.data(), count));
+        co_await peer.write_all(std::span(buffer).first(count));
     }
 }
 
@@ -121,13 +125,11 @@ public:
     stream& operator=(const stream&) = delete;
 
     task<void> connect(endpoint endpoint);
-    task<std::size_t> read_some(std::span<char> buffer);
     task<std::size_t> read_some(std::span<std::byte> buffer);
-    task<void> read_exact(std::span<char> buffer);
     task<void> read_exact(std::span<std::byte> buffer);
     task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
-    task<void> write_all(std::string_view bytes);
     task<void> write_all(std::span<const std::byte> bytes);
+    task<void> shutdown_write();
 
     void set_no_delay(bool enabled = true);
     task<void> close_gracefully(
@@ -167,15 +169,19 @@ task<void> connect(endpoint endpoint);
 #### 读取
 
 ```cpp
-task<std::size_t> read_some(std::span<char> buffer);
 task<std::size_t> read_some(std::span<std::byte> buffer);
 ```
 
 等待至少一个字节可读，返回复制的字节数，可能少于 `buffer.size()`。缓冲区非空时，`0` 表示对端关闭了发送方向（有序
-EOF）。缓冲区为空时不读取，直接返回 `0`。读到的字节不以 NUL 结尾。
+EOF）。缓冲区为空时不读取，直接返回 `0`。读到的字节不以 NUL 结尾。读入字符缓冲区时经过 `pace::as_writable_bytes`：
 
 ```cpp
-task<void> read_exact(std::span<char> buffer);
+std::array<char, 4096> buffer{};
+const auto count = co_await stream.read_some(pace::as_writable_bytes(buffer));
+std::string_view received(buffer.data(), count);
+```
+
+```cpp
 task<void> read_exact(std::span<std::byte> buffer);
 task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
 ```
@@ -187,14 +193,35 @@ task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t
 #### 写入
 
 ```cpp
-task<void> write_all(std::string_view bytes);
 task<void> write_all(std::span<const std::byte> bytes);
 ```
 
-循环处理部分发送，发送整个视图，在操作系统接受了全部字节后完成。这并不表示对端已收到或处理。任务借用这些字节：
-完成之前保持它们存活且不变，或者改用拥有字符串的 [`pace::write`](README.zh.md#write)。空视图不发送，直接完成。大块
-写入每发送 1 MiB 就让出一次反应器，使其他连接得以推进。在 POSIX 上发送从不触发 `SIGPIPE`；对端已关闭时报告为
-`std::system_error`。
+循环处理部分发送，发送整个 span，在操作系统接受了全部字节后完成。这并不表示对端已收到或处理。任务借用这些字节：
+完成之前保持它们存活且不变，或者改用拥有字符串的 [`pace::write`](README.zh.md#write)。文本写作
+`write_all(pace::as_bytes(text))`。空 span 不发送，直接完成。大块写入每发送 1 MiB 就让出一次反应器，使其他连接得以
+推进。在 POSIX 上发送从不触发 `SIGPIPE`；对端已关闭时报告为 `std::system_error`。
+
+#### `shutdown_write`
+
+```cpp
+task<void> shutdown_write();
+```
+
+半关闭连接：发送 FIN（关闭发送方向的 `shutdown`），对端由此读到 EOF，本端则继续读取，直到对端自己的 EOF。它立即
+完成，不等待对端；操作系统失败或流已关闭时抛出 `std::system_error`。不要在有写操作未完成时调用它；之后再调用
+`write_all` 会以操作系统错误失败。与 `close_gracefully` 不同，它既不排空输入也不关闭套接字：读完应答后再 `close()`
+或销毁流。
+
+```cpp
+co_await stream.write_all(pace::as_bytes(request));
+co_await stream.shutdown_write(); // 对端在请求之后读到 EOF
+std::string reply;
+std::array<char, 4096> buffer{};
+while (const auto count = co_await stream.read_some(pace::as_writable_bytes(buffer)))
+{
+    reply.append(buffer.data(), count);
+}
+```
 
 #### `set_no_delay`
 
@@ -374,15 +401,16 @@ std::string exchange(
   一个读任务和一个写任务可以共享同一个流。同一方向上已有操作挂起时再发起读或写，会在触碰套接字之前立即抛出
   `std::logic_error`，因此它既不会拿走第一个读操作的数据，也不会与第一个写操作的数据交错。
 - 一个监听器同时只允许一个未完成的 `accept()`；第二个会立即抛出 `std::logic_error`。
-- `close_gracefully()` 要求没有其他未完成操作。
+- `close_gracefully()` 要求没有其他未完成操作。`shutdown_write()` 属于写方向：请在没有写操作未完成时调用（不做
+  检查）；此时仍可以有一个读操作未完成。
 
 ## 生命周期与所有权
 
 - `io_context` 的寿命必须长于在其上创建的所有流和监听器。
 - 只要流或监听器还有挂起的操作，就要保持它存活且地址不变。关闭会让这些操作恢复，但在它们结束之前销毁对象属于未
   定义行为。
-- 传给 `read_some`、`read_exact`（span 重载）和 `write_all` 的缓冲区在操作完成前一直被借用。`connect` 以及接受
-  `std::string` 的辅助函数拥有自己的参数。
+- 传给 `read_some`、`read_exact`（span 重载）和 `write_all` 的缓冲区在操作完成前一直被借用，`pace::as_bytes` 或
+  `pace::as_writable_bytes` 视图背后的存储也是如此。`connect` 以及接受 `std::string` 的辅助函数拥有自己的参数。
 - 只在没有未完成操作时移动流或监听器。移动后源对象不再持有句柄（但仍绑定原上下文）；移动赋值会先关闭目标原有的
   套接字。
 - 接受得到的流属于监听器的上下文，无法重新绑定到其他上下文。

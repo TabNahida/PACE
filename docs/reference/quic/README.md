@@ -38,7 +38,7 @@ pace::task<std::string> read_to_fin(pace::quic::stream& stream)
 {
     std::array<char, 4096> buffer{};
     std::string bytes;
-    while (auto count = co_await stream.read_some(buffer))
+    while (auto count = co_await stream.read_some(pace::as_writable_bytes(buffer)))
     {
         bytes.append(buffer.data(), count);
     }
@@ -49,7 +49,7 @@ pace::task<void> echo_once(pace::quic::listener& listener)
 {
     auto connection = co_await listener.accept();
     auto stream = co_await connection.accept_stream();
-    co_await stream.write_all("echo: " + co_await read_to_fin(stream));
+    co_await pace::write(stream, "echo: " + co_await read_to_fin(stream));
     stream.finish_write();
     while (stream.pending_write_bytes() != 0) // Keep the stream until the peer has acknowledged it.
     {
@@ -65,7 +65,7 @@ pace::task<void> ask(pace::quic::listener& listener, const pace::quic::context& 
             auto server = group.spawn(echo_once(listener));
             auto connection = co_await pace::quic::connect(client_config, listener.local_endpoint(), "localhost");
             auto stream = co_await connection.open_stream();
-            co_await stream.write_all("hello");
+            co_await stream.write_all(pace::as_bytes("hello"));
             stream.finish_write(); // FIN on our direction; the reply still arrives.
             std::cout << co_await read_to_fin(stream) << '\n';
             co_await server; // Keep the connection open until the server has its acknowledgement.
@@ -198,20 +198,23 @@ public:
     bool is_unidirectional() const noexcept;
     bool is_local() const noexcept;
     io_context& context() const noexcept;
-    task<std::size_t> read_some(std::span<char> buffer);
-    task<void> write_all(std::string_view bytes);
     task<std::size_t> read_some(std::span<std::byte> buffer);
     task<void> write_all(std::span<const std::byte> bytes);
+    task<void> shutdown_write();
+    void close() noexcept;
     task<void> wait_events();
-    std::optional<std::size_t> try_read(std::span<char> buffer);
-    std::size_t try_write(std::string_view bytes);
+    std::optional<std::size_t> try_read(std::span<std::byte> buffer);
+    std::size_t try_write(std::span<const std::byte> bytes);
     std::uint64_t pending_write_bytes() const;
     void finish_write();
     void reset(std::uint64_t application_error = 0) noexcept;
 };
 ```
 
-One stream of a connection. Move-only. A stream handle keeps its connection's state alive.
+One stream of a connection. Move-only. A stream handle keeps its connection's state alive. A `quic::stream` is a
+[`pace::byte_stream`](../net/README.md#byte_stream): it reads and writes `std::byte` spans (text goes through
+[`pace::as_bytes` and `pace::as_writable_bytes`](../net/README.md#as_bytes-as_writable_bytes-and-as_text)), and
+`tls::stream` can run over a bidirectional one.
 
 - `id()` is the QUIC stream ID; `is_unidirectional()` and `is_local()` (this endpoint opened it) are derived from
   it. `context()` is the owning `io_context`.
@@ -220,7 +223,10 @@ One stream of a connection. Move-only. A stream handle keeps its connection's st
 - `write_all(bytes)` completes when the transport has accepted every byte, applying flow-control backpressure. It
   does not mean the peer has received or acknowledged them. The bytes are borrowed: keep them alive until the
   task completes.
-- The `std::byte` overloads behave the same.
+- `shutdown_write()` is `finish_write()` in the form `pace::byte_stream` requires: it queues FIN and completes at
+  once.
+- `close()` is `reset()` with application error 0, in the form `pace::byte_stream` requires: it abandons both
+  directions at once and wakes pending operations.
 - `try_read(buffer)` reads without suspending: an empty optional means no data yet, 0 means FIN, otherwise the
   number of bytes copied.
 - `try_write(bytes)` queues as much as the flow-control windows allow without suspending and returns the count;
