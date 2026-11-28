@@ -201,6 +201,17 @@ inline void apply_tcp_options(native_socket_type fd, address_family family, cons
             );
 #elif defined(IPV6_DONTFRAG)
             set_native_option(fd, IPPROTO_IPV6, IPV6_DONTFRAG, df, "IPV6_DONTFRAG");
+            // BSD kernels can accept this datagram option on TCP but leave it disabled.
+            int applied = 0;
+            socket_length size = sizeof(applied);
+            if (::getsockopt(fd, IPPROTO_IPV6, IPV6_DONTFRAG, reinterpret_cast<char*>(&applied), &size) != 0)
+            {
+                throw_socket_error("getsockopt(IPV6_DONTFRAG)");
+            }
+            if (df && !applied)
+            {
+                unsupported_option("IPv6 DF on TCP");
+            }
 #else
             unsupported_option("IPv6 DF");
 #endif

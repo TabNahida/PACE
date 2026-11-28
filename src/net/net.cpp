@@ -1,3 +1,6 @@
+#if defined(__APPLE__)
+#define __APPLE_USE_RFC_3542
+#endif
 #include <pace/net/tcp.hpp>
 #include <pace/runtime/operation.hpp>
 #include <pace/runtime/this_context.hpp>
@@ -408,17 +411,23 @@ task<result_access::value<Report, void>> stream::connect_impl(
             co_return result_access::fail<Report, void>(error, "TCP connect");
         }
     }
-#if defined(_WIN32) || defined(__FreeBSD__)
-    if (!first_write.empty())
+    std::size_t queued = 0;
+    int status;
+    do
     {
 #if defined(_WIN32)
-        const auto sent = co_await fast_open_send(*this, address, first_write);
-#else
-        // FreeBSD performs an implied connect when sendto supplies both the peer and the first data.
-        ssize_t sent;
-        do
+        if (!first_write.empty())
         {
-            sent = ::sendto(
+            queued = co_await fast_open_send(*this, address, first_write);
+            status = 0;
+        }
+        else
+#elif defined(__FreeBSD__)
+        if (!first_write.empty())
+        {
+            // An addressed first send starts a nonblocking TCP connect. The
+            // remaining bytes must wait for the handshake, even after a successful sendto.
+            const auto sent = ::sendto(
                 fd_,
                 first_write.data(),
                 std::min<std::size_t>(first_write.size(), 16384),
@@ -426,46 +435,41 @@ task<result_access::value<Report, void>> stream::connect_impl(
                 address.data(),
                 address.length
             );
-        } while (sent < 0 && interrupted(last_socket_error()));
-        if (sent < 0)
-        {
-            co_return result_access::fail<Report, void>(socket_error_code(last_socket_error()), "Fast Open sendto");
+            if (sent >= 0)
+            {
+                queued = static_cast<std::size_t>(sent);
+                status = EINPROGRESS;
+                break;
+            }
+            status = -1;
         }
-#endif
-        co_return co_await write_impl<Report>(first_write.subspan(static_cast<std::size_t>(sent)));
-    }
-#endif
-    std::size_t queued = 0;
-    int result;
-    do
-    {
-#if defined(__APPLE__)
+        else
+#elif defined(__APPLE__)
         if (!first_write.empty())
         {
             iovec data{const_cast<std::byte*>(first_write.data()), std::min<std::size_t>(first_write.size(), 16384)};
             sa_endpoints_t endpoints{};
             endpoints.sae_dstaddr = address.data();
             endpoints.sae_dstaddrlen = address.length;
-            result = ::connectx(fd_, &endpoints, SAE_ASSOCID_ANY, CONNECT_DATA_IDEMPOTENT, &data, 1, &queued, nullptr);
+            status = ::connectx(fd_, &endpoints, SAE_ASSOCID_ANY, CONNECT_DATA_IDEMPOTENT, &data, 1, &queued, nullptr);
         }
         else
 #endif
         {
-            result = ::connect(fd_, address.data(), address.length);
+            status = ::connect(fd_, address.data(), address.length);
         }
-    } while (result < 0 && interrupted(last_socket_error()));
-    if (result != 0)
+        status = status < 0 ? last_socket_error() : 0;
+    } while (interrupted(status));
+    if (status != 0)
     {
-        const auto pending_error = last_socket_error();
 #if defined(_WIN32)
-        const bool failed =
-            pending_error != WSAEWOULDBLOCK && pending_error != WSAEINPROGRESS && pending_error != WSAEALREADY;
+        const bool failed = status != WSAEWOULDBLOCK && status != WSAEINPROGRESS && status != WSAEALREADY;
 #else
-        const bool failed = pending_error != EINPROGRESS && pending_error != EALREADY;
+        const bool failed = status != EINPROGRESS && status != EALREADY;
 #endif
         if (failed)
         {
-            co_return result_access::fail<Report, void>(socket_error_code(pending_error), "connect");
+            co_return result_access::fail<Report, void>(socket_error_code(status), "connect");
         }
         if (auto reason = co_await net::socket_wait{context_->wait_writable(fd_)})
         {

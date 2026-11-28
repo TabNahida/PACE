@@ -1,3 +1,6 @@
+#if defined(__APPLE__)
+#define __APPLE_USE_RFC_3542
+#endif
 #include <pace/net/tcp.hpp>
 #include <pace/pace.hpp>
 #include "net/socket_address.hpp"
@@ -128,6 +131,7 @@ pace::task<void> adopt_and_configure(pace::io_context& io)
     };
     co_await client.connect(listener.local_endpoint(), std::move(options));
     require(calls == 1, "pre_connect must run exactly once");
+    co_await io.wait_readable(server_fd);
     const auto accepted = ::accept(server_fd, nullptr, nullptr);
     auto peer = pace::tcp::stream::adopt(io, accepted);
     co_await pace::write(client, "request");
@@ -183,6 +187,7 @@ pace::task<void> verify_tcp_options(pace::io_context& io)
     options.keepalive_idle_seconds = 61;
 #endif
 #if defined(SO_USER_COOKIE)
+    // FreeBSD supports setsockopt(SO_USER_COOKIE) but has no matching getsockopt.
     options.mark = 42;
 #endif
 #if defined(TCP_KEEPINTVL)
@@ -204,9 +209,6 @@ pace::task<void> verify_tcp_options(pace::io_context& io)
         require(read_socket_option(fd, IPPROTO_TCP, TCP_KEEPIDLE) == 61, "keepalive idle duration");
 #elif defined(__APPLE__) && defined(TCP_KEEPALIVE)
         require(read_socket_option(fd, IPPROTO_TCP, TCP_KEEPALIVE) == 61, "keepalive idle duration");
-#endif
-#if defined(SO_USER_COOKIE)
-        require(read_socket_option(fd, SOL_SOCKET, SO_USER_COOKIE) == 42, "socket user cookie");
 #endif
 #if defined(TCP_KEEPINTVL)
         require(read_socket_option(fd, IPPROTO_TCP, TCP_KEEPINTVL) == 17, "keepalive interval");
@@ -265,7 +267,16 @@ pace::task<void> verify_routing_options(pace::io_context& io)
             )
             == 0)
         {
-            options.dont_fragment = true;
+            if (read_socket_option(probe.native_handle(), df.level, df.name) == df.value)
+            {
+                options.dont_fragment = true;
+            }
+            else
+            {
+                auto result =
+                    co_await probe.connect(pace::as_result, {address, 0}, {.socket = {.dont_fragment = true}});
+                require(result.error() == std::errc::operation_not_supported, "ignored TCP DF must be reported");
+            }
         }
         else
         {
@@ -304,7 +315,11 @@ pace::task<void> verify_routing_options(pace::io_context& io)
 #elif defined(_WIN32)
             const auto index =
                 unsigned(read_socket_option(fd, v6 ? IPPROTO_IPV6 : IPPROTO_IP, v6 ? IPV6_UNICAST_IF : IP_UNICAST_IF));
-            require((v6 ? index : ntohl(index)) == *options.interface_index, "unicast interface");
+            require(
+                index == *options.interface_index,
+                std::string(v6 ? "IPv6" : "IPv4") + " unicast interface expected "
+                    + std::to_string(*options.interface_index) + ", got " + std::to_string(index)
+            );
 #endif
         };
         auto server = pace::tcp::listen(io, {address, 0}, {.socket = options});
