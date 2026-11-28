@@ -25,6 +25,10 @@ FreeBSD)
     rules | jexec "$name" pfctl -f -
     jexec "$name" pfctl -e
     jexec "$name" env PACE_TEST_PF_REDIRECT=1 "$binary" --test-case="PF original destination after redirection"
+    if jexec "$name" sysctl -N net.inet.tcp.fastopen.client_enable >/dev/null 2>&1; then
+        jexec "$name" sysctl net.inet.tcp.fastopen.client_enable=1 net.inet.tcp.fastopen.server_enable=1
+        jexec "$name" "$binary" --test-case="TCP Fast Open listener and exchange preserve the first write"
+    fi
     ;;
 Darwin)
     # Use the standard Apple wildcard rdr anchor and release only our enable reference.

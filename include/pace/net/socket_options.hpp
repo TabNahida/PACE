@@ -5,7 +5,7 @@
 
 namespace pace
 {
-/// Native TCP options applied before bind/listen or connect. Unset fields keep the OS defaults.
+/// Native TCP options for listeners and outbound connections. Unset fields keep the OS defaults.
 /// An unavailable option throws operation_not_supported. Kernel and permission errors propagate.
 struct socket_options
 {
@@ -21,7 +21,7 @@ struct socket_options
     std::optional<int> keepalive_count{};
     std::optional<unsigned> user_timeout_ms{};
     std::optional<bool> dont_fragment{};
-    /// Client Fast Open may defer the SYN until the first write on Linux.
+    /// Allow replayable TCP Fast Open data. TCP exchange supplies its request during connection setup.
     bool fast_open = false;
     /// Linux IP_TRANSPARENT / IPV6_TRANSPARENT for nonlocal binds.
     bool transparent = false;

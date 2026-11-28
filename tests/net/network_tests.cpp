@@ -170,6 +170,12 @@ pace::task<void> verify_tcp_options(pace::io_context& io)
 {
     pace::socket_options options;
     options.keepalive = true;
+#if defined(TCP_KEEPIDLE) || (defined(__APPLE__) && defined(TCP_KEEPALIVE))
+    options.keepalive_idle_seconds = 61;
+#endif
+#if defined(SO_USER_COOKIE)
+    options.mark = 42;
+#endif
 #if defined(TCP_KEEPINTVL)
     options.keepalive_interval_seconds = 17;
 #endif
@@ -192,6 +198,14 @@ pace::task<void> verify_tcp_options(pace::io_context& io)
             return value;
         };
         require(read(SOL_SOCKET, SO_KEEPALIVE) != 0, "keepalive enabled");
+#if defined(TCP_KEEPIDLE)
+        require(read(IPPROTO_TCP, TCP_KEEPIDLE) == 61, "keepalive idle duration");
+#elif defined(__APPLE__) && defined(TCP_KEEPALIVE)
+        require(read(IPPROTO_TCP, TCP_KEEPALIVE) == 61, "keepalive idle duration");
+#endif
+#if defined(SO_USER_COOKIE)
+        require(read(SOL_SOCKET, SO_USER_COOKIE) == 42, "socket user cookie");
+#endif
 #if defined(TCP_KEEPINTVL)
         require(read(IPPROTO_TCP, TCP_KEEPINTVL) == 17, "keepalive interval");
 #endif
@@ -216,6 +230,73 @@ pace::task<void> verify_tcp_options(pace::io_context& io)
     require(peer.remote_endpoint().port == client.local_endpoint().port, "connection with native options");
 }
 
+#if defined(TCP_FASTOPEN)
+pace::task<void> fast_open_exchange(pace::io_context& io)
+{
+    // Some kernels disable server TFO by policy. Probe the native option on a
+    // listening socket so an error in the library's setup order still fails the test.
+    auto probe = pace::tcp::listen(io, {"127.0.0.1", 0});
+    const int on = 1;
+    const bool server_tfo =
+        ::setsockopt(probe.native_handle(), IPPROTO_TCP, TCP_FASTOPEN, reinterpret_cast<const char*>(&on), sizeof(on))
+        == 0;
+#if defined(__FreeBSD__)
+    pace::tcp::stream client_probe(io);
+    if (::setsockopt(
+            client_probe.native_handle(),
+            IPPROTO_TCP,
+            TCP_FASTOPEN,
+            reinterpret_cast<const char*>(&on),
+            sizeof(on)
+        )
+        != 0)
+    {
+        if (errno != EPERM && errno != ENOPROTOOPT && errno != EOPNOTSUPP)
+        {
+            throw std::system_error(errno, std::generic_category(), "probe client Fast Open");
+        }
+        MESSAGE("FreeBSD kernel has disabled TCP Fast Open");
+        co_return;
+    }
+#endif
+    auto listener = std::make_shared<pace::tcp::listener>(
+        io,
+        pace::tcp::endpoint{"127.0.0.1", 0},
+        pace::tcp::listen_options{.socket = {.fast_open = server_tfo}}
+    );
+    if (server_tfo)
+    {
+        int enabled = 0;
+        pace::net::socket_address_length length = sizeof(enabled);
+        require(
+            ::getsockopt(
+                listener->native_handle(),
+                IPPROTO_TCP,
+                TCP_FASTOPEN,
+                reinterpret_cast<char*>(&enabled),
+                &length
+            ) == 0
+                && enabled,
+            "listener enabled TCP Fast Open"
+        );
+    }
+    io.spawn(echo_listener(listener));
+    // Longer than the first ConnectEx/sendto write. Check every echoed byte.
+    std::string request(48 * 1024, 'x');
+    for (std::size_t i = 0; i < request.size(); ++i)
+    {
+        request[i] = static_cast<char>(i % 251);
+    }
+    auto reply = co_await pace::tcp::async_exchange(
+        listener->local_endpoint(),
+        request,
+        request.size(),
+        {.timeout = 5s, .transport = {.socket = {.fast_open = true}}}
+    );
+    require(reply == request, "Fast Open exchange lost or duplicated data");
+}
+#endif
+
 #if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
 pace::task<void> check_redirect(pace::tcp::listener& listener, pace::tcp::endpoint target)
 {
@@ -223,8 +304,10 @@ pace::task<void> check_redirect(pace::tcp::listener& listener, pace::tcp::endpoi
     auto accepted = co_await listener.accept();
     const auto original = accepted.original_destination();
     require(accepted.local_endpoint().port != target.port, "connection was redirected");
-    require(original.port == target.port && original.address == target.address && original.family == target.family,
-            "original destination must match the address on the wire");
+    require(
+        original.port == target.port && original.address == target.address && original.family == target.family,
+        "original destination must match the address on the wire"
+    );
 }
 
 pace::task<void> original_destinations(pace::io_context& io)
@@ -1573,13 +1656,20 @@ TEST_CASE("pre-connect hook can abort without initiating a connection")
     run_test(connect_hook_failure);
 }
 
+#if defined(TCP_FASTOPEN)
+TEST_CASE("TCP Fast Open listener and exchange preserve the first write")
+{
+    run_test(fast_open_exchange);
+}
+#endif
+
 TEST_CASE("TCP listener and client apply native socket options")
 {
     run_test(verify_tcp_options);
 }
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
-// On a PF fixture, redirect TCP 127.0.0.1:29001 to 127.0.0.1:29002 and grant read access to /dev/pf.
+// tests/net/transparent_pf.sh supplies loopback redirection and access to /dev/pf.
 TEST_CASE("PF original destination after redirection" * doctest::skip(std::getenv("PACE_TEST_PF_REDIRECT") == nullptr))
 {
     run_test(original_destinations);

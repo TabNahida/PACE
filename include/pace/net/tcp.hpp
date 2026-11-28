@@ -133,7 +133,12 @@ public:
 
 private:
     template <bool Report>
-    task<result_access::value<Report, void>> connect_impl(endpoint destination, connect_options options);
+    task<result_access::value<Report, void>> connect_impl(
+        endpoint destination,
+        connect_options options,
+        std::span<const std::byte> first_write = {}
+    );
+    friend task<std::string> async_exchange(endpoint, std::string, std::size_t, client_options);
     template <bool Report>
     task<result_access::value<Report, std::size_t>> read_impl(std::span<std::byte> buffer);
     template <bool Report>

@@ -12,6 +12,7 @@
 #if defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <mswsock.h>
 #include <windows.h>
 #else
 #include <arpa/inet.h>
@@ -48,6 +49,102 @@ using net::would_block;
 {
     net::throw_socket_error(what);
 }
+
+#if defined(_WIN32)
+// ConnectEx can put the first application bytes in the SYN. Its OVERLAPPED and buffer
+// must stay alive through cancellation, even when the socket is closed during the wait.
+task<std::size_t> fast_open_send(stream& client, const net::socket_address& peer, std::span<const std::byte> bytes)
+{
+    const auto fd = client.native_handle();
+    net::socket_address local;
+    if (::getsockname(fd, local.data(), &local.length) != 0)
+    {
+        if (last_socket_error() != WSAEINVAL)
+        {
+            socket_error("getsockname before ConnectEx");
+        }
+        local = net::parse_socket_address(peer.native_family() == AF_INET ? "0.0.0.0" : "::", 0);
+        if (::bind(fd, local.data(), local.length) != 0)
+        {
+            socket_error("bind before ConnectEx");
+        }
+    }
+    GUID guid = WSAID_CONNECTEX;
+    LPFN_CONNECTEX connect_ex{};
+    DWORD count{};
+    if (::WSAIoctl(
+            fd,
+            SIO_GET_EXTENSION_FUNCTION_POINTER,
+            &guid,
+            sizeof(guid),
+            &connect_ex,
+            sizeof(connect_ex),
+            &count,
+            nullptr,
+            nullptr
+        )
+        != 0)
+    {
+        socket_error("lookup ConnectEx");
+    }
+
+    struct event_owner
+    {
+        HANDLE handle = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
+        ~event_owner()
+        {
+            if (handle)
+            {
+                CloseHandle(handle);
+            }
+        }
+    } event;
+
+    if (!event.handle)
+    {
+        throw std::system_error(GetLastError(), std::system_category(), "create ConnectEx event");
+    }
+    OVERLAPPED request{};
+    // Suppress a completion packet if an adopted handle is associated with a completion port.
+    request.hEvent = reinterpret_cast<HANDLE>(reinterpret_cast<std::uintptr_t>(event.handle) | 1);
+    const auto size = static_cast<DWORD>(std::min<std::size_t>(bytes.size(), 16384));
+    if (!connect_ex(fd, peer.data(), peer.length, const_cast<std::byte*>(bytes.data()), size, &count, &request))
+    {
+        if (last_socket_error() != WSA_IO_PENDING)
+        {
+            socket_error("ConnectEx");
+        }
+        try
+        {
+            co_await client.context().wait_handle(event.handle);
+        }
+        catch (...)
+        {
+            if (client.is_open())
+            {
+                CancelIoEx(reinterpret_cast<HANDLE>(fd), &request);
+            }
+            WaitForSingleObject(event.handle, INFINITE);
+            throw;
+        }
+        if (!client.is_open())
+        {
+            throw std::system_error(std::make_error_code(std::errc::operation_canceled));
+        }
+        DWORD flags{};
+        if (!WSAGetOverlappedResult(fd, &request, &count, FALSE, &flags))
+        {
+            socket_error("complete ConnectEx");
+        }
+    }
+    if (::setsockopt(fd, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, nullptr, 0) != 0)
+    {
+        socket_error("SO_UPDATE_CONNECT_CONTEXT");
+    }
+    co_return count;
+}
+#endif
 
 native_socket_type accept_socket(native_socket_type listener)
 {
@@ -254,7 +351,11 @@ task<result<void>> stream::connect(as_result_t, endpoint destination, connect_op
 }
 
 template <bool Report>
-task<result_access::value<Report, void>> stream::connect_impl(endpoint destination, connect_options options)
+task<result_access::value<Report, void>> stream::connect_impl(
+    endpoint destination,
+    connect_options options,
+    std::span<const std::byte> first_write
+)
 {
     if (auto error = net::socket_state(*context_, fd_))
     {
@@ -294,7 +395,11 @@ task<result_access::value<Report, void>> stream::connect_impl(endpoint destinati
         family_ = address.family();
     }
     connect_started_ = true;
-    net::apply_tcp_options(fd_, family_, options.socket, 0);
+    net::apply_tcp_options(fd_, family_, options.socket);
+    if (options.socket.fast_open)
+    {
+        net::enable_client_fast_open(fd_);
+    }
     if (options.pre_connect)
     {
         options.pre_connect(fd_);
@@ -303,25 +408,45 @@ task<result_access::value<Report, void>> stream::connect_impl(endpoint destinati
             co_return result_access::fail<Report, void>(error, "TCP connect");
         }
     }
+#if defined(_WIN32) || defined(__FreeBSD__)
+    if (!first_write.empty())
+    {
+#if defined(_WIN32)
+        const auto sent = co_await fast_open_send(*this, address, first_write);
+#else
+        // FreeBSD performs an implied connect when sendto supplies both the peer and the first data.
+        ssize_t sent;
+        do
+        {
+            sent = ::sendto(
+                fd_,
+                first_write.data(),
+                std::min<std::size_t>(first_write.size(), 16384),
+                0,
+                address.data(),
+                address.length
+            );
+        } while (sent < 0 && interrupted(last_socket_error()));
+        if (sent < 0)
+        {
+            co_return result_access::fail<Report, void>(socket_error_code(last_socket_error()), "Fast Open sendto");
+        }
+#endif
+        co_return co_await write_impl<Report>(first_write.subspan(static_cast<std::size_t>(sent)));
+    }
+#endif
+    std::size_t queued = 0;
     int result;
     do
     {
 #if defined(__APPLE__)
-        if (options.socket.fast_open)
+        if (!first_write.empty())
         {
+            iovec data{const_cast<std::byte*>(first_write.data()), std::min<std::size_t>(first_write.size(), 16384)};
             sa_endpoints_t endpoints{};
             endpoints.sae_dstaddr = address.data();
             endpoints.sae_dstaddrlen = address.length;
-            result = ::connectx(
-                fd_,
-                &endpoints,
-                SAE_ASSOCID_ANY,
-                CONNECT_RESUME_ON_READ_WRITE | CONNECT_DATA_IDEMPOTENT,
-                nullptr,
-                0,
-                nullptr,
-                nullptr
-            );
+            result = ::connectx(fd_, &endpoints, SAE_ASSOCID_ANY, CONNECT_DATA_IDEMPOTENT, &data, 1, &queued, nullptr);
         }
         else
 #endif
@@ -329,39 +454,42 @@ task<result_access::value<Report, void>> stream::connect_impl(endpoint destinati
             result = ::connect(fd_, address.data(), address.length);
         }
     } while (result < 0 && interrupted(last_socket_error()));
-    if (result == 0)
+    if (result != 0)
     {
-        co_return result_access::success<Report>();
-    }
-    const auto pending_error = last_socket_error();
+        const auto pending_error = last_socket_error();
 #if defined(_WIN32)
-    const bool failed =
-        pending_error != WSAEWOULDBLOCK && pending_error != WSAEINPROGRESS && pending_error != WSAEALREADY;
+        const bool failed =
+            pending_error != WSAEWOULDBLOCK && pending_error != WSAEINPROGRESS && pending_error != WSAEALREADY;
 #else
-    const bool failed = pending_error != EINPROGRESS && pending_error != EALREADY;
+        const bool failed = pending_error != EINPROGRESS && pending_error != EALREADY;
 #endif
-    if (failed)
-    {
-        co_return result_access::fail<Report, void>(socket_error_code(pending_error), "connect");
-    }
-    if (auto reason = co_await net::socket_wait{context_->wait_writable(fd_)})
-    {
-        co_return result_access::fail<Report, void>(reason, "TCP connect");
-    }
-    if (auto error = net::socket_state(*context_, fd_))
-    {
-        co_return result_access::fail<Report, void>(error, "TCP connect");
-    }
+        if (failed)
+        {
+            co_return result_access::fail<Report, void>(socket_error_code(pending_error), "connect");
+        }
+        if (auto reason = co_await net::socket_wait{context_->wait_writable(fd_)})
+        {
+            co_return result_access::fail<Report, void>(reason, "TCP connect");
+        }
+        if (auto error = net::socket_state(*context_, fd_))
+        {
+            co_return result_access::fail<Report, void>(error, "TCP connect");
+        }
 
-    int error = 0;
-    socket_length length = sizeof(error);
-    if (::getsockopt(fd_, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &length) < 0)
-    {
-        co_return result_access::fail<Report, void>(socket_error_code(last_socket_error()), "getsockopt(SO_ERROR)");
+        int error = 0;
+        socket_length length = sizeof(error);
+        if (::getsockopt(fd_, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &length) < 0)
+        {
+            co_return result_access::fail<Report, void>(socket_error_code(last_socket_error()), "getsockopt(SO_ERROR)");
+        }
+        if (error != 0)
+        {
+            co_return result_access::fail<Report, void>(socket_error_code(error), "connect");
+        }
     }
-    if (error != 0)
+    if (queued < first_write.size())
     {
-        co_return result_access::fail<Report, void>(socket_error_code(error), "connect");
+        co_return co_await write_impl<Report>(first_write.subspan(queued));
     }
     co_return result_access::success<Report>();
 }
@@ -721,7 +849,7 @@ listener::listener(io_context& context, endpoint endpoint, listen_options option
             throw std::system_error(std::make_error_code(std::errc::operation_not_supported), "SO_REUSEPORT");
         }
 #endif
-        net::apply_tcp_options(fd_, family_, options.socket, options.backlog);
+        net::apply_tcp_options(fd_, family_, options.socket);
         if (::bind(fd_, address.data(), address.length) < 0)
         {
             socket_error("bind");
@@ -729,6 +857,10 @@ listener::listener(io_context& context, endpoint endpoint, listen_options option
         if (::listen(fd_, options.backlog) < 0)
         {
             socket_error("listen");
+        }
+        if (options.socket.fast_open)
+        {
+            net::enable_listener_fast_open(fd_, options.backlog);
         }
     }
     catch (...)
@@ -947,7 +1079,18 @@ task<result<stream>> connect(as_result_t, endpoint destination, client_options o
 
 task<std::string> async_exchange(endpoint peer, std::string request, std::size_t reply_size, client_options options)
 {
-    auto connection = connect_stream<false>(std::move(peer), std::move(options.transport));
+    std::string first_write;
+    if (options.transport.socket.fast_open)
+    {
+        first_write.swap(request);
+    }
+    auto dial = [&]() -> task<stream>
+    {
+        stream client(this_context());
+        co_await client.connect_impl<false>(std::move(peer), std::move(options.transport), as_bytes(first_write));
+        co_return std::move(client);
+    };
+    auto connection = dial();
     auto work = net::exchange_bytes(
         std::move(connection),
         std::move(request),

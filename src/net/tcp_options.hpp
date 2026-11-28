@@ -64,7 +64,40 @@ inline void bind_interface(native_socket_type fd, address_family family, unsigne
 #endif
 }
 
-inline void apply_tcp_options(native_socket_type fd, address_family family, const socket_options& opts, int backlog)
+inline void enable_listener_fast_open(native_socket_type fd, int backlog)
+{
+#if defined(TCP_FASTOPEN)
+    // Linux takes a queue length. BSD and Winsock take a boolean.
+#if !defined(__linux__)
+    (void)backlog;
+    constexpr int value = 1;
+#else
+    const int value = backlog;
+#endif
+    set_native_option(fd, IPPROTO_TCP, TCP_FASTOPEN, value, "listener TCP_FASTOPEN");
+#else
+    (void)fd;
+    (void)backlog;
+    unsupported_option("listener Fast Open");
+#endif
+}
+
+inline void enable_client_fast_open(native_socket_type fd)
+{
+#if defined(TCP_FASTOPEN_CONNECT)
+    set_native_option(fd, IPPROTO_TCP, TCP_FASTOPEN_CONNECT, 1, "TCP_FASTOPEN_CONNECT");
+#elif defined(__APPLE__)
+    // The client uses connectx. Darwin's TCP_FASTOPEN socket option is listener-only.
+    (void)fd;
+#elif defined(TCP_FASTOPEN)
+    set_native_option(fd, IPPROTO_TCP, TCP_FASTOPEN, 1, "client TCP_FASTOPEN");
+#else
+    (void)fd;
+    unsupported_option("client Fast Open");
+#endif
+}
+
+inline void apply_tcp_options(native_socket_type fd, address_family family, const socket_options& opts)
 {
     if (opts.interface_index)
     {
@@ -125,29 +158,6 @@ inline void apply_tcp_options(native_socket_type fd, address_family family, cons
 #else
         unsupported_option("TCP_USER_TIMEOUT");
 #endif
-    }
-    if (opts.fast_open)
-    {
-        if (backlog)
-        {
-#if (defined(__APPLE__) || defined(_WIN32)) && defined(TCP_FASTOPEN)
-            set_native_option(fd, IPPROTO_TCP, TCP_FASTOPEN, 1, "TCP_FASTOPEN");
-#elif defined(TCP_FASTOPEN)
-            set_native_option(fd, IPPROTO_TCP, TCP_FASTOPEN, backlog, "TCP_FASTOPEN");
-#else
-            unsupported_option("listener Fast Open");
-#endif
-        }
-        else
-        {
-#if defined(TCP_FASTOPEN_CONNECT)
-            set_native_option(fd, IPPROTO_TCP, TCP_FASTOPEN_CONNECT, 1, "TCP_FASTOPEN_CONNECT");
-#elif (defined(_WIN32) || defined(__APPLE__)) && defined(TCP_FASTOPEN)
-            set_native_option(fd, IPPROTO_TCP, TCP_FASTOPEN, 1, "TCP_FASTOPEN");
-#else
-            unsupported_option("client Fast Open");
-#endif
-        }
     }
     if (opts.dont_fragment)
     {

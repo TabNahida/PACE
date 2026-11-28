@@ -1,4 +1,4 @@
-<!-- source-hash: 77a5ca0b208a -->
+<!-- source-hash: 7b28a4c801ae -->
 # TCP（`pace::tcp`）
 
 [English](tcp.md) · [网络](README.zh.md)
@@ -21,7 +21,7 @@
 
 `tcp::stream::adopt(io, fd)` 接管空闲的已连接或尚未连接的 TCP 套接字，`tcp::listener::adopt(io, fd)` 接管已监听的套接字。成功后对象独占句柄，失败时由调用方关闭。接管会设置非阻塞和禁止继承标记。不要传入另一个对象的借用句柄或已注册到其他事件循环的句柄。
 
-`tcp::connect_options::socket` 和 `tcp::listen_options::socket` 共用 `pace::socket_options`。可指定接口索引、mark、FreeBSD 路由表、keepalive 及其空闲时间、间隔、次数、TCP 用户超时、DF、Fast Open 和 Linux 透明绑定。未设置的字段保留系统默认值。平台缺少所选能力时会报告错误。Linux 客户端开启 Fast Open 后，首次写入可能才会发起握手。
+`tcp::connect_options::socket` 和 `tcp::listen_options::socket` 共用 `pace::socket_options`。可指定接口索引、mark、FreeBSD 路由表、keepalive 及其空闲时间、间隔、次数、TCP 用户超时、DF、Fast Open 和 Linux 透明绑定。未设置的字段保留系统默认值。平台缺少所选能力时会报告错误。TCP exchange 开启 Fast Open 后可在握手期间发送首批请求字节，适用于可重放请求。Linux 可能在首次写入时才发送 SYN。Darwin 通过 `connectx`、FreeBSD 通过带目标地址的首次发送、Windows 通过 `ConnectEx` 传入请求数据。SYN 是否携带数据取决于缓存的 cookie、内核策略和对端支持。
 
 `pre_connect(fd)` 在地址族选择和选项设置完毕后、系统连接调用前同步执行。钩子抛出的异常会中止这次尝试。`original_destination()` 查询 netfilter 或 PF 的 NAT 映射，PF 需要能够打开 `/dev/pf`。Linux TPROXY 保留目标地址，可直接读取 `local_endpoint()`。
 

@@ -135,7 +135,17 @@ private:
 struct result_access
 {
     template <class>
-    static constexpr bool is_result = false;
+    struct result_type : std::false_type
+    {
+    };
+
+    template <class T>
+    struct result_type<result<T>> : std::true_type
+    {
+    };
+
+    template <class T>
+    static constexpr bool is_result = result_type<T>::value;
 
     template <bool Report, class T>
     using value = std::conditional_t<Report, result<T>, T>;
@@ -194,6 +204,4 @@ struct result_access
         }
     }
 };
-template <class T>
-inline constexpr bool result_access::is_result<result<T>> = true;
 } // namespace pace
