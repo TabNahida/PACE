@@ -28,12 +28,6 @@ using ::pace::http::get;
 using ::pace::http::limits;
 using ::pace::http::post;
 using ::pace::http::request_head;
-using ::pace::http::serve;
-using ::pace::http::serve_connection;
-using ::pace::http::server_handler;
-using ::pace::http::server_options;
-using ::pace::http::server_response;
-using ::pace::http::streaming_response;
 } // namespace pace::http
 #endif
 
@@ -41,5 +35,17 @@ using ::pace::http::streaming_response;
 export namespace pace::http
 {
 using ::pace::http::secure_client;
+} // namespace pace::http
+#endif
+
+#if defined(PACE_HAS_HTTP1)
+export namespace pace::http
+{
+using ::pace::http::serve;
+using ::pace::http::serve_connection;
+using ::pace::http::server_handler;
+using ::pace::http::server_options;
+using ::pace::http::server_response;
+using ::pace::http::streaming_response;
 } // namespace pace::http
 #endif

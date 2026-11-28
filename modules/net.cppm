@@ -13,8 +13,11 @@ export module pace.net;
 export namespace pace
 {
 using ::pace::address_family;
+using ::pace::as_bytes;
+using ::pace::as_text;
+using ::pace::as_writable_bytes;
+using ::pace::byte_stream;
 using ::pace::read_exact;
-using ::pace::write;
 } // namespace pace
 
 export namespace pace::tcp
@@ -45,8 +48,5 @@ using ::pace::udp::socket;
 
 export namespace pace
 {
-using ::pace::byte_stream;
-using ::pace::as_bytes;
-using ::pace::as_writable_bytes;
-using ::pace::as_text;
+using ::pace::write;
 } // namespace pace

@@ -171,11 +171,23 @@
           "requires": null
         },
         {
-          "name": "pace::read_exact",
+          "name": "pace::as_bytes",
           "requires": null
         },
         {
-          "name": "pace::write",
+          "name": "pace::as_text",
+          "requires": null
+        },
+        {
+          "name": "pace::as_writable_bytes",
+          "requires": null
+        },
+        {
+          "name": "pace::byte_stream",
+          "requires": null
+        },
+        {
+          "name": "pace::read_exact",
           "requires": null
         },
         {
@@ -251,19 +263,7 @@
           "requires": null
         },
         {
-          "name": "pace::byte_stream",
-          "requires": null
-        },
-        {
-          "name": "pace::as_bytes",
-          "requires": null
-        },
-        {
-          "name": "pace::as_writable_bytes",
-          "requires": null
-        },
-        {
-          "name": "pace::as_text",
+          "name": "pace::write",
           "requires": null
         }
       ]
@@ -275,6 +275,11 @@
       ],
       "feature": null,
       "exports": [
+        {
+          "alias": "pace::http1",
+          "target": "http",
+          "requires": null
+        },
         {
           "name": "pace::http::handler",
           "requires": null
@@ -313,11 +318,6 @@
         },
         {
           "name": "pace::http::text",
-          "requires": null
-        },
-        {
-          "alias": "pace::http1",
-          "target": "http",
           "requires": null
         }
       ]
@@ -391,6 +391,10 @@
           "requires": null
         },
         {
+          "name": "pace::http::secure_client",
+          "requires": "PACE_HAS_TLS"
+        },
+        {
           "name": "pace::http::serve",
           "requires": null
         },
@@ -413,10 +417,6 @@
         {
           "name": "pace::http::streaming_response",
           "requires": null
-        },
-        {
-          "name": "pace::http::secure_client",
-          "requires": "PACE_HAS_TLS"
         }
       ]
     },
@@ -748,6 +748,10 @@
           "requires": null
         },
         {
+          "name": "pace::websocket::secure_stream",
+          "requires": "PACE_HAS_TLS"
+        },
+        {
           "name": "pace::websocket::stream",
           "requires": null
         },
@@ -758,10 +762,6 @@
         {
           "name": "pace::websocket::upgrade_request",
           "requires": null
-        },
-        {
-          "name": "pace::websocket::secure_stream",
-          "requires": "PACE_HAS_TLS"
         }
       ]
     }

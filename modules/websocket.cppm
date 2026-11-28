@@ -21,9 +21,6 @@ using ::pace::websocket::message;
 using ::pace::websocket::message_type;
 using ::pace::websocket::protocol_error;
 using ::pace::websocket::role;
-using ::pace::websocket::stream;
-using ::pace::websocket::upgrade;
-using ::pace::websocket::upgrade_request;
 } // namespace pace::websocket
 #endif
 
@@ -31,5 +28,14 @@ using ::pace::websocket::upgrade_request;
 export namespace pace::websocket
 {
 using ::pace::websocket::secure_stream;
+} // namespace pace::websocket
+#endif
+
+#if defined(PACE_HAS_WEBSOCKET)
+export namespace pace::websocket
+{
+using ::pace::websocket::stream;
+using ::pace::websocket::upgrade;
+using ::pace::websocket::upgrade_request;
 } // namespace pace::websocket
 #endif

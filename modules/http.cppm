@@ -10,6 +10,11 @@ module;
 
 export module pace.http;
 
+export namespace pace
+{
+namespace http1 = http;
+} // namespace pace
+
 export namespace pace::http
 {
 using ::pace::http::handler;
@@ -23,8 +28,3 @@ using ::pace::http::response;
 using ::pace::http::router;
 using ::pace::http::text;
 } // namespace pace::http
-
-export namespace pace
-{
-namespace http1 = http;
-} // namespace pace
