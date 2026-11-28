@@ -19,7 +19,7 @@ by `import pace.net;`. The checked-in example is `examples/tutorial_udp.cpp` (`x
 
 `udp::socket::adopt(io, fd)` accepts an idle native IPv4 or IPv6 datagram socket and preserves its binding and dual-stack mode. Ownership transfers on success.
 
-Wildcard listeners can set `bind_options{.packet_info = true}` and use `receive_from(buffer, info)`. Each successful receive replaces the local destination address, interface index and available ECN in `udp::packet_info`. Use `send_to(bytes, peer, info)` to select a reply source and ECN. On Linux, `.transparent = true` also delivers the original address and port in `original_destination`.
+Wildcard listeners can set `bind_options{.packet_info = true}` and use `receive_from(buffer, info)`. Each successful receive replaces `udp::packet_info` with the local destination address and the interface index and ECN available from the kernel. An unavailable interface index is zero. FreeBSD IPv4 uses `IP_RECVDSTADDR` to receive the address and `IP_SENDSRCADDR` to select it for the reply. Use `send_to(bytes, peer, info)` to select a reply source and ECN. On Linux, `.transparent = true` also delivers the original address and port in `original_destination`.
 
 `send_batch(span<outgoing_datagram>)` and `receive_batch(span<incoming_datagram>)` process up to 32 slots and return the completed prefix length. Use one destination family per send batch. Keep slots and buffers alive and advance the span by the returned count. Linux uses sendmmsg/recvmmsg. To request GSO/USO set `packet_info::segment_size`. With `.coalesce = true` (GRO/URO), use the receive overload taking `packet_info&` and split the payload by the reported segment size. The last segment may be shorter.
 

@@ -1,4 +1,4 @@
-<!-- source-hash: da9f864b7009 -->
+<!-- source-hash: 754f7935feca -->
 # UDP（`pace::udp`）
 
 [English](udp.md) · [网络](README.zh.md)
@@ -20,7 +20,7 @@
 
 `udp::socket::adopt(io, fd)` 接管空闲的原生 IPv4 或 IPv6 数据报套接字，保留绑定地址和双栈模式。仅在成功后转移所有权。
 
-通配地址监听器可设置 `bind_options{.packet_info = true}`，然后使用 `receive_from(buffer, info)`。每次成功接收都会替换 `udp::packet_info` 中的本地目的地址、接口索引和可用的 ECN。用 `send_to(bytes, peer, info)` 指定回复源地址及 ECN。Linux 上 `.transparent = true` 还会在 `original_destination` 中返回原始目的地址和端口。
+通配地址监听器可设置 `bind_options{.packet_info = true}`，然后使用 `receive_from(buffer, info)`。每次成功接收都会用本地目的地址以及内核提供的接口索引和 ECN 替换 `udp::packet_info`。接口索引不可用时为零。FreeBSD IPv4 用 `IP_RECVDSTADDR` 获取地址，再用 `IP_SENDSRCADDR` 将它设为回包源地址。用 `send_to(bytes, peer, info)` 指定回复源地址及 ECN。Linux 上 `.transparent = true` 还会在 `original_destination` 中返回原始目的地址和端口。
 
 `send_batch(span<outgoing_datagram>)` 和 `receive_batch(span<incoming_datagram>)` 每次处理至多 32 条，返回已完成的前缀长度。发送批次使用同一地址族。保持整个数组以及缓冲区有效，按返回数推进数组。Linux 使用 sendmmsg/recvmmsg。单独指定 `packet_info::segment_size` 可以请求 GSO/USO。以 `.coalesce = true` 启用 GRO/URO 后，使用带 `packet_info&` 的接收重载，按返回的分段大小拆分数据，末段可以较短。
 
