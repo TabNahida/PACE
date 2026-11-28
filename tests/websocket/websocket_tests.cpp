@@ -229,7 +229,7 @@ pace::task<void> secure_client(
     completion& done
 )
 {
-    auto transport = co_await pace::tls::connect(io, config, std::move(endpoint), "localhost");
+    auto transport = co_await pace::tls::connect(std::move(endpoint), "localhost", {.context = &io, .tls = &config});
     co_await client_peer(std::move(transport), done);
 }
 

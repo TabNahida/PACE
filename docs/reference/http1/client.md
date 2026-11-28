@@ -26,7 +26,7 @@ follows redirects, retries, uses a proxy, stores cookies or decompresses. The UR
 pace::task<void> two_requests(pace::io_context& io, pace::tcp::endpoint server)
 {
     // A persistent connection: requests are sent one after another.
-    pace::http::client client(co_await pace::tcp::connect(io, server));
+    pace::http::client client(co_await pace::tcp::connect(server, {.context = &io}));
     for (const char* target : {"/a", "/b"})
     {
         auto reply = co_await client.send({.method = "GET", .target = target, .headers = {{"Host", "localhost"}}});

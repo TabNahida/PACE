@@ -172,7 +172,7 @@ inline task<tcp::stream> connect_url(io_context& io, const destination& url)
     {
         try
         {
-            co_return co_await tcp::connect(io, address);
+            co_return co_await tcp::connect(address, {.context = &io});
         }
         catch (const std::system_error& error)
         {

@@ -42,7 +42,7 @@ inline void check_affinity(io_context* context)
 struct io_context::callback_timers
 {
     using key = std::pair<std::chrono::steady_clock::time_point, std::uint64_t>;
-    std::map<key, std::function<void()>> callbacks;
+    std::map<key, unique_function<void()>> callbacks;
     std::uint64_t next_id = 0;
 
     void clear() noexcept
@@ -60,7 +60,7 @@ struct io_context::cancellation_records
     struct record
     {
         cancellation_token token;
-        std::function<void(std::error_code)> callback;
+        unique_function<void(std::error_code)> callback;
         std::uint64_t id = 0;
         record* previous = nullptr;
         record* next = nullptr;
@@ -251,7 +251,7 @@ struct io_context::implementation
     std::mutex inbox_mutex;
     std::atomic<bool> inbox_pending{false};
     std::deque<task<void>> incoming_tasks;
-    std::deque<std::function<void()>> incoming_posts;
+    std::deque<unique_function<void()>> incoming_posts;
     // Notifies the remote_access listeners once (remote.cpp).
     void notify_shutdown() noexcept;
 
@@ -285,7 +285,7 @@ struct io_context::implementation
         }
     }
 
-    std::deque<std::function<void()>> posts;
+    std::deque<unique_function<void()>> posts;
     std::deque<std::coroutine_handle<>> ready;
     std::vector<task<void>::handle_type> roots;
 

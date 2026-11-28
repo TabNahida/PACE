@@ -124,7 +124,7 @@ void io_context::spawn(task<void> work)
     }
 }
 
-void io_context::post(std::function<void()> work)
+void io_context::post(unique_function<void()> work)
 {
     if (!work)
     {
@@ -254,7 +254,7 @@ void io_context::run()
     // Reuse the empty batches between drains. Reconstructing two deques on
     // every producer wake allocates their maps/blocks even for a single post.
     std::deque<task<void>> new_tasks;
-    std::deque<std::function<void()>> new_posts;
+    std::deque<unique_function<void()>> new_posts;
     bool inbox_buffered = false;
     for (;;)
     {

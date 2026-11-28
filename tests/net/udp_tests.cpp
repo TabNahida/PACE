@@ -1,4 +1,5 @@
 #include <pace/net/udp.hpp>
+#include <pace/runtime/run.hpp>
 #include "net/socket_address.hpp"
 #include "support/pace_test.hpp"
 
@@ -19,7 +20,7 @@ using pace::test::require;
 pace::task<void> owned_packets(pace::io_context& io)
 {
     auto receiver = pace::udp::bind({"127.0.0.1", 0});
-    auto sender = pace::udp::open(io);
+    auto sender = pace::udp::open({.context = &io});
     auto pending = sender.send(std::string("a\0b", 3), receiver.local_endpoint());
     co_await io.yield();
     require((co_await std::move(pending)) == 3, "owned UDP lazy send");
@@ -78,7 +79,7 @@ pace::task<void> exchange_filtered(pace::io_context& io)
     auto peer = std::make_shared<pace::udp::socket>(io, pace::udp::endpoint{"127.0.0.1", 0});
     const auto endpoint = peer->local_endpoint();
     io.spawn(exchange_replies(peer));
-    auto reply = co_await pace::udp::async_exchange(io, endpoint, "request", 3);
+    auto reply = co_await pace::udp::async_exchange(endpoint, "request", {.context = &io, .max_reply_size = 3});
     require(
         reply.data == "rep" && reply.truncated && reply.sender.port == endpoint.port,
         "UDP exchange must preserve source filtering and truncation"
@@ -152,6 +153,95 @@ pace::task<void> roundtrip(pace::io_context& io)
     require(rejected, "closed socket");
     io.stop();
 }
+
+pace::task<void> packet_information(pace::io_context& io, bool ipv6)
+{
+    const std::string address = ipv6 ? "::1" : "127.0.0.1";
+    pace::udp::socket listener(io, {ipv6 ? "::" : "0.0.0.0", 0}, {.packet_info = true});
+    pace::udp::socket client(io, {address, 0}, {.packet_info = true});
+    pace::udp::endpoint destination{address, listener.local_endpoint().port};
+    pace::udp::packet_info sent;
+#if !defined(_WIN32) || (defined(IP_ECN) && defined(IPV6_ECN))
+    sent.ecn = 2;
+#endif
+    co_await client.send_to(pace::as_bytes("request"), destination, sent);
+    pace::udp::packet_info received;
+    std::array<std::byte, 16> bytes{};
+    const auto request = co_await listener.receive_from(bytes, received);
+    require(received.local_address == address, "UDP wildcard destination address");
+    require(received.ecn == sent.ecn, "UDP ECN round trip");
+    // Reply from the address the client contacted.
+    co_await listener.send_to(std::span(bytes).first(request.size), request.sender, received);
+    auto reply = co_await client.receive_from(bytes, received);
+    require(reply.sender.address == address && reply.size == 7 && received.ecn == sent.ecn, "UDP reply metadata");
+    io.stop();
+}
+
+pace::task<void> batched_datagrams(pace::io_context& io)
+{
+    pace::udp::socket receiver(io, {"::1", 0}), sender(io);
+    const auto addr = receiver.local_endpoint();
+    const std::array<pace::udp::outgoing_datagram, 3> outgoing{
+        {{pace::as_bytes("first"), addr}, {{}, addr}, {pace::as_bytes("last"), addr}}
+    };
+    std::size_t sent = 0;
+    while (sent < outgoing.size())
+    {
+        sent += co_await sender.send_batch(std::span(outgoing).subspan(sent));
+    }
+    std::array<std::array<std::byte, 4>, 3> storage{};
+    std::array<pace::udp::incoming_datagram, 3> slots{{{storage[0]}, {storage[1]}, {storage[2]}}};
+    std::size_t read = 0;
+    while (read < slots.size())
+    {
+        read += co_await receiver.receive_batch(std::span(slots).subspan(read));
+    }
+    require(
+        slots[0].result.size == 4 && slots[0].result.truncated && pace::as_text(storage[0]) == "firs",
+        "batch truncation"
+    );
+    require(slots[1].result.size == 0 && !slots[1].result.truncated, "empty batch datagram");
+    require(
+        slots[2].result.sender.port == sender.local_endpoint().port && pace::as_text(storage[2]) == "last",
+        "batch order"
+    );
+    io.stop();
+}
+
+#if defined(__linux__)                                                                                                 \
+    || (defined(UDP_SEND_MSG_SIZE) && defined(UDP_RECV_MAX_COALESCED_SIZE) && defined(UDP_COALESCED_INFO))
+pace::task<void> segmented_datagrams(pace::io_context& io)
+{
+    pace::udp::socket receiver(io, {"127.0.0.1", 0}, {.coalesce = true});
+    pace::udp::socket sender(io);
+    const auto bytes = pace::as_bytes("aaaabbbbcc");
+    pace::udp::packet_info segments;
+    segments.segment_size = 4;
+    co_await sender.send_to(bytes, receiver.local_endpoint(), segments);
+    std::array<std::byte, 32> storage{};
+    pace::udp::packet_info received;
+    std::string payload;
+    unsigned datagrams = 0;
+    while (payload.size() < bytes.size())
+    {
+        const auto result = co_await receiver.receive_from(storage, received);
+        require(!result.truncated && result.size > 0, "segmented UDP receive");
+        if (received.segment_size)
+        {
+            require(received.segment_size == 4, "GRO segment size");
+            datagrams += static_cast<unsigned>((result.size + 3) / 4);
+        }
+        else
+        {
+            require(result.size <= 4, "unsplit GSO payload");
+            ++datagrams;
+        }
+        payload += pace::as_text(std::span(storage).first(result.size));
+    }
+    require(datagrams == 3 && payload == pace::as_text(bytes), "UDP segment boundaries and payload");
+    io.stop();
+}
+#endif
 
 pace::task<void> ipv6_roundtrip(pace::io_context& io)
 {
@@ -472,4 +562,89 @@ TEST_CASE("UDP rejects non-numeric and NUL-embedded addresses")
     pace::io_context io;
     CHECK_THROWS_AS(pace::udp::socket(io, {"invalid", 0}), std::invalid_argument);
     CHECK_THROWS_AS(pace::udp::socket(io, {std::string("127.0.0.1\0suffix", 16), 0}), std::invalid_argument);
+}
+
+TEST_CASE("UDP wildcard listeners receive destination address and ECN and select the reply source")
+{
+    for (bool ipv6 : {false, true})
+    {
+        CAPTURE(ipv6);
+        pace::io_context io;
+        io.spawn(packet_information(io, ipv6));
+        run(io);
+    }
+}
+
+TEST_CASE("UDP batches preserve datagram boundaries, sender and truncation")
+{
+    pace::io_context io;
+    io.spawn(batched_datagrams(io));
+    run(io);
+}
+
+#if defined(__linux__)                                                                                                 \
+    || (defined(UDP_SEND_MSG_SIZE) && defined(UDP_RECV_MAX_COALESCED_SIZE) && defined(UDP_COALESCED_INFO))
+TEST_CASE("UDP segmentation and coalescing preserve datagrams")
+{
+    pace::io_context io;
+    io.spawn(segmented_datagrams(io));
+#ifdef _WIN32
+    try
+    {
+        run(io);
+    }
+    catch (const std::system_error& error)
+    {
+        if (error.code().category() != std::system_category()
+            || (error.code().value() != WSAENOPROTOOPT && error.code().value() != WSAEOPNOTSUPP))
+        {
+            throw;
+        }
+        MESSAGE("UDP segmentation unavailable from this Winsock provider: " << error.what());
+    }
+#else
+    run(io);
+#endif
+}
+#endif
+
+static_assert(std::same_as<decltype(std::declval<pace::udp::socket&>().send_to({}, {}, {})), pace::task<std::size_t>>);
+
+TEST_CASE("UDP result overloads distinguish empty and truncated datagrams from errors")
+{
+    pace::run(
+        [](pace::io_context& io) -> pace::task<void>
+        {
+            using pace::as_result;
+            auto receiver = pace::udp::bind(io, {"127.0.0.1", 0});
+            auto sender = pace::udp::open({.context = &io});
+            auto address = receiver.local_endpoint();
+            std::array<std::byte, 1> byte{};
+            auto sent = co_await sender.send_to(as_result, {}, address);
+            require(sent && sent.value() == 0, "successful zero-byte UDP send");
+            auto empty = co_await receiver.receive_from(as_result, byte);
+            require(empty && !empty.value().truncated && empty.value().size == 0, "successful empty datagram");
+            require(empty.value().sender.port == sender.local_endpoint().port, "empty datagram sender");
+
+            auto invalid = co_await receiver.receive_from(as_result, {});
+            require(!invalid && invalid.error() == std::errc::invalid_argument, "empty receive buffer result");
+            std::string oversized(65508, 'x');
+            auto too_large = co_await sender.send_to(as_result, pace::as_bytes(oversized), address);
+            require(!too_large && too_large.error() == std::errc::message_size, "oversized UDP send result");
+
+            auto longer = co_await sender.send_to(as_result, pace::as_bytes("ab"), address, {});
+            require(longer && longer.value() == 2, "metadata UDP send result");
+            pace::udp::packet_info info;
+            auto cut = co_await receiver.receive_from(as_result, byte, info);
+            require(
+                cut && cut.value().truncated && cut.value().size == 1 && byte[0] == std::byte{'a'},
+                "UDP truncation result"
+            );
+            auto closer = io.call_after(5ms, [&] { receiver.close(); });
+            auto canceled = co_await receiver.receive_from(as_result, byte);
+            require(!canceled && canceled.error() == std::errc::operation_canceled, "suspended UDP receive result");
+            auto closed = co_await receiver.receive_from(as_result, byte);
+            require(!closed && closed.error() == std::errc::bad_file_descriptor, "closed UDP receive result");
+        }
+    );
 }

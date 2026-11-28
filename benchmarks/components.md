@@ -95,3 +95,16 @@ assumes representative independent pairs; shared-runner noise and correlated
 clock/frequency drift can violate that assumption. It is not a guarantee of
 general improvement. The process fails on invalid/incomplete measurements;
 performance gains or regressions do not determine its exit code.
+
+## Reactor-local coroutine frame cache
+
+The cache reduced median paired time for `spawn_completion` by 38.4%. It added 9.9% to lazy task creation and destruction and 10.6% to the synchronous await chain, both measured outside a running reactor. PACE retains the default allocator.
+
+| Component | Default median (ns/op) | Cache median (ns/op) | Median paired cache/default |
+|---|---:|---:|---:|
+| spawn_completion | 18.44 | 11.42 | 0.616 |
+| lazy_task | 14.30 | 16.40 | 1.099 |
+| await_chain | 66.94 | 74.78 | 1.106 |
+| yield | 7.13 | 7.51 | 1.053 |
+
+The prototype rounded frames into six power-of-two classes from 128 to 4096 bytes and retained up to 128 KiB per active reactor. The trial used Apple Clang 21 at `-O2` on macOS arm64. Each component had 16 pairs with alternating execution order, 12,000 warmup operations and 400,000 measured operations per run. Batch size was 256 and await depth was four. These short component timings measure this build on one host. [Prototype patch](results/frame-cache-macos-arm64/candidate.patch) · [Measurements and build flags](results/frame-cache-macos-arm64/pairs.json)

@@ -112,7 +112,7 @@ socket. Inside a coroutine, the async request is:
 auto packet = co_await pace::udp::async_exchange({"127.0.0.1", 9091}, "hello");
 ```
 
-The async form adds no total budget. To reuse a socket or accept replies from other addresses, use `udp::open()` or
+The async form inherits the caller’s deadline by default. Pass `{.timeout = 2s}` to set a total budget. To reuse a socket or accept replies from other addresses, use `udp::open()` or
 `udp::bind()` with `socket.send` and `socket.receive` in your coroutine, as the server does.
 
 The companion `xmake run tutorial_udp` ([source](../../examples/tutorial_udp.cpp)) binds a receiver, sends a

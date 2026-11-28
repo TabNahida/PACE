@@ -3,6 +3,7 @@
 #include <pace/runtime/io_backend.hpp>
 #include <pace/runtime/platform.hpp>
 #include <pace/runtime/task.hpp>
+#include <pace/runtime/unique_function.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -50,7 +51,7 @@ public:
     void spawn(task<void> work);
     /// Queues `work` to run on this context, never inline. Thread-safe. Throws std::invalid_argument for an empty
     /// function and std::system_error(operation_canceled) once stopped.
-    void post(std::function<void()> work);
+    void post(unique_function<void()> work);
     /// Runs on the calling thread until stop() and the drain finish, then rethrows the first unhandled error of a
     /// root, callback or the poller. Throws std::logic_error for a nested, concurrent or repeated run.
     void run();
@@ -93,11 +94,14 @@ public:
     /// Runs `callback` once on this context at `deadline`; never inline. Register on the owning thread or before
     /// run(). Throws std::invalid_argument for an empty callback, operation_canceled once stopped. Stop discards
     /// pending callbacks.
-    [[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, std::function<void()> callback);
+    [[nodiscard]] timer_handle call_at(
+        std::chrono::steady_clock::time_point deadline,
+        unique_function<void()> callback
+    );
 
     /// call_at(now + duration, callback), with the deadline computed like sleep_for.
     template <class Rep, class Period>
-    [[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, std::function<void()> callback)
+    [[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, unique_function<void()> callback)
     {
         return call_at(sleep_for(duration).deadline, std::move(callback));
     }
@@ -126,7 +130,7 @@ public:
     /// passed deadline) or when the context stops. An empty token registers nothing. Otherwise call on the owning
     /// thread; throws operation_canceled once stopped, std::invalid_argument for an empty callback, and the token's
     /// error if it is already cancelled.
-    [[nodiscard]] cancellation_handle on_cancel(cancellation_token, std::function<void(std::error_code)>);
+    [[nodiscard]] cancellation_handle on_cancel(cancellation_token, unique_function<void(std::error_code)>);
 
     /// A readiness wait: create with wait_*, await once, immediately, on the owning context; do not move or modify
     /// it while suspended. Fails with the task token's error, operation_canceled on stop or cancel(fd), or
@@ -162,6 +166,7 @@ public:
             return context.arm(*this, handle);
         }
 
+        std::error_code resume_error() noexcept;
         void await_resume();
     };
 
@@ -375,7 +380,7 @@ struct remote_access
     /// drains. Accepted work runs if run() is running or yet to run and has not finished its drain; otherwise it is
     /// destroyed unrun with the context, like the suspended frames it would resume. Returns false, without keeping
     /// `work`, once the context is destroyed.
-    static bool post(anchor& target, std::function<void()> work, bool while_stopping = true);
+    static bool post(anchor& target, unique_function<void()> work, bool while_stopping = true);
 
     /// Resumes `handle` on the anchored context: queued directly when called on its thread, otherwise posted.
     /// Returns false when the context can no longer run it.
@@ -389,7 +394,7 @@ struct remote_access
     static io_context::cancellation_handle on_cancel_or_stop(
         io_context& io,
         const cancellation_token& token,
-        std::function<void(std::error_code)> callback
+        unique_function<void(std::error_code)> callback
     );
 };
 } // namespace pace

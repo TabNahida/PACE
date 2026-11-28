@@ -1,4 +1,4 @@
-<!-- source-hash: f622b1932a9c -->
+<!-- source-hash: 14c2170ffad1 -->
 # 网络（`pace/net.hpp`）
 
 [English](README.md) · [参考手册](../README.zh.md)
@@ -36,7 +36,15 @@ net 模块在 PACE 反应器之上提供非阻塞的 TCP 与 UDP 套接字、TCP
 - 流和套接字以 `std::byte` 读写：`read_some(std::span<std::byte>)` 与 `write_all(std::span<const std::byte>)`，
   UDP 数据报也使用同样的 span 类型。文本通过 [`<pace/net/buffer.hpp>`](#as_bytesas_writable_bytes-与-as_text)
   的视图跨过这道边界，不产生拷贝：`write_all(pace::as_bytes("text"))`、`read_some(pace::as_writable_bytes(buffer))`。
-- 错误以异常报告，大多是 `std::system_error`；参见各页的“错误”一节和[错误处理](../errors.zh.md)。
+- TCP 和 UDP 热路径接受 `pace::as_result` 并以错误码报告失败。默认重载抛出异常。见[错误处理](../errors.zh.md#以结果值返回错误)。
+
+## 客户端选项
+
+TCP、UDP、TLS 客户端辅助函数共用 `<pace/net/client_options.hpp>` 中的 `pace::client_options`。例如 `udp::async_exchange(peer, request, {.context = &io, .timeout = 2s, .max_reply_size = 512})`。
+
+- 协程在开始执行时读取运行中的 context；显式的 `context` 必须匹配。阻塞入口拥有新建的 context，传入非空 `context` 会抛出 `std::invalid_argument`。
+- `timeout` 必须为正数。协程默认继承外层期限，阻塞调用默认 30 秒。相对超时、绝对 `deadline` 和外层期限中最早者生效；`cancellation` 可取消整个操作。
+- `max_reply_size` 限制应答分配。TCP/TLS 默认 1 MiB，UDP 默认 65536 字节。`tls` 指向借用的 TLS 配置。`transport` 将套接字设置和只移动的 TCP 连接钩子传给 TCP/TLS。具名选项通过 `std::move(options)` 交给一次调用。
 
 ## 概要
 
@@ -51,7 +59,7 @@ net 模块在 PACE 反应器之上提供非阻塞的 TCP 与 UDP 套接字、TCP
 pace::task<void> demo(pace::io_context& io)
 {
     auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
-    auto client = co_await pace::tcp::connect(io, listener.local_endpoint());
+    auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
     auto server = co_await listener.accept();
 
     co_await pace::write(client, "ping"); // 拥有自己的字符串
@@ -301,3 +309,9 @@ span 重载借用调用方的缓冲区。`<pace/net/buffer.hpp>` 的视图借用
 - 教程：[TCP](../../tutorial/05-tcp.zh.md)、[UDP](../../tutorial/06-udp.zh.md)
 - 指南：[协议调优](../../guides/protocol-tuning.zh.md)
 - [迁移到字节接口](../../migration/0.6-to-1.0.zh.md#字节流只有一套字节接口)
+
+## 双向转发
+
+`co_await pace::relay(a, b, options)` 在两个流共同的 context 上双向转发。TCP 流、QUIC 双向流和已完成握手的 TLS 流可以任意配对。转发期间，relay 独占 TLS 会话。自定义传输须允许一次读和一次写同时进行。收到 EOF 时，relay 向另一端发送 TCP FIN、QUIC FIN 或 TLS `close_notify`，对端仍可回传数据。两个方向均结束后返回字节数 `a_to_b` 和 `b_to_a`。运行中出错、取消或超时会关闭两端。
+
+`relay_options::idle_timeout` 限制无进展时间，`linger` 限制第一次 EOF 后等待反向结束的时间。两者默认为零，表示禁用。第四个参数可以是观察者，其 `before_write(direction, size)` 返回 `task<void>`，可在写入前限速。两个普通 TCP 流在 Linux 上可用 `.splice = true` 请求零拷贝，使用观察者时走复制路径。

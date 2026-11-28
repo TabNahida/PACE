@@ -10,6 +10,12 @@ module;
 
 export module pace.runtime;
 
+export namespace pace
+{
+using ::pace::as_result;
+using ::pace::as_result_t;
+} // namespace pace
+
 export namespace pace::ascii
 {
 using ::pace::ascii::iequals;
@@ -26,6 +32,7 @@ using ::pace::cancellation_token;
 using ::pace::channel;
 using ::pace::deadline;
 using ::pace::deliver_signal;
+using ::pace::file_watch;
 using ::pace::invalid_socket;
 using ::pace::io_backend;
 using ::pace::io_context;
@@ -36,6 +43,7 @@ using ::pace::operation_options;
 using ::pace::operation_result;
 using ::pace::overflow_policy;
 using ::pace::process_signal;
+using ::pace::result;
 using ::pace::run;
 using ::pace::runtime;
 using ::pace::send_status;
@@ -56,6 +64,7 @@ using ::pace::this_task::cancellation;
 
 export namespace pace
 {
+using ::pace::unique_function;
 using ::pace::wait_for_signal;
 using ::pace::with_cancellation;
 using ::pace::with_deadline;

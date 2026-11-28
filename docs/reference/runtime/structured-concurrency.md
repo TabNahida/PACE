@@ -153,7 +153,7 @@ Requests may come from any thread. `link` is not synchronized: link before the s
 class cancellation_registration
 {
 public:
-    cancellation_registration(const cancellation_token&, std::function<void()>);
+    cancellation_registration(const cancellation_token&, pace::unique_function<void()>);
     ~cancellation_registration();
     cancellation_registration(const cancellation_registration&) = delete;
     cancellation_registration& operator=(const cancellation_registration&) = delete;

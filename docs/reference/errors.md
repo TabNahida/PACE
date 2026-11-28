@@ -4,7 +4,7 @@
 
 ## Overview
 
-PACE reports failures with exceptions. Awaiting a task rethrows whatever the task threw, so errors travel through
+PACE reports failures with exceptions by default. Awaiting a task rethrows whatever the task threw, so errors travel through
 `co_await` chains like ordinary C++ exceptions. Each module page lists the errors of its own operations; this page
 describes the categories they all use.
 
@@ -29,6 +29,41 @@ describes the categories they all use.
 `std::logic_error` and `std::invalid_argument` mean the program is wrong: fix the call rather than retry it.
 `std::system_error` and the protocol errors describe the network and the peer, and are expected in correct
 programs.
+
+## Result-returning I/O
+
+Pass `pace::as_result` as the first argument to TCP `connect` (member or free function), `accept`,
+`read_some` and `write_all`, or UDP `send_to` and `receive_from` (including the packet-info overloads).
+These operations return `task<pace::result<T>>`. Native socket failures and readiness cancellation go
+directly into the result. The socket ownership, buffer lifetime, and single-operation rules apply to both API forms.
+
+```cpp
+auto incoming = co_await listener.accept(pace::as_result);
+if (!incoming) {
+    log_error(incoming.error());
+    co_return;
+}
+auto stream = std::move(incoming).value();
+auto read = co_await stream.read_some(pace::as_result, buffer);
+if (!read) {
+    log_error(read.error());
+} else if (read.value() == 0) {
+    // EOF when buffer is nonempty.
+}
+```
+
+Check the result before calling `value()`, which throws `std::system_error` on failure. Success has an empty
+`error()`, including TCP EOF and an empty UDP datagram. A failed `write_all` may have sent a prefix.
+A closed socket reports `bad_file_descriptor`. Closing it during a wait reports `operation_canceled`.
+Deadlines report `timed_out`. An overlapping TCP read/write/accept or UDP send/receive in the same direction
+reports `operation_in_progress`.
+
+Existing tasks, including TLS and QUIC operations, can be awaited as `co_await pace::as_result(task)`.
+This form converts exceptions from the underlying task. A `task<result<T>>` keeps the original
+`std::system_error` code and category. It maps invalid arguments to `invalid_argument`, length errors to
+`message_size`, other logic errors to `operation_not_permitted`, allocation failures in the task body to
+`not_enough_memory`, and other exceptions to `io_error`. Task creation and argument evaluation follow ordinary
+C++ allocation and exception rules.
 
 ## Error codes
 

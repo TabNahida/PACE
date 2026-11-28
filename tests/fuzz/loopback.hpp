@@ -75,7 +75,7 @@ void feed_server(std::string_view input, Serve serve)
                 }
             };
             io.spawn(server(std::move(listener), serve));
-            auto client = co_await tcp::connect(io, endpoint);
+            auto client = co_await tcp::connect(endpoint, {.context = &io});
             try
             {
                 co_await client.write_all(pace::as_bytes(input));

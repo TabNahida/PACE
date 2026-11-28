@@ -17,13 +17,21 @@ using ::pace::as_bytes;
 using ::pace::as_text;
 using ::pace::as_writable_bytes;
 using ::pace::byte_stream;
+using ::pace::client_options;
 using ::pace::read_exact;
+using ::pace::relay;
+using ::pace::relay_direction;
+using ::pace::relay_observer;
+using ::pace::relay_options;
+using ::pace::relay_result;
+using ::pace::socket_options;
 } // namespace pace
 
 export namespace pace::tcp
 {
 using ::pace::tcp::async_exchange;
 using ::pace::tcp::connect;
+using ::pace::tcp::connect_options;
 using ::pace::tcp::endpoint;
 using ::pace::tcp::exchange;
 using ::pace::tcp::listen;
@@ -40,8 +48,11 @@ using ::pace::udp::bind_options;
 using ::pace::udp::datagram;
 using ::pace::udp::endpoint;
 using ::pace::udp::exchange;
+using ::pace::udp::incoming_datagram;
 using ::pace::udp::open;
+using ::pace::udp::outgoing_datagram;
 using ::pace::udp::packet;
+using ::pace::udp::packet_info;
 using ::pace::udp::send;
 using ::pace::udp::socket;
 } // namespace pace::udp

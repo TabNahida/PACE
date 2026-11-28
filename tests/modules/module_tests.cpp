@@ -33,7 +33,7 @@ int main()
             co_await pace::sleep_for(std::chrono::milliseconds(0));
             co_await pace::yield();
             pace::tcp::listener listener(io, {"127.0.0.1", 0});
-            auto client = co_await pace::tcp::connect(io, listener.local_endpoint());
+            auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
             auto accepted = co_await listener.accept();
             if (!client.is_open() || !accepted.is_open())
             {

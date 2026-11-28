@@ -2,6 +2,20 @@
 
 ## 1.0.0-alpha.2 — unreleased
 
+- Breaking: TCP, UDP and TLS direct clients now take a trailing `pace::client_options`. Pass
+  `{.context = &io}` for an explicit reactor, `{.tls = &trust}` for a TLS configuration, or
+  `{.max_reply_size = n}` for a reply bound. TLS gains blocking and async exact-length exchanges.
+
+- Added `pace::file_watch` for awaitable file updates, including atomic replacement and recreation (#32).
+- TCP connect/listen socket options, pre-connect hooks, TCP/UDP native socket adoption, NAT destination lookup,
+  UDP packet information, batch I/O and optional UDP segmentation/coalescing (#29).
+- Bidirectional relay for full-duplex byte streams, directional counts, half-close and inactivity deadlines,
+  awaitable write throttling and optional Linux TCP splice. Handshaken TLS streams forward `close_notify` and
+  bidirectional QUIC streams forward FIN while keeping the reverse direction open (#30).
+- TCP connect, accept, read and write and UDP datagram send/receive accept `pace::as_result` and return
+  `task<pace::result<T>>` with the native error code, including cancellation and deadline expiry.
+- Posts, timers and cancellation handlers accept move-only captures through `pace::unique_function`.
+
 - Add cross-context communication (issue #31, `<pace/runtime/channel.hpp>`, `snapshot.hpp`, `on.hpp`):
   - `pace::channel<T>`, a bounded multi-producer, single-consumer queue owned by one context: non-blocking
     `try_send` from any thread with an `overflow_policy` (`reject` or `drop_oldest`), `co_await send()` with

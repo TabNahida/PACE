@@ -85,7 +85,7 @@ void io_context::cancellation_handle::cancel() noexcept
 
 io_context::cancellation_handle io_context::on_cancel(
     cancellation_token token,
-    std::function<void(std::error_code)> callback
+    unique_function<void(std::error_code)> callback
 )
 {
     if (!token.stop_possible())

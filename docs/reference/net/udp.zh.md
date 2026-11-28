@@ -1,4 +1,4 @@
-<!-- source-hash: 77bab1c8e3a4 -->
+<!-- source-hash: da9f864b7009 -->
 # UDP（`pace::udp`）
 
 [English](udp.md) · [网络](README.zh.md)
@@ -15,6 +15,14 @@
 端点是数字形式的 IPv4 或 IPv6 地址；主机名请先用 [DNS 模块](../dns/README.zh.md)解析。UDP 保留消息边界，但不保证
 送达、顺序或不重复。启用 `--modules=y` 时，这些名字由 `import pace.net;` 导出。仓库中的示例是
 `examples/tutorial_udp.cpp`（`xmake run tutorial_udp`）。
+
+## 接管、数据报元信息与批量收发
+
+`udp::socket::adopt(io, fd)` 接管空闲的原生 IPv4 或 IPv6 数据报套接字，保留绑定地址和双栈模式。仅在成功后转移所有权。
+
+通配地址监听器可设置 `bind_options{.packet_info = true}`，然后使用 `receive_from(buffer, info)`。每次成功接收都会替换 `udp::packet_info` 中的本地目的地址、接口索引和可用的 ECN。用 `send_to(bytes, peer, info)` 指定回复源地址及 ECN。Linux 上 `.transparent = true` 还会在 `original_destination` 中返回原始目的地址和端口。
+
+`send_batch(span<outgoing_datagram>)` 和 `receive_batch(span<incoming_datagram>)` 每次处理至多 32 条，返回已完成的前缀长度。发送批次使用同一地址族。保持整个数组以及缓冲区有效，按返回数推进数组。Linux 使用 sendmmsg/recvmmsg。单独指定 `packet_info::segment_size` 可以请求 GSO/USO。以 `.coalesce = true` 启用 GRO/URO 后，使用带 `packet_info&` 的接收重载，按返回的分段大小拆分数据，末段可以较短。
 
 ## 概要
 
@@ -67,6 +75,9 @@ struct endpoint
 struct bind_options
 {
     bool ipv6_only = true;
+    bool packet_info = false;
+    bool transparent = false;
+    bool coalesce = false;
 };
 ```
 
@@ -211,22 +222,18 @@ void set_broadcast(bool enabled = true);
 ### `open` 与 `bind`
 
 ```cpp
-socket open(io_context& io);
-socket open();
+socket open(const client_options& options = {});
 socket bind(io_context& io, endpoint local, bind_options options = {});
 socket bind(endpoint local, bind_options options = {});
 ```
 
-`open` 返回一个未绑定、首次使用时确定地址族的套接字；`bind` 返回一个已绑定到 `local` 的套接字。两者都是同步的。
-不带上下文的重载在调用时就调用 `pace::this_context()`，因此必须在运行中上下文的任务或回调里调用；在 `io.run()`
-之前请使用显式传入上下文的重载。
+两个函数都同步创建套接字。在运行前可用 `open({.context = &io})` 创建未绑定的套接字，也可用 `bind(io, local)` 绑定地址；省略上下文时使用调用时的运行上下文。
 
 ### `exchange` 与 `async_exchange`
 
 ```cpp
-task<packet> async_exchange(io_context& io, endpoint peer, std::string request, std::size_t capacity = 65536);
-task<packet> async_exchange(endpoint peer, std::string request, std::size_t capacity = 65536);
-packet exchange(endpoint peer, std::string request, blocking_options options = {}, std::size_t capacity = 65536);
+task<packet> async_exchange(endpoint peer, std::string request, client_options options = {});
+packet exchange(endpoint peer, std::string request, client_options options = {});
 ```
 
 从一个与对端地址族相同的新套接字把 `request` 作为一个数据报发出，然后返回第一个来自相同 IP 地址、端口、地址族和
@@ -234,23 +241,20 @@ IPv6 作用域的应答（地址规范化后比较）。其他发送方的数据
 请求 ID 关联，也不重传：请求或应答丢失只能通过截止时间发现。从不同地址或端口应答的服务，以及广播和组播，需要使用
 `socket`。
 
-- `capacity` 必须在 1 到 65536 字节之间（为零抛出 `std::invalid_argument`，超出抛出 `std::length_error`），
+- `options.max_reply_size` 必须在 1 到 65536 字节之间（为零抛出 `std::invalid_argument`，超出抛出 `std::length_error`），
   `peer.port` 必须非零（`std::invalid_argument`）；两者都在发送之前检查。
 - 匹配但被截断的应答以 `truncated = true` 返回，不会重试。空应答是合法的。
-- `async_exchange` 在已有上下文上执行（不带 `io` 的重载使用当前运行的上下文），自身不添加截止时间，继承等待它的
-  任务的取消和截止时间。没有截止时间时，它会一直等待应答。
-- `exchange` 阻塞调用线程，按 [`blocking_options`](../runtime/run.zh.md) 在新建的上下文上执行交换。其 `timeout`
-  （默认 30 s）或 `deadline` 约束整个调用；到期时抛出错误码为 `std::errc::timed_out` 的 `std::system_error`。
-  `timeout` 不为正数时抛出 `std::invalid_argument`，在 PACE 上下文内调用会在任何 I/O 之前抛出 `std::logic_error`。
+- `async_exchange` 默认继承调用者的期限和取消；所有被过滤的数据报共用同一预算。
+- `exchange` 使用新建的 context，默认总超时为 30 秒。用 `options.timeout` 或 `options.deadline` 设置期限，到期报告 `timed_out`。
 
 ### `send`
 
 ```cpp
-std::size_t send(endpoint peer, std::string message, blocking_options options = {});
+std::size_t send(endpoint peer, std::string message, client_options options = {});
 ```
 
 阻塞调用：在新建的上下文上从一个新套接字发送一个数据报，返回本地套接字接受的字节数。它不等待、也不证明送达。
-`blocking_options` 的行为与 `exchange` 相同。在任务中请改用自有套接字上的 `co_await socket.send(message, peer)`。
+`client_options` 的行为与 `exchange` 相同。在任务中请改用自有套接字上的 `co_await socket.send(message, peer)`。
 
 ## 错误
 
@@ -293,8 +297,8 @@ std::size_t send(endpoint peer, std::string message, blocking_options options = 
 | `endpoint` 默认值 | `"127.0.0.1"`、端口 `0`、`unspecified`、作用域 `0` |
 | `bind_options::ipv6_only` | `true` |
 | `send_to` 接受的最大载荷 | 65,507 字节 |
-| `receive` / `exchange` 的 `capacity` | 默认 65536，允许 1–65536 |
-| `exchange` / `send` 超时（`blocking_options::timeout`） | 30 s |
+| `receive` 的 `capacity` / `exchange` 的 `max_reply_size` | 默认 65536，允许 1–65536 |
+| `exchange` / `send` 超时（`client_options::timeout`） | 30 s |
 | `async_exchange` 超时 | 无；请使用截止时间 |
 
 ## 参见

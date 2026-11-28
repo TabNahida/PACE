@@ -30,7 +30,7 @@ std::shared_ptr<remote_access::anchor> remote_access::anchor_of(io_context& io)
     return io.impl_->anchor;
 }
 
-bool remote_access::post(anchor& target, std::function<void()> work, bool while_stopping)
+bool remote_access::post(anchor& target, unique_function<void()> work, bool while_stopping)
 {
     // Holding the anchor lock keeps the context alive: ~io_context takes it before tearing anything down.
     std::scoped_lock remote(target.mutex);
@@ -87,7 +87,7 @@ bool remote_access::listen(anchor& target, std::weak_ptr<listener> subscriber)
 io_context::cancellation_handle remote_access::on_cancel_or_stop(
     io_context& io,
     const cancellation_token& token,
-    std::function<void(std::error_code)> callback
+    unique_function<void(std::error_code)> callback
 )
 {
     if (token.stop_possible())

@@ -54,7 +54,7 @@ pace::task<void> accept_connections(pace::tcp::listener& listener)
 
 pace::task<void> client(pace::io_context& io, pace::tcp::endpoint endpoint, std::string message)
 {
-    auto socket = co_await pace::tcp::connect(io, std::move(endpoint));
+    auto socket = co_await pace::tcp::connect(std::move(endpoint), {.context = &io});
     socket.set_no_delay();
     co_await pace::write(socket, message);
     auto response = co_await pace::read_exact(socket, message.size());

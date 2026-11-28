@@ -1,3 +1,4 @@
+#include <pace/net/relay.hpp>
 #include <pace/net/udp.hpp>
 #include "net/socket_address.hpp"
 #include "runtime/poller.hpp"
@@ -28,7 +29,7 @@ void require(bool condition, const char* message)
 double poll_time(pace::io_context& io, std::size_t iterations, std::size_t batch)
 {
     pace::poller poller(false, io.backend());
-    auto sender = pace::udp::open(io);
+    auto sender = pace::udp::open({.context = &io});
     std::vector<pace::udp::socket> sockets;
     std::vector<pace::net::socket_address> targets;
     constexpr std::size_t registrations = 192;
@@ -114,10 +115,61 @@ pace::task<double> udp_time(pace::io_context& io, std::size_t iterations)
         {
             started = clock_type::now();
         }
-        const auto result = co_await pace::udp::async_exchange(io, target, "x");
+        const auto result = co_await pace::udp::async_exchange(target, "x", {.context = &io});
         require(result.data == "reply" && !result.truncated && result.sender.port == target.port, "bad UDP exchange");
     }
     co_return std::chrono::duration<double, std::nano>(clock_type::now() - started).count() / iterations;
+}
+
+pace::task<void> manual_pump(pace::tcp::stream& from, pace::tcp::stream& to)
+{
+    std::array<std::byte, 16 * 1024> buffer{};
+    while (const auto count = co_await from.read_some(buffer))
+    {
+        co_await to.write_all(std::span(buffer).first(count));
+    }
+    co_await to.shutdown_write();
+}
+
+pace::task<double> relay_time(pace::io_context& io, std::string_view workload, std::size_t iterations)
+{
+    auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+    auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+    auto left = co_await listener.accept();
+    auto right = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+    auto server = co_await listener.accept();
+    const std::string payload(16 * 1024, 'x');
+    std::vector<std::byte> received(payload.size());
+    clock_type::duration elapsed{};
+    co_await pace::with_task_group(
+        [&](pace::task_group& group) -> pace::task<void>
+        {
+            if (workload == "relay-manual")
+            {
+                (void)group.spawn(manual_pump(left, right));
+                (void)group.spawn(manual_pump(right, left));
+            }
+            else
+            {
+                (void)group.spawn(pace::relay(left, right, {.splice = workload == "relay-splice"}));
+            }
+            auto started = clock_type::now();
+            for (std::size_t i = 0; i < warmup + iterations; ++i)
+            {
+                if (i == warmup)
+                {
+                    started = clock_type::now();
+                }
+                co_await client.write_all(pace::as_bytes(payload));
+                co_await server.read_exact(received);
+            }
+            elapsed = clock_type::now() - started;
+            require(pace::as_text(received) == payload, "bad relay data");
+            co_await client.shutdown_write();
+            co_await server.shutdown_write();
+        }
+    );
+    co_return std::chrono::duration<double, std::nano>(elapsed).count() / iterations;
 }
 } // namespace
 
@@ -125,7 +177,10 @@ int main(int argc, char** argv)
 {
     try
     {
-        require(argc == 3, "usage: pace_net_hotpaths poll-dense|poll-sparse|udp iterations");
+        require(
+            argc == 3,
+            "usage: pace_net_hotpaths poll-dense|poll-sparse|udp|relay-manual|relay-copy|relay-splice iterations"
+        );
         const std::string_view workload(argv[1]);
         const auto iterations = std::stoul(argv[2]);
         require(iterations > 0 && iterations <= 100000, "out-of-range iterations");
@@ -137,6 +192,10 @@ int main(int argc, char** argv)
                 if (workload == "udp")
                 {
                     co_return co_await pace::with_deadline(pace::deadline::after(20s), udp_time(io, iterations));
+                }
+                if (workload == "relay-manual" || workload == "relay-copy" || workload == "relay-splice")
+                {
+                    co_return co_await relay_time(io, workload, iterations);
                 }
                 require(workload == "poll-dense" || workload == "poll-sparse", "unknown workload");
                 co_return poll_time(io, iterations, workload == "poll-dense" ? 128 : 1);

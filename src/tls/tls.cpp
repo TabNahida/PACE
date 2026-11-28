@@ -1,5 +1,7 @@
 #include <pace/runtime/task_group.hpp>
 #include <pace/tls/stream.hpp>
+#include "net/client_operation.hpp"
+#include "runtime/reactor_signal.hpp"
 #include "tls/protocol_driver.hpp"
 
 #ifdef PACE_HAS_TLS
@@ -401,6 +403,7 @@ struct transport_bio
     bool multiplexing = false, input_eof = false;
     shutdown_writer* writer = nullptr;
     std::optional<std::string> hello_reads{};
+    bool relay_buffered = false;
 
     void stop_capturing_hello() noexcept
     {
@@ -476,7 +479,7 @@ int bio_read(BIO* bio, char* bytes, int size)
     {
         return 0;
     }
-    if (!state.socket || state.hello_reads)
+    if (!state.socket || state.hello_reads || state.relay_buffered)
     {
         BIO_set_retry_read(bio);
         return -1;
@@ -497,7 +500,7 @@ int bio_write(BIO* bio, const char* bytes, int size)
         return 0;
     }
     auto& state = *static_cast<transport_bio*>(BIO_get_data(bio));
-    if (state.socket && !state.multiplexing && !state.writer)
+    if (state.socket && !state.multiplexing && !state.writer && !state.relay_buffered)
     {
         const int result = socket_write(*state.socket, bytes, size);
         if (result < 0 && socket_would_block())
@@ -508,7 +511,7 @@ int bio_write(BIO* bio, const char* bytes, int size)
     }
     auto& output = state.buffers->output;
     int sent = 0;
-    if (state.socket && !state.writer && !output.size())
+    if (state.socket && !state.writer && !state.relay_buffered && !output.size())
     {
         sent = socket_write(*state.socket, bytes, size);
         if (sent == size)
@@ -1619,6 +1622,243 @@ struct stream::implementation
     }
 };
 
+// One session per TLS layer. OpenSSL only touches the bounded BIO buffers on the reactor.
+// At most one ciphertext read and one ciphertext write can be suspended on the transport.
+struct stream::relay_view::state
+{
+    enum class action
+    {
+        read,
+        write,
+        finish
+    };
+
+    stream::implementation& tls;
+    stream::implementation::operation exclusive;
+    reactor_signal changed;
+    std::unique_ptr<state> nested;
+    std::optional<action> retry;
+    bool receiving = false, sending = false;
+    std::string outgoing;
+
+    explicit state(stream& owner)
+        : tls(*owner.impl_)
+        , exclusive(tls)
+        , changed(owner.context())
+    {
+        tls.check(true);
+        if (tls.transport)
+        {
+            if (auto* inner = tls.transport->nested_stream())
+            {
+                nested = std::make_unique<state>(*inner);
+            }
+            else if (!tls.transport->supports_concurrent_io())
+            {
+                throw std::system_error(
+                    std::make_error_code(std::errc::operation_not_supported),
+                    "TLS relay requires a full-duplex transport"
+                );
+            }
+        }
+        if (!tls.bio_state.buffers)
+        {
+            tls.bio_state.buffers = std::make_unique<ciphertext_buffers>();
+        }
+        tls.bio_state.relay_buffered = true;
+    }
+
+    ~state()
+    {
+        tls.bio_state.relay_buffered = false;
+    }
+
+    // A waiter always retries its SSL operation after the in-flight read completes. It must not
+    // start another read first: the first read may already have supplied the record it needs.
+    task<void> fill()
+    {
+        if (receiving)
+        {
+            while (receiving)
+            {
+                co_await changed.wait();
+            }
+            co_return;
+        }
+        auto& bio = tls.bio_state;
+        auto& input = bio.buffers->input;
+        if (input.size() || bio.prefix_offset < bio.prefix.size())
+        {
+            co_return;
+        }
+        if (bio.input_eof)
+        {
+            tls_error("TLS transport reached unclean EOF", tls.ssl.get());
+        }
+        receiving = true;
+        auto bytes = as_writable_bytes(std::span(input.bytes));
+        auto read = nested       ? nested->transfer(action::read, bytes, {})
+                    : tls.socket ? tls.socket->read_some(bytes)
+                                 : tls.transport->read_some(bytes);
+        const auto count = co_await std::move(read);
+        if (count > bytes.size())
+        {
+            throw std::logic_error("TLS transport read exceeded its buffer");
+        }
+        input.begin = 0;
+        input.end = count;
+        bio.input_eof = !count;
+        receiving = false;
+        changed.notify();
+    }
+
+    task<void> flush()
+    {
+        while (sending)
+        {
+            co_await changed.wait();
+        }
+        auto& output = tls.bio_state.buffers->output;
+        sending = true;
+        while (output.size())
+        {
+            // Release the BIO storage before suspending: a concurrent SSL_read may generate control traffic.
+            outgoing.assign(output.bytes.data() + output.begin, output.size());
+            output.consume(outgoing.size());
+            const auto bytes = as_bytes(outgoing);
+            if (nested)
+            {
+                co_await nested->write_all(bytes);
+            }
+            else if (tls.socket)
+            {
+                co_await tls.socket->write_all(bytes);
+            }
+            else
+            {
+                co_await tls.transport->write_all(bytes);
+            }
+        }
+        sending = false;
+        changed.notify();
+    }
+
+    task<std::size_t> transfer(action op, std::span<std::byte> input, std::span<const std::byte> output)
+    {
+        auto* ssl = tls.ssl.get();
+        for (;;)
+        {
+            while (retry && *retry != op)
+            {
+                co_await changed.wait();
+            }
+            tls.check(true);
+            if (op == action::read && (tls.eof || input.empty()))
+            {
+                co_return 0;
+            }
+            std::size_t count = 0;
+            ERR_clear_error();
+            int result = 0;
+            switch (op)
+            {
+                case action::read:
+                    result = SSL_read_ex(ssl, input.data(), input.size(), &count);
+                    break;
+                case action::write:
+                    result = SSL_write_ex(ssl, output.data(), output.size(), &count);
+                    break;
+                case action::finish:
+                    result = SSL_shutdown(ssl);
+                    break;
+            }
+            // SSL_shutdown returning zero means our close_notify was sent. Waiting for the peer
+            // belongs to the read pump and would discard application data still in flight.
+            const bool success = result > 0 || (op == action::finish && result == 0);
+            const int error = success ? SSL_ERROR_NONE : SSL_get_error(ssl, result);
+            const bool eof = op == action::read && error == SSL_ERROR_ZERO_RETURN;
+            const bool sent_alert =
+                op == action::finish && error == SSL_ERROR_WANT_READ && (SSL_get_shutdown(ssl) & SSL_SENT_SHUTDOWN);
+            const bool done = success || eof || sent_alert;
+            if (!done && error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE)
+            {
+                tls_error("TLS relay record operation failed", ssl);
+            }
+            // A read parked on WANT_READ permits writes. Preserve the exact operation and buffer across
+            // every write retry, including a read that needs to finish sending a TLS control record.
+            if (!done && (op != action::read || error == SSL_ERROR_WANT_WRITE))
+            {
+                retry = op;
+            }
+            else if (retry)
+            {
+                retry.reset();
+                changed.notify();
+            }
+            tls.eof |= eof;
+            if (tls.bio_state.buffers->output.size()
+                && !(op == action::read && sending && error != SSL_ERROR_WANT_WRITE))
+            {
+                co_await flush();
+            }
+            if (done)
+            {
+                co_return count;
+            }
+            if (error == SSL_ERROR_WANT_READ)
+            {
+                co_await fill();
+            }
+        }
+    }
+
+    task<void> write_all(std::span<const std::byte> bytes)
+    {
+        while (!bytes.empty())
+        {
+            const auto record = bytes.first(std::min<std::size_t>(bytes.size(), 16384));
+            const auto count = co_await transfer(action::write, {}, record);
+            bytes = bytes.subspan(count);
+        }
+    }
+};
+
+stream::relay_view::relay_view(stream& owner)
+{
+    if (!owner.impl_)
+    {
+        throw std::logic_error("moved-from TLS stream");
+    }
+    state_ = std::make_unique<state>(owner);
+}
+
+stream::relay_view::~relay_view() = default;
+
+task<std::size_t> stream::relay_view::read_some(std::span<std::byte> bytes)
+{
+    return state_->transfer(state::action::read, bytes, {});
+}
+
+task<void> stream::relay_view::write_all(std::span<const std::byte> bytes)
+{
+    return state_->write_all(bytes);
+}
+
+task<void> stream::relay_view::shutdown_write()
+{
+    (void)co_await state_->transfer(state::action::finish, {}, {});
+}
+
+io_context& stream::relay_view::context() const noexcept
+{
+    return state_->tls.context();
+}
+
+void stream::relay_view::close() noexcept
+{
+    state_->tls.close();
+}
+
 bool context::implementation::client_hello_overrides_sni(SSL* ssl) noexcept
 {
     const auto* state = static_cast<const stream::implementation*>(SSL_get_app_data(ssl));
@@ -1795,7 +2035,12 @@ task<void> stream::connect(tcp::endpoint endpoint, std::string peer_name, std::s
     return connect_impl(std::move(endpoint), std::move(peer_name), std::move(server_name));
 }
 
-task<void> stream::connect_impl(tcp::endpoint endpoint, std::string peer_name, std::optional<std::string> server_name)
+task<void> stream::connect_impl(
+    tcp::endpoint endpoint,
+    std::string peer_name,
+    std::optional<std::string> server_name,
+    tcp::connect_options transport
+)
 {
     if (!impl_)
     {
@@ -1815,7 +2060,7 @@ task<void> stream::connect_impl(tcp::endpoint endpoint, std::string peer_name, s
             throw std::logic_error("TLS connect requires a client context");
         }
         impl_->prepare_handshake(std::move(peer_name), server_name);
-        co_await tcp_socket.connect(std::move(endpoint));
+        co_await tcp_socket.connect(std::move(endpoint), std::move(transport));
         co_await perform_handshake();
     }
     catch (...)
@@ -1823,6 +2068,66 @@ task<void> stream::connect_impl(tcp::endpoint endpoint, std::string peer_name, s
         close();
         throw;
     }
+}
+
+task<stream> connect(tcp::endpoint peer, std::string expected_name, client_options options)
+{
+    auto handshake = [&]() -> task<stream>
+    {
+        std::optional<context> system_trust;
+        const auto& config = options.tls ? *options.tls : system_trust.emplace();
+        stream connection(this_context(), config);
+        co_await connection
+            .connect_impl(std::move(peer), std::move(expected_name), std::nullopt, std::move(options.transport));
+        co_return std::move(connection);
+    };
+    co_return co_await net::client_operation(options, handshake());
+}
+
+task<std::string> async_exchange(
+    tcp::endpoint peer,
+    std::string expected_name,
+    std::string request,
+    std::size_t reply_size,
+    client_options options
+)
+{
+    auto connection = connect(
+        std::move(peer),
+        std::move(expected_name),
+        {.tls = options.tls, .transport = std::move(options.transport)}
+    );
+    auto work = net::exchange_bytes(
+        std::move(connection),
+        std::move(request),
+        reply_size,
+        options.max_reply_size.value_or(std::size_t{1024} * 1024)
+    );
+    co_return co_await net::client_operation(options, std::move(work));
+}
+
+std::string exchange(
+    tcp::endpoint peer,
+    std::string expected_name,
+    std::string request,
+    std::size_t reply_size,
+    client_options options
+)
+{
+    auto budget = net::take_blocking_budget(options);
+    return blocking_call(
+        [&]
+        {
+            return async_exchange(
+                std::move(peer),
+                std::move(expected_name),
+                std::move(request),
+                reply_size,
+                std::move(options)
+            );
+        },
+        std::move(budget)
+    );
 }
 
 task<void> stream::handshake(std::string peer_name)

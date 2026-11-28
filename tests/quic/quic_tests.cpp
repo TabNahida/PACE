@@ -1,6 +1,6 @@
 #include <pace/quic/connection.hpp>
 #include <pace/runtime/operation.hpp>
-#include "support/pace_test.hpp"
+#include "support/relay_exchange.hpp"
 
 #include <array>
 #include <chrono>
@@ -761,6 +761,34 @@ int run_interop_peer(int argc, char** argv)
 const pace::test::command interop_server_command{"--interop-server", run_interop_peer};
 const pace::test::command interop_client_command{"--interop-client", run_interop_peer};
 } // namespace
+
+TEST_CASE("QUIC relay forwards binary data and FIN between independent UDP connections")
+{
+    configurations config(certificates());
+    pace::run(
+        [&](pace::io_context& io) -> pace::task<void>
+        {
+            pace::quic::listener listener(io, {"127.0.0.1", 0}, config.server);
+            pace::quic::connection first(io, config.client), second(io, config.client);
+            co_await first.connect(listener.local_endpoint(), "localhost");
+            auto ingress = co_await listener.accept();
+            co_await second.connect(listener.local_endpoint(), "localhost");
+            auto egress = co_await listener.accept();
+            auto client = co_await first.open_stream();
+            auto server = co_await second.open_stream();
+            // A QUIC peer learns about a locally opened stream on its first STREAM frame.
+            co_await pace::write(client, "A");
+            co_await pace::write(server, "B");
+            auto incoming = co_await pace::as_result(ingress.accept_stream());
+            require(bool(incoming), "QUIC stream accept result");
+            auto left = std::move(incoming).value();
+            auto right = co_await egress.accept_stream();
+            require((co_await pace::read_exact(left, 1)) == "A", "QUIC ingress setup");
+            require((co_await pace::read_exact(right, 1)) == "B", "QUIC egress setup");
+            co_await pace::test::relay_exchange(left, right, client, server);
+        }
+    );
+}
 
 TEST_CASE("QUIC concurrent streams round trip with a DNS name")
 {

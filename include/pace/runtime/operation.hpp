@@ -16,7 +16,17 @@ task<operation_result<Factory>> scoped_operation(Factory factory, operation_opti
     cancellation_source source(earlier(earlier(parent.expires(), options.cancellation.expires()), options.deadline));
     source.link(parent);
     source.link(options.cancellation);
-    source.token().throw_if_cancelled();
+    if constexpr (result_access::is_result<operation_result<Factory>>)
+    {
+        if (auto error = source.token().error())
+        {
+            co_return operation_result<Factory>::failure(error);
+        }
+    }
+    else
+    {
+        source.token().throw_if_cancelled();
+    }
     auto& io = this_context();
     io_context::timer_handle timer;
     if (source.token().expires().time() != deadline::clock::time_point::max())
@@ -31,7 +41,17 @@ task<operation_result<Factory>> scoped_operation(Factory factory, operation_opti
     else
     {
         auto result = co_await entry_access::invoke_bound(factory, io, source.token());
-        source.token().throw_if_cancelled();
+        if constexpr (result_access::is_result<operation_result<Factory>>)
+        {
+            if (auto error = source.token().error())
+            {
+                co_return operation_result<Factory>::failure(error);
+            }
+        }
+        else
+        {
+            source.token().throw_if_cancelled();
+        }
         co_return result;
     }
 }

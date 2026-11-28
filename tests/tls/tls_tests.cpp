@@ -1,7 +1,7 @@
 #include <pace/quic/connection.hpp>
 #include <pace/tls/stream.hpp>
 #include "runtime/reactor_signal.hpp"
-#include "support/pace_test.hpp"
+#include "support/relay_exchange.hpp"
 
 #include <algorithm>
 #include <array>
@@ -184,7 +184,8 @@ pace::task<void> half_close_server(pace::tcp::listener& listener, const pace::tl
 pace::task<void> half_close_client(pace::tls::stream& socket, pace::tcp::endpoint endpoint, finished& done)
 {
     co_await socket.connect(std::move(endpoint), "localhost");
-    co_await socket.write_all(pace::as_bytes("ping"));
+    auto sent = co_await pace::as_result(socket.write_all(pace::as_bytes("ping")));
+    require(bool(sent), "TLS write result");
     co_await socket.shutdown_write();
     require(co_await read_to_end(socket) == "pong", "TLS reply after shutdown_write was lost");
     socket.close();
@@ -1717,7 +1718,7 @@ pace::task<void> nested_tls_server(pace::tcp::listener& listener, const transpor
 
 pace::task<void> nested_tls_client(pace::tcp::listener& listener, const transport_contexts& contexts, finished& done)
 {
-    auto outer = co_await pace::tls::connect(contexts.client, listener.local_endpoint(), "localhost");
+    auto outer = co_await pace::tls::connect(listener.local_endpoint(), "localhost", {.tls = &contexts.client});
     co_await transport_echo_client(pace::tls::stream(std::move(outer), contexts.client), done);
 }
 
@@ -1900,6 +1901,119 @@ TEST_CASE("handed-off TCP stream completes a TLS handshake")
 {
     const transport_contexts contexts(certs());
     client_hello_handoff_roundtrip(contexts);
+}
+
+TEST_CASE("TLS relay forwards records and close_notify over TCP and a bounded transport")
+{
+    const transport_contexts contexts(certs());
+    for (bool nested : {false, true})
+    {
+        pace::run(
+            [&](pace::io_context& io) -> pace::task<void>
+            {
+                auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+                pace::tls::stream client(
+                    co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io}),
+                    contexts.client
+                );
+                pace::tls::stream left(co_await listener.accept(), contexts.server);
+                auto pipe = std::make_shared<pipe_state>(io, 1024);
+                pace::tls::stream right(pipe_stream(pipe, 0), contexts.client);
+                pace::tls::stream server(pipe_stream(pipe, 1), contexts.server);
+                co_await pace::with_task_group(
+                    [&](pace::task_group& group) -> pace::task<void>
+                    {
+                        (void)group.spawn(client.handshake("localhost"));
+                        (void)group.spawn(right.handshake("localhost"));
+                        (void)group.spawn(server.handshake());
+                        co_await left.handshake();
+                        co_await group.join();
+                    }
+                );
+                if (nested)
+                {
+                    client = pace::tls::stream(std::move(client), contexts.client);
+                    left = pace::tls::stream(std::move(left), contexts.server);
+                    co_await pace::with_task_group(
+                        [&](pace::task_group& group) -> pace::task<void>
+                        {
+                            (void)group.spawn(client.handshake("localhost"));
+                            co_await left.handshake();
+                            co_await group.join();
+                        }
+                    );
+                }
+                co_await pace::test::relay_exchange(left, right, client, server);
+            }
+        );
+    }
+}
+
+TEST_CASE("TLS relay owns the session and closes both endpoints on truncation or idle timeout")
+{
+    const transport_contexts contexts(certs());
+    for (bool truncate : {true, false})
+    {
+        pace::run(
+            [&](pace::io_context& io) -> pace::task<void>
+            {
+                auto pipe = std::make_shared<pipe_state>(io);
+                pace::tls::stream client(pipe_stream(pipe, 0), contexts.client);
+                pace::tls::stream left(pipe_stream(pipe, 1), contexts.server);
+                auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+                auto right = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+                auto peer = co_await listener.accept();
+                co_await pace::with_task_group(
+                    [&](pace::task_group& group) -> pace::task<void>
+                    {
+                        (void)group.spawn(client.handshake("localhost"));
+                        co_await left.handshake();
+                        co_await group.join();
+                    }
+                );
+                co_await pace::with_task_group(
+                    [&](pace::task_group& group) -> pace::task<void>
+                    {
+                        (void)group.spawn(
+                            [&]() -> pace::task<void>
+                            {
+                                co_await pace::write(client, "X");
+                                require((co_await pace::read_exact(peer, 1)) == "X", "TLS relay did not start");
+                                bool exclusive = false;
+                                try
+                                {
+                                    (void)co_await left.read_some({});
+                                }
+                                catch (const std::logic_error&)
+                                {
+                                    exclusive = true;
+                                }
+                                require(exclusive && left.is_open(), "overlapping TLS operation disturbed the relay");
+                                if (truncate)
+                                {
+                                    client.close();
+                                }
+                            }
+                        );
+                        std::error_code failure;
+                        try
+                        {
+                            (void)co_await pace::relay(left, right, {.idle_timeout = truncate ? 5s : 100ms});
+                        }
+                        catch (const std::system_error& error)
+                        {
+                            failure = error.code();
+                        }
+                        require(
+                            failure == (truncate ? std::errc::protocol_error : std::errc::timed_out),
+                            "TLS relay error"
+                        );
+                        require(!left.is_open() && !right.is_open(), "TLS relay left a failed endpoint open");
+                    }
+                );
+            }
+        );
+    }
 }
 
 TEST_CASE("TLS round trip over an in-memory transport with and without a shutdown hook")

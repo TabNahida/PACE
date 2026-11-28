@@ -43,7 +43,7 @@ void io_context::timer_handle::cancel() noexcept
 
 io_context::timer_handle io_context::call_at(
     std::chrono::steady_clock::time_point deadline,
-    std::function<void()> callback
+    unique_function<void()> callback
 )
 {
     if (impl_->running.load(std::memory_order_acquire))

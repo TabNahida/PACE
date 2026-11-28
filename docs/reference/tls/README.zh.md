@@ -1,4 +1,4 @@
-<!-- source-hash: 9383233a293a -->
+<!-- source-hash: d239080c31ac -->
 # TLS（`pace/tls.hpp`）
 
 [English](README.md) · [参考手册](../README.zh.md)
@@ -50,7 +50,7 @@ pace::task<void> client(pace::tcp::endpoint address)
 {
     pace::tls::context configuration;
     configuration.set_alpn_protocols({"http/1.1"});
-    auto connection = co_await pace::tls::connect(configuration, address, "api.example.com");
+    auto connection = co_await pace::tls::connect(address, "api.example.com", {.tls = &configuration});
     std::cout << "ALPN: " << connection.selected_protocol() << '\n';
     std::cout << co_await pace::read_exact(connection, 6);
     co_await connection.shutdown();
@@ -534,16 +534,21 @@ PACE 基于 TLS 的 HTTP/2 驱动也需要。嵌套 TLS 中，每个会话依次
 ### `connect`
 
 ```cpp
-task<stream> connect(io_context& io, const context& configuration, tcp::endpoint peer, std::string expected_name);
-task<stream> connect(const context& configuration, tcp::endpoint peer, std::string expected_name);
-task<stream> connect(io_context& io, tcp::endpoint peer, std::string expected_name);
-task<stream> connect(tcp::endpoint peer, std::string expected_name);
+task<stream> connect(tcp::endpoint peer, std::string expected_name, client_options options = {});
 ```
 
-创建一个流，连接到数字地址 `peer`，完成握手并检查 `expected_name`（含义同上文的 `peer_name`），然后返回该流。不带
-`configuration` 的重载使用一个系统信任、进行 CA 与名字验证、不设 ALPN 的客户端 context。传入的 `configuration` 在
-任务完成前被借用，因此保存起来的惰性任务不能引用已销毁的 context；返回的流共享该配置的状态。不带 `io` 的重载使用
-运行该任务的上下文，在任务开始时读取。
+在运行上下文连接到数值端点并验证 `expected_name`。默认使用系统信任库。传入 `{.tls = &configuration}` 选择自定义 CA、验证策略和 ALPN。配置借用到任务完成，返回的流共享其内部状态。超时覆盖 TCP 连接和握手。
+
+### `exchange` 与 `async_exchange`
+
+```cpp
+task<std::string> async_exchange(tcp::endpoint peer, std::string expected_name, std::string request,
+                                 std::size_t reply_size, client_options options = {});
+std::string exchange(tcp::endpoint peer, std::string expected_name, std::string request,
+                     std::size_t reply_size, client_options options = {});
+```
+
+在同一总预算内完成握手、写出请求、读满 `reply_size` 字节并关闭。应答上限 `max_reply_size` 默认为 1 MiB，在连接前检查。阻塞形式默认使用 30 秒预算。
 
 ### `accept`
 
@@ -577,6 +582,7 @@ task<stream> accept(tcp::stream transport, const context& configuration);
 - 所有流操作都在拥有传输层的反应器上执行。`close()` 和析构也必须在那里执行，或在它未运行时执行。
 - **每个流同一时间只能有一个异步操作**，读、写、握手、`shutdown_write` 和关闭都算在内。OpenSSL 的任何操作都可能需要另一个方向，因此
   TCP 那种“一读一写”的规则在这里不适用；独立的读任务和写任务不能共享一个 TLS 流。
+- `pace::relay` 在已握手的流上算作一个操作。它在内部协调双向读写，并在另一端的输入到达 EOF 时发送 `close_notify`。如果自定义传输声明 `supports_concurrent_io() == false`，relay 会在转发前以 `operation_not_supported` 拒绝该传输。
 - 一个 `context` 可以同时被多个反应器上的流使用，此时其验证回调和 ClientHello 回调会并发执行，必须是线程安全的。
   请在第一个流创建之前，在一个线程上完成配置。
 

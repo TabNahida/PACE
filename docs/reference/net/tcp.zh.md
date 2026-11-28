@@ -1,4 +1,4 @@
-<!-- source-hash: 4a8447c4e7a0 -->
+<!-- source-hash: 77a5ca0b208a -->
 # TCP（`pace::tcp`）
 
 [English](tcp.md) · [网络](README.zh.md)
@@ -16,6 +16,14 @@
 [`pace::as_bytes` 和 `pace::as_writable_bytes`](README.zh.md#as_bytesas_writable_bytes-与-as_text)，通用的
 [`pace::write` 和 `pace::read_exact`](README.zh.md#函数) 也可用于它。启用 `--modules=y` 时，这些名字由
 `import pace.net;` 导出。
+
+## 原生套接字与连接选项
+
+`tcp::stream::adopt(io, fd)` 接管空闲的已连接或尚未连接的 TCP 套接字，`tcp::listener::adopt(io, fd)` 接管已监听的套接字。成功后对象独占句柄，失败时由调用方关闭。接管会设置非阻塞和禁止继承标记。不要传入另一个对象的借用句柄或已注册到其他事件循环的句柄。
+
+`tcp::connect_options::socket` 和 `tcp::listen_options::socket` 共用 `pace::socket_options`。可指定接口索引、mark、FreeBSD 路由表、keepalive 及其空闲时间、间隔、次数、TCP 用户超时、DF、Fast Open 和 Linux 透明绑定。未设置的字段保留系统默认值。平台缺少所选能力时会报告错误。Linux 客户端开启 Fast Open 后，首次写入可能才会发起握手。
+
+`pre_connect(fd)` 在地址族选择和选项设置完毕后、系统连接调用前同步执行。钩子抛出的异常会中止这次尝试。`original_destination()` 查询 netfilter 或 PF 的 NAT 映射，PF 需要能够打开 `/dev/pf`。Linux TPROXY 保留目标地址，可直接读取 `local_endpoint()`。
 
 ## 概要
 
@@ -40,7 +48,7 @@ pace::task<void> echo(pace::tcp::stream peer)
 pace::task<void> demo(pace::io_context& io)
 {
     auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
-    auto client = co_await pace::tcp::connect(io, listener.local_endpoint());
+    auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
     client.set_no_delay();
     io.spawn(echo(co_await listener.accept()));
 
@@ -92,6 +100,7 @@ struct listen_options
     bool reuse_port = false;
     int backlog = 1024;
     bool ipv6_only = true;
+    pace::socket_options socket{};
 };
 ```
 
@@ -124,7 +133,7 @@ public:
     stream(const stream&) = delete;
     stream& operator=(const stream&) = delete;
 
-    task<void> connect(endpoint endpoint);
+    task<void> connect(endpoint endpoint, connect_options options = {});
     task<std::size_t> read_some(std::span<std::byte> buffer);
     task<void> read_exact(std::span<std::byte> buffer);
     task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
@@ -158,7 +167,7 @@ public:
 #### `connect`
 
 ```cpp
-task<void> connect(endpoint endpoint);
+task<void> connect(endpoint endpoint, connect_options options = {});
 ```
 
 连接到一个数字端点。在流上启动其他任何操作之前先等待它完成。连接结果通过 `SO_ERROR` 检查；被拒绝或其他失败抛出
@@ -312,12 +321,11 @@ public:
 ### `connect`
 
 ```cpp
-task<stream> connect(io_context& context, endpoint destination);
-task<stream> connect(endpoint destination);
+task<stream> connect(endpoint destination, client_options options = {});
+task<result<stream>> connect(as_result_t, endpoint destination, client_options options = {});
 ```
 
-创建一个流，连接到 `destination` 并返回它。不带上下文的重载使用运行该任务的上下文，在任务开始时读取。流属于该上下文；
-不要让它的寿命超过上下文（例如从 `pace::run` 返回它）。
+连接到数值端点并返回属于当前 context 的流。显式设置的 `options.context` 必须是执行此任务的 context。流使用期间该 context 必须存活。
 
 ### `listen`
 
@@ -332,40 +340,18 @@ listener listen(endpoint local, listen_options options = {});
 ### `exchange` 与 `async_exchange`
 
 ```cpp
-task<std::string> async_exchange(
-    io_context& io,
-    endpoint peer,
-    std::string request,
-    std::size_t reply_size,
-    std::size_t maximum = std::size_t{1024} * 1024
-);
-task<std::string> async_exchange(
-    endpoint peer,
-    std::string request,
-    std::size_t reply_size,
-    std::size_t maximum = std::size_t{1024} * 1024
-);
-std::string exchange(
-    endpoint peer,
-    std::string request,
-    std::size_t reply_size,
-    blocking_options options = {},
-    std::size_t maximum = std::size_t{1024} * 1024
-);
+task<std::string> async_exchange(endpoint peer, std::string request, std::size_t reply_size, client_options options = {});
+std::string exchange(endpoint peer, std::string request, std::size_t reply_size, client_options options = {});
 ```
 
 一个连接、一个请求、一个恰好 `reply_size` 字节的应答。连接到 `peer`，写出
 `request`，恰好读取 `reply_size` 字节，以默认的 100 ms / 64 KiB 上限优雅关闭，然后返回应答。不做连接池或复用。
 
 - `reply_size` 是精确的分帧约定，而不是上限：收到较少字节后遇到 EOF 属于错误。允许为 `0`，此时请求仍会发出。
-- `reply_size > maximum` 在连接之前抛出 `std::length_error`。
+- `reply_size > options.max_reply_size.value_or(1024 * 1024)` 在连接之前抛出 `std::length_error`。
 - 请求和应答字符串可以包含零字节。
-- `async_exchange` 在已有上下文上执行（不带 `io` 的重载使用当前运行的上下文），自身不添加截止时间；它继承等待它的
-  任务的取消和截止时间。
-- `exchange` 阻塞调用线程：它按 [`blocking_options`](../runtime/run.zh.md) 在一个新建的上下文上执行交换并返回结果。
-  其 `timeout`（默认 30 s）或 `deadline` 约束整个调用，包括优雅关闭；到期时调用会取消自己的工作并抛出错误码为
-  `std::errc::timed_out` 的 `std::system_error`。`timeout` 不为正数时抛出 `std::invalid_argument`。在 PACE 上下文内
-  调用会在任何 I/O 之前抛出 `std::logic_error`。
+- `async_exchange` 继承调用者的取消和期限；`options.timeout` 和 `options.deadline` 可缩短整个操作（含关闭）的预算。
+- `exchange` 使用新建的 context，默认总超时为 30 秒。到期报告 `timed_out`。在反应器内阻塞调用会抛出 `std::logic_error`。
 
 需要持久连接、其他分帧方式（分隔符、长度前缀）或可复用缓冲区时，请在自有的流上使用 `connect`、`pace::write` 和
 `pace::read_exact`。
@@ -423,8 +409,8 @@ std::string exchange(
 | `listen_options::backlog` | 1024（必须 > 0；操作系统可能截断） |
 | `listen_options::reuse_port` / `ipv6_only` | `false` / `true` |
 | `close_gracefully` 超时 / 丢弃上限 | 100 ms / 64 KiB |
-| `read_exact`、`exchange` 的 `maximum` | 1 MiB |
-| `exchange` 超时（`blocking_options::timeout`） | 30 s |
+| `read_exact` 的 `maximum` / `exchange` 的 `max_reply_size` | 1 MiB |
+| `exchange` 超时（`client_options::timeout`） | 30 s |
 | `write_all` 让出反应器之前发送的字节数 | 1 MiB |
 | `accept()` 让出之前连续接受的连接数 | 64 |
 | 描述符或缓冲区耗尽时 `accept()` 的退避时间 | 50 ms |

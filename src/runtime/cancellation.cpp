@@ -15,7 +15,7 @@ struct cancellation_registration::implementation
     using list = std::list<std::shared_ptr<implementation>>;
     list::iterator position;
     bool registered = false; // Protected by owner->mutex.
-    std::function<void()> callback;
+    unique_function<void()> callback;
     std::mutex mutex;
     std::condition_variable finished;
     std::thread::id runner;
@@ -91,7 +91,7 @@ struct cancellation_state
     }
 };
 
-cancellation_registration::cancellation_registration(const cancellation_token& token, std::function<void()> callback)
+cancellation_registration::cancellation_registration(const cancellation_token& token, unique_function<void()> callback)
 {
     if (!token.state_)
     {

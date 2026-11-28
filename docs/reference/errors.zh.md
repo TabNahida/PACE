@@ -1,11 +1,11 @@
-<!-- source-hash: cd6f3928939d -->
+<!-- source-hash: 7fa9ee5c318a -->
 # 错误
 
 [English](errors.md) · [参考](README.zh.md)
 
 ## 概述
 
-PACE 用异常报告失败。等待一个任务时，会重新抛出该任务抛出的异常，因此错误像普通 C++ 异常一样沿 `co_await`
+PACE 默认用异常报告失败。等待一个任务时，会重新抛出该任务抛出的异常，因此错误像普通 C++ 异常一样沿 `co_await`
 链传递。各模块页面列出各自操作的错误；本页说明它们共同使用的几类错误。
 
 | 头文件 | 目标 | 构建选项 |
@@ -28,6 +28,37 @@ PACE 用异常报告失败。等待一个任务时，会重新抛出该任务抛
 
 `std::logic_error` 和 `std::invalid_argument` 说明程序本身有错：应当修正调用，而不是重试。`std::system_error`
 和协议错误描述的是网络和对端的情况，在正确的程序里也会出现。
+
+## 以结果值返回错误
+
+TCP 的 `connect`（成员函数和自由函数）、`accept`、`read_some`、`write_all`，以及 UDP 的 `send_to`、
+`receive_from`（含 `packet_info` 重载）均可传入首个参数 `pace::as_result`，返回 `task<pace::result<T>>`。
+原生套接字调用失败、就绪等待被取消时，错误码直接写入结果。两种接口遵循相同的套接字所有权、缓冲区生命周期和并发约束。
+
+```cpp
+auto incoming = co_await listener.accept(pace::as_result);
+if (!incoming) {
+    log_error(incoming.error());
+    co_return;
+}
+auto stream = std::move(incoming).value();
+auto read = co_await stream.read_some(pace::as_result, buffer);
+if (!read) {
+    log_error(read.error());
+} else if (read.value() == 0) {
+    // 缓冲区非空时表示 EOF。
+}
+```
+
+先检查结果再调用 `value()`，在失败结果上调用它会抛出 `std::system_error`。成功时 `error()` 为空，
+包括 TCP EOF 和 UDP 空数据报。失败的 `write_all` 可能已经发送了一部分数据。在已关闭的套接字上执行操作会得到
+`bad_file_descriptor`，等待中关闭则得到 `operation_canceled`，截止时间到期得到 `timed_out`。
+同方向重复发起 TCP 读、写、接受，或 UDP 发送、接收，会得到 `operation_in_progress`。
+
+已有任务（包括 TLS、QUIC 操作）可通过 `co_await pace::as_result(task)` 适配，底层任务抛出的异常会转换为结果。
+`task<result<T>>` 保留 `std::system_error` 的错误码和类别。无效参数映射为 `invalid_argument`，长度错误映射为
+`message_size`，其他逻辑错误映射为 `operation_not_permitted`，任务体内的内存分配失败映射为 `not_enough_memory`，
+其余异常映射为 `io_error`。求值参数及创建任务时遵循 C++ 常规的分配和异常规则。
 
 ## 错误码
 

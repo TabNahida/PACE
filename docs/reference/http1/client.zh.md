@@ -1,4 +1,4 @@
-<!-- source-hash: 863d6c218efe -->
+<!-- source-hash: 1dca3cde158a -->
 # HTTP/1 客户端
 
 [English](client.md) · [HTTP/1](README.zh.md)
@@ -23,7 +23,7 @@
 pace::task<void> two_requests(pace::io_context& io, pace::tcp::endpoint server)
 {
     // A persistent connection: requests are sent one after another.
-    pace::http::client client(co_await pace::tcp::connect(io, server));
+    pace::http::client client(co_await pace::tcp::connect(server, {.context = &io}));
     for (const char* target : {"/a", "/b"})
     {
         auto reply = co_await client.send({.method = "GET", .target = target, .headers = {{"Host", "localhost"}}});

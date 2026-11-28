@@ -1,4 +1,4 @@
-<!-- source-hash: 876169915b2f -->
+<!-- source-hash: 6c3b25348726 -->
 # 句柄与信号
 
 [English](handles-and-signals.md) · [运行时](README.zh.md)
@@ -16,6 +16,23 @@
 `io_context::wait_readable`、`wait_writable` 和 `wait_ready`（见 [`io_context`](io-context.zh.md#就绪等待)）接受后端
 能够轮询的任何描述符，不限于 socket。Windows 没有这类描述符；在那里改用 `io_context::wait_handle` 等待事件、进程或其他
 内核对象。`signal_set` 与 `wait_for_signal` 把信号变成可等待的值，服务只需两行代码就能优雅关闭。
+
+## 监听文件
+
+`pace::file_watch watch(io, path)` 在构造时订阅文件名。父目录必须存在并保持原位，目标文件可以稍后创建。使用头文件 `<pace/runtime/file_watch.hpp>` 或 `<pace/runtime.hpp>`。
+
+```cpp
+pace::file_watch watch(io, config_path);
+for (;;)
+{
+    reload(config_path);     // 应用自行处理文件缺失或配置无效。
+    co_await watch.wait();
+}
+```
+
+写入、创建、删除或替换目标文件都可以唤醒等待者。多个变更可能合并，一次写入也可能产生多次通知。每次唤醒后，重新读取文件的当前内容。Linux 使用 inotify，macOS 和 FreeBSD 使用 vnode 通知，Windows 使用目录变更通知。
+
+在所属 context 上使用监听器，同一时间只能有一个等待。等待被取消或超时后仍可继续订阅。关闭或销毁监听器将结束订阅，并以 `operation_canceled` 唤醒正在等待的协程。文件系统不支持监听或系统调用失败时，会抛出 `std::system_error`。
 
 ## 概要
 

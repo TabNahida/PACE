@@ -1,4 +1,4 @@
-<!-- source-hash: e346edb18da1 -->
+<!-- source-hash: 3cdac6eb57f5 -->
 # 结构化并发、取消与截止时间
 
 [English](structured-concurrency.md) · [运行时](README.zh.md)
@@ -152,7 +152,7 @@ public:
 class cancellation_registration
 {
 public:
-    cancellation_registration(const cancellation_token&, std::function<void()>);
+    cancellation_registration(const cancellation_token&, pace::unique_function<void()>);
     ~cancellation_registration();
     cancellation_registration(const cancellation_registration&) = delete;
     cancellation_registration& operator=(const cancellation_registration&) = delete;

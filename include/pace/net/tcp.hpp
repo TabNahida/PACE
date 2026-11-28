@@ -1,13 +1,16 @@
 #pragma once
 
 #include <pace/net/buffer.hpp>
+#include <pace/net/client_options.hpp>
 #include <pace/net/ip.hpp>
+#include <pace/net/socket_options.hpp>
 #include <pace/net/stream_io.hpp>
 #include <pace/runtime/blocking.hpp>
 #include <pace/runtime/io_context.hpp>
 #include <pace/runtime/platform.hpp>
 #include <pace/runtime/task.hpp>
 #include <pace/runtime/this_context.hpp>
+#include <pace/runtime/unique_function.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -42,6 +45,7 @@ struct listen_options
     int backlog = 1024;
     /// Sets IPV6_V6ONLY on an IPv6 endpoint. Set false for explicit dual-stack; must stay true on IPv4.
     bool ipv6_only = true;
+    socket_options socket{};
 };
 
 /// Move-only, context-affine TCP socket. The context must outlive the socket.
@@ -56,6 +60,8 @@ public:
     explicit stream(io_context& context);
     /// Creates an unconnected socket of a fixed family (`unspecified` behaves like the one-argument form).
     stream(io_context& context, address_family family);
+    /// Takes ownership of an idle native IPv4/IPv6 TCP stream on success. On failure the caller owns fd.
+    static stream adopt(io_context& context, native_socket_type fd);
     /// Closes the socket.
     ~stream();
     /// Moves the handle; only while idle. The source keeps its context but owns no handle; move assignment
@@ -67,10 +73,12 @@ public:
 
     /// Connects to a numeric endpoint; one attempt per stream (a second throws std::logic_error). Throws
     /// std::system_error on failure, including address_family_not_supported for an explicit-family mismatch.
-    task<void> connect(endpoint endpoint);
+    task<void> connect(endpoint endpoint, connect_options options = {});
+    task<result<void>> connect(as_result_t, endpoint destination, connect_options options = {});
     /// Completes when at least one byte was read and returns the count; 0 with a nonempty buffer means EOF. The
     /// buffer is borrowed until completion. One read may be outstanding (std::logic_error otherwise).
     task<std::size_t> read_some(std::span<std::byte> buffer);
+    task<result<std::size_t>> read_some(as_result_t, std::span<std::byte> buffer);
     /// Fills the buffer or throws std::system_error(connection_reset) on premature EOF. A failed read may have
     /// filled a prefix; no bytes beyond buffer.size() are consumed.
     task<void> read_exact(std::span<std::byte> buffer);
@@ -80,6 +88,7 @@ public:
     /// Completes when the OS has accepted every byte of `bytes`, which stay borrowed until then. One write may be
     /// outstanding (std::logic_error otherwise). Text: `write_all(pace::as_bytes(text))`.
     task<void> write_all(std::span<const std::byte> bytes);
+    task<result<void>> write_all(as_result_t, std::span<const std::byte> bytes);
     /// Sends FIN (shutdown(SHUT_WR)): the peer reads EOF while this side can still read. Completes at once; throws
     /// std::system_error. Do not overlap a write.
     task<void> shutdown_write();
@@ -118,9 +127,19 @@ public:
     [[nodiscard]] endpoint local_endpoint() const;
     /// The connected peer's address and port. Throws std::system_error.
     [[nodiscard]] endpoint remote_endpoint() const;
+    /// Destination before NAT redirect (Linux netfilter or BSD/macOS PF). Requires a matching state entry.
+    /// For a Linux TPROXY socket, local_endpoint() already contains the unmodified destination.
+    [[nodiscard]] endpoint original_destination() const;
 
 private:
+    template <bool Report>
+    task<result_access::value<Report, void>> connect_impl(endpoint destination, connect_options options);
+    template <bool Report>
+    task<result_access::value<Report, std::size_t>> read_impl(std::span<std::byte> buffer);
+    template <bool Report>
+    task<result_access::value<Report, void>> write_impl(std::span<const std::byte> bytes);
     friend class listener;
+    friend struct splice_access;
     // A short read commonly drains a socket. Wait for level readiness before
     // the next attempt instead of issuing a predictable failing recv syscall.
     bool read_may_be_ready_ = true;
@@ -135,10 +154,9 @@ private:
     bool writing_ = false;
 };
 
-/// Connects a new stream to a numeric endpoint; the returned stream belongs to the supplied loop.
-task<stream> connect(io_context& context, endpoint destination);
-/// As above, on the context that runs the task (read when the task starts).
-task<stream> connect(endpoint destination);
+/// Connects a new stream on the running context, under the supplied client budget.
+task<stream> connect(endpoint destination, client_options options = {});
+task<result<stream>> connect(as_result_t, endpoint destination, client_options options = {});
 
 /// Move-only, context-affine listening socket. The context must outlive it; one accept() may be outstanding.
 class listener
@@ -147,6 +165,8 @@ public:
     /// Creates, binds and listens synchronously. Throws std::invalid_argument for invalid input and
     /// std::system_error for OS failures.
     listener(io_context& context, endpoint endpoint, listen_options options = {});
+    /// Takes ownership of an idle native IPv4/IPv6 TCP listener on success. On failure the caller owns fd.
+    static listener adopt(io_context& context, native_socket_type fd);
     /// Closes the listener; accepted streams are not affected.
     ~listener();
     /// Moves the handle; only while no accept() is pending. Move assignment closes the previous socket.
@@ -158,6 +178,7 @@ public:
     /// Waits for one connection and returns it as a stream on the listener's context. Skips aborted connections
     /// and backs off on descriptor exhaustion; other failures throw std::system_error.
     task<stream> accept();
+    task<result<stream>> accept(as_result_t);
     /// The bound address and actual port. Throws std::system_error.
     [[nodiscard]] endpoint local_endpoint() const;
 
@@ -177,6 +198,9 @@ public:
     void close() noexcept;
 
 private:
+    template <bool Report>
+    task<result_access::value<Report, stream>> accept_impl();
+    listener(io_context& context, native_socket_type fd, address_family family) noexcept;
     io_context* context_;
     native_socket_type fd_ = invalid_socket;
     address_family family_ = address_family::ipv4;
@@ -197,52 +221,13 @@ inline listener listen(endpoint local, listen_options options = {})
     return listen(this_context(), std::move(local), options);
 }
 
-/// One connection, one owned request, and an exactly framed reply of `reply_size` bytes. No pooling.
-/// Throws std::length_error before connecting when `reply_size > maximum`, and
-/// std::system_error(connection_reset) on early EOF. Adds no deadline of its own.
-inline task<std::string> async_exchange(
-    io_context& io,
+/// Sends one request and reads an exactly framed reply bounded by options.max_reply_size.
+task<std::string> async_exchange(
     endpoint peer,
     std::string request,
     std::size_t reply_size,
-    std::size_t maximum = std::size_t{1024} * 1024
-)
-{
-    if (reply_size > maximum)
-    {
-        throw std::length_error("TCP reply exceeds maximum");
-    }
-    auto socket = co_await connect(io, std::move(peer));
-    co_await pace::write(socket, std::move(request));
-    auto reply = co_await pace::read_exact(socket, reply_size, maximum);
-    co_await socket.close_gracefully();
-    co_return reply;
-}
-
-/// As above, on the context that runs the task.
-inline task<std::string> async_exchange(
-    endpoint peer,
-    std::string request,
-    std::size_t reply_size,
-    std::size_t maximum = std::size_t{1024} * 1024
-)
-{
-    co_return co_await async_exchange(this_context(), std::move(peer), std::move(request), reply_size, maximum);
-}
-
-/// Blocking async_exchange on a fresh context, bounded by `options` (30 s by default); expiry throws
-/// std::system_error(timed_out). Throws std::logic_error when called inside a PACE context.
-inline std::string exchange(
-    endpoint peer,
-    std::string request,
-    std::size_t reply_size,
-    blocking_options options = {},
-    std::size_t maximum = std::size_t{1024} * 1024
-)
-{
-    return blocking_call(
-        [&](io_context& io) { return async_exchange(io, std::move(peer), std::move(request), reply_size, maximum); },
-        std::move(options)
-    );
-}
+    client_options options = {}
+);
+/// Blocking exchange on a fresh context, with a default total timeout of 30 seconds.
+std::string exchange(endpoint peer, std::string request, std::size_t reply_size, client_options options = {});
 } // namespace pace::tcp

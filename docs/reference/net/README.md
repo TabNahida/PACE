@@ -37,8 +37,16 @@ Rules shared by every page of the module:
   `write_all(std::span<const std::byte>)`, and the same span types for UDP datagrams. Text crosses that boundary
   through the views of [`<pace/net/buffer.hpp>`](#as_bytes-as_writable_bytes-and-as_text), without a copy:
   `write_all(pace::as_bytes("text"))`, `read_some(pace::as_writable_bytes(buffer))`.
-- Errors are reported as exceptions, mostly `std::system_error`; see each page's Errors section and
-  [error handling](../errors.md).
+- TCP and UDP hot paths accept `pace::as_result` for error-code reporting. The default overloads throw exceptions.
+  See [error handling](../errors.md#result-returning-io).
+
+## Client options
+
+TCP, UDP and TLS client helpers take `pace::client_options` from `<pace/net/client_options.hpp>`. For example, `udp::async_exchange(peer, request, {.context = &io, .timeout = 2s, .max_reply_size = 512})`.
+
+- Coroutines select the running context when execution starts. An explicit `context` must match it. Blocking helpers own a fresh context and reject a non-null `context` with `std::invalid_argument`.
+- A supplied `timeout` must be positive. Async calls inherit their parent's deadline by default. Blocking calls default to 30 seconds. The earliest relative, absolute or inherited deadline applies. The `cancellation` token covers the whole operation.
+- `max_reply_size` bounds the reply allocation. TCP/TLS default to 1 MiB and UDP to 65536 bytes. `tls` points to a borrowed TLS configuration. `transport` supplies native socket settings and the move-only pre-connect hook for TCP/TLS. Pass named options with `std::move(options)`.
 
 ## Synopsis
 
@@ -53,7 +61,7 @@ Rules shared by every page of the module:
 pace::task<void> demo(pace::io_context& io)
 {
     auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
-    auto client = co_await pace::tcp::connect(io, listener.local_endpoint());
+    auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
     auto server = co_await listener.accept();
 
     co_await pace::write(client, "ping"); // owns its string
@@ -311,3 +319,9 @@ completed.
 - Tutorial: [TCP](../../tutorial/05-tcp.md), [UDP](../../tutorial/06-udp.md)
 - Guide: [protocol tuning](../../guides/protocol-tuning.md)
 - [Migrating to the byte interface](../../migration/0.6-to-1.0.md#byte-streams-have-one-interface-in-bytes)
+
+## Bidirectional relay
+
+`co_await pace::relay(a, b, options)` forwards both directions on the streams' common context. TCP streams, bidirectional QUIC streams and handshaken TLS streams can be paired in any combination. The relay owns the TLS session for the duration of the transfer. Custom transports must permit one concurrent read and write. EOF half-closes the opposite writer using TCP FIN, QUIC FIN or TLS `close_notify`, so the peer can still send a reply. Completion returns the byte counts `a_to_b` and `b_to_a`. An error, cancellation or timeout during the transfer closes both endpoints.
+
+`relay_options::idle_timeout` bounds time without progress. `linger` bounds the reverse direction after the first EOF. Both default to zero, disabling the deadline. An optional fourth argument owns an observer whose `before_write(direction, size)` returns `task<void>` and can rate-limit writes. For two TCP streams on Linux, `.splice = true` requests zero-copy forwarding. An observer selects the copy path.

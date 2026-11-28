@@ -37,7 +37,7 @@ pace::task<void> client(
     completion& done
 )
 {
-    auto connection = co_await pace::tls::connect(io, config, std::move(endpoint), "localhost");
+    auto connection = co_await pace::tls::connect(std::move(endpoint), "localhost", {.context = &io, .tls = &config});
     if (connection.selected_protocol() != "pace-demo")
     {
         throw std::runtime_error("unexpected negotiated protocol");

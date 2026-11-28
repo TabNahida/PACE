@@ -85,7 +85,7 @@ co_await connection.shutdown();
 On the client, name the identity the handshake must verify:
 
 ```cpp
-auto connection = co_await pace::tls::connect(client_config, endpoint, "localhost");
+auto connection = co_await pace::tls::connect(endpoint, "localhost", {.tls = &client_config});
 auto message = co_await pace::read_exact(connection, 25);
 std::cout << message;
 co_await connection.shutdown();

@@ -1,4 +1,4 @@
-<!-- source-hash: f02e27d9d64b -->
+<!-- source-hash: cfd1573ac77d -->
 # 6. UDP
 
 [English](06-udp.md) · [学习路线](README.zh.md) · [上一章：TCP](05-tcp.zh.md)
@@ -102,7 +102,7 @@ auto sent = pace::udp::send({"127.0.0.1", 9091}, "notification");
 auto packet = co_await pace::udp::async_exchange({"127.0.0.1", 9091}, "hello");
 ```
 
-异步形式不附加总预算。要复用 socket 或接受来自其他地址的回复，就在协程中使用 `udp::open()` 或 `udp::bind()`，配合 `socket.send` 和 `socket.receive`，正如服务器所做的那样。
+异步形式默认继承调用者的期限。传入 `{.timeout = 2s}` 可设置总预算。要复用 socket 或接受来自其他地址的回复，就在协程中使用 `udp::open()` 或 `udp::bind()`，配合 `socket.send` 和 `socket.receive`，正如服务器所做的那样。
 
 配套程序 `xmake run tutorial_udp`（[源码](../../examples/tutorial_udp.cpp)）绑定一个接收端，从另一个用 `udp::open()` 打开的 socket 向它发送一个数据报，检查后输出 `Hello, UDP!`。
 

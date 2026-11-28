@@ -13,6 +13,7 @@
 #include <charconv>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -95,13 +96,347 @@ pace::task<void> tcp_roundtrip(pace::io_context& context)
     require(bad_fd, "closed stream should reject operations");
 }
 
+pace::task<void> adopt_and_configure(pace::io_context& io)
+{
+    pace::initialize_sockets();
+    const auto local = pace::net::parse_socket_address("127.0.0.1", 0);
+    const auto server_fd = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    require(server_fd != pace::invalid_socket, "raw TCP listener socket");
+    require(::bind(server_fd, local.data(), local.length) == 0 && ::listen(server_fd, 4) == 0, "raw TCP listen");
+    CHECK_THROWS_AS(pace::tcp::stream::adopt(io, server_fd), std::invalid_argument);
+    auto listener = pace::tcp::listener::adopt(io, server_fd);
+    const auto client_fd = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    CHECK_THROWS_AS(pace::tcp::listener::adopt(io, client_fd), std::invalid_argument);
+    auto client = pace::tcp::stream::adopt(io, client_fd);
+
+    int calls = 0;
+    pace::tcp::connect_options options;
+    options.socket.keepalive = true;
+    options.pre_connect = [&](pace::native_socket_type fd)
+    {
+        ++calls;
+        require(fd == client_fd, "adopted socket was replaced");
+        int enabled = 0;
+        pace::net::socket_address_length size = sizeof(enabled);
+        require(
+            ::getsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<char*>(&enabled), &size) == 0 && enabled,
+            "socket options must precede pre_connect"
+        );
+        pace::net::socket_address peer;
+        require(::getpeername(fd, peer.data(), &peer.length) != 0, "hook must precede connect");
+    };
+    co_await client.connect(listener.local_endpoint(), std::move(options));
+    require(calls == 1, "pre_connect must run exactly once");
+    const auto accepted = ::accept(server_fd, nullptr, nullptr);
+    auto peer = pace::tcp::stream::adopt(io, accepted);
+    co_await pace::write(client, "request");
+    require((co_await peer.read_exact(7)) == "request", "adopted TCP read");
+    co_await pace::write(peer, "reply");
+    require((co_await client.read_exact(5)) == "reply", "adopted TCP reply");
+
+    const auto datagram_fd = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    CHECK_THROWS_AS(pace::tcp::stream::adopt(io, datagram_fd), std::invalid_argument);
+    require(::bind(datagram_fd, local.data(), local.length) == 0, "raw UDP bind");
+    auto receiver = pace::udp::socket::adopt(io, datagram_fd);
+    pace::udp::socket sender(io);
+    co_await sender.send("one", receiver.local_endpoint());
+    const auto packet = co_await receiver.receive();
+    co_await receiver.send(packet.data, packet.sender);
+    require((co_await sender.receive()).data == "one", "adopted UDP echo");
+}
+
+pace::task<void> connect_hook_failure(pace::io_context& io)
+{
+    auto listener = pace::tcp::listen(io, {"127.0.0.1", 0}, {.socket = {.keepalive = true}});
+    pace::tcp::stream client(io);
+    pace::tcp::connect_options options;
+    options.pre_connect = [](pace::native_socket_type) { throw std::runtime_error("hook refused"); };
+    try
+    {
+        co_await client.connect(listener.local_endpoint(), std::move(options));
+        require(false, "throwing hook did not abort connect");
+    }
+    catch (const std::runtime_error& e)
+    {
+        require(std::string_view(e.what()) == "hook refused", "hook exception lost");
+    }
+    // A successful connection must be the first one in the listener queue.
+    auto next = co_await pace::tcp::connect(listener.local_endpoint());
+    auto accepted = co_await listener.accept();
+    require(accepted.remote_endpoint().port == next.local_endpoint().port, "failed hook still connected");
+}
+
+pace::task<void> verify_tcp_options(pace::io_context& io)
+{
+    pace::socket_options options;
+    options.keepalive = true;
+#if defined(TCP_KEEPINTVL)
+    options.keepalive_interval_seconds = 17;
+#endif
+#if defined(TCP_KEEPCNT)
+    options.keepalive_count = 5;
+#endif
+#if defined(TCP_USER_TIMEOUT)
+    options.user_timeout_ms = 23100;
+#endif
+#if defined(SO_SETFIB)
+    options.routing_table = 0;
+#endif
+    const auto verify = [](pace::native_socket_type fd)
+    {
+        const auto read = [&](int level, int option)
+        {
+            int value = 0;
+            pace::net::socket_address_length length = sizeof(value);
+            require(::getsockopt(fd, level, option, reinterpret_cast<char*>(&value), &length) == 0, "read TCP option");
+            return value;
+        };
+        require(read(SOL_SOCKET, SO_KEEPALIVE) != 0, "keepalive enabled");
+#if defined(TCP_KEEPINTVL)
+        require(read(IPPROTO_TCP, TCP_KEEPINTVL) == 17, "keepalive interval");
+#endif
+#if defined(TCP_KEEPCNT)
+        require(read(IPPROTO_TCP, TCP_KEEPCNT) == 5, "keepalive probes");
+#endif
+#if defined(TCP_USER_TIMEOUT)
+        require(read(IPPROTO_TCP, TCP_USER_TIMEOUT) == 23100, "user timeout");
+#endif
+#if defined(SO_SETFIB)
+        require(read(SOL_SOCKET, SO_SETFIB) == 0, "routing table");
+#endif
+    };
+    auto server = pace::tcp::listen(io, {"127.0.0.1", 0}, {.socket = options});
+    verify(server.native_handle());
+    pace::tcp::connect_options client_options;
+    client_options.socket = options;
+    client_options.pre_connect = verify;
+    pace::tcp::stream client(io);
+    co_await client.connect(server.local_endpoint(), std::move(client_options));
+    auto peer = co_await server.accept();
+    require(peer.remote_endpoint().port == client.local_endpoint().port, "connection with native options");
+}
+
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
+pace::task<void> check_redirect(pace::tcp::listener& listener, pace::tcp::endpoint target)
+{
+    auto client = co_await pace::tcp::connect(target);
+    auto accepted = co_await listener.accept();
+    const auto original = accepted.original_destination();
+    require(accepted.local_endpoint().port != target.port, "connection was redirected");
+    require(original.port == target.port && original.address == target.address && original.family == target.family,
+            "original destination must match the address on the wire");
+}
+
+pace::task<void> original_destinations(pace::io_context& io)
+{
+    auto v4 = pace::tcp::listen(io, {"127.0.0.1", 29002});
+    co_await check_redirect(v4, {"127.0.0.1", 29001, pace::address_family::ipv4});
+    auto dual = pace::tcp::listen(io, {"::", 29006}, {.ipv6_only = false});
+    co_await check_redirect(dual, {"127.0.0.1", 29005, pace::address_family::ipv4});
+    co_await check_redirect(dual, {"::1", 29005, pace::address_family::ipv6});
+
+#if defined(__linux__)
+    pace::udp::socket receiver(io, {"0.0.0.0", 29004}, {.transparent = true});
+    pace::udp::socket sender(io);
+    co_await sender.send("TPROXY", {"127.0.0.2", 29003});
+    std::array<std::byte, 16> bytes{};
+    pace::udp::packet_info info;
+    const auto packet = co_await receiver.receive_from(bytes, info);
+    require(
+        packet.size == 6 && info.original_destination && info.original_destination->address == "127.0.0.2"
+            && info.original_destination->port == 29003,
+        "UDP TPROXY original destination"
+    );
+#endif
+}
+#endif
+
+pace::task<void> relay_exchange(pace::io_context& io)
+{
+    auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+    auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+    auto left = co_await listener.accept();
+    auto right = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+    auto server = co_await listener.accept();
+
+    struct observer
+    {
+        pace::io_context& io;
+        std::size_t& seen;
+
+        pace::task<void> before_write(pace::relay_direction, std::size_t bytes)
+        {
+            co_await io.sleep_for(1ms);
+            seen += bytes;
+        }
+    };
+
+    std::size_t seen = 0;
+    co_await pace::with_task_group(
+        [&](pace::task_group& group) -> pace::task<void>
+        {
+            auto pumping =
+                group.spawn(pace::relay(left, right, {.idle_timeout = 2s, .linger = 2s}, observer{io, seen}));
+            co_await pace::write(client, "request");
+            co_await client.shutdown_write();
+            require((co_await server.read_exact(7)) == "request", "relay request");
+            std::array<std::byte, 1> byte{};
+            require((co_await server.read_some(byte)) == 0, "relay forwarded FIN");
+            co_await pace::write(server, "reply");
+            co_await server.shutdown_write();
+            require((co_await client.read_exact(5)) == "reply", "relay kept reverse direction");
+            require((co_await client.read_some(byte)) == 0, "relay reverse FIN");
+            const auto result = co_await pumping;
+            require(result.a_to_b == 7 && result.b_to_a == 5 && seen == 12, "relay observer and counters");
+        }
+    );
+}
+
+pace::task<void> relay_payloads(pace::io_context& io)
+{
+    std::string payload(512 * 1024 + 7, 0);
+    for (std::size_t i = 0; i < payload.size(); ++i)
+    {
+        payload[i] = static_cast<char>(i % 251);
+    }
+    for (bool splice : {false, true})
+    {
+        auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+        auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+        auto left = co_await listener.accept();
+        auto right = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+        auto server = co_await listener.accept();
+        co_await pace::with_task_group(
+            [&](pace::task_group& group) -> pace::task<void>
+            {
+                auto pump = group.spawn(pace::relay(left, right, {.splice = splice}));
+                auto writer = group.spawn(
+                    [&]() -> pace::task<void>
+                    {
+                        co_await client.write_all(pace::as_bytes(payload));
+                        co_await client.shutdown_write();
+                    }
+                );
+                co_await server.shutdown_write();
+                require(co_await server.read_exact(payload.size()) == payload, "relay payload mismatch");
+                co_await writer;
+                const auto result = co_await pump;
+                require(result.a_to_b == payload.size() && !result.b_to_a, "relay payload counters");
+            }
+        );
+    }
+}
+
+pace::task<void> relay_pacing(pace::io_context& io)
+{
+    struct limiter
+    {
+        pace::io_context& io;
+        std::chrono::steady_clock::time_point start;
+        std::size_t bytes = 0;
+
+        pace::task<void> before_write(pace::relay_direction direction, std::size_t size)
+        {
+            if (direction == pace::relay_direction::a_to_b)
+            {
+                bytes += size;
+                // One KiB per millisecond, with no initial burst.
+                const auto due = start + std::chrono::milliseconds(bytes / 1024);
+                co_await io.sleep_for(due - std::chrono::steady_clock::now());
+            }
+        }
+    };
+
+    auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+    auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+    auto left = co_await listener.accept();
+    auto right = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+    auto server = co_await listener.accept();
+    std::string payload(32 * 1024, 'r');
+    co_await server.shutdown_write();
+    co_await pace::with_task_group(
+        [&](pace::task_group& group) -> pace::task<void>
+        {
+            const auto start = std::chrono::steady_clock::now();
+            auto pump = group.spawn(pace::relay(left, right, {}, limiter{io, start}));
+            auto writer = group.spawn(
+                [&]() -> pace::task<void>
+                {
+                    co_await client.write_all(pace::as_bytes(payload));
+                    co_await client.shutdown_write();
+                }
+            );
+            require((co_await server.read_exact(payload.size())) == payload, "paced relay data");
+            require(
+                std::chrono::steady_clock::now() >= start + 32ms,
+                "relay wrote before the observer released its budget"
+            );
+            require((co_await pump).a_to_b == payload.size(), "paced relay byte count");
+            co_await writer;
+        }
+    );
+}
+
+pace::task<void> relay_cancel(pace::io_context& io)
+{
+    auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+    auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+    auto left = co_await listener.accept();
+    auto right = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+    auto server = co_await listener.accept();
+    pace::cancellation_source source;
+    auto timer = io.call_after(5ms, [source] { source.request_cancellation(); });
+    bool cancelled = false;
+    try
+    {
+        (void)co_await pace::with_cancellation(source.token(), pace::relay(left, right));
+    }
+    catch (const std::system_error& error)
+    {
+        cancelled = error.code() == std::errc::operation_canceled;
+    }
+    require(cancelled && !left.is_open() && !right.is_open(), "relay external cancellation");
+}
+
+pace::task<void> relay_timeouts(pace::io_context& io)
+{
+    for (bool half_close : {false, true})
+    {
+        auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+        auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+        auto left = co_await listener.accept();
+        auto right = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
+        auto server = co_await listener.accept();
+        pace::relay_options options;
+        if (half_close)
+        {
+            options.linger = 5ms;
+            co_await client.shutdown_write();
+        }
+        else
+        {
+            options.idle_timeout = 5ms;
+        }
+        bool expired = false;
+        try
+        {
+            (void)co_await pace::relay(left, right, options);
+        }
+        catch (const std::system_error& error)
+        {
+            expired = error.code() == std::errc::timed_out;
+        }
+        require(expired && !left.is_open() && !right.is_open(), "relay timeout closes both streams");
+    }
+}
+
 pace::task<void> accept_burst(pace::io_context& io)
 {
     auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
     std::vector<pace::tcp::stream> clients;
     for (unsigned i = 0; i < 65; ++i)
     {
-        clients.push_back(co_await pace::tcp::connect(io, listener.local_endpoint()));
+        clients.push_back(co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io}));
     }
     auto dispatched = std::make_shared<bool>(false);
     io.post([dispatched] { *dispatched = true; });
@@ -126,7 +461,7 @@ pace::task<void> accept_burst(pace::io_context& io)
 pace::task<void> large_write(pace::io_context& io)
 {
     auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
-    auto client = co_await pace::tcp::connect(io, listener.local_endpoint());
+    auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
     auto peer = co_await listener.accept();
     const std::string bytes(2 * 1024 * 1024 + 13, 'x');
     co_await pace::with_task_group(
@@ -985,7 +1320,7 @@ pace::task<void> exact_reads(pace::io_context& io)
         eof = error.code() == std::errc::connection_reset;
     }
     require(eof, "exact read silently returned a truncated message");
-    auto pending = co_await pace::tcp::connect(io, listener.local_endpoint());
+    auto pending = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
     auto waiting_peer = co_await listener.accept();
     io.spawn(stop_soon(io));
     bool canceled = false;
@@ -998,6 +1333,83 @@ pace::task<void> exact_reads(pace::io_context& io)
         canceled = error.code() == std::errc::operation_canceled;
     }
     require(canceled, "exact read lost cancellation");
+}
+
+static_assert(std::same_as<decltype(std::declval<pace::tcp::stream&>().connect({}, {})), pace::task<void>>);
+
+pace::task<void> tcp_results(pace::io_context& io)
+{
+    using pace::as_result;
+    auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
+    const auto address = listener.local_endpoint();
+    auto connected = co_await pace::tcp::connect(as_result, address);
+    require(connected && !connected.error(), "TCP result connect");
+    auto client = std::move(connected).value();
+    auto accepted = co_await listener.accept(as_result);
+    require(bool(accepted), "TCP result accept");
+    auto peer = std::move(accepted).value();
+
+    std::array<std::byte, 1> byte{};
+    // A deadline while suspended reports its own reason and releases the pending-read guard.
+    auto timed = co_await pace::with_deadline(pace::deadline::after(5ms), client.read_some(as_result, byte));
+    require(!timed && timed.error() == std::errc::timed_out, "TCP read deadline result");
+
+    co_await pace::with_task_group(
+        [&](pace::task_group& group) -> pace::task<void>
+        {
+            auto waiting = group.spawn(client.read_some(as_result, byte));
+            co_await io.yield();
+            auto duplicate = co_await client.read_some(as_result, byte);
+            require(!duplicate && duplicate.error() == std::errc::operation_in_progress, "overlapping read result");
+            auto wake = co_await peer.write_all(as_result, pace::as_bytes("w"));
+            auto received = co_await waiting;
+            require(
+                wake && received && received.value() == 1 && byte[0] == std::byte{'w'},
+                "original read survived overlap"
+            );
+        }
+    );
+
+    pace::cancellation_source canceled;
+    auto skipped = co_await pace::with_cancellation(
+        canceled.token(),
+        [&]
+        {
+            canceled.request_cancellation();
+            return peer.write_all(as_result, pace::as_bytes("x"));
+        }
+    );
+    require(!skipped && skipped.error() == std::errc::operation_canceled, "pre-canceled write result");
+    auto sent = co_await peer.write_all(as_result, pace::as_bytes("y"));
+    auto read = co_await client.read_some(as_result, byte);
+    require(sent && read && read.value() == 1 && byte[0] == std::byte{'y'}, "TCP result bytes");
+    require(bool(co_await as_result(peer.shutdown_write())), "void task result");
+    auto eof = co_await client.read_some(as_result, byte);
+    require(eof && eof.value() == 0 && !eof.error(), "TCP EOF is a successful zero");
+
+    client.close();
+    auto bad_read = co_await client.read_some(as_result, byte);
+    auto bad_write = co_await client.write_all(as_result, {});
+    require(!bad_read && bad_read.error() == std::errc::bad_file_descriptor, "closed TCP read result");
+    require(!bad_write && bad_write.error() == std::errc::bad_file_descriptor, "closed TCP write result");
+
+    auto close_listener = io.call_after(5ms, [&] { listener.close(); });
+    auto interrupted = co_await listener.accept(as_result);
+    require(!interrupted && interrupted.error() == std::errc::operation_canceled, "close during accept result");
+    // No accept was registered on this listener, so a pending kernel poll cannot retain it after close.
+    auto unused = pace::tcp::listen(io, {"127.0.0.1", 0});
+    const auto unavailable = unused.local_endpoint();
+    unused.close();
+    auto refused = co_await pace::tcp::connect(as_result, unavailable, {.context = &io});
+    require(
+        !refused && refused.error() == std::errc::connection_refused,
+        "TCP connect refusal result: " + refused.error().message()
+    );
+    auto adapted = co_await as_result(pace::tcp::connect(unavailable, {.context = &io}));
+    require(!adapted && adapted.error() == refused.error(), "adapted move-only task preserves its socket error");
+    pace::tcp::stream fresh(io);
+    auto invalid = co_await fresh.connect(as_result, {"invalid", 42});
+    require(!invalid && invalid.error() == std::errc::invalid_argument, "invalid TCP address result");
 }
 
 using test_body = pace::task<void> (*)(pace::io_context&);
@@ -1149,4 +1561,62 @@ TEST_CASE("completed IPv6 graceful close removes its deadline")
 TEST_CASE("stop cancels graceful close")
 {
     run_test(graceful_close_cancellation);
+}
+
+TEST_CASE("native TCP and UDP adoption and pre-connect socket configuration")
+{
+    run_test(adopt_and_configure);
+}
+
+TEST_CASE("pre-connect hook can abort without initiating a connection")
+{
+    run_test(connect_hook_failure);
+}
+
+TEST_CASE("TCP listener and client apply native socket options")
+{
+    run_test(verify_tcp_options);
+}
+
+#if defined(__APPLE__) || defined(__FreeBSD__)
+// On a PF fixture, redirect TCP 127.0.0.1:29001 to 127.0.0.1:29002 and grant read access to /dev/pf.
+TEST_CASE("PF original destination after redirection" * doctest::skip(std::getenv("PACE_TEST_PF_REDIRECT") == nullptr))
+{
+    run_test(original_destinations);
+}
+#elif defined(__linux__)
+TEST_CASE("netfilter original destinations" * doctest::skip(std::getenv("PACE_TEST_TRANSPARENT") == nullptr))
+{
+    run_test(original_destinations);
+}
+#endif
+
+TEST_CASE("relay forwards both half-closes and accounts for both directions")
+{
+    run_test(relay_exchange);
+}
+
+TEST_CASE("relay closes both streams on idle or half-close timeout")
+{
+    run_test(relay_timeouts);
+}
+
+TEST_CASE("relay copy and optional splice deliver identical multi-buffer payloads")
+{
+    run_test(relay_payloads);
+}
+
+TEST_CASE("cancelling an active relay closes both streams")
+{
+    run_test(relay_cancel);
+}
+
+TEST_CASE("relay obeys the observer's cumulative write budget")
+{
+    run_test(relay_pacing);
+}
+
+TEST_CASE("TCP result overloads report success, EOF, socket errors and cancellation")
+{
+    run_test(tcp_results);
 }

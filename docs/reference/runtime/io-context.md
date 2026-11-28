@@ -16,6 +16,8 @@ Most programs never create one directly: [`pace::run`](run.md) makes a fresh con
 [`pace::runtime`](runtime.md) owns one per worker. Create an `io_context` yourself to control its thread and its
 lifetime. Sockets, listeners, timers and waits all belong to exactly one context.
 
+Posts, timers and cancellation callbacks can move-capture resources such as a `std::unique_ptr`. The queue owns each callback until dispatch or cancellation.
+
 ## Synopsis
 
 ```cpp
@@ -60,7 +62,7 @@ public:
     );
     void* find_local_state(const void* key);
     void spawn(task<void> work);
-    void post(std::function<void()> work);
+    void post(pace::unique_function<void()> work);
     void run();
     void stop() noexcept;
     bool stopped() const noexcept;
@@ -69,12 +71,12 @@ public:
     void cancel(native_socket_type fd) noexcept;
 
     class timer_handle;
-    [[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, std::function<void()> callback);
+    [[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, pace::unique_function<void()> callback);
     template <class Rep, class Period>
-    [[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, std::function<void()> callback);
+    [[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, pace::unique_function<void()> callback);
 
     class cancellation_handle;
-    [[nodiscard]] cancellation_handle on_cancel(cancellation_token, std::function<void(std::error_code)>);
+    [[nodiscard]] cancellation_handle on_cancel(cancellation_token, pace::unique_function<void(std::error_code)>);
 
     struct io_awaiter;
     io_awaiter wait_readable(native_socket_type fd) noexcept;
@@ -300,9 +302,9 @@ turn first.
 ### Callback timers
 
 ```cpp
-[[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, std::function<void()> callback);
+[[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, pace::unique_function<void()> callback);
 template <class Rep, class Period>
-[[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, std::function<void()> callback);
+[[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, pace::unique_function<void()> callback);
 ```
 
 Arms a one-shot callback that runs on this context at `deadline` (or after `duration`, computed like `sleep_for`).
@@ -318,7 +320,7 @@ handle.
 ### Cancellation callbacks
 
 ```cpp
-[[nodiscard]] cancellation_handle on_cancel(cancellation_token, std::function<void(std::error_code)>);
+[[nodiscard]] cancellation_handle on_cancel(cancellation_token, pace::unique_function<void(std::error_code)>);
 ```
 
 The hook for custom awaiters. When `token` is cancelled, `callback` runs **on this context** with the token's error

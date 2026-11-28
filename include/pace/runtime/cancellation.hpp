@@ -1,9 +1,9 @@
 #pragma once
 
 #include <pace/runtime/requirements.hpp>
+#include <pace/runtime/unique_function.hpp>
 
 #include <chrono>
-#include <functional>
 #include <memory>
 #include <system_error>
 
@@ -126,7 +126,7 @@ class cancellation_registration
 {
 public:
     /// Registers `callback` with `token`; registers nothing for an empty token.
-    cancellation_registration(const cancellation_token&, std::function<void()>);
+    cancellation_registration(const cancellation_token&, unique_function<void()>);
     /// Unregisters; waits for a callback running on another thread. A callback may destroy its own registration.
     ~cancellation_registration();
     cancellation_registration(const cancellation_registration&) = delete;

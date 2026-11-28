@@ -13,20 +13,24 @@ bool io_context::io_awaiter::await_ready() noexcept
     return false;
 }
 
-void io_context::io_awaiter::await_resume()
+std::error_code io_context::io_awaiter::resume_error() noexcept
 {
     if (token.stop_possible())
     {
         registration.cancel();
-        token.throw_if_cancelled();
+        if (auto reason = token.error())
+        {
+            return reason;
+        }
     }
-    if (error)
+    return !error && context.stopped() ? canceled() : error;
+}
+
+void io_context::io_awaiter::await_resume()
+{
+    if (auto reason = resume_error())
     {
-        throw std::system_error(error);
-    }
-    if (context.stopped())
-    {
-        throw std::system_error(canceled());
+        throw std::system_error(reason);
     }
 }
 

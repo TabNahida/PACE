@@ -6,6 +6,14 @@
       "feature": null,
       "exports": [
         {
+          "name": "pace::as_result",
+          "requires": null
+        },
+        {
+          "name": "pace::as_result_t",
+          "requires": null
+        },
+        {
           "name": "pace::ascii::iequals",
           "requires": null
         },
@@ -46,6 +54,10 @@
           "requires": null
         },
         {
+          "name": "pace::file_watch",
+          "requires": null
+        },
+        {
           "name": "pace::invalid_socket",
           "requires": null
         },
@@ -83,6 +95,10 @@
         },
         {
           "name": "pace::process_signal",
+          "requires": null
+        },
+        {
+          "name": "pace::result",
           "requires": null
         },
         {
@@ -131,6 +147,10 @@
         },
         {
           "name": "pace::this_task::cancellation",
+          "requires": null
+        },
+        {
+          "name": "pace::unique_function",
           "requires": null
         },
         {
@@ -187,7 +207,35 @@
           "requires": null
         },
         {
+          "name": "pace::client_options",
+          "requires": null
+        },
+        {
           "name": "pace::read_exact",
+          "requires": null
+        },
+        {
+          "name": "pace::relay",
+          "requires": null
+        },
+        {
+          "name": "pace::relay_direction",
+          "requires": null
+        },
+        {
+          "name": "pace::relay_observer",
+          "requires": null
+        },
+        {
+          "name": "pace::relay_options",
+          "requires": null
+        },
+        {
+          "name": "pace::relay_result",
+          "requires": null
+        },
+        {
+          "name": "pace::socket_options",
           "requires": null
         },
         {
@@ -196,6 +244,10 @@
         },
         {
           "name": "pace::tcp::connect",
+          "requires": null
+        },
+        {
+          "name": "pace::tcp::connect_options",
           "requires": null
         },
         {
@@ -247,11 +299,23 @@
           "requires": null
         },
         {
+          "name": "pace::udp::incoming_datagram",
+          "requires": null
+        },
+        {
           "name": "pace::udp::open",
           "requires": null
         },
         {
+          "name": "pace::udp::outgoing_datagram",
+          "requires": null
+        },
+        {
           "name": "pace::udp::packet",
+          "requires": null
+        },
+        {
+          "name": "pace::udp::packet_info",
           "requires": null
         },
         {
@@ -473,6 +537,10 @@
           "requires": null
         },
         {
+          "name": "pace::tls::async_exchange",
+          "requires": null
+        },
+        {
           "name": "pace::tls::client_hello",
           "requires": null
         },
@@ -498,6 +566,10 @@
         },
         {
           "name": "pace::tls::context",
+          "requires": null
+        },
+        {
+          "name": "pace::tls::exchange",
           "requires": null
         },
         {

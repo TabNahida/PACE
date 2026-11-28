@@ -1,4 +1,4 @@
-<!-- source-hash: 66bc1de429f2 -->
+<!-- source-hash: 1f464086b780 -->
 # `pace::io_context`
 
 [English](io-context.md) · [运行时](README.zh.md)
@@ -16,6 +16,8 @@
 大多数程序不需要直接创建它：[`pace::run`](run.zh.md) 为一个入口 task 创建新的 context，
 [`pace::runtime`](runtime.zh.md) 为每个工作线程持有一个。需要自己控制运行线程和生命周期时，再自行创建
 `io_context`。socket、listener、定时器和等待都只属于一个 context。
+
+投递、定时器和取消回调可以移动捕获独占资源，例如 `std::unique_ptr`。队列持有回调直至执行或取消。
 
 ## 概要
 
@@ -61,7 +63,7 @@ public:
     );
     void* find_local_state(const void* key);
     void spawn(task<void> work);
-    void post(std::function<void()> work);
+    void post(pace::unique_function<void()> work);
     void run();
     void stop() noexcept;
     bool stopped() const noexcept;
@@ -70,12 +72,12 @@ public:
     void cancel(native_socket_type fd) noexcept;
 
     class timer_handle;
-    [[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, std::function<void()> callback);
+    [[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, pace::unique_function<void()> callback);
     template <class Rep, class Period>
-    [[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, std::function<void()> callback);
+    [[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, pace::unique_function<void()> callback);
 
     class cancellation_handle;
-    [[nodiscard]] cancellation_handle on_cancel(cancellation_token, std::function<void(std::error_code)>);
+    [[nodiscard]] cancellation_handle on_cancel(cancellation_token, pace::unique_function<void(std::error_code)>);
 
     struct io_awaiter;
     io_awaiter wait_readable(native_socket_type fd) noexcept;
@@ -295,9 +297,9 @@ yield_awaiter yield() noexcept;
 ### 回调定时器
 
 ```cpp
-[[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, std::function<void()> callback);
+[[nodiscard]] timer_handle call_at(std::chrono::steady_clock::time_point deadline, pace::unique_function<void()> callback);
 template <class Rep, class Period>
-[[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, std::function<void()> callback);
+[[nodiscard]] timer_handle call_after(std::chrono::duration<Rep, Period> duration, pace::unique_function<void()> callback);
 ```
 
 设置一个一次性回调，在 `deadline`（或 `duration` 之后，计算方式与 `sleep_for` 相同）于本 context 上运行。
@@ -311,7 +313,7 @@ template <class Rep, class Period>
 ### 取消回调
 
 ```cpp
-[[nodiscard]] cancellation_handle on_cancel(cancellation_token, std::function<void(std::error_code)>);
+[[nodiscard]] cancellation_handle on_cancel(cancellation_token, pace::unique_function<void(std::error_code)>);
 ```
 
 自定义 awaiter 的挂钩。`token` 被取消时，`callback` 以令牌的错误码（`operation_canceled` 或 `timed_out`）

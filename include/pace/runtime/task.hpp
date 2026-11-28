@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pace/runtime/cancellation.hpp>
+#include <pace/runtime/result.hpp>
 
 #include <coroutine>
 #include <cstddef>
@@ -86,6 +87,18 @@ public:
             return task{handle_type::from_promise(*this)};
         }
 
+        void unhandled_exception() noexcept
+        {
+            if constexpr (result_access::is_result<T>)
+            {
+                value.emplace(T::failure(result_access::current_error()));
+            }
+            else
+            {
+                promise_base::unhandled_exception();
+            }
+        }
+
         /// Stores the operand of co_return.
         template <class U>
         void return_value(U&& result)
@@ -169,8 +182,8 @@ public:
             return !handle || handle.done();
         }
 
-        /// Passes the parent's token on (unless the child has a bound one), throws std::system_error if it is
-        /// already cancelled, and transfers control to the child.
+        /// Inherits the parent token unless already bound. Cancellation before dispatch skips the body:
+        /// result tasks return the code, other tasks throw std::system_error.
         template <class P>
         std::coroutine_handle<> await_suspend(std::coroutine_handle<P> parent)
         {
@@ -182,24 +195,45 @@ public:
                     promise.cancellation = parent.promise().cancellation;
                 }
             }
-            promise.cancellation.throw_if_cancelled();
+            if constexpr (result_access::is_result<T>)
+            {
+                if (auto error = promise.cancellation.error())
+                {
+                    promise.value.emplace(T::failure(error));
+                    return parent;
+                }
+            }
+            else
+            {
+                promise.cancellation.throw_if_cancelled();
+            }
             handle.promise().continuation = parent;
             return handle;
         }
 
-        /// Rethrows the child's exception, throws std::system_error if its token was cancelled by the time it
-        /// finished, else moves the result out. Throws std::logic_error for an empty task.
+        /// Moves out the value. A result task reports failure and cancellation through its error code.
+        /// Other tasks propagate exceptions and cancellation. Awaiting an empty task throws std::logic_error.
         T await_resume()
         {
             if (!handle)
             {
                 throw std::logic_error("cannot await an empty task");
             }
-            if (handle.promise().exception)
+            if constexpr (result_access::is_result<T>)
             {
-                std::rethrow_exception(handle.promise().exception);
+                if (auto error = handle.promise().cancellation.error())
+                {
+                    return T::failure(error);
+                }
             }
-            handle.promise().cancellation.throw_if_cancelled();
+            else
+            {
+                if (handle.promise().exception)
+                {
+                    std::rethrow_exception(handle.promise().exception);
+                }
+                handle.promise().cancellation.throw_if_cancelled();
+            }
             // A task<T> that finished without an exception ran return_value. Checking again
             // would add a branch to every co_await.
             // NOLINTNEXTLINE(bugprone-unchecked-optional-access): set by return_value, see above
@@ -417,6 +451,20 @@ struct task_access
         return settled<T>(work.release());
     }
 };
+
+template <class T>
+task<result<T>> as_result_t::operator()(task<T> operation) const
+{
+    if constexpr (std::is_void_v<T>)
+    {
+        co_await std::move(operation);
+        co_return result<void>{};
+    }
+    else
+    {
+        co_return co_await std::move(operation);
+    }
+}
 
 namespace this_task
 {

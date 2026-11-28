@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pace/net/buffer.hpp>
+#include <pace/net/client_options.hpp>
 #include <pace/net/ip.hpp>
 #include <pace/runtime/blocking.hpp>
 #include <pace/runtime/io_context.hpp>
@@ -10,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -37,6 +39,24 @@ struct bind_options
 {
     /// Sets IPV6_V6ONLY on an IPv6 endpoint. Set false for explicit dual-stack; must stay true on IPv4.
     bool ipv6_only = true;
+    /// Enable destination address and ECN reception before binding.
+    bool packet_info = false;
+    /// Enable Linux transparent bind and original-destination control messages.
+    bool transparent = false;
+    /// Enable Linux GRO or Windows URO. Read via the packet_info overload to obtain segment_size.
+    bool coalesce = false;
+};
+
+/// Per-datagram control information. A missing address, zero interface or absent ECN lets the OS choose on send.
+struct packet_info
+{
+    std::string local_address;
+    unsigned interface_index = 0;
+    std::optional<unsigned> ecn{};
+    /// GSO/USO segment size on send, GRO/URO segment size on receive (zero for an ordinary datagram).
+    std::uint16_t segment_size = 0;
+    /// Original destination supplied by Linux transparent reception, including its port.
+    std::optional<endpoint> original_destination{};
 };
 
 /// Result of receive_from().
@@ -48,6 +68,20 @@ struct datagram
     endpoint sender;
     /// The datagram was larger than the buffer; its remainder was discarded.
     bool truncated = false;
+};
+
+/// One borrowed payload and its destination for send_batch().
+struct outgoing_datagram
+{
+    std::span<const std::byte> bytes;
+    endpoint destination;
+};
+
+/// One caller-owned receive buffer and its result for receive_batch().
+struct incoming_datagram
+{
+    std::span<std::byte> buffer;
+    datagram result{};
 };
 
 /// Owns the received bytes. An empty data string is a valid datagram, not EOF.
@@ -74,6 +108,8 @@ public:
     socket(io_context& context, address_family family);
     /// Creates a socket and binds it to `local`.
     socket(io_context& context, endpoint local, bind_options options = {});
+    /// Takes ownership of an idle IPv4/IPv6 UDP socket on success. On failure the caller owns fd.
+    static socket adopt(io_context& context, native_socket_type fd);
     /// Closes the socket.
     ~socket();
     /// Moves the handle; only while idle. Move assignment closes the destination's previous socket first.
@@ -91,8 +127,27 @@ public:
     /// Sends one datagram and returns its size; `bytes` stay borrowed until completion. More than 65,507 bytes,
     /// or a partial send, throws std::system_error(message_size).
     task<std::size_t> send_to(std::span<const std::byte> bytes, endpoint destination);
+    task<result<std::size_t>> send_to(as_result_t, std::span<const std::byte> bytes, endpoint destination);
     /// Receives one datagram into `buffer`, which must not be empty (std::invalid_argument).
     task<datagram> receive_from(std::span<std::byte> buffer);
+    task<result<datagram>> receive_from(as_result_t, std::span<std::byte> buffer);
+
+    /// Send with a source address, interface and/or ECN codepoint (0..3).
+    task<std::size_t> send_to(std::span<const std::byte> bytes, endpoint destination, packet_info info);
+    task<result<std::size_t>> send_to(
+        as_result_t,
+        std::span<const std::byte> bytes,
+        endpoint destination,
+        packet_info info
+    );
+    /// Receives the available ancillary information; enable bind_options::packet_info before packets arrive.
+    task<datagram> receive_from(std::span<std::byte> buffer, packet_info& info);
+    task<result<datagram>> receive_from(as_result_t, std::span<std::byte> buffer, packet_info& info);
+
+    /// Sends a prefix of up to 32 messages of one address family. Returns after the first successful batch.
+    task<std::size_t> send_batch(std::span<const outgoing_datagram> messages);
+    /// Waits for one datagram and drains up to 32 into the supplied slots. Only the returned prefix is valid.
+    task<std::size_t> receive_batch(std::span<incoming_datagram> messages);
 
     /// Owned datagrams for small applications. receive() allocates up to 64 KiB;
     /// use receive_from(span) to reuse storage or control larger datagrams.
@@ -145,24 +200,28 @@ public:
     }
 
 private:
+    socket(io_context& context, native_socket_type fd, address_family family, bool ipv6_only) noexcept;
+    template <bool Report>
+    task<result_access::value<Report, std::size_t>> send_impl(
+        std::span<const std::byte> bytes,
+        endpoint destination,
+        const packet_info* info
+    );
+    template <bool Report>
+    task<result_access::value<Report, datagram>> receive_impl(std::span<std::byte> buffer, packet_info* info);
     void select_family(address_family family);
     io_context* context_;
     native_socket_type fd_ = invalid_socket;
     bool sending_ = false, receiving_ = false;
+    bool coalescing_ = false;
     address_family family_ = address_family::ipv4;
     bool automatic_family_ = true, family_selected_ = false, ipv6_only_ = true;
 };
 
-/// An unbound socket whose family is chosen on first use.
-inline socket open(io_context& io)
+/// Opens immediately on options.context, or on the running context if omitted.
+inline socket open(const client_options& options = {})
 {
-    return socket(io);
-}
-
-/// As above, on pace::this_context() at the call; throws std::logic_error when no context is running.
-inline socket open()
-{
-    return open(this_context());
+    return socket(options.context ? *options.context : this_context());
 }
 
 /// A socket bound to `local`; port 0 picks a free port.
@@ -177,28 +236,10 @@ inline socket bind(endpoint local, bind_options options = {})
     return bind(this_context(), std::move(local), options);
 }
 
-/// One datagram request, then the first reply from the same numeric endpoint.
-/// Unrelated senders are ignored; this is filtering, not authentication/reliability. `capacity` must be
-/// 1..65536 and the peer port nonzero. Adds no deadline: without one it waits for a reply forever.
-task<packet> async_exchange(io_context&, endpoint peer, std::string request, std::size_t capacity = 65536);
-
-/// As above, on the context that runs the task.
-inline task<packet> async_exchange(endpoint peer, std::string request, std::size_t capacity = 65536)
-{
-    co_return co_await async_exchange(this_context(), std::move(peer), std::move(request), capacity);
-}
-
-/// Blocking async_exchange on a fresh context, bounded by `options` (30 s by default); expiry throws
-/// std::system_error(timed_out). Throws std::logic_error when called inside a PACE context.
-inline packet exchange(endpoint peer, std::string request, blocking_options options = {}, std::size_t capacity = 65536)
-{
-    return blocking_call(
-        [&](io_context& io) { return async_exchange(io, std::move(peer), std::move(request), capacity); },
-        std::move(options)
-    );
-}
-
-/// Blocking: sends one datagram from a fresh socket on a fresh context and returns the bytes the local socket
-/// accepted. Does not prove delivery. `options` behave as for exchange().
-std::size_t send(endpoint peer, std::string message, blocking_options options = {});
+/// Sends one datagram and accepts the first reply from the same numeric endpoint.
+/// max_reply_size is the receive capacity (1..65536); oversized replies report truncation.
+task<packet> async_exchange(endpoint peer, std::string request, client_options options = {});
+packet exchange(endpoint peer, std::string request, client_options options = {});
+/// Blocking send on a fresh socket. Reports the number of bytes accepted locally.
+std::size_t send(endpoint peer, std::string message, client_options options = {});
 } // namespace pace::udp

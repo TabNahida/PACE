@@ -175,7 +175,7 @@ TEST_CASE("TCP exchange enforces its total deadline")
 
 TEST_CASE("TCP exchange rejects an oversized reply bound before connecting")
 {
-    CHECK_THROWS_AS((void)pace::tcp::exchange({"127.0.0.1", 1}, "", 10, {}, 9), std::length_error);
+    CHECK_THROWS_AS((void)pace::tcp::exchange({"127.0.0.1", 1}, "", 10, {.max_reply_size = 9}), std::length_error);
 }
 
 TEST_CASE("UDP exchange filters other senders and truncates to capacity")
@@ -186,7 +186,7 @@ TEST_CASE("UDP exchange filters other senders and truncates to capacity")
         peer<pace::udp::socket> server;
         const auto endpoint = server.endpoint;
         server.start(udp_reply(server.socket, "reply"));
-        auto reply = pace::udp::exchange(endpoint, "hello", {}, capacity);
+        auto reply = pace::udp::exchange(endpoint, "hello", {.max_reply_size = capacity});
         require(
             reply.data == (capacity == 3 ? "rep" : "reply") && reply.truncated == (capacity == 3),
             "UDP filtering/truncation"
@@ -331,4 +331,123 @@ TEST_CASE("direct HTTPS client verifies the server certificate")
     secure.stop();
 }
 #endif
+#endif
+TEST_CASE("async client options apply the selected context, cancellation and earliest deadline")
+{
+    pace::io_context other;
+    auto before_run = pace::udp::open({.context = &other});
+    require(&before_run.context() == &other, "explicit UDP context before run");
+    pace::run(
+        [&](pace::io_context& io) -> pace::task<void>
+        {
+            auto reserved = pace::tcp::listen({"127.0.0.1", 0});
+            auto mismatch =
+                co_await pace::tcp::connect(pace::as_result, reserved.local_endpoint(), {.context = &other});
+            require(mismatch.error() == std::errc::operation_not_permitted, "foreign context accepted");
+            pace::cancellation_source source;
+            source.request_cancellation();
+            bool attempted = false;
+            pace::client_options options{.context = &io, .cancellation = source.token()};
+            options.transport.pre_connect = [&](pace::native_socket_type) { attempted = true; };
+            auto skipped = co_await pace::tcp::connect(pace::as_result, reserved.local_endpoint(), std::move(options));
+            require(
+                skipped.error() == std::errc::operation_canceled && !attempted,
+                "pre-canceled connect attempted I/O"
+            );
+            auto silent = pace::udp::bind({"127.0.0.1", 0});
+            auto timeout = co_await pace::as_result(
+                pace::udp::async_exchange(silent.local_endpoint(), "q", {.context = &io, .timeout = 10ms})
+            );
+            require(timeout.error() == std::errc::timed_out, "async UDP timeout");
+            auto expired = co_await pace::as_result(
+                pace::udp::async_exchange(
+                    silent.local_endpoint(),
+                    "q",
+                    {.timeout = 1s, .deadline = pace::deadline::after(0ms)}
+                )
+            );
+            require(expired.error() == std::errc::timed_out, "absolute deadline ignored");
+            auto parent = co_await pace::with_deadline(
+                pace::deadline::after(5ms),
+                pace::as_result(pace::udp::async_exchange(silent.local_endpoint(), "q", {.timeout = 1s}))
+            );
+            require(parent.error() == std::errc::timed_out, "client extended the parent deadline");
+        }
+    );
+    CHECK_THROWS_AS((void)pace::udp::exchange({"127.0.0.1", 1}, "", {.context = &other}), std::invalid_argument);
+}
+
+TEST_CASE("TCP client options carry a move-only hook and enforce the reply bound before connecting")
+{
+    peer<pace::tcp::listener> server;
+    server.start(tcp_reply(server.socket));
+    unsigned calls = 0;
+    auto settings = [&]
+    {
+        pace::client_options options{.timeout = 2s, .max_reply_size = 3};
+        options.transport.pre_connect = [owned = std::make_unique<int>(1), &calls](pace::native_socket_type)
+        { calls += *owned; };
+        return options;
+    };
+    CHECK_THROWS_AS((void)pace::tcp::exchange(server.endpoint, "", 4, settings()), std::length_error);
+    require(calls == 0, "TCP limit checked after opening connection");
+    const auto request = std::string("a\0b", 3);
+    require(pace::tcp::exchange(server.endpoint, request, 3, settings()) == request && calls == 1, "TCP options hook");
+    server.join();
+}
+
+#ifdef PACE_HAS_TLS
+TEST_CASE("TLS client options bound a verified binary exchange and a stalled handshake")
+{
+    const auto certs = pace::test::certificates();
+    pace::tls::context security(pace::tls::role::server);
+    security.use_certificate_chain((certs / "localhost.pem").string(), (certs / "localhost-key.pem").string());
+    pace::tls::context trust(pace::tls::role::client, pace::tls::trust_source::application);
+    trust.load_verify_file((certs / "ca.pem").string());
+    const std::string payload("a\0b", 3);
+    for (bool async : {false, true})
+    {
+        peer<pace::tcp::listener> server;
+        auto echo = [&]() -> pace::task<void>
+        {
+            auto stream = co_await pace::tls::accept(co_await server.socket.accept(), security);
+            auto request = co_await pace::read_exact(stream, payload.size());
+            co_await pace::write(stream, std::move(request));
+            co_await stream.shutdown();
+            server.io.stop();
+        };
+        server.start(echo());
+        bool connected = false;
+        pace::client_options options{.timeout = 2s, .max_reply_size = 3, .tls = &trust};
+        options.transport.pre_connect = [&](pace::native_socket_type) { connected = true; };
+        auto reply =
+            async ? pace::run(pace::tls::async_exchange(server.endpoint, "localhost", payload, 3, std::move(options)))
+                  : pace::tls::exchange(server.endpoint, "localhost", payload, 3, std::move(options));
+        require(reply == payload && connected, "TLS options were lost in the exchange");
+        server.join();
+    }
+    peer<pace::tcp::listener> mismatch;
+    auto accept_tls = [&]() -> pace::task<void>
+    {
+        auto incoming = co_await mismatch.socket.accept();
+        (void)co_await pace::as_result(pace::tls::accept(std::move(incoming), security));
+        mismatch.io.stop();
+    };
+    mismatch.start(accept_tls());
+    auto denied = pace::run(
+        pace::as_result(
+            pace::tls::async_exchange(mismatch.endpoint, "wrong.example", "", 0, {.timeout = 2s, .tls = &trust})
+        )
+    );
+    require(denied.error() == std::errc::protocol_error, "TLS client options bypassed peer name verification");
+    mismatch.join();
+    peer<pace::tcp::listener> silent;
+    CHECK_THROWS_AS(
+        (void)pace::tls::exchange(silent.endpoint, "localhost", "", 4, {.max_reply_size = 3, .tls = &trust}),
+        std::length_error
+    );
+    auto expired =
+        pace::run(pace::as_result(pace::tls::connect(silent.endpoint, "localhost", {.timeout = 20ms, .tls = &trust})));
+    require(expired.error() == std::errc::timed_out, "TLS handshake outside the client timeout");
+}
 #endif

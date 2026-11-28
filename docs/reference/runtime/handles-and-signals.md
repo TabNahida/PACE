@@ -18,6 +18,23 @@ accept any descriptor the backend can poll, not only sockets. Windows has no suc
 `io_context::wait_handle` waits for an event, process or other kernel object instead. `signal_set` and
 `wait_for_signal` turn signals into awaitable values, so a service shuts down gracefully with two lines.
 
+## Watching a file
+
+`pace::file_watch watch(io, path)` subscribes to a filename immediately. The parent directory must exist and stay in place. The target may be absent at construction. Include `<pace/runtime/file_watch.hpp>` or `<pace/runtime.hpp>`.
+
+```cpp
+pace::file_watch watch(io, config_path);
+for (;;)
+{
+    reload(config_path);     // The application handles an absent or invalid configuration.
+    co_await watch.wait();
+}
+```
+
+Writes, creation, removal and replacement can wake the waiter. Multiple changes can produce one notification, and one write can produce several. Re-read the current file after each wake. Linux uses inotify, macOS and FreeBSD use vnode notifications, and Windows uses directory change notifications.
+
+Use the watcher on its owning context with one outstanding wait. Canceling or timing out that wait leaves the subscription active. Closing or destroying the watcher ends the subscription and wakes a pending wait with `operation_canceled`. Unsupported filesystems and OS errors surface as `std::system_error`.
+
 ## Synopsis
 
 Graceful shutdown on Ctrl-C or `SIGTERM`: the serving tasks run in a task group, and the signal cancels it.

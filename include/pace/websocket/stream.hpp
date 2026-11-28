@@ -219,7 +219,7 @@ inline task<stream> connect(
     limits bounds = {}
 )
 {
-    auto transport = co_await tcp::connect(io, std::move(peer));
+    auto transport = co_await tcp::connect(std::move(peer), {.context = &io});
     co_return co_await upgrade(
         std::move(transport),
         std::move(authority),

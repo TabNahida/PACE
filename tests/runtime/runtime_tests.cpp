@@ -2121,3 +2121,64 @@ TEST_CASE("simultaneous read and write readiness preserve both directions")
     require(read && rejected, "simultaneous read/write readiness must preserve both directions");
 }
 #endif
+
+TEST_CASE("posted, timer and cancellation callbacks own move-only captures")
+{
+    pace::io_context io;
+    pace::cancellation_source source;
+    unsigned seen = 0;
+    pace::io_context::cancellation_handle token;
+    pace::io_context::timer_handle timeout;
+    io.post(
+        [&, owned = std::make_unique<unsigned>(1)]
+        {
+            seen += *owned;
+            token = io.on_cancel(
+                source.token(),
+                [owned = std::make_unique<unsigned>(4), &seen, &io](std::error_code e)
+                {
+                    require(e == std::errc::operation_canceled, "move-only cancellation reason");
+                    seen += *owned;
+                    io.stop();
+                }
+            );
+            timeout = io.call_after(
+                1ms,
+                [owned = std::make_unique<unsigned>(2), &seen, &source]
+                {
+                    seen += *owned;
+                    source.request_cancellation();
+                }
+            );
+        }
+    );
+    io.run();
+    CHECK(seen == 7);
+}
+
+TEST_CASE("unique_function preserves inline and over-aligned callables across moves")
+{
+    static_assert(!std::copy_constructible<pace::unique_function<int()>>);
+
+    struct alignas(64) large
+    {
+        int n = 42;
+
+        int operator()()
+        {
+            return n++;
+        }
+    };
+
+    pace::unique_function<int()> held = large{};
+    auto moved = std::move(held);
+    CHECK_FALSE(held);
+    CHECK_THROWS_AS(held(), std::bad_function_call);
+    CHECK(moved() == 42);
+    held = [n = std::make_unique<int>(7)] { return *n; };
+    moved = std::move(held);
+    CHECK(moved() == 7);
+    int (*empty)() = nullptr;
+    moved = empty;
+    CHECK_FALSE(moved);
+}

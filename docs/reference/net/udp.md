@@ -15,6 +15,14 @@ Endpoints are numeric IPv4 or IPv6 addresses; resolve host names with the [DNS m
 message boundaries but does not guarantee delivery, order or uniqueness. With `--modules=y` the names are exported
 by `import pace.net;`. The checked-in example is `examples/tutorial_udp.cpp` (`xmake run tutorial_udp`).
 
+## Adoption, packet information and batches
+
+`udp::socket::adopt(io, fd)` accepts an idle native IPv4 or IPv6 datagram socket and preserves its binding and dual-stack mode. Ownership transfers on success.
+
+Wildcard listeners can set `bind_options{.packet_info = true}` and use `receive_from(buffer, info)`. Each successful receive replaces the local destination address, interface index and available ECN in `udp::packet_info`. Use `send_to(bytes, peer, info)` to select a reply source and ECN. On Linux, `.transparent = true` also delivers the original address and port in `original_destination`.
+
+`send_batch(span<outgoing_datagram>)` and `receive_batch(span<incoming_datagram>)` process up to 32 slots and return the completed prefix length. Use one destination family per send batch. Keep slots and buffers alive and advance the span by the returned count. Linux uses sendmmsg/recvmmsg. To request GSO/USO set `packet_info::segment_size`. With `.coalesce = true` (GRO/URO), use the receive overload taking `packet_info&` and split the payload by the reported segment size. The last segment may be shorter.
+
 ## Synopsis
 
 ```cpp
@@ -67,6 +75,9 @@ address. PACE does not resolve interface names.
 struct bind_options
 {
     bool ipv6_only = true;
+    bool packet_info = false;
+    bool transparent = false;
+    bool coalesce = false;
 };
 ```
 
@@ -216,22 +227,18 @@ close it or change its blocking mode) and `context()` the owning context.
 ### `open` and `bind`
 
 ```cpp
-socket open(io_context& io);
-socket open();
+socket open(const client_options& options = {});
 socket bind(io_context& io, endpoint local, bind_options options = {});
 socket bind(endpoint local, bind_options options = {});
 ```
 
-`open` returns an unbound socket whose family is chosen on first use; `bind` returns a socket bound to `local`. Both
-are synchronous. The overloads without a context call `pace::this_context()` at the call, so they must be called
-from a task or callback on a running context; use the explicit-context overloads before `io.run()`.
+Both functions create a socket synchronously. Before running the context, use `open({.context = &io})` for an unbound socket or `bind(io, local)` to bind an address. Omitting the context selects the one running at the call.
 
 ### `exchange` and `async_exchange`
 
 ```cpp
-task<packet> async_exchange(io_context& io, endpoint peer, std::string request, std::size_t capacity = 65536);
-task<packet> async_exchange(endpoint peer, std::string request, std::size_t capacity = 65536);
-packet exchange(endpoint peer, std::string request, blocking_options options = {}, std::size_t capacity = 65536);
+task<packet> async_exchange(endpoint peer, std::string request, client_options options = {});
+packet exchange(endpoint peer, std::string request, client_options options = {});
 ```
 
 Sends `request` as one datagram from a fresh socket of the peer's family, then returns the first reply that comes
@@ -240,24 +247,20 @@ other senders are dropped and do not extend any deadline. This filtering is not 
 request ID, and not retransmission: a lost request or reply is only noticed through a deadline. Services that reply
 from a different address or port, and broadcast or multicast, need a `socket`.
 
-- `capacity` must be between 1 and 65536 bytes (`std::invalid_argument` for zero, `std::length_error` above), and
+- `options.max_reply_size` must be between 1 and 65536 bytes (`std::invalid_argument` for zero, `std::length_error` above), and
   `peer.port` must be nonzero (`std::invalid_argument`); both are checked before sending.
 - A matching truncated reply is returned with `truncated = true`, not retried. An empty reply is valid.
-- `async_exchange` runs on an existing context (the running one for the overload without `io`) and adds no
-  deadline; it inherits the awaiting task's cancellation and deadline. Without one it waits for a reply forever.
-- `exchange` blocks the calling thread, running the exchange on a fresh context with
-  [`blocking_options`](../runtime/run.md). Its `timeout` (30 s by default) or `deadline` bounds the call; on expiry
-  it throws `std::system_error` with `std::errc::timed_out`. A non-positive `timeout` throws `std::invalid_argument`,
-  and a call from inside a PACE context throws `std::logic_error` before any I/O.
+- `async_exchange` inherits the caller’s deadline and cancellation by default. All filtered datagrams share the same budget.
+- `exchange` runs on a fresh context with a 30 s default total timeout. Use `options.timeout` or `options.deadline` to bound the operation. Expiry reports `timed_out`.
 
 ### `send`
 
 ```cpp
-std::size_t send(endpoint peer, std::string message, blocking_options options = {});
+std::size_t send(endpoint peer, std::string message, client_options options = {});
 ```
 
 Blocking: sends one datagram from a fresh socket on a fresh context and returns the byte count accepted by the local
-socket. It does not wait for or prove delivery. `blocking_options` behaves as for `exchange`. Inside a task, use
+socket. It does not wait for or prove delivery. `client_options` behaves as for `exchange`. Inside a task, use
 `co_await socket.send(message, peer)` on an owned socket instead.
 
 ## Errors
@@ -303,9 +306,9 @@ As with TCP, compare `error.code()` with `std::errc` conditions rather than nume
 | `endpoint` defaults | `"127.0.0.1"`, port `0`, `unspecified`, scope `0` |
 | `bind_options::ipv6_only` | `true` |
 | Largest payload `send_to` accepts | 65,507 bytes |
-| `receive` / `exchange` `capacity` | default 65536, allowed 1–65536 |
-| `exchange` / `send` timeout (`blocking_options::timeout`) | 30 s |
-| `async_exchange` timeout | none; use a deadline |
+| `receive` capacity / `exchange` max_reply_size | default 65536, allowed 1–65536 |
+| `exchange` / `send` timeout (`client_options::timeout`) | 30 s |
+| `async_exchange` timeout | inherited by default |
 
 ## See also
 

@@ -1,4 +1,4 @@
-<!-- source-hash: c35037d44690 -->
+<!-- source-hash: 7d5a0b189fe4 -->
 # 10. TLS 与 DNS
 
 [English](10-tls-and-dns.md) · [学习路线](README.zh.md) · [上一章：有序关闭](09-graceful-shutdown.zh.md)
@@ -74,7 +74,7 @@ co_await connection.shutdown();
 在客户端，指明握手必须校验的身份：
 
 ```cpp
-auto connection = co_await pace::tls::connect(client_config, endpoint, "localhost");
+auto connection = co_await pace::tls::connect(endpoint, "localhost", {.tls = &client_config});
 auto message = co_await pace::read_exact(connection, 25);
 std::cout << message;
 co_await connection.shutdown();

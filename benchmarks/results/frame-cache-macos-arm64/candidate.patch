@@ -1,0 +1,87 @@
+--- a/include/pace/runtime/task.hpp
++++ b/include/pace/runtime/task.hpp
+@@ -19,6 +19,8 @@
+ /// Fields other than `cancellation` are io_context bookkeeping.
+ struct promise_base
+ {
++    static void* operator new(std::size_t);
++    static void operator delete(void*, std::size_t) noexcept;
+     cancellation_token cancellation;
+     bool cancellation_bound = false;
+     std::coroutine_handle<> continuation = std::noop_coroutine();
+--- a/src/runtime/io_context.cpp
++++ b/src/runtime/io_context.cpp
+@@ -1,7 +1,49 @@
++#include <bit>
+ #include "runtime/io_context_state.hpp"
+ 
+ namespace pace
+ {
++namespace
++{
++struct frame_cache
++{
++    struct node { node* next; };
++    node* lists[6]{};
++    std::size_t retained = 0;
++    ~frame_cache()
++    {
++        for (auto head : lists) while (head) { auto* next = head->next; ::operator delete(head); head = next; }
++    }
++};
++thread_local frame_cache* active_cache;
++unsigned frame_class(std::size_t size) { return size <= 128 ? 0u : std::bit_width((size-1) >> 7); }
++}
++void* promise_base::operator new(std::size_t size)
++{
++    if (size > 4096) return ::operator new(size);
++    const auto i = frame_class(size);
++    const std::size_t bytes = std::size_t{128} << i;
++    if (active_cache && active_cache->lists[i])
++    {
++        auto* head = active_cache->lists[i]; active_cache->lists[i] = head->next;
++        active_cache->retained -= bytes; return head;
++    }
++    return ::operator new(bytes);
++}
++void promise_base::operator delete(void* p, std::size_t size) noexcept
++{
++    if (active_cache && size <= 4096)
++    {
++        const auto i = frame_class(size);
++        const std::size_t bytes = std::size_t{128} << i;
++        if (active_cache->retained + bytes <= 128*1024)
++        {
++            active_cache->lists[i] = ::new(p) frame_cache::node{active_cache->lists[i]};
++            active_cache->retained += bytes; return;
++        }
++    }
++    ::operator delete(p);
++}
+ constinit thread_local io_context* active_context = nullptr;
+ 
+ io_context::io_context(io_backend selected)
+@@ -191,6 +233,7 @@
+         throw std::logic_error("io_context already running");
+     }
+ 
++    frame_cache cache;
+     struct reset_guard
+     {
+         implementation& p;
+@@ -205,6 +248,7 @@
+ 
+         ~reset_guard()
+         {
++            active_cache = nullptr;
+             active_context = nullptr;
+             p.running.store(false);
+         }
+@@ -215,6 +259,7 @@
+         throw std::logic_error("io_context is single-use");
+     }
+     p.has_run = true;
++    active_cache = &cache;
+     active_context = this;
+     profiling::scope run_timing(profiling::stage::reactor_run);
+     // By value on purpose: taking the exception_ptr by reference changes how this loop is compiled and

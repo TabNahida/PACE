@@ -51,7 +51,7 @@ pace::task<void> client(pace::tcp::endpoint address)
 {
     pace::tls::context configuration;
     configuration.set_alpn_protocols({"http/1.1"});
-    auto connection = co_await pace::tls::connect(configuration, address, "api.example.com");
+    auto connection = co_await pace::tls::connect(address, "api.example.com", {.tls = &configuration});
     std::cout << "ALPN: " << connection.selected_protocol() << '\n';
     std::cout << co_await pace::read_exact(connection, 6);
     co_await connection.shutdown();
@@ -563,17 +563,21 @@ part of the API and are not exported by `import pace.tls;`.
 ### `connect`
 
 ```cpp
-task<stream> connect(io_context& io, const context& configuration, tcp::endpoint peer, std::string expected_name);
-task<stream> connect(const context& configuration, tcp::endpoint peer, std::string expected_name);
-task<stream> connect(io_context& io, tcp::endpoint peer, std::string expected_name);
-task<stream> connect(tcp::endpoint peer, std::string expected_name);
+task<stream> connect(tcp::endpoint peer, std::string expected_name, client_options options = {});
 ```
 
-Creates a stream, connects to the numeric `peer`, completes the handshake checking `expected_name` (as `peer_name`
-above) and returns the stream. The overloads without `configuration` use a client context with system trust,
-CA and name verification and no ALPN. A supplied `configuration` is borrowed until the task completes, so a stored
-lazy task must not refer to a destroyed context; the returned stream shares the configuration's state. The
-overloads without `io` use the context that runs the task, read when the task starts.
+Connects to the numeric endpoint on the running context and verifies `expected_name`. System trust is the default. Pass `{.tls = &configuration}` for custom roots, verification policy and ALPN. The task borrows the configuration until completion. The returned stream shares its state. The timeout covers TCP connect and handshake.
+
+### `exchange` and `async_exchange`
+
+```cpp
+task<std::string> async_exchange(tcp::endpoint peer, std::string expected_name, std::string request,
+                                 std::size_t reply_size, client_options options = {});
+std::string exchange(tcp::endpoint peer, std::string expected_name, std::string request,
+                     std::size_t reply_size, client_options options = {});
+```
+
+One budget covers the handshake, request write, exact-length reply and TLS shutdown. The reply limit `max_reply_size` defaults to 1 MiB and is checked before connecting. The blocking form defaults to 30 seconds.
 
 ### `accept`
 
@@ -611,6 +615,7 @@ the connection's task so one peer cannot end the server.
 - **One asynchronous operation at a time per stream**, counting reads, writes, handshakes, `shutdown_write` and shutdown together.
   OpenSSL may need either direction for any operation, so the TCP rule of one read plus one write does not apply;
   independent reader and writer tasks must not share one TLS stream.
+- `pace::relay` counts as one operation on a handshaken stream. It coordinates both directions internally and sends `close_notify` when the opposite input reaches EOF. A custom transport that declares `supports_concurrent_io() == false` is rejected with `operation_not_supported` before forwarding starts.
 - A `context` may be used by streams on several reactors at once. Its verification and ClientHello callbacks then
   run concurrently and must be thread-safe. Configure it on one thread before the first stream.
 

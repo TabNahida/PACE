@@ -15,6 +15,11 @@
 #include <utility>
 #include <vector>
 
+namespace pace
+{
+struct relay_access;
+} // namespace pace
+
 namespace pace::tls
 {
 class stream;
@@ -455,9 +460,35 @@ private:
     // Kept outside impl_ so that a moved-from stream still answers context() (noexcept, as byte streams require).
     io_context* context_;
     stream(std::unique_ptr<tls_transport> transport, const tls::context& configuration, std::string_view pre_read);
+    friend struct pace::relay_access;
+
+    class relay_view
+    {
+    public:
+        explicit relay_view(stream& owner);
+        ~relay_view();
+        relay_view(const relay_view&) = delete;
+        relay_view& operator=(const relay_view&) = delete;
+        task<std::size_t> read_some(std::span<std::byte> bytes);
+        task<void> write_all(std::span<const std::byte> bytes);
+        task<void> shutdown_write();
+        void close() noexcept;
+        io_context& context() const noexcept;
+
+    private:
+        struct state;
+        std::unique_ptr<state> state_;
+    };
+
+    friend task<stream> connect(tcp::endpoint, std::string, client_options);
     friend class tls_driver;
     friend struct tls::context::implementation;
-    task<void> connect_impl(tcp::endpoint endpoint, std::string peer_name, std::optional<std::string> server_name);
+    task<void> connect_impl(
+        tcp::endpoint endpoint,
+        std::string peer_name,
+        std::optional<std::string> server_name,
+        tcp::connect_options transport = {}
+    );
     task<void> handshake_impl(std::string peer_name, std::optional<std::string> server_name, bool allow_handoff);
     task<bool> perform_handshake();
     bool handoff_requested() const noexcept;
@@ -467,33 +498,23 @@ private:
     client_hello_handoff<std::unique_ptr<tls_transport>> release_generic();
 };
 
-/// Complete a handshake using the supplied verification policy. Custom
-/// configuration is borrowed through task completion; streams retain its state.
-inline task<stream> connect(io_context& io, const context& configuration, tcp::endpoint peer, std::string expected_name)
-{
-    stream result(io, configuration);
-    co_await result.connect(std::move(peer), std::move(expected_name));
-    co_return result;
-}
-
-/// As above, on the context that runs the task.
-inline task<stream> connect(const context& configuration, tcp::endpoint peer, std::string expected_name)
-{
-    co_return co_await connect(this_context(), configuration, std::move(peer), std::move(expected_name));
-}
-
-/// System trust for a client that needs no custom CA or ALPN configuration.
-inline task<stream> connect(io_context& io, tcp::endpoint peer, std::string expected_name)
-{
-    context configuration;
-    co_return co_await connect(io, configuration, std::move(peer), std::move(expected_name));
-}
-
-/// As above, on the context that runs the task.
-inline task<stream> connect(tcp::endpoint peer, std::string expected_name)
-{
-    co_return co_await connect(this_context(), std::move(peer), std::move(expected_name));
-}
+/// Opens a verified TLS connection. options.tls selects a borrowed configuration; null uses system trust.
+task<stream> connect(tcp::endpoint peer, std::string expected_name, client_options options = {});
+/// One request and an exactly framed reply over TLS. The budget includes handshake and shutdown.
+task<std::string> async_exchange(
+    tcp::endpoint peer,
+    std::string expected_name,
+    std::string request,
+    std::size_t reply_size,
+    client_options options = {}
+);
+std::string exchange(
+    tcp::endpoint peer,
+    std::string expected_name,
+    std::string request,
+    std::size_t reply_size,
+    client_options options = {}
+);
 
 /// Server handshake over an accepted TCP stream; `configuration` is borrowed through task completion.
 inline task<stream> accept(tcp::stream transport, const context& configuration)

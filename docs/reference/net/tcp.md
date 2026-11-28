@@ -17,6 +17,14 @@ Endpoints are numeric IPv4 or IPv6 addresses; there is no implicit name lookup. 
 [`pace::write` and `pace::read_exact`](README.md#functions) helpers work on it. With `--modules=y` the names are
 exported by `import pace.net;`.
 
+## Native sockets and connection options
+
+`tcp::stream::adopt(io, fd)` accepts an idle connected or unconnected TCP socket. `tcp::listener::adopt(io, fd)` accepts a listening socket. Success transfers exclusive ownership. On failure the caller owns the handle. Adoption sets nonblocking and non-inheritable flags. Pass a handle that is free of registrations on other loops and owned by the caller.
+
+`tcp::connect_options::socket` and `tcp::listen_options::socket` share `pace::socket_options`. Fields select the interface index, mark, FreeBSD routing table, keepalive and its idle time, interval and probe count, TCP user timeout, DF, Fast Open and Linux transparent bind. Unset fields keep the OS defaults. Requesting an unavailable feature reports an error. With Linux client Fast Open, the first write may start the handshake.
+
+The synchronous `pre_connect(fd)` hook runs after family selection and socket configuration, immediately before the system connect call. Throwing aborts that attempt. `original_destination()` looks up the netfilter or PF NAT mapping. PF requires access to `/dev/pf`. Linux TPROXY preserves the destination in `local_endpoint()`.
+
 ## Synopsis
 
 ```cpp
@@ -40,7 +48,7 @@ pace::task<void> echo(pace::tcp::stream peer)
 pace::task<void> demo(pace::io_context& io)
 {
     auto listener = pace::tcp::listen(io, {"127.0.0.1", 0});
-    auto client = co_await pace::tcp::connect(io, listener.local_endpoint());
+    auto client = co_await pace::tcp::connect(listener.local_endpoint(), {.context = &io});
     client.set_no_delay();
     io.spawn(echo(co_await listener.accept()));
 
@@ -93,6 +101,7 @@ struct listen_options
     bool reuse_port = false;
     int backlog = 1024;
     bool ipv6_only = true;
+    pace::socket_options socket{};
 };
 ```
 
@@ -125,7 +134,7 @@ public:
     stream(const stream&) = delete;
     stream& operator=(const stream&) = delete;
 
-    task<void> connect(endpoint endpoint);
+    task<void> connect(endpoint endpoint, connect_options options = {});
     task<std::size_t> read_some(std::span<std::byte> buffer);
     task<void> read_exact(std::span<std::byte> buffer);
     task<std::string> read_exact(std::size_t size, std::size_t maximum = std::size_t{1024} * 1024);
@@ -162,7 +171,7 @@ if the OS cannot create the socket.
 #### `connect`
 
 ```cpp
-task<void> connect(endpoint endpoint);
+task<void> connect(endpoint endpoint, connect_options options = {});
 ```
 
 Connects to a numeric endpoint. Await it before starting any other operation on the stream. Completion is checked
@@ -330,13 +339,11 @@ destruction follow the `stream` rules.
 ### `connect`
 
 ```cpp
-task<stream> connect(io_context& context, endpoint destination);
-task<stream> connect(endpoint destination);
+task<stream> connect(endpoint destination, client_options options = {});
+task<result<stream>> connect(as_result_t, endpoint destination, client_options options = {});
 ```
 
-Creates a stream, connects it to `destination` and returns it. The overload without a context uses the context
-that runs the task, read when the task starts. The stream belongs to that context; do not let it outlive the
-context (for example by returning it from `pace::run`).
+Connects to the numeric endpoint and returns a stream owned by the running context. An explicit `options.context` must match the context executing the task. Keep the context alive while using the stream.
 
 ### `listen`
 
@@ -352,26 +359,8 @@ explicit-context overload to create a listener before `io.run()`.
 ### `exchange` and `async_exchange`
 
 ```cpp
-task<std::string> async_exchange(
-    io_context& io,
-    endpoint peer,
-    std::string request,
-    std::size_t reply_size,
-    std::size_t maximum = std::size_t{1024} * 1024
-);
-task<std::string> async_exchange(
-    endpoint peer,
-    std::string request,
-    std::size_t reply_size,
-    std::size_t maximum = std::size_t{1024} * 1024
-);
-std::string exchange(
-    endpoint peer,
-    std::string request,
-    std::size_t reply_size,
-    blocking_options options = {},
-    std::size_t maximum = std::size_t{1024} * 1024
-);
+task<std::string> async_exchange(endpoint peer, std::string request, std::size_t reply_size, client_options options = {});
+std::string exchange(endpoint peer, std::string request, std::size_t reply_size, client_options options = {});
 ```
 
 One connection, one request, one reply of exactly `reply_size` bytes: connect to `peer`, write `request`, read
@@ -380,15 +369,10 @@ no pooling or reuse.
 
 - `reply_size` is an exact framing contract, not a maximum: fewer bytes followed by EOF is an error. `0` is allowed;
   the request is still sent.
-- `reply_size > maximum` throws `std::length_error` before connecting.
+- `reply_size > options.max_reply_size.value_or(1024 * 1024)` throws `std::length_error` before connecting.
 - Request and reply strings may contain zero bytes.
-- `async_exchange` runs on an existing context (the running one for the overload without `io`) and adds no
-  deadline of its own; it inherits the awaiting task's cancellation and deadline.
-- `exchange` blocks the calling thread: it runs the exchange on a fresh context with
-  [`blocking_options`](../runtime/run.md) and returns the result. Its `timeout` (30 s by default) or `deadline`
-  bounds the whole call, including the graceful close; on expiry the call cancels its work and throws
-  `std::system_error` with `std::errc::timed_out`. A non-positive `timeout` throws `std::invalid_argument`.
-  Calling it from inside a PACE context throws `std::logic_error` before any I/O.
+- `async_exchange` inherits cancellation and deadlines. Set `options.timeout` or `options.deadline` to bound the entire exchange, including graceful close.
+- `exchange` runs on a fresh context with a 30 s default total timeout. Expiry reports `timed_out`. Calling it on a reactor thread throws `std::logic_error`.
 
 For persistent connections, other framing (delimiters, length prefixes) or reusable buffers, use `connect`,
 `pace::write` and `pace::read_exact` on an owned stream.
@@ -448,8 +432,8 @@ the connection's task so one failing peer does not end the program.
 | `listen_options::backlog` | 1024 (must be > 0; the OS may cap it) |
 | `listen_options::reuse_port` / `ipv6_only` | `false` / `true` |
 | `close_gracefully` timeout / discard limit | 100 ms / 64 KiB |
-| `read_exact`, `exchange` `maximum` | 1 MiB |
-| `exchange` timeout (`blocking_options::timeout`) | 30 s |
+| `read_exact` maximum / `exchange` max_reply_size | 1 MiB |
+| `exchange` timeout (`client_options::timeout`) | 30 s |
 | `write_all` bytes sent before yielding to the reactor | 1 MiB |
 | `accept()` consecutive accepts before yielding | 64 |
 | `accept()` back-off on descriptor or buffer exhaustion | 50 ms |
