@@ -1,4 +1,4 @@
-<!-- source-hash: 90ed18ee5c52 -->
+<!-- source-hash: 81ce3e89a364 -->
 # 所有权与生命周期
 
 [English](ownership.md) · [设计说明](README.zh.md)
@@ -43,8 +43,10 @@ co_await std::move(task);                  // 早于这个惰性任务第一次�
 ```
 
 由于任务是惰性的，“参数在调用期间有效”是不够的：它必须一直有效，直到任务结束。拥有所有权的参数则根本不存在这个
-问题。PACE 自己的 API 两种都提供：`stream.write_all(text)` 借用数据，应当立即等待；而
-`pace::write(stream, std::string)` 拥有自己的字节，可以先存起来，也可以 spawn。
+问题。PACE 自己的 API 两种都提供：`stream.write_all(pace::as_bytes(text))` 借用数据，应当立即等待；而
+`pace::write(stream, std::string)` 拥有自己的字节，可以先存起来，也可以 spawn。同样的规则也适用于 `pace::as_bytes`
+视图本身：它指向 `text` 内部，因此先存起来的 `stream.write_all(pace::as_bytes(make_greeting()))` 任务与上面的
+`send` 例子有同样的错误。
 
 ## 协程 lambda
 

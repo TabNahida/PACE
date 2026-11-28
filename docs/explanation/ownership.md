@@ -45,8 +45,10 @@ co_await std::move(task);                  // before the lazy task first runs
 ```
 
 Because tasks are lazy, "the argument is alive during the call" is not enough: it has to be alive until the task
-finishes. Owning parameters remove the question. PACE's own APIs offer both: `stream.write_all(text)` borrows and
-is meant to be awaited at once, while `pace::write(stream, std::string)` owns its bytes and can be stored or spawned.
+finishes. Owning parameters remove the question. PACE's own APIs offer both: `stream.write_all(pace::as_bytes(text))`
+borrows and is meant to be awaited at once, while `pace::write(stream, std::string)` owns its bytes and can be stored
+or spawned. The same rule covers the `pace::as_bytes` view itself: it points into `text`, so a stored
+`stream.write_all(pace::as_bytes(make_greeting()))` task has the same bug as the `send` example above.
 
 ## Coroutine lambdas
 

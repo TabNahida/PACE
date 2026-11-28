@@ -1,4 +1,4 @@
-<!-- source-hash: e3c349760859 -->
+<!-- source-hash: 8c064b34d615 -->
 # 5. TCP
 
 [English](05-tcp.md) · [学习路线](README.zh.md) · [上一章：任务与定时器](04-tasks-and-timers.zh.md)
@@ -115,7 +115,17 @@ co_await socket.close_gracefully();
 
 `pace::write` 在等待期间拥有它的字符串。`read_exact` 返回自有的字符串，除非传入更大的上限，否则拒绝超过 1 MiB 的长度。socket 的生命周期不能超过它的上下文。异步调用不附加阻塞调用的 30 秒预算。
 
-配套程序 `xmake run tutorial_tcp`（[源码](../../examples/tutorial_tcp.cpp)）在一个进程里运行完整的回显服务器和客户端，输出 `TCP echo verified: Hello from PACE`。它的回显循环用 `read_some` 读入可复用的缓冲区，再把收到的内容写回；它的接受循环把监听器关闭视为循环结束。`xmake run tutorial_tcp serve` 在 9090 端口上保持服务器直到按下 Ctrl-C；`xmake run tutorial_tcp client` 连接这个服务器。
+配套程序 `xmake run tutorial_tcp`（[源码](../../examples/tutorial_tcp.cpp)）在一个进程里运行完整的回显服务器和客户端，输出 `TCP echo verified: Hello from PACE`。它的回显循环用 `read_some` 读入可复用的缓冲区，再把收到的内容写回：
+
+```cpp
+std::array<char, 4096> buffer{};
+while (const auto count = co_await socket.read_some(pace::as_writable_bytes(buffer)))
+{
+    co_await socket.write_all(pace::as_bytes(std::string_view(buffer.data(), count)));
+}
+```
+
+流以字节（`std::span<std::byte>`）读写。`pace::as_writable_bytes` 让 `read_some` 填充 `char` 缓冲区，`pace::as_bytes` 把文本交给 `write_all`；两者都不复制。`read_some` 返回实际到达的字节数，可能少于缓冲区的容量，只有对端关闭了它那一侧时才返回 `0`。与 `pace::write` 不同，`write_all` 借用它的字节，所以写完成之前缓冲区不能改变。接受循环把监听器关闭视为循环结束。`xmake run tutorial_tcp serve` 在 9090 端口上保持服务器直到按下 Ctrl-C；`xmake run tutorial_tcp client` 连接这个服务器。
 
 [TCP 参考](../reference/net/tcp.zh.md) · [协议调优](../guides/protocol-tuning.zh.md) · [有序关闭](09-graceful-shutdown.zh.md)
 

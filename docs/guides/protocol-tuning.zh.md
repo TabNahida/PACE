@@ -1,4 +1,4 @@
-<!-- source-hash: 6be91f86c11e -->
+<!-- source-hash: 54946457e7c4 -->
 # 协议调优与显式控制
 
 [English](protocol-tuning.md) · [指南](README.zh.md) · [教程](../tutorial/README.zh.md) · [API 参考](../reference/README.zh.md)
@@ -10,13 +10,14 @@
 ## TCP 与 UDP
 
 更看重简单的所有权时，使用 `pace::write` 和返回持有数据的 `pace::read_exact`。
-热点路径上可以保留一块缓冲区，等 `stream.write_all(string_view)` 或 `read_some(span)` 完成后再复用。
+热点路径上可以保留一块缓冲区，等 `stream.write_all(pace::as_bytes(text))` 或
+`read_some(pace::as_writable_bytes(buffer))` 完成后再复用。这些视图没有开销：它们只是不经复制地重新解释同一块存储。
 这些调用是借用的：缓冲区和 stream 在挂起期间都必须存活且地址不变。精确读取仍需要应用自己的分帧规则；
 按不可信的长度分配内存之前，先检查上限。
 
 `udp::socket::receive` 每次调用都按 capacity 分配（默认 64 KiB）。
 高频收包时用 `receive_from(span)` 复用存储，并检查 `size`、`sender` 和 `truncated`。
-`send_to` 省去了一次持有字符串的复制，但它的视图必须活到 await 完成。两种形式都不提供送达保证或重试。
+`send_to` 省去了一次持有字符串的复制，但它所指向的字节必须活到 await 完成。两种形式都不提供送达保证或重试。
 
 TCP 上不要同时进行两个读或两个写，UDP 上不要同时进行两个发送或两个接收。
 TCP 允许一读一写并行，但这条规则不适用于 TLS 和 WebSocket。
@@ -90,7 +91,8 @@ runtime worker，并同步 handler 之间共享的状态。连接退出前会取
 ## QUIC
 
 在第一次连接之前配置信任和 ALPN。`quic::connect` 默认的握手预算为 10 秒，与应用的请求或流期限相互独立。
-`finish_write()` 为一个流的单个方向发送 FIN，对端仍然可以回复。流在操作期间要保持连接存活；
+`finish_write()`（或其 `pace::byte_stream` 形式 `co_await shutdown_write()`）为一个流的单个方向发送 FIN，对端
+仍然可以回复。流在操作期间要保持连接存活；
 listener 也要活到其接受的连接结束。`pace::write` / `write_all` 只是把字节交给传输层，并不代表对端已经确认。
 销毁发送方之前，只要 `pending_write_bytes()` 不为零就继续 await 进展，做法见
 [QUIC 示例](../../examples/tutorial_quic.cpp)。立即调用 `connection.close()` 只是尽力而为，不是送达确认。

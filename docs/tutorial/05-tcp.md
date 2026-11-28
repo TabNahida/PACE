@@ -130,9 +130,22 @@ budget of the blocking call.
 
 The companion `xmake run tutorial_tcp` ([source](../../examples/tutorial_tcp.cpp)) runs a full echo server and a
 client in one process and prints `TCP echo verified: Hello from PACE`. Its echo loop reads into a reusable buffer
-with `read_some` and writes back what arrived, and its accept loop treats a closed listener as the end of the loop.
-`xmake run tutorial_tcp serve` keeps the server on port 9090 until Ctrl-C; `xmake run tutorial_tcp client` talks to
-it.
+with `read_some` and writes back what arrived:
+
+```cpp
+std::array<char, 4096> buffer{};
+while (const auto count = co_await socket.read_some(pace::as_writable_bytes(buffer)))
+{
+    co_await socket.write_all(pace::as_bytes(std::string_view(buffer.data(), count)));
+}
+```
+
+Streams read and write bytes (`std::span<std::byte>`). `pace::as_writable_bytes` lets `read_some` fill a `char`
+buffer, and `pace::as_bytes` hands text to `write_all`; neither copies. `read_some` returns how many bytes arrived,
+possibly fewer than the buffer holds, and `0` only when the peer has closed its side. Unlike `pace::write`,
+`write_all` borrows its bytes, so the buffer must not change until the write completes. The accept loop treats a
+closed listener as the end of the loop. `xmake run tutorial_tcp serve` keeps the server on port 9090 until Ctrl-C;
+`xmake run tutorial_tcp client` talks to it.
 
 [TCP reference](../reference/net/tcp.md) · [Protocol tuning](../guides/protocol-tuning.md) ·
 [Orderly shutdown](09-graceful-shutdown.md)

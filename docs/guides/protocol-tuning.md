@@ -12,15 +12,16 @@ See the [local benchmark methodology](../../benchmarks/README.md).
 ## TCP and UDP
 
 Use `pace::write` and the owning `pace::read_exact` when simple ownership matters.
-For a hot path, keep a buffer and await `stream.write_all(string_view)` or
-`read_some(span)` before reusing it. These calls borrow: the buffer and the stream must
+For a hot path, keep a buffer and await `stream.write_all(pace::as_bytes(text))` or
+`read_some(pace::as_writable_bytes(buffer))` before reusing it. The views cost nothing: they
+reinterpret the same storage without copying. These calls borrow: the buffer and the stream must
 stay alive and at the same address across suspension. Exact reads still need an application
 framing rule, and a maximum checked before allocating from an untrusted length.
 
 `udp::socket::receive` allocates its capacity on each call (64 KiB by default).
 For frequent datagrams use `receive_from(span)` with reused storage and inspect
-`size`, `sender` and `truncated`. `send_to` avoids an owning string copy, but its
-view must outlive the await. Neither form adds delivery guarantees or retries.
+`size`, `sender` and `truncated`. `send_to` avoids an owning string copy, but the
+bytes it views must outlive the await. Neither form adds delivery guarantees or retries.
 
 Do not overlap two reads or two writes on TCP, or two sends or two receives on UDP.
 TCP's one-read-plus-one-write allowance does not apply to TLS or WebSocket.
@@ -114,7 +115,8 @@ rather than falling back. Read the [HTTP/2](../reference/http2/README.md) and
 
 Configure trust and ALPN before the first connection. `quic::connect` defaults to
 a 10-second handshake budget, independent of application request or stream deadlines.
-`finish_write()` sends FIN for one stream direction; the peer can still reply.
+`finish_write()` (or `co_await shutdown_write()`, its `pace::byte_stream` form) sends FIN for one stream
+direction; the peer can still reply.
 Keep the connection alive while streams operate, and the listener alive for its
 accepted connections. `pace::write` / `write_all` hand bytes to the transport;
 they do not mean the peer acknowledged them. Before disposing of a sender, keep awaiting

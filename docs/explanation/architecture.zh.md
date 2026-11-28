@@ -1,4 +1,4 @@
-<!-- source-hash: f36fbfd887dc -->
+<!-- source-hash: 3c60c85671a7 -->
 # 架构与执行契约
 
 [English](architecture.md) · [原理阐释](README.zh.md)
@@ -125,8 +125,8 @@ socket 通知和可选的 io_uring 轮询。读写仍使用非阻塞 socket 调�
 
 ```cpp
 // 两种写法都恰好消费一个任务一次。
-co_await stream.write_all(message);
-auto pending = stream.read_some(buffer);
+co_await stream.write_all(pace::as_bytes(message));
+auto pending = stream.read_some(pace::as_writable_bytes(buffer));
 const auto count = co_await std::move(pending);
 ```
 
@@ -137,7 +137,8 @@ const auto count = co_await std::move(pending);
 协程帧并不会自动持有协程引用的每个对象：
 
 - 在所有使用 socket 或 listener 的操作结束之前，保持它们存活。不支持在该对象上有操作挂起时移动 socket。
-- `std::span` 和 `std::string_view` 引用的内存，在被 await 的操作期间必须一直有效。字符串字面量是安全的；
+- `std::span` 和 `std::string_view` 引用的内存（包括 `pace::as_bytes`、`pace::as_writable_bytes` 返回的视图），
+  在被 await 的操作期间必须一直有效。字符串字面量是安全的；
   在惰性任务开始运行前就结束生命周期的临时字符串则不安全。
 - 在所有使用该上下文的 socket 和 listener 销毁之前，保持上下文存活。
 - 协程 lambda 通过闭包对象访问捕获。闭包必须比协程活得更久；立即调用一个带捕获的临时协程 lambda 是不安全的。
@@ -186,12 +187,21 @@ TCP 头文件是 `<pace/net/tcp.hpp>`，由 `<pace/net.hpp>` 包含。它声明�
 以及可选的数字 IPv6 scope。
 
 TCP 使用非阻塞的数字 IPv4/IPv6 socket。IPv6 listener 默认只接受 IPv6；应用需要显式选择双栈绑定。操作先尝试
-原生调用；会阻塞时，就等待相应的就绪事件后重试。`write_all()` 在整个缓冲区发送完之前一直借用其输入视图。
+原生调用；会阻塞时，就等待相应的就绪事件后重试。`write_all()` 在整个缓冲区发送完之前一直借用其输入字节。
 socket 错误以 `std::system_error` 报告。Linux 在每次发送时抑制 `SIGPIPE`；支持 `SO_NOSIGPIPE` 的平台在 socket
 上设置该选项。
 一次短读之后，下一次非空读取会先等待水平就绪再重试 `recv`，省去常见的多余 EAGAIN 调用。这只是一个提示，
 不是对 EOF 的判断：已排队的数据、新到达的数据和对端关闭仍由轮询器报告并经 `recv` 确认。读满缓冲区的读取
 保留立即读取的路径；这个提示会随移动操作一起转移。
+
+TCP、TLS 与 QUIC 流共用一套以字节为单位的接口，由 [`pace::byte_stream`](../reference/net/README.zh.md#byte_stream)
+概念命名：`read_some(std::span<std::byte>)`、`write_all(std::span<const std::byte>)`、`shutdown_write()`、`close()`
+和 `context()`。传输层承载的是字节而不是文本，流的边界如实表达这一点，每个操作也只有一个重载，而不是 `char` 与
+`std::byte` 两套并行的形式。文本经由零拷贝视图（`pace::as_bytes`、`pace::as_writable_bytes`、`pace::as_text`）跨过
+边界，编译后只是一次指针转换；协议解析器（HTTP/1、WebSocket）内部仍然按字符工作。与旧接口成对交替测量，TCP 回显、
+WebSocket 帧、HTTP/1 以及基于 TLS 的 HTTP/1 的差异都在 1% 以内。由于 `tls::stream` 接受任何字节流作为传输层，自身
+也是字节流，同一套 TLS 代码可以运行在 TCP、QUIC 流或另一个 TLS 流之上；满足该概念的应用适配器无需额外胶水代码，
+就能与 `pace::write`、`pace::read_exact` 和 TLS 配合使用。
 
 `co_await stream.close_gracefully()` 先半关闭发送方向，然后排空对端输入，直到遇到 EOF、100 ms 期限或丢弃了
 64 KiB 数据为止。两个上限都可以配置。等待对端时使用可取消的定时器，不会阻塞反应器。该操作总会释放 socket，

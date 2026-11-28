@@ -61,7 +61,22 @@ stream.finish_write();
 ```
 
 On the server, await `listener.accept()` and then `connection.accept_stream()`. Read until that stream ends, write
-the reply, and call `finish_write()` for the reply direction. The end of stream (FIN) applies to that one stream, not
+the reply, and call `finish_write()` for the reply direction:
+
+```cpp
+std::array<char, 64> bytes{};
+std::string request;
+while (auto count = co_await stream.read_some(pace::as_writable_bytes(bytes)))
+{
+    request.append(bytes.data(), count);
+}
+co_await stream.write_all(pace::as_bytes("Hello over verified QUIC!\n"));
+stream.finish_write();
+```
+
+`read_some` fills a byte span, here the `char` array viewed through `pace::as_writable_bytes`, and returns 0 at the
+peer's FIN. `write_all` borrows the bytes `pace::as_bytes` views; a string literal lives long enough. The end of
+stream (FIN) applies to that one stream, not
 to the connection's other streams. Keep the connection alive while its streams are in use. A completed
 `pace::write` does not prove that the peer received the bytes; before closing a sender, follow the delivery and FIN
 rules in [protocol tuning](../guides/protocol-tuning.md), as the companion below does.

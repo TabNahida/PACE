@@ -1,4 +1,4 @@
-<!-- source-hash: e50bf8091e2e -->
+<!-- source-hash: 5e30f8d690e4 -->
 # 13. QUIC 与 HTTP/3
 
 [English](13-quic-and-http3.md) · [学习路线](README.zh.md) · [上一章：HTTP/2](12-http2.zh.md)
@@ -50,7 +50,20 @@ co_await pace::write(stream, "hello");
 stream.finish_write();
 ```
 
-在服务端，先等待 `listener.accept()`，再等待 `connection.accept_stream()`。一直读到该流结束，写出回复，再为回复方向调用 `finish_write()`。流结束标记（FIN）只作用于这一个流，而不是连接上的其他流。在流使用期间保持连接存活。`pace::write` 完成并不能证明对端已收到这些字节；关闭发送方之前，请遵循[协议调优](../guides/protocol-tuning.zh.md)中关于送达和 FIN 的规则，下面的配套程序就是这样做的。
+在服务端，先等待 `listener.accept()`，再等待 `connection.accept_stream()`。一直读到该流结束，写出回复，再为回复方向调用 `finish_write()`：
+
+```cpp
+std::array<char, 64> bytes{};
+std::string request;
+while (auto count = co_await stream.read_some(pace::as_writable_bytes(bytes)))
+{
+    request.append(bytes.data(), count);
+}
+co_await stream.write_all(pace::as_bytes("Hello over verified QUIC!\n"));
+stream.finish_write();
+```
+
+`read_some` 填充一个字节 span，这里是经 `pace::as_writable_bytes` 看作字节的 `char` 数组，并在对端 FIN 时返回 0。`write_all` 借用 `pace::as_bytes` 所指向的字节；字符串字面量的寿命足够长。流结束标记（FIN）只作用于这一个流，而不是连接上的其他流。在流使用期间保持连接存活。`pace::write` 完成并不能证明对端已收到这些字节；关闭发送方之前，请遵循[协议调优](../guides/protocol-tuning.zh.md)中关于送达和 FIN 的规则，下面的配套程序就是这样做的。
 
 配套程序 [`tutorial_quic.cpp`](../../examples/tutorial_quic.cpp) 会等到服务器的回复被确认、两端都结束后才停止，并在五秒后判定失败。以 `--quic=y --examples=y` 配置 PACE 源码目录，运行 `xmake run tutorial_quic`，预期输出 `Hello over verified QUIC!`。在你自己的副本中试试两个流，确认第一个流上的 FIN 不会关闭第二个流。
 

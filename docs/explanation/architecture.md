@@ -120,8 +120,8 @@ Socket registrations have tokens independent of the native socket handle, allowi
 
 ```cpp
 // Both forms consume one task exactly once.
-co_await stream.write_all(message);
-auto pending = stream.read_some(buffer);
+co_await stream.write_all(pace::as_bytes(message));
+auto pending = stream.read_some(pace::as_writable_bytes(buffer));
 const auto count = co_await std::move(pending);
 ```
 
@@ -130,7 +130,7 @@ An lvalue task is intentionally not awaitable. A task object that still owns its
 The coroutine frame does not automatically own every object referenced by the coroutine:
 
 - Keep a socket or listener alive until every operation using it has finished. Moving a socket while an operation on that object is suspended is not supported.
-- Keep memory referenced by `std::span` and `std::string_view` valid throughout the awaited operation. A string literal is safe; a temporary owning string whose lifetime ends before the lazy task runs is not.
+- Keep memory referenced by `std::span` and `std::string_view` (including the views `pace::as_bytes` and `pace::as_writable_bytes` return) valid throughout the awaited operation. A string literal is safe; a temporary owning string whose lifetime ends before the lazy task runs is not.
 - Keep the context alive until all sockets and listeners using it have been destroyed.
 - A coroutine lambda accesses captures through its closure object. That closure must outlive the coroutine; immediately invoking a temporary capturing coroutine lambda is unsafe. Prefer named coroutine functions with owned values passed as parameters, or explicitly maintain the callable's lifetime. `pace::run(factory)` owns the factory it is given until shutdown, which makes a capturing coroutine lambda safe there.
 
@@ -159,12 +159,23 @@ Stop is cooperative, not a forced thread interruption. An application coroutine 
 
 The TCP header is `<pace/net/tcp.hpp>`, included by `<pace/net.hpp>`. It declares `pace::tcp::listener`, `pace::tcp::stream`, `pace::tcp::endpoint`, and `pace::tcp::listen_options`; `endpoint` represents a numeric IPv4/IPv6 address, port, address family and optional numeric IPv6 scope.
 
-TCP uses nonblocking numeric IPv4/IPv6 sockets. IPv6 listeners default to IPv6-only; applications explicitly opt into dual-stack binding. Operations first attempt the native call; when it would block, they await the relevant readiness event and retry. `write_all()` retains its input view until the complete buffer has been sent. Socket errors use `std::system_error`. Linux sends suppress `SIGPIPE` per operation; platforms with `SO_NOSIGPIPE` configure it on the socket.
+TCP uses nonblocking numeric IPv4/IPv6 sockets. IPv6 listeners default to IPv6-only; applications explicitly opt into dual-stack binding. Operations first attempt the native call; when it would block, they await the relevant readiness event and retry. `write_all()` borrows its input bytes until the complete buffer has been sent. Socket errors use `std::system_error`. Linux sends suppress `SIGPIPE` per operation; platforms with `SO_NOSIGPIPE` configure it on the socket.
 After a short TCP read, the next nonempty read waits for level readiness before
 retrying `recv`, avoiding the common redundant EAGAIN call. This is a hint,
 not an EOF decision: queued data, new arrivals and peer shutdown are still
 reported by the poller and verified with `recv`. Full-buffer reads keep the
 immediate-read path; the hint follows move operations.
+
+TCP, TLS and QUIC streams share one interface, in bytes, named by the
+[`pace::byte_stream`](../reference/net/README.md#byte_stream) concept: `read_some(std::span<std::byte>)`,
+`write_all(std::span<const std::byte>)`, `shutdown_write()`, `close()` and `context()`. A transport carries bytes, not
+text, so the stream boundary says so, and there is a single overload per operation instead of parallel `char` and
+`std::byte` forms. Text crosses the boundary through zero-copy views (`pace::as_bytes`, `pace::as_writable_bytes`,
+`pace::as_text`), which compile to a pointer cast; the protocol parsers (HTTP/1, WebSocket) keep working on characters
+internally. Paired runs against the earlier interface kept TCP echo, WebSocket frames, HTTP/1
+and HTTP/1 over TLS within 1%. Because `tls::stream` takes any byte stream as its transport and is one itself, the
+same TLS code runs over TCP, over a QUIC stream or over another TLS stream, and an application adapter that models
+the concept works with `pace::write`, `pace::read_exact` and TLS without further glue.
 
 `co_await stream.close_gracefully()` half-closes the send side, then drains peer input until EOF, a 100 ms deadline, or 64 KiB of discarded data. Both bounds are configurable. A cancellable timer avoids blocking the reactor while waiting for the peer. The operation always releases the socket, including on cancellation or error, and requires that no other socket operation is outstanding. HTTP uses this bounded close after its final response so unread rejected-request bytes do not immediately reset the connection. Reaching either bound can still terminate a noncooperating peer before an orderly close; this is a shutdown bound, not a request timeout.
 
